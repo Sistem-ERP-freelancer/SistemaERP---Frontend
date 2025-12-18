@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Zap, Eye, EyeOff, LogIn, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { authService } from "@/services/auth.service";
+import { useRedirectAfterLogin } from "@/hooks/useRedirectAfterLogin";
+import { TopERPLogo } from "@/components/TopERPLogo";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -13,21 +17,81 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { login, isAuthenticated, isLoading: authLoading, user } = useAuth();
+  
+  // Hook para redirecionamento automático
+  useRedirectAfterLogin();
+
+  // Mostra loading enquanto verifica autenticação
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-xl primary-gradient flex items-center justify-center">
+            <Zap className="w-7 h-7 text-primary-foreground animate-pulse" />
+          </div>
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulação de login - integrar com backend real depois
-    setTimeout(() => {
-      setIsLoading(false);
-      if (email && password) {
-        toast.success("Login realizado com sucesso!");
-        navigate("/dashboard");
-      } else {
-        toast.error("Preencha todos os campos");
+    try {
+      const response = await login({
+        email: email.trim(),
+        senha: password,
+      });
+      
+      // Aguarda um momento para garantir que o contexto foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Verifica o role de múltiplas formas (sem expor token)
+      const userFromResponse = response?.user || response?.usuario;
+      const userFromStorage = authService.getCurrentUser();
+      const roleFromResponse = userFromResponse?.role?.toUpperCase()?.trim();
+      const roleFromStorage = userFromStorage?.role?.toUpperCase()?.trim();
+      
+      const finalRole = roleFromResponse || roleFromStorage;
+      
+      // Log seguro apenas em desenvolvimento
+      if (import.meta.env.DEV) {
+        console.log('🔍 Role detectado:', finalRole);
+        console.log('🔍 É SUPER_ADMIN?', finalRole === 'SUPER_ADMIN');
       }
-    }, 1000);
+      
+      // Força o redirecionamento usando window.location para garantir
+      if (finalRole === 'SUPER_ADMIN') {
+        if (import.meta.env.DEV) {
+          console.log('🚀 Redirecionando para /admin');
+        }
+        // Usa replace para não voltar para login
+        setTimeout(() => {
+          window.location.href = '/admin';
+        }, 100);
+      } else {
+        if (import.meta.env.DEV) {
+          console.log('🚀 Redirecionando para /dashboard');
+        }
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 100);
+      }
+    } catch (error) {
+      // O erro já foi tratado no contexto de autenticação
+      console.error("Erro no login:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -63,11 +127,8 @@ const Login = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 rounded-xl bg-card/20 backdrop-blur-sm flex items-center justify-center">
-                <Zap className="w-7 h-7 text-cyan" />
-              </div>
-              <span className="text-2xl font-bold text-primary-foreground">GestãoPro</span>
+            <div className="mb-8">
+              <TopERPLogo variant="landing" showText={false} />
             </div>
 
             <h1 className="text-4xl xl:text-5xl font-bold text-primary-foreground mb-4 leading-tight">
@@ -91,11 +152,8 @@ const Login = () => {
           className="w-full max-w-md"
         >
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-xl primary-gradient flex items-center justify-center">
-              <Zap className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold text-foreground">GestãoPro</span>
+          <div className="lg:hidden mb-8">
+            <TopERPLogo variant="landing" showText={false} />
           </div>
 
           <Link 
@@ -185,7 +243,7 @@ const Login = () => {
           </form>
 
           <p className="text-center text-muted-foreground text-sm mt-8">
-            © 2024 GestãoPro. Todos os direitos reservados.
+            © 2025 TopERP. Todos os direitos reservados.
           </p>
         </motion.div>
       </div>

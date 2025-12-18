@@ -112,6 +112,37 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
   }
+
+  /* Corrigir cursor de texto aparecendo em elementos que não deveriam */
+  * {
+    cursor: default;
+  }
+
+  button,
+  a,
+  [role="button"],
+  [tabindex]:not([tabindex="-1"]) {
+    cursor: pointer;
+  }
+
+  input,
+  textarea,
+  select,
+  [contenteditable="true"],
+  [contenteditable=""] {
+    cursor: text;
+  }
+
+  /* Prevenir seleção de texto em elementos não interativos */
+  button,
+  a,
+  img,
+  svg {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
 }
 
 @layer components {

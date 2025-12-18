@@ -1,60 +1,1187 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { 
-  Users, 
-  Plus,
-  Search,
-  Eye,
-  Edit,
-  Trash2,
-  Phone,
-  Mail
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import AppLayout from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import {
+  ClienteCreateDialog,
+  ClienteStats,
+  ClienteTable,
+} from "@/features/clientes/components";
+import { cleanDocument, formatCNPJ, formatCPF, formatCEP, formatTelefone } from "@/lib/validators";
+import {
+    ClientesEstatisticas,
+    CreateClienteDto,
+    FiltrosClientes,
+    StatusCliente,
+    clientesService,
+    extractClientesFromResponse,
+} from "@/services/clientes.service";
+import { UpdateContatoDto, contatosService } from "@/services/contatos.service";
+import {
+  UpdateEnderecoDto,
+  enderecosService,
+} from "@/services/enderecos.service";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+    Building2,
+    Calendar,
+    Check,
+    Circle,
+    Edit,
+    Eye,
+    FileText,
+    Filter,
+    Hash,
+    Loader2,
+    Mail as MailIcon,
+    MapPin,
+    MapPin as MapPinIcon,
+    Phone,
+    Phone as PhoneIcon,
+    Plus,
+    RotateCcw,
+    Save,
+    Search,
+    Trash2,
+    User,
+    User as UserIcon,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-const initialClientes = [
-  { id: 1, nome: "Tech Solutions Ltda", cpfCnpj: "12.345.678/0001-90", email: "contato@techsol.com", telefone: "(11) 98765-4321", tipo: "PJ", status: "Ativo" },
-  { id: 2, nome: "João Silva", cpfCnpj: "123.456.789-00", email: "joao@email.com", telefone: "(21) 99876-5432", tipo: "PF", status: "Ativo" },
-  { id: 3, nome: "Comércio ABC", cpfCnpj: "98.765.432/0001-10", email: "vendas@comercioabc.com", telefone: "(31) 97654-3210", tipo: "PJ", status: "Ativo" },
-  { id: 4, nome: "Maria Souza", cpfCnpj: "987.654.321-00", email: "maria@email.com", telefone: "(41) 96543-2100", tipo: "PF", status: "Inativo" },
-];
 
 const Clientes = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [clientes, setClientes] = useState(initialClientes);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newCliente, setNewCliente] = useState({ nome: "", cpfCnpj: "", email: "", telefone: "", tipo: "PF" });
+  const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedClienteId, setSelectedClienteId] = useState<number | null>(
+    null
+  );
+  const [editEnderecoDialogOpen, setEditEnderecoDialogOpen] = useState(false);
+  const [editContatoDialogOpen, setEditContatoDialogOpen] = useState(false);
+  const [selectedEnderecoId, setSelectedEnderecoId] = useState<number | null>(
+    null
+  );
+  const [selectedContatoId, setSelectedContatoId] = useState<number | null>(
+    null
+  );
+  const [editingEndereco, setEditingEndereco] = useState<UpdateEnderecoDto>({});
+  const [editingContato, setEditingContato] = useState<UpdateContatoDto>({});
+  const [originalContato, setOriginalContato] = useState<any>(null); // Armazenar valores originais para comparação
+  const [isUpdatingCliente, setIsUpdatingCliente] = useState(false); // Estado de loading para atualização completa
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null); // ID do cliente que está tendo o status atualizado
+  
+  // Estados para o dialog de edição
+  const [editCurrentStep, setEditCurrentStep] = useState(1);
+  const [editNewCliente, setEditNewCliente] = useState<CreateClienteDto>({
+    nome: "",
+    nome_fantasia: "",
+    nome_razao: "",
+    tipoPessoa: "PESSOA_FISICA",
+    statusCliente: "ATIVO",
+    cpf_cnpj: "",
+    inscricao_estadual: "",
+  });
+  const [editEnderecos, setEditEnderecos] = useState<
+    Array<{
+      id?: number;
+      cep: string;
+      logradouro: string;
+      numero: string;
+      complemento: string;
+      bairro: string;
+      cidade: string;
+      estado: string;
+      referencia: string;
+    }>
+  >([
+    {
+      cep: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cidade: "",
+      estado: "",
+      referencia: "",
+    },
+  ]);
+  const [editContatos, setEditContatos] = useState<
+    Array<{
+      id?: number;
+      telefone: string;
+      email: string;
+      nomeContato: string;
+      outroTelefone: string;
+      nomeOutroTelefone: string;
+      observacao: string;
+      ativo?: boolean;
+    }>
+  >([
+    {
+      telefone: "",
+      email: "",
+      nomeContato: "",
+      outroTelefone: "",
+      nomeOutroTelefone: "",
+      observacao: "",
+      ativo: true,
+    },
+  ]);
+  
+  const [filtrosAvancados, setFiltrosAvancados] = useState<FiltrosClientes>({
+    tipoPessoa: "",
+    statusCliente: "",
+    cidade: "",
+    estado: "",
+  });
 
-  const filteredClientes = clientes.filter(c => 
-    c.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.cpfCnpj.includes(searchTerm)
+  // Buscar estatísticas
+  const {
+    data: estatisticas,
+    isLoading: isLoadingEstatisticas,
+    error: errorEstatisticas,
+  } = useQuery<ClientesEstatisticas>({
+      queryKey: ["clientes-estatisticas"],
+    queryFn: async () => {
+      try {
+        return await clientesService.getEstatisticas();
+      } catch (error: any) {
+        // Se houver erro na API, logar mas não quebrar a aplicação
+        if (import.meta.env.DEV) {
+          console.warn("⚠️ [Estatísticas] Erro ao buscar estatísticas:", error);
+          console.warn("⚠️ [Estatísticas] Detalhes do erro:", {
+            message: error?.message,
+            status: error?.response?.status,
+            data: error?.response?.data,
+          });
+        }
+
+        // Se for erro 400 (Bad Request), pode ser problema de validação no backend
+        if (error?.response?.status === 400) {
+          console.error(
+            "❌ [Estatísticas] Erro 400 - O backend está esperando um parâmetro que não está sendo enviado. Verifique a documentação da API."
+          );
+        }
+        // Retornar valores padrão em caso de erro
+        return {
+          total: 0,
+          ativos: 0,
+          inativos: 0,
+          bloqueados: 0,
+          inadimplentes: 0,
+          novosNoMes: 0,
+        };
+      }
+    },
+      refetchInterval: 30000,
+    retry: 1, // Tentar uma vez em caso de erro
+      staleTime: 0, // Sempre considerar os dados como stale para garantir atualização
+      gcTime: 5 * 60 * 1000, // Manter no cache por 5 minutos
+    refetchOnWindowFocus: true, // Refetch quando a janela recebe foco
+    refetchOnMount: true, // Sempre refetch ao montar
+    });
+
+  // Verificar se há filtros ativos
+  const temFiltrosAtivos = Object.values(filtrosAvancados).some(
+    (val) => val !== ""
   );
 
-  const handleCreate = () => {
-    if (!newCliente.nome || !newCliente.cpfCnpj) {
-      toast.error("Preencha os campos obrigatórios");
-      return;
-    }
-    setClientes([...clientes, { ...newCliente, id: clientes.length + 1, status: "Ativo" }]);
-    setNewCliente({ nome: "", cpfCnpj: "", email: "", telefone: "", tipo: "PF" });
-    setDialogOpen(false);
-    toast.success("Cliente cadastrado com sucesso!");
+  // Buscar clientes - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
+  const {
+    data: clientesData,
+    isLoading: isLoadingClientes,
+    error: errorClientes,
+  } = useQuery({
+    queryKey: ["clientes", searchTerm, filtrosAvancados],
+    queryFn: async () => {
+      try {
+        let response;
+
+        if (temFiltrosAtivos) {
+          // Usa busca avançada quando há filtros
+          response = await clientesService.buscarAvancado({
+            termo: searchTerm.trim() || undefined,
+            ...filtrosAvancados,
+            page: 1,
+            limit: 100,
+          });
+        } else if (searchTerm.trim()) {
+          response = await clientesService.buscar(searchTerm, 1, 100);
+        } else {
+          // Lista todos quando não há termo nem filtros
+          response = await clientesService.listar({
+            page: 1,
+            limit: 100,
+          });
+        }
+
+        // Usar função helper para extrair clientes de forma consistente
+        const clientes = extractClientesFromResponse(response);
+
+        // Debug temporário para verificar a resposta
+        if (import.meta.env.DEV) {
+          console.log("🔍 [Clientes] Resposta da API:", response);
+          console.log("🔍 [Clientes] Tipo da resposta:", typeof response);
+          console.log("🔍 [Clientes] É array?", Array.isArray(response));
+          if (
+            response &&
+            typeof response === "object" &&
+            !Array.isArray(response)
+          ) {
+            console.log(
+              "🔍 [Clientes] Chaves do objeto:",
+              Object.keys(response)
+            );
+            console.log("🔍 [Clientes] response.data:", response.data);
+            console.log("🔍 [Clientes] response.meta:", response.meta);
+          }
+          console.log("🔍 [Clientes] Clientes extraídos:", clientes);
+          console.log("🔍 [Clientes] Quantidade de clientes:", clientes.length);
+        }
+
+        return clientes;
+      } catch (error: unknown) {
+        // Type guard para erro com response
+        const isErrorWithResponse = (
+          err: unknown
+        ): err is {
+          response?: {
+            status?: number;
+            statusText?: string;
+            data?: { message?: string | string[] };
+            headers?: Headers;
+          };
+          config?: { url?: string; method?: string };
+          message?: string;
+          stack?: string;
+        } => {
+          return typeof err === "object" && err !== null;
+        };
+
+        // Mostrar erro ao usuário apenas se não for erro de autenticação (que já é tratado globalmente)
+        if (isErrorWithResponse(error)) {
+          if (
+            error.response?.status !== 401 &&
+            error.response?.status !== 403
+          ) {
+            const errorMessage =
+              error.response?.data?.message ||
+              (Array.isArray(error.response?.data?.message)
+                ? error.response.data.message.join(", ")
+                : null) ||
+              error.message ||
+              "Erro ao carregar clientes.";
+
+            toast.error(
+              typeof errorMessage === "string"
+                ? errorMessage
+                : "Erro ao carregar clientes"
+            );
+          }
+        }
+
+        return [];
+      }
+    },
+    retry: (failureCount, error: unknown) => {
+      // Type guard para erro com response
+      const isErrorWithResponse = (
+        err: unknown
+      ): err is { response?: { status?: number } } => {
+        return typeof err === "object" && err !== null;
+      };
+
+      // Não tentar novamente se for erro 401 (não autorizado) ou 403 (proibido)
+      if (
+        isErrorWithResponse(error) &&
+        (error.response?.status === 401 || error.response?.status === 403)
+      ) {
+        return false;
+      }
+      // Tentar até 2 vezes para outros erros
+      return failureCount < 2;
+    },
+    retryDelay: 1000, // Esperar 1 segundo entre tentativas
+  });
+
+  const clientes = clientesData || [];
+  const queryClient = useQueryClient();
+
+  // Mutation para criar cliente
+  const createClienteMutation = useMutation({
+    mutationFn: async (data: CreateClienteDto) => {
+      return await clientesService.criar(data);
+    },
+    onSuccess: async () => {
+      // Invalidar todas as queries de clientes (sem exact para pegar todas as variações)
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes"],
+        exact: false,
+      });
+
+      // Invalidar estatísticas para garantir atualização
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes-estatisticas"],
+        exact: true,
+      });
+      
+      // Forçar refetch imediato para atualizar a tabela e estatísticas
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: ["clientes"],
+          exact: false,
+        }),
+        queryClient.refetchQueries({
+          queryKey: ["clientes-estatisticas"],
+          exact: true,
+        }),
+      ]);
+      
+      toast.success("Cliente cadastrado com sucesso!");
+      setDialogOpen(false);
+    },
+    onError: (error: unknown) => {
+      // Type guard para erro com response
+      const isErrorWithResponse = (
+        err: unknown
+      ): err is {
+        response?: {
+          data?: {
+            message?: string | string[];
+            error?: string | { message?: string };
+          };
+        };
+      } => {
+        return typeof err === "object" && err !== null;
+      };
+
+      if (isErrorWithResponse(error)) {
+        const errorResponse = error.response?.data;
+
+        // Tenta extrair mensagem de erro de diferentes formatos
+        let errorMessage = "";
+
+        if (Array.isArray(errorResponse?.message)) {
+          // Se for array, junta todas as mensagens
+          errorMessage = errorResponse.message.join(". ");
+        } else if (typeof errorResponse?.message === "string") {
+          errorMessage = errorResponse.message;
+        } else if (
+          typeof errorResponse?.error === "object" &&
+          errorResponse.error?.message
+        ) {
+          errorMessage = errorResponse.error.message;
+        } else if (typeof errorResponse?.error === "string") {
+          errorMessage = errorResponse.error;
+        } else {
+          errorMessage = "Erro ao cadastrar cliente";
+        }
+
+        toast.error(errorMessage);
+      } else {
+        toast.error("Erro ao cadastrar cliente");
+      }
+    },
+  });
+
+  // Query para buscar cliente por ID (para visualização e edição)
+  const { data: selectedCliente, isLoading: isLoadingCliente } = useQuery({
+    queryKey: ["cliente", selectedClienteId],
+    queryFn: () => clientesService.buscarPorId(selectedClienteId!),
+    enabled: !!selectedClienteId && (viewDialogOpen || editDialogOpen),
+  });
+
+  // Mutation para atualizar cliente
+  const updateClienteMutation = useMutation({
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: Partial<CreateClienteDto>;
+    }) => {
+      return await clientesService.atualizar(id, data);
+    },
+    onSuccess: async () => {
+      // Invalidar todas as queries de clientes (incluindo variações com filtros e busca)
+      await queryClient.invalidateQueries({ 
+        queryKey: ["clientes"],
+        exact: false,
+      });
+      
+      // Invalidar estatísticas para garantir atualização
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes-estatisticas"],
+        exact: true,
+      });
+      
+      await queryClient.invalidateQueries({
+        queryKey: ["cliente", selectedClienteId],
+        exact: true,
+      });
+      
+      // Forçar refetch imediato de todas as queries relacionadas
+      await Promise.all([
+        queryClient.refetchQueries({ 
+          queryKey: ["clientes"],
+          exact: false,
+        }),
+        queryClient.refetchQueries({ 
+          queryKey: ["clientes-estatisticas"],
+          exact: true,
+        }),
+      ]);
+      
+      toast.success("Cliente atualizado com sucesso!");
+      setEditDialogOpen(false);
+      setSelectedClienteId(null);
+    },
+    onError: (error: unknown) => {
+      const isErrorWithResponse = (
+        err: unknown
+      ): err is {
+        response?: { status?: number; data?: { message?: string | string[] } };
+        message?: string;
+      } => {
+        return typeof err === "object" && err !== null;
+      };
+
+      if (isErrorWithResponse(error)) {
+        const errorResponse = error.response?.data;
+        const errorMessage =
+          errorResponse?.message ||
+          (Array.isArray(errorResponse?.message)
+            ? errorResponse.message.join(", ")
+            : null) ||
+          error.message ||
+          "Erro ao atualizar cliente";
+        toast.error(
+          typeof errorMessage === "string"
+            ? errorMessage
+            : "Erro ao atualizar cliente"
+        );
+      } else {
+        toast.error("Erro ao atualizar cliente");
+      }
+    },
+  });
+
+  // Mutation para atualizar status do cliente
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({
+      id,
+      status,
+    }: {
+      id: number;
+      status: StatusCliente;
+    }) => {
+      return await clientesService.atualizarStatus(id, status);
+    },
+    onSuccess: async (data) => {
+      // Invalidar todas as queries de clientes primeiro (sem exact para pegar todas as variações)
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes"],
+        exact: false,
+      });
+      
+      // Invalidar estatísticas sem condições para garantir atualização
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes-estatisticas"],
+        exact: true,
+      });
+      
+      await queryClient.invalidateQueries({
+        queryKey: ["cliente", data.id],
+        exact: true,
+      });
+
+      // Forçar refetch imediato de todas as queries relacionadas
+      // Usar refetchQueries sem type para garantir que todas sejam atualizadas
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: ["clientes"],
+          exact: false,
+        }),
+        queryClient.refetchQueries({
+          queryKey: ["clientes-estatisticas"],
+          exact: true,
+        }),
+      ]);
+
+      toast.success(`Status do cliente atualizado para ${data.statusCliente}!`);
+      setUpdatingStatusId(null);
+    },
+    onError: (error: unknown) => {
+      setUpdatingStatusId(null);
+      const isErrorWithResponse = (
+        err: unknown
+      ): err is {
+        response?: { status?: number; data?: { message?: string | string[] } };
+        message?: string;
+      } => {
+        return typeof err === "object" && err !== null;
+      };
+
+      if (isErrorWithResponse(error)) {
+        const errorResponse = error.response?.data;
+        const errorMessage =
+          errorResponse?.message ||
+          (Array.isArray(errorResponse?.message)
+            ? errorResponse.message.join(", ")
+            : null) ||
+          error.message ||
+          "Erro ao atualizar status do cliente";
+
+        // Mensagens específicas para erros comuns
+        if (error.response?.status === 403) {
+          toast.error(
+            "Você não tem permissão para atualizar o status. Apenas ADMIN ou GERENTE podem realizar esta ação."
+          );
+        } else if (error.response?.status === 400) {
+          toast.error(
+            typeof errorMessage === "string"
+              ? errorMessage
+              : "Status inválido ou cliente não encontrado"
+          );
+        } else {
+          toast.error(
+            typeof errorMessage === "string"
+              ? errorMessage
+              : "Erro ao atualizar status do cliente"
+          );
+        }
+      } else {
+        toast.error("Erro ao atualizar status do cliente");
+      }
+    },
+  });
+
+  // Handler para atualizar status
+  const handleStatusChange = (id: number, novoStatus: StatusCliente) => {
+    setUpdatingStatusId(id);
+    updateStatusMutation.mutate({ id, status: novoStatus });
   };
 
+  // Mutation para deletar cliente
+  const deleteClienteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await clientesService.deletar(id);
+    },
+    onSuccess: async () => {
+      // Invalidar todas as queries de clientes (sem exact para pegar todas as variações)
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes"],
+        exact: false,
+      });
+
+      // Invalidar estatísticas para garantir atualização
+      await queryClient.invalidateQueries({
+        queryKey: ["clientes-estatisticas"],
+        exact: true,
+      });
+      
+      // Forçar refetch imediato para atualizar a tabela e estatísticas
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: ["clientes"],
+          exact: false,
+        }),
+        queryClient.refetchQueries({
+          queryKey: ["clientes-estatisticas"],
+          exact: true,
+        }),
+      ]);
+      
+      toast.success("Cliente excluído com sucesso!");
+      setDeleteDialogOpen(false);
+      setSelectedClienteId(null);
+    },
+    onError: (error: unknown) => {
+      const isErrorWithResponse = (
+        err: unknown
+      ): err is {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      } => {
+        return typeof err === "object" && err !== null;
+      };
+
+      if (isErrorWithResponse(error)) {
+        const errorResponse = error.response?.data;
+        const errorMessage =
+          errorResponse?.message ||
+          (Array.isArray(errorResponse?.message)
+            ? errorResponse.message.join(", ")
+            : null) ||
+          error.message ||
+          "Erro ao excluir cliente";
+        toast.error(
+          typeof errorMessage === "string"
+            ? errorMessage
+            : "Erro ao excluir cliente"
+        );
+      } else {
+        toast.error("Erro ao excluir cliente");
+      }
+    },
+  });
+
+  const handleView = (id: number) => {
+    setSelectedClienteId(id);
+    setViewDialogOpen(true);
+  };
+
+  const handleEdit = (id: number) => {
+    setSelectedClienteId(id);
+    setEditDialogOpen(true);
+  };
+
+  // Mutation para atualizar endereço
+  const updateEnderecoMutation = useMutation({
+    mutationFn: async ({
+      id,
+      data,
+      clienteId,
+    }: {
+      id: number;
+      data: UpdateEnderecoDto;
+      clienteId?: number;
+    }) => {
+      // Conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md
+      // Para atualizar endereço, usar PATCH /api/v1/clientes/:id
+      // com array de endereços incluindo o ID do endereço
+      if (!clienteId) {
+        throw new Error("ID do cliente é obrigatório para atualizar endereço");
+      }
+
+      // Buscar cliente atual para obter todos os endereços
+      const clienteAtual = await clientesService.buscarPorId(clienteId);
+
+      // Encontrar o endereço que está sendo editado
+      const enderecoOriginal = (clienteAtual.enderecos || []).find(
+        (end) => end.id === id
+      );
+
+      if (!enderecoOriginal) {
+        throw new Error("Endereço não encontrado no cliente");
+      }
+
+      // Preparar array de endereços com todos os endereços existentes
+      // Atualizar apenas o endereço que está sendo editado
+      const enderecosAtualizados = (clienteAtual.enderecos || []).map((end) => {
+        if (end.id === id) {
+          // Este é o endereço que está sendo atualizado
+          // Criar objeto com id e TODOS os campos (usando valores editados ou originais)
+          // Conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md: todos os campos são opcionais na atualização
+          const enderecoAtualizado: any = {
+            id: end.id, // ⚠️ OBRIGATÓRIO: incluir ID para atualizar
+          };
+
+          // Usar valores editados se fornecidos, senão usar valores originais
+          // Strings vazias ("") são enviadas para limpar campos
+          enderecoAtualizado.cep =
+            data.cep !== undefined ? data.cep : end.cep || "";
+          enderecoAtualizado.logradouro =
+            data.logradouro !== undefined
+              ? data.logradouro
+              : end.logradouro || "";
+          enderecoAtualizado.numero =
+            data.numero !== undefined ? data.numero : end.numero || "";
+          enderecoAtualizado.complemento =
+            data.complemento !== undefined
+              ? data.complemento
+              : end.complemento || "";
+          enderecoAtualizado.bairro =
+            data.bairro !== undefined ? data.bairro : end.bairro || "";
+          enderecoAtualizado.cidade =
+            data.cidade !== undefined ? data.cidade : end.cidade || "";
+          enderecoAtualizado.estado =
+            data.estado !== undefined ? data.estado : end.estado || "";
+          enderecoAtualizado.referencia =
+            data.referencia !== undefined
+              ? data.referencia
+              : end.referencia || "";
+
+          return enderecoAtualizado;
+        }
+        // Manter outros endereços inalterados (com todos os campos incluindo ID)
+        return {
+          id: end.id,
+          cep: end.cep || "",
+          logradouro: end.logradouro || "",
+          numero: end.numero || "",
+          complemento: end.complemento || "",
+          bairro: end.bairro || "",
+          cidade: end.cidade || "",
+          estado: end.estado || "",
+          referencia: end.referencia || "",
+        };
+      });
+
+      // Atualizar cliente com array de endereços atualizado
+      return await clientesService.atualizar(clienteId, {
+        enderecos: enderecosAtualizados,
+      });
+    },
+    onSuccess: async () => {
+      // Invalidar queries de clientes para atualizar os dados
+      await queryClient.invalidateQueries({ 
+        queryKey: ["clientes"],
+        exact: false,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["cliente", selectedClienteId],
+      });
+      await queryClient.refetchQueries({ 
+        queryKey: ["clientes"],
+        exact: false,
+      });
+      
+      // Recarregar dados do cliente se estiver editando
+      if (selectedClienteId) {
+        const updatedCliente = await clientesService.buscarPorId(
+          selectedClienteId
+        );
+        if (updatedCliente.enderecos) {
+          setEditEnderecos(
+            updatedCliente.enderecos.map((end) => ({
+              id: end.id,
+              cep: end.cep || "",
+              logradouro: end.logradouro || "",
+              numero: end.numero || "",
+              complemento: end.complemento || "",
+              bairro: end.bairro || "",
+              cidade: end.cidade || "",
+              estado: end.estado || "",
+              referencia: end.referencia || "",
+            }))
+          );
+        }
+      }
+      
+      toast.success("Endereço atualizado com sucesso!");
+      setEditEnderecoDialogOpen(false);
+      setSelectedEnderecoId(null);
+      setEditingEndereco({});
+    },
+    onError: (error: unknown) => {
+      const errorMessage =
+        (error as any)?.response?.data?.message ||
+        (error as any)?.message ||
+        "Erro ao atualizar endereço";
+      toast.error(errorMessage);
+    },
+  });
+
+  // Mutation para atualizar contato
+  const updateContatoMutation = useMutation({
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: UpdateContatoDto;
+    }) => {
+      // Comparar com valores originais e enviar apenas campos modificados
+      const payload: UpdateContatoDto = {};
+
+      // Função auxiliar para normalizar valores para comparação
+      const normalizeValue = (value: any): string | undefined | boolean => {
+        if (value === null || value === undefined) return undefined;
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          return trimmed === "" ? "" : trimmed;
+        }
+        return value;
+      };
+
+      // Função auxiliar para comparar valores
+      const hasChanged = (newValue: any, originalValue: any): boolean => {
+        const normalizedNew = normalizeValue(newValue);
+        const normalizedOriginal = normalizeValue(originalValue);
+        return normalizedNew !== normalizedOriginal;
+      };
+      
+      // Comparar cada campo e incluir apenas se foi modificado
+      // Se o campo foi removido (undefined no data mas existia no original), não enviar
+      // Se o campo foi limpo (string vazia), enviar string vazia para limpar no backend
+      // Se o campo foi modificado, enviar o novo valor
+      
+      if (data.nomeContato !== undefined) {
+        // Tentar obter o valor original de múltiplas fontes
+        const originalValue =
+          originalContato?.nomeContato ??
+          originalContato?.nome_contato ??
+          undefined;
+
+        const hasNomeChanged = hasChanged(data.nomeContato, originalValue);
+
+        if (import.meta.env.DEV) {
+          console.log("🔍 [DEBUG nomeContato]:", {
+            valorAtual: data.nomeContato,
+            valorOriginal: originalValue,
+            originalContatoCompleto: originalContato,
+            normalizadoAtual: normalizeValue(data.nomeContato),
+            normalizadoOriginal: normalizeValue(originalValue),
+            mudou: hasNomeChanged,
+            tipoAtual: typeof data.nomeContato,
+            tipoOriginal: typeof originalValue,
+            "originalContato?.nomeContato": originalContato?.nomeContato,
+            "originalContato?.nome_contato": originalContato?.nome_contato,
+          });
+        }
+
+        if (hasNomeChanged) {
+          payload.nomeContato =
+            typeof data.nomeContato === "string"
+              ? data.nomeContato.trim()
+              : data.nomeContato;
+
+          if (import.meta.env.DEV) {
+            console.log(
+              "✅ nomeContato incluído no payload:",
+              payload.nomeContato
+            );
+          }
+        } else if (import.meta.env.DEV) {
+          console.warn(
+            "⚠️ nomeContato não foi incluído no payload - valores são iguais",
+            {
+              atual: data.nomeContato,
+              original: originalValue,
+            }
+          );
+        }
+      } else if (import.meta.env.DEV) {
+        console.warn(
+          "⚠️ data.nomeContato é undefined - campo não será atualizado"
+        );
+      }
+      
+      if (data.email !== undefined) {
+        const originalValue = originalContato?.email ?? undefined;
+        if (hasChanged(data.email, originalValue)) {
+          payload.email =
+            typeof data.email === "string" ? data.email.trim() : data.email;
+        }
+      }
+      
+      if (data.telefone !== undefined) {
+        const originalValue = originalContato?.telefone ?? undefined;
+        if (hasChanged(data.telefone, originalValue)) {
+          payload.telefone =
+            typeof data.telefone === "string"
+              ? data.telefone.trim()
+              : data.telefone;
+        }
+      }
+      
+      if (data.outroTelefone !== undefined) {
+        const originalValue = originalContato?.outroTelefone ?? undefined;
+        if (hasChanged(data.outroTelefone, originalValue)) {
+          payload.outroTelefone =
+            typeof data.outroTelefone === "string"
+              ? data.outroTelefone.trim()
+              : data.outroTelefone;
+        }
+      }
+      
+      if (data.nomeOutroTelefone !== undefined) {
+        const originalValue = originalContato?.nomeOutroTelefone ?? undefined;
+        if (hasChanged(data.nomeOutroTelefone, originalValue)) {
+          payload.nomeOutroTelefone =
+            typeof data.nomeOutroTelefone === "string"
+              ? data.nomeOutroTelefone.trim()
+              : data.nomeOutroTelefone;
+        }
+      }
+      
+      if (data.observacao !== undefined) {
+        const originalValue = originalContato?.observacao ?? undefined;
+        if (hasChanged(data.observacao, originalValue)) {
+          payload.observacao =
+            typeof data.observacao === "string"
+              ? data.observacao.trim()
+              : data.observacao;
+        }
+      }
+      
+      if (data.ativo !== undefined) {
+        const originalValue = originalContato?.ativo ?? true;
+        if (data.ativo !== originalValue) {
+          payload.ativo = data.ativo;
+        }
+      }
+
+      // Validar se há pelo menos um campo para atualizar
+      if (Object.keys(payload).length === 0) {
+        if (import.meta.env.DEV) {
+          console.warn("⚠️ Nenhum campo foi modificado. Nada será atualizado.");
+        }
+        // Retornar o contato original sem fazer requisição
+        const contatoAtual = await contatosService.buscarPorId(id);
+        return contatoAtual;
+      }
+      
+      if (import.meta.env.DEV) {
+        console.log("🔄 Atualizando contato:", { 
+          id, 
+          dadosAtuais: data,
+          dadosOriginais: originalContato,
+          payloadEnviado: payload,
+          camposModificados: Object.keys(payload),
+        });
+      }
+      
+      return await contatosService.atualizar(id, payload);
+    },
+    onSuccess: async () => {
+      // Invalidar queries de clientes para atualizar os dados
+      await queryClient.invalidateQueries({ 
+        queryKey: ["clientes"],
+        exact: false,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["cliente", selectedClienteId],
+      });
+      await queryClient.refetchQueries({ 
+        queryKey: ["clientes"],
+        exact: false,
+      });
+      
+      // Recarregar dados do cliente se estiver editando
+      if (selectedClienteId) {
+        const updatedCliente = await clientesService.buscarPorId(
+          selectedClienteId
+        );
+        if (updatedCliente.contato) {
+          setEditContatos(
+            updatedCliente.contato.map((cont: any) => ({
+              id: cont.id,
+              telefone: cont.telefone || "",
+              email: cont.email || "",
+              // Aceitar ambos os formatos (camelCase e snake_case)
+              nomeContato: cont.nomeContato || cont.nome_contato || "",
+              outroTelefone: cont.outroTelefone || cont.outro_telefone || "",
+              nomeOutroTelefone:
+                cont.nomeOutroTelefone || cont.nome_outro_telefone || "",
+              observacao: cont.observacao || "",
+              ativo: cont.ativo !== undefined ? cont.ativo : true,
+            }))
+          );
+        }
+      }
+      
+      toast.success("Contato atualizado com sucesso!");
+      setEditContatoDialogOpen(false);
+      setSelectedContatoId(null);
+      setEditingContato({});
+      setOriginalContato(null);
+    },
+    onError: (error: unknown) => {
+      // Log detalhado do erro (apenas em desenvolvimento)
+      if (import.meta.env.DEV) {
+        console.error("❌ Erro ao atualizar contato:", error);
+        const errorWithResponse = error as any;
+        if (errorWithResponse?.response) {
+          console.error("❌ Status HTTP:", errorWithResponse.response.status);
+          console.error("❌ Dados do erro:", errorWithResponse.response.data);
+        }
+      }
+      
+      const errorMessage =
+        (error as any)?.response?.data?.message ||
+        (Array.isArray((error as any)?.response?.data?.message)
+          ? (error as any).response.data.message.join(", ")
+          : null) ||
+        (error as any)?.message ||
+        "Erro ao atualizar contato";
+      toast.error(errorMessage);
+    },
+  });
+
+  const handleEditEndereco = (enderecoId: number, endereco: any) => {
+    setSelectedEnderecoId(enderecoId);
+    setEditingEndereco({
+      cep: endereco.cep || "",
+      logradouro: endereco.logradouro || "",
+      numero: endereco.numero || "",
+      complemento: endereco.complemento || "",
+      bairro: endereco.bairro || "",
+      cidade: endereco.cidade || "",
+      estado: endereco.estado || "",
+      referencia: endereco.referencia || "",
+    });
+    setEditEnderecoDialogOpen(true);
+  };
+
+  const handleEditContato = (contatoId: number, contato: any) => {
+    setSelectedContatoId(contatoId);
+    
+    // Armazenar valores originais (aceitar ambos os formatos)
+    // IMPORTANTE: Preservar strings vazias como strings vazias, não converter para undefined
+    const original: any = {
+      nomeContato: contato.nomeContato ?? contato.nome_contato ?? undefined,
+      email: contato.email ?? undefined,
+      telefone: contato.telefone ?? undefined,
+      outroTelefone:
+        contato.outroTelefone ?? contato.outro_telefone ?? undefined,
+      nomeOutroTelefone:
+        contato.nomeOutroTelefone ?? contato.nome_outro_telefone ?? undefined,
+      observacao: contato.observacao ?? undefined,
+      ativo: contato.ativo !== undefined ? contato.ativo : true,
+    };
+
+    if (import.meta.env.DEV) {
+      console.log("📋 [handleEditContato] Valores originais armazenados:", {
+        contatoRecebido: contato,
+        originalArmazenado: original,
+        nomeContatoOriginal: original.nomeContato,
+        emailOriginal: original.email,
+        "contato.nomeContato": contato.nomeContato,
+        "contato.nome_contato": contato.nome_contato,
+      });
+    }
+    
+    setOriginalContato(original);
+    
+    // Inicializar com todos os valores (incluindo strings vazias)
+    // Isso permite que o usuário veja e edite todos os campos, mesmo os vazios
+    const editing: UpdateContatoDto = {
+      nomeContato: original.nomeContato,
+      email: original.email,
+      telefone: original.telefone,
+      outroTelefone: original.outroTelefone,
+      nomeOutroTelefone: original.nomeOutroTelefone,
+      observacao: original.observacao,
+      ativo: original.ativo,
+    };
+    
+    setEditingContato(editing);
+    setEditContatoDialogOpen(true);
+  };
+
+  // Carregar dados do cliente selecionado no formulário de edição
+  useEffect(() => {
+    if (selectedCliente && editDialogOpen) {
+      setEditNewCliente({
+        nome: selectedCliente.nome,
+        nome_fantasia: selectedCliente.nome_fantasia || "",
+        nome_razao: selectedCliente.nome_razao || "",
+        tipoPessoa: selectedCliente.tipoPessoa,
+        statusCliente: selectedCliente.statusCliente as
+          | "ATIVO"
+          | "INATIVO"
+          | "BLOQUEADO"
+          | "INADIMPLENTE",
+        cpf_cnpj: selectedCliente.cpf_cnpj,
+        inscricao_estadual: selectedCliente.inscricao_estadual || "",
+      });
+      if (selectedCliente.enderecos && selectedCliente.enderecos.length > 0) {
+        setEditEnderecos(
+          selectedCliente.enderecos.map((end) => ({
+            id: end.id,
+            cep: end.cep || "",
+            logradouro: end.logradouro || "",
+            numero: end.numero || "",
+            complemento: end.complemento || "",
+            bairro: end.bairro || "",
+            cidade: end.cidade || "",
+            estado: end.estado || "",
+            referencia: end.referencia || "",
+          }))
+        );
+      } else {
+        setEditEnderecos([
+          {
+            cep: "",
+            logradouro: "",
+            numero: "",
+            complemento: "",
+            bairro: "",
+            cidade: "",
+            estado: "",
+            referencia: "",
+          },
+        ]);
+      }
+      if (selectedCliente.contato && selectedCliente.contato.length > 0) {
+        setEditContatos(
+          selectedCliente.contato.map((cont: any) => ({
+            id: cont.id,
+            // Preservar valores null/undefined como "" apenas para exibição no input
+            // Mas vamos comparar com os valores originais (null/undefined) na atualização
+            telefone: cont.telefone ?? "",
+            email: cont.email ?? "",
+            // Aceitar ambos os formatos (camelCase e snake_case)
+            nomeContato: cont.nomeContato ?? cont.nome_contato ?? "",
+            outroTelefone: cont.outroTelefone ?? cont.outro_telefone ?? "",
+            nomeOutroTelefone:
+              cont.nomeOutroTelefone ?? cont.nome_outro_telefone ?? "",
+            observacao: cont.observacao ?? "",
+            ativo: cont.ativo !== undefined ? cont.ativo : true,
+          }))
+        );
+      } else {
+        setEditContatos([
+          {
+            telefone: "",
+            email: "",
+            nomeContato: "",
+            outroTelefone: "",
+            nomeOutroTelefone: "",
+            observacao: "",
+          },
+        ]);
+      }
+      setEditCurrentStep(1);
+    }
+  }, [selectedCliente, editDialogOpen]);
+
   const handleDelete = (id: number) => {
-    setClientes(clientes.filter(c => c.id !== id));
-    toast.success("Cliente excluído!");
+    setSelectedClienteId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (selectedClienteId) {
+      deleteClienteMutation.mutate(selectedClienteId);
+    }
+  };
+
+  const handleAplicarFiltros = () => {
+    setFiltrosDialogOpen(false);
+    // A query será atualizada automaticamente pelo React Query
+  };
+
+  const handleLimparFiltros = () => {
+    setFiltrosAvancados({
+      tipoPessoa: "",
+      statusCliente: "",
+      cidade: "",
+      estado: "",
+    });
+    setFiltrosDialogOpen(false);
   };
 
   return (
@@ -65,164 +1192,2524 @@ const Clientes = () => {
             <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
             <p className="text-muted-foreground">Gerencie seus clientes</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="gradient" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Criar Cliente
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Novo Cliente</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>Nome *</Label>
-                  <Input 
-                    placeholder="Nome do cliente"
-                    value={newCliente.nome}
-                    onChange={(e) => setNewCliente({...newCliente, nome: e.target.value})}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <select 
-                      className="w-full h-11 rounded-lg border border-input bg-card px-4"
-                      value={newCliente.tipo}
-                      onChange={(e) => setNewCliente({...newCliente, tipo: e.target.value})}
-                    >
-                      <option value="PF">Pessoa Física</option>
-                      <option value="PJ">Pessoa Jurídica</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{newCliente.tipo === "PF" ? "CPF" : "CNPJ"} *</Label>
-                    <Input 
-                      placeholder={newCliente.tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"}
-                      value={newCliente.cpfCnpj}
-                      onChange={(e) => setNewCliente({...newCliente, cpfCnpj: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>E-mail</Label>
-                  <Input 
-                    type="email"
-                    placeholder="email@cliente.com"
-                    value={newCliente.email}
-                    onChange={(e) => setNewCliente({...newCliente, email: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Telefone</Label>
-                  <Input 
-                    placeholder="(00) 00000-0000"
-                    value={newCliente.telefone}
-                    onChange={(e) => setNewCliente({...newCliente, telefone: e.target.value})}
-                  />
-                </div>
-                <Button onClick={handleCreate} className="w-full" variant="gradient">
-                  Cadastrar Cliente
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <ClienteCreateDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            onCreate={({
+              cliente,
+              enderecos: enderecosData,
+              contatos: contatosData,
+            }) => {
+              // Validação final antes de criar
+              if (cliente.tipoPessoa === "PESSOA_JURIDICA") {
+                if (!cliente.nome_razao || !cliente.cpf_cnpj) {
+                  toast.error(
+                    "Preencha os campos obrigatórios (Razão Social e CNPJ)"
+                  );
+                  return;
+                }
+              } else {
+                if (!cliente.nome || !cliente.cpf_cnpj) {
+                  toast.error("Preencha os campos obrigatórios");
+                  return;
+                }
+              }
+
+              // Limpa e valida o documento
+              const cleanedDoc = cleanDocument(cliente.cpf_cnpj);
+
+              // Valida o documento
+              if (cliente.tipoPessoa === "PESSOA_FISICA") {
+                if (cleanedDoc.length !== 11) {
+                  toast.error("CPF deve ter 11 dígitos");
+                  return;
+                }
+              } else {
+                if (cleanedDoc.length !== 14) {
+                  toast.error("CNPJ deve ter 14 dígitos");
+                  return;
+                }
+              }
+
+              // Formata o documento antes de enviar
+              const formattedDoc =
+                cliente.tipoPessoa === "PESSOA_FISICA"
+                  ? formatCPF(cleanedDoc)
+                  : formatCNPJ(cleanedDoc);
+
+              // Cria o objeto com o documento formatado
+              // Para Pessoa Jurídica: apenas nome_razao e nome_fantasia (SEM nome)
+              // Para Pessoa Física: apenas nome (SEM nome_razao)
+              const clienteToCreate: CreateClienteDto = {
+                tipoPessoa: cliente.tipoPessoa,
+                cpf_cnpj: formattedDoc,
+                statusCliente: cliente.statusCliente,
+                // Para Pessoa Jurídica: nome_razao e nome_fantasia (SEM nome)
+                ...(cliente.tipoPessoa === "PESSOA_JURIDICA" 
+                  ? {
+                      nome_razao: cliente.nome_razao || "",
+                      nome_fantasia: cliente.nome_fantasia,
+                      inscricao_estadual: cliente.inscricao_estadual,
+                    }
+                  : {
+                      // Para Pessoa Física: apenas nome
+                      nome: cliente.nome || "",
+                    }),
+                enderecos: enderecosData.filter(
+                  (end) => end.cep || end.logradouro || end.cidade
+                ),
+                contatos: contatosData.filter(
+                  (cont) => cont.telefone || cont.email || cont.nomeContato
+                ),
+              };
+
+              createClienteMutation.mutate(clienteToCreate);
+            }}
+            isPending={createClienteMutation.isPending}
+          />
         </div>
 
-        {/* Search */}
+        {/* Stats Grid */}
+        <ClienteStats
+          estatisticas={estatisticas}
+          isLoading={isLoadingEstatisticas}
+          error={errorEstatisticas}
+        />
+
+        {/* Filters and Search */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nome ou CPF/CNPJ..." 
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setFiltrosDialogOpen(true)}
+              style={
+                temFiltrosAtivos
+                  ? { borderColor: "var(--primary)", borderWidth: "2px" }
+                  : {}
+              }
+            >
+              <Filter className="w-4 h-4" />
+              Filtros
+              {temFiltrosAtivos && (
+                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                  {
+                    Object.values(filtrosAvancados).filter((v) => v !== "")
+                      .length
+                  }
+                </span>
+              )}
+            </Button>
+            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+              <SheetContent
+                side="right"
+                className="w-[400px] sm:w-[540px] overflow-y-auto"
+              >
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">
+                      Filtros Avançados
+                    </SheetTitle>
+                  </div>
+                  <SheetDescription>Refine sua busca</SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  {/* Tipo de Cliente */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">
+                      Tipo de Cliente
+                    </Label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiltrosAvancados({
+                            ...filtrosAvancados,
+                            tipoPessoa: "",
+                          })
+                        }
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-colors ${
+                          !filtrosAvancados.tipoPessoa
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-card text-foreground border-border hover:bg-secondary"
+                        }`}
+                      >
+                        <Circle
+                          className={`w-4 h-4 ${
+                            !filtrosAvancados.tipoPessoa
+                              ? "text-primary-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                        <span className="text-sm font-medium">Todos</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiltrosAvancados({
+                            ...filtrosAvancados,
+                            tipoPessoa: "PESSOA_JURIDICA",
+                          })
+                        }
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-colors ${
+                          filtrosAvancados.tipoPessoa === "PESSOA_JURIDICA"
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-card text-foreground border-border hover:bg-secondary"
+                        }`}
+                      >
+                        <Building2
+                          className={`w-4 h-4 ${
+                            filtrosAvancados.tipoPessoa === "PESSOA_JURIDICA"
+                              ? "text-primary-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                        <span className="text-sm font-medium">
+                          Pessoa Jurídica
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiltrosAvancados({
+                            ...filtrosAvancados,
+                            tipoPessoa: "PESSOA_FISICA",
+                          })
+                        }
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-colors ${
+                          filtrosAvancados.tipoPessoa === "PESSOA_FISICA"
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-card text-foreground border-border hover:bg-secondary"
+                        }`}
+                      >
+                        <User
+                          className={`w-4 h-4 ${
+                            filtrosAvancados.tipoPessoa === "PESSOA_FISICA"
+                              ? "text-primary-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                        <span className="text-sm font-medium">
+                          Pessoa Física
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Status */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <RadioGroup
+                      value={filtrosAvancados.statusCliente || "none"}
+                      onValueChange={(value) => {
+                        const newStatus = value === "none" ? "" : value;
+                        setFiltrosAvancados({
+                          ...filtrosAvancados,
+                          statusCliente: newStatus as
+                            | ""
+                            | "ATIVO"
+                            | "INATIVO"
+                            | "BLOQUEADO"
+                            | "INADIMPLENTE",
+                        });
+                      }}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="none" id="status-all" />
+                        <Label
+                          htmlFor="status-all"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Circle className="w-3 h-3 text-primary" />
+                          <span>Todos</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ATIVO" id="status-ativo" />
+                        <Label
+                          htmlFor="status-ativo"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Circle className="w-3 h-3 text-green-500" />
+                          <span>Ativo</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="INATIVO" id="status-inativo" />
+                        <Label
+                          htmlFor="status-inativo"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Circle className="w-3 h-3 text-muted-foreground" />
+                          <span>Inativo</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem
+                          value="BLOQUEADO"
+                          id="status-bloqueado"
+                        />
+                        <Label
+                          htmlFor="status-bloqueado"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Circle className="w-3 h-3 text-amber-500" />
+                          <span>Bloqueado</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem
+                          value="INADIMPLENTE"
+                          id="status-inadimplente"
+                        />
+                        <Label
+                          htmlFor="status-inadimplente"
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Circle className="w-3 h-3 text-red-500" />
+                          <span>Inadimplente</span>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  {/* Localização */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                      LOCALIZAÇÃO
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="cidade"
+                          className="flex items-center gap-2"
+                        >
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          Cidade
+                        </Label>
+                        <Input
+                          id="cidade"
+                          placeholder="Ex: São Paulo"
+                          value={filtrosAvancados.cidade}
+                          onChange={(e) =>
+                            setFiltrosAvancados({
+                              ...filtrosAvancados,
+                              cidade: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="estado">Estado</Label>
+                        <Input
+                          id="estado"
+                          placeholder="UF"
+                          value={filtrosAvancados.estado}
+                          onChange={(e) =>
+                            setFiltrosAvancados({
+                              ...filtrosAvancados,
+                              estado: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Botões de ação */}
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={handleAplicarFiltros}
+                      className="flex-1"
+                      variant="gradient"
+                    >
+                      Aplicar Filtros
+                    </Button>
+                    <Button
+                      onClick={handleLimparFiltros}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome, razão social, nome fantasia ou CPF/CNPJ..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
         {/* Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-xl border border-border overflow-hidden"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-sidebar text-sidebar-foreground">
-                  <th className="text-left py-3 px-4 text-sm font-medium">Nome</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">CPF/CNPJ</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">E-mail</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Telefone</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Tipo</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredClientes.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                      Nenhum cliente encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  filteredClientes.map((cliente) => (
-                    <tr key={cliente.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
-                      <td className="py-3 px-4 text-sm font-medium text-foreground">{cliente.nome}</td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">{cliente.cpfCnpj}</td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
-                          {cliente.email}
+        <ClienteTable
+          clientes={clientes}
+          isLoading={isLoadingClientes}
+          error={errorClientes}
+          searchTerm={searchTerm}
+          hasActiveFilters={temFiltrosAtivos}
+          onView={handleView}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onStatusChange={handleStatusChange}
+          updatingStatusId={updatingStatusId}
+        />
+      </div>
+
+      {/* Modal de Visualização */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-primary" />
+              Visualizar Cliente
+            </DialogTitle>
+            <DialogDescription>
+              Informações completas do cliente
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingCliente ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : selectedCliente ? (
+            <div className="space-y-8 mt-6">
+              {/* Informações Básicas */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />
+                  Informações Básicas
+                </h3>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground">
+                      {selectedCliente.tipoPessoa === "PESSOA_JURIDICA"
+                        ? "Razão Social"
+                        : "Nome"}
+                    </Label>
+                    <p className="font-medium text-base">
+                      {selectedCliente.tipoPessoa === "PESSOA_JURIDICA"
+                        ? selectedCliente.nome_razao || selectedCliente.nome
+                        : selectedCliente.nome}
+                    </p>
+                  </div>
+                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" &&
+                    selectedCliente.nome_fantasia && (
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">
+                          Nome Fantasia
+                        </Label>
+                        <p className="font-medium text-base">
+                          {selectedCliente.nome_fantasia}
+                        </p>
+                      </div>
+                    )}
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground">
+                      CPF/CNPJ
+                    </Label>
+                    <p className="font-medium text-base">
+                      {selectedCliente.cpf_cnpj}
+                    </p>
+                  </div>
+                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" &&
+                    selectedCliente.inscricao_estadual && (
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">
+                          Inscrição Estadual
+                        </Label>
+                        <p className="font-medium text-base">
+                          {selectedCliente.inscricao_estadual}
+                        </p>
+                      </div>
+                    )}
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground">
+                      Tipo
+                    </Label>
+                    <p className="font-medium text-base">
+                      {selectedCliente.tipoPessoa === "PESSOA_FISICA"
+                        ? "Pessoa Física"
+                        : "Pessoa Jurídica"}
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                    <Label className="text-sm text-muted-foreground">
+                      Status
+                    </Label>
+                      <span
+                        className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${
+                          selectedCliente.statusCliente === "ATIVO"
+                            ? "bg-green-500/10 text-green-500"
+                            : selectedCliente.statusCliente === "INATIVO"
+                            ? "bg-muted text-muted-foreground"
+                            : selectedCliente.statusCliente === "BLOQUEADO"
+                            ? "bg-amber-500/10 text-amber-500"
+                            : "bg-red-500/10 text-red-500"
+                        }`}
+                      >
+                        {selectedCliente.statusCliente}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Endereços */}
+              {selectedCliente.enderecos &&
+                selectedCliente.enderecos.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-primary" />
+                      Endereços ({selectedCliente.enderecos.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {selectedCliente.enderecos.map((endereco, index) => (
+                        <div
+                          key={index}
+                          className="p-4 border rounded-lg space-y-2 relative"
+                        >
+                          <div className="absolute top-2 right-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (endereco.id) {
+                                  handleEditEndereco(endereco.id, endereco);
+                                }
+                              }}
+                              className="h-8 w-8 p-0"
+                              title="Editar endereço"
+                        >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                CEP
+                              </Label>
+                              <p>{endereco.cep || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Logradouro
+                              </Label>
+                              <p>{endereco.logradouro || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Número
+                              </Label>
+                              <p>{endereco.numero || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Complemento
+                              </Label>
+                              <p>{endereco.complemento || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Bairro
+                              </Label>
+                              <p>{endereco.bairro || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Cidade
+                              </Label>
+                              <p>{endereco.cidade || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Estado
+                              </Label>
+                              <p>{endereco.estado || "-"}</p>
+                            </div>
+                            {endereco.referencia && (
+                              <div className="col-span-2">
+                                <Label className="text-xs text-muted-foreground">
+                                  Referência
+                                </Label>
+                                <p>{endereco.referencia}</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {cliente.telefone}
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Contatos */}
+              {selectedCliente.contato &&
+                selectedCliente.contato.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Phone className="w-5 h-5 text-primary" />
+                      Contatos ({selectedCliente.contato.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {selectedCliente.contato.map((contato, index) => (
+                        <div
+                          key={index}
+                          className="p-4 border rounded-lg space-y-2 relative"
+                        >
+                          <div className="absolute top-2 right-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (contato.id) {
+                                  handleEditContato(contato.id, contato);
+                                }
+                              }}
+                              className="h-8 w-8 p-0"
+                              title="Editar contato"
+                        >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Telefone
+                              </Label>
+                              <p>{contato.telefone || "-"}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                E-mail
+                              </Label>
+                              <p>{contato.email || "-"}</p>
+                            </div>
+                            {(contato.nomeContato ||
+                              (contato as any).nome_contato) && (
+                              <div>
+                                <Label className="text-xs text-muted-foreground">
+                                  Nome do Contato
+                                </Label>
+                                <p>
+                                  {contato.nomeContato ||
+                                    (contato as any).nome_contato}
+                                </p>
+                              </div>
+                            )}
+                            {contato.outroTelefone && (
+                              <div>
+                                <Label className="text-xs text-muted-foreground">
+                                  Outro Telefone
+                                </Label>
+                                <p>{contato.outroTelefone}</p>
+                              </div>
+                            )}
+                            {contato.nomeOutroTelefone && (
+                              <div>
+                                <Label className="text-xs text-muted-foreground">
+                                  Nome do Outro Telefone
+                                </Label>
+                                <p>{contato.nomeOutroTelefone}</p>
+                              </div>
+                            )}
+                            {contato.observacao && (
+                              <div className="col-span-2">
+                                <Label className="text-xs text-muted-foreground">
+                                  Observação
+                                </Label>
+                                <p>{contato.observacao}</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-royal/10 text-royal">
-                          {cliente.tipo}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                          cliente.status === "Ativo" ? "bg-cyan/10 text-cyan" : "bg-muted text-muted-foreground"
-                        }`}>
-                          {cliente.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-1">
-                          <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
-                            <Eye className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button 
-                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                            onClick={() => handleDelete(cliente.id)}
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Datas */}
+              {(selectedCliente.criadoEm || selectedCliente.atualizadoEm) && (
+                <div className="space-y-2 pt-4 border-t">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-primary" />
+                    Informações do Sistema
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {selectedCliente.criadoEm && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          Criado em
+                        </Label>
+                        <p>
+                          {new Date(selectedCliente.criadoEm).toLocaleString(
+                            "pt-BR"
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {selectedCliente.atualizadoEm && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          Atualizado em
+                        </Label>
+                        <p>
+                          {new Date(
+                            selectedCliente.atualizadoEm
+                          ).toLocaleString("pt-BR")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              Cliente não encontrado
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edição */}
+      <Dialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) {
+            setSelectedClienteId(null);
+            setEditCurrentStep(1);
+            setEditNewCliente({
+              nome: "",
+              nome_fantasia: "",
+              nome_razao: "",
+              tipoPessoa: "PESSOA_FISICA",
+              statusCliente: "ATIVO",
+              cpf_cnpj: "",
+              inscricao_estadual: "",
+            });
+            setEditEnderecos([
+              {
+                cep: "",
+                logradouro: "",
+                numero: "",
+                complemento: "",
+                bairro: "",
+                cidade: "",
+                estado: "",
+                referencia: "",
+              },
+            ]);
+            setEditContatos([
+              {
+                telefone: "",
+                email: "",
+                nomeContato: "",
+                outroTelefone: "",
+                nomeOutroTelefone: "",
+                observacao: "",
+                ativo: true,
+              },
+            ]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold">
+                  Editar Cliente
+                </DialogTitle>
+                <DialogDescription className="mt-1">
+                  Preencha os dados do cliente
+                </DialogDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedCliente) {
+                      setEditNewCliente({
+                        nome: selectedCliente.nome,
+                        nome_fantasia: selectedCliente.nome_fantasia || "",
+                        nome_razao: selectedCliente.nome_razao || "",
+                        tipoPessoa: selectedCliente.tipoPessoa,
+                        statusCliente: selectedCliente.statusCliente as
+                          | "ATIVO"
+                          | "INATIVO"
+                          | "BLOQUEADO"
+                          | "INADIMPLENTE",
+                        cpf_cnpj: selectedCliente.cpf_cnpj,
+                        inscricao_estadual:
+                          selectedCliente.inscricao_estadual || "",
+                      });
+                      if (
+                        selectedCliente.enderecos &&
+                        selectedCliente.enderecos.length > 0
+                      ) {
+                        setEditEnderecos(
+                          selectedCliente.enderecos.map((end) => ({
+                            id: end.id,
+                            cep: end.cep || "",
+                            logradouro: end.logradouro || "",
+                            numero: end.numero || "",
+                            complemento: end.complemento || "",
+                            bairro: end.bairro || "",
+                            cidade: end.cidade || "",
+                            estado: end.estado || "",
+                            referencia: end.referencia || "",
+                          }))
+                        );
+                      }
+                      if (
+                        selectedCliente.contato &&
+                        selectedCliente.contato.length > 0
+                      ) {
+                        setEditContatos(
+                          selectedCliente.contato.map((cont: any) => ({
+                            id: cont.id,
+                            telefone: cont.telefone || "",
+                            email: cont.email || "",
+                            nomeContato:
+                              cont.nomeContato || cont.nome_contato || "",
+                            outroTelefone:
+                              cont.outroTelefone || cont.outro_telefone || "",
+                            nomeOutroTelefone:
+                              cont.nomeOutroTelefone ||
+                              cont.nome_outro_telefone ||
+                              "",
+                            observacao: cont.observacao || "",
+                            ativo:
+                              (cont as any).ativo !== undefined
+                                ? (cont as any).ativo
+                                : true,
+                          }))
+                        );
+                      }
+                    }
+                  }}
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Limpar
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {isLoadingCliente ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : selectedCliente ? (
+            <div className="space-y-8 pt-6">
+              {/* Seção: Informações Básicas */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-orange-500/10">
+                    <UserIcon className="w-5 h-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Informações Básicas
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Dados principais do cliente
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-8">
+                  {/* Tipo de Cliente */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">
+                      Tipo de Cliente
+                    </Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditNewCliente({
+                            ...editNewCliente,
+                            tipoPessoa: "PESSOA_JURIDICA",
+                            cpf_cnpj:
+                              editNewCliente.tipoPessoa === "PESSOA_FISICA"
+                                ? ""
+                                : editNewCliente.cpf_cnpj,
+                          })
+                        }
+                        className={`relative p-6 rounded-lg border-2 transition-all ${
+                          (editNewCliente.tipoPessoa ||
+                            selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
+                            ? "border-primary bg-primary/5"
+                            : "border-border bg-card hover:border-primary/50"
+                        }`}
+                      >
+                        {(editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa) === "PESSOA_JURIDICA" && (
+                          <div className="absolute top-3 right-3">
+                            <Check className="w-5 h-5 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex flex-col items-center gap-3">
+                          <Building2
+                            className={`w-8 h-8 ${
+                              (editNewCliente.tipoPessoa ||
+                                selectedCliente.tipoPessoa) ===
+                              "PESSOA_JURIDICA"
+                                ? "text-primary"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                          <div className="text-center">
+                            <p className="font-semibold">Pessoa Jurídica</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              CNPJ
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditNewCliente({
+                            ...editNewCliente,
+                            tipoPessoa: "PESSOA_FISICA",
+                            cpf_cnpj:
+                              editNewCliente.tipoPessoa === "PESSOA_JURIDICA"
+                                ? ""
+                                : editNewCliente.cpf_cnpj,
+                          })
+                        }
+                        className={`relative p-6 rounded-lg border-2 transition-all ${
+                          (editNewCliente.tipoPessoa ||
+                            selectedCliente.tipoPessoa) === "PESSOA_FISICA"
+                            ? "border-primary bg-primary/5"
+                            : "border-border bg-card hover:border-primary/50"
+                        }`}
+                      >
+                        {(editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa) === "PESSOA_FISICA" && (
+                          <div className="absolute top-3 right-3">
+                            <Check className="w-5 h-5 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex flex-col items-center gap-3">
+                          <User
+                            className={`w-8 h-8 ${
+                              (editNewCliente.tipoPessoa ||
+                                selectedCliente.tipoPessoa) === "PESSOA_FISICA"
+                                ? "text-primary"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                          <div className="text-center">
+                            <p className="font-semibold">Pessoa Física</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              CPF
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) */}
+                  {(editNewCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
+                    "PESSOA_JURIDICA" && (
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Nome Fantasia
+                      </Label>
+                      <Input
+                        placeholder="Nome Fantasia da Empresa"
+                        value={
+                          editNewCliente.nome_fantasia ||
+                          selectedCliente.nome_fantasia ||
+                          ""
+                        }
+                        onChange={(e) =>
+                          setEditNewCliente({
+                            ...editNewCliente,
+                            nome_fantasia: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* Nome / Razão Social (SEGUNDO) */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      {(editNewCliente.tipoPessoa ||
+                        selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
+                        ? "Razão Social"
+                        : "Nome"}{" "}
+                      *
+                    </Label>
+                    <Input
+                      placeholder={
+                        (editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
+                          ? "Razão Social da Empresa"
+                          : "Nome do cliente"
+                      }
+                      value={
+                        (editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
+                          ? editNewCliente.nome_razao ||
+                            selectedCliente.nome_razao ||
+                            editNewCliente.nome ||
+                            selectedCliente.nome
+                          : editNewCliente.nome || selectedCliente.nome
+                      }
+                      onChange={(e) => {
+                        const tipo =
+                          editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa;
+                        if (tipo === "PESSOA_JURIDICA") {
+                          // Para Pessoa Jurídica, o campo "Razão Social" deve ser enviado como nome_razao
+                          // NÃO enviar campo nome para Pessoa Jurídica
+                          setEditNewCliente({
+                            ...editNewCliente,
+                            nome_razao: e.target.value, // Campo principal que será enviado ao backend
+                          });
+                        } else {
+                          // Para Pessoa Física, usar apenas nome
+                          setEditNewCliente({
+                            ...editNewCliente,
+                            nome: e.target.value,
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* CPF/CNPJ */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-muted-foreground" />
+                      {(editNewCliente.tipoPessoa ||
+                        selectedCliente.tipoPessoa) === "PESSOA_FISICA"
+                        ? "CPF"
+                        : "CNPJ"}{" "}
+                      *
+                    </Label>
+                    <Input
+                      placeholder={
+                        (editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa) === "PESSOA_FISICA"
+                          ? "000.000.000-00"
+                          : "00.000.000/0000-00"
+                      }
+                      value={
+                        editNewCliente.cpf_cnpj !== undefined
+                          ? editNewCliente.cpf_cnpj
+                          : selectedCliente.cpf_cnpj || ""
+                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        const cleaned = cleanDocument(value);
+                        const tipo =
+                          editNewCliente.tipoPessoa ||
+                          selectedCliente.tipoPessoa;
+                        const maxLength = tipo === "PESSOA_FISICA" ? 11 : 14;
+                        const limited = cleaned.slice(0, maxLength);
+                        let formatted = limited;
+                        if (tipo === "PESSOA_FISICA" && limited.length === 11) {
+                          formatted = formatCPF(limited);
+                        } else if (
+                          tipo === "PESSOA_JURIDICA" &&
+                          limited.length === 14
+                        ) {
+                          formatted = formatCNPJ(limited);
+                        } else if (limited.length > 0) {
+                          if (tipo === "PESSOA_FISICA") {
+                            formatted = limited
+                              .replace(
+                                /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+                                "$1.$2.$3-$4"
+                              )
+                              .replace(/^(\d{3})(\d{3})(\d{3})$/, "$1.$2.$3")
+                              .replace(/^(\d{3})(\d{3})$/, "$1.$2")
+                              .replace(/^(\d{3})$/, "$1");
+                          } else {
+                            formatted = limited
+                              .replace(
+                                /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+                                "$1.$2.$3/$4-$5"
+                              )
+                              .replace(
+                                /^(\d{2})(\d{3})(\d{3})(\d{4})$/,
+                                "$1.$2.$3/$4"
+                              )
+                              .replace(/^(\d{2})(\d{3})(\d{3})$/, "$1.$2.$3")
+                              .replace(/^(\d{2})(\d{3})$/, "$1.$2")
+                              .replace(/^(\d{2})$/, "$1");
+                          }
+                        }
+                        setEditNewCliente({
+                          ...editNewCliente,
+                          cpf_cnpj: formatted || "",
+                        });
+                      }}
+                    />
+                    {/* Mensagem de validação em tempo real - apenas tamanho */}
+                    {(editNewCliente.tipoPessoa ||
+                      selectedCliente.tipoPessoa) === "PESSOA_JURIDICA" &&
+                      cleanDocument(
+                        editNewCliente.cpf_cnpj ||
+                          selectedCliente.cpf_cnpj ||
+                          ""
+                      ).length > 0 &&
+                      cleanDocument(
+                        editNewCliente.cpf_cnpj ||
+                          selectedCliente.cpf_cnpj ||
+                          ""
+                      ).length !== 14 && (
+                        <p className="text-xs text-destructive mt-1">
+                          CNPJ deve ter 14 dígitos.
+                        </p>
+                      )}
+                      {(editNewCliente.tipoPessoa ||
+                      selectedCliente.tipoPessoa) === "PESSOA_FISICA" &&
+                      cleanDocument(
+                        editNewCliente.cpf_cnpj ||
+                          selectedCliente.cpf_cnpj ||
+                          ""
+                      ).length > 0 &&
+                      cleanDocument(
+                        editNewCliente.cpf_cnpj ||
+                          selectedCliente.cpf_cnpj ||
+                          ""
+                      ).length !== 11 && (
+                        <p className="text-xs text-destructive mt-1">
+                          CPF deve ter 11 dígitos.
+                        </p>
+                      )}
+                  </div>
+
+                  {/* Inscrição Estadual - Apenas para Pessoa Jurídica */}
+                  {(editNewCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
+                    "PESSOA_JURIDICA" && (
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-muted-foreground" />
+                        Inscrição Estadual
+                      </Label>
+                      <Input
+                        placeholder="000.000.000.000"
+                        value={
+                          editNewCliente.inscricao_estadual ||
+                          selectedCliente.inscricao_estadual ||
+                          ""
+                        }
+                        onChange={(e) =>
+                          setEditNewCliente({
+                            ...editNewCliente,
+                            inscricao_estadual: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* Status */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {(
+                        [
+                          "ATIVO",
+                          "INATIVO",
+                          "BLOQUEADO",
+                          "INADIMPLENTE",
+                        ] as const
+                      ).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() =>
+                            setEditNewCliente({
+                              ...editNewCliente,
+                              statusCliente: status,
+                            })
+                          }
+                          className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                            (editNewCliente.statusCliente ||
+                              selectedCliente.statusCliente) === status
+                              ? "border-primary bg-primary/5"
+                              : "border-border bg-card hover:border-primary/50"
+                          }`}
+                        >
+                          <Circle
+                            className={`w-4 h-4 ${
+                              (editNewCliente.statusCliente ||
+                                selectedCliente.statusCliente) === status
+                                ? status === "ATIVO"
+                                  ? "text-green-500 fill-green-500"
+                                  : status === "INATIVO"
+                                  ? "text-muted-foreground fill-muted-foreground"
+                                  : status === "BLOQUEADO"
+                                  ? "text-red-500 fill-red-500"
+                                  : "text-primary fill-primary"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                          <span className="font-medium">{status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Endereços */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <MapPinIcon className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">Endereços</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Localizações do cliente
+                      </p>
+                    </div>
+                  </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setEditEnderecos([
+                          ...editEnderecos,
+                          {
+                            cep: "",
+                            logradouro: "",
+                            numero: "",
+                            complemento: "",
+                            bairro: "",
+                            cidade: "",
+                            estado: "",
+                            referencia: "",
+                          },
+                        ])
+                      }
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Endereço
+                    </Button>
+                  </div>
+
+                  {editEnderecos.map((endereco, index) => (
+                    <div
+                      key={index}
+                      className="space-y-4 p-4 border rounded-lg bg-background"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                          <Label className="text-sm font-semibold">
+                            Endereço {index + 1}
+                          </Label>
+                        </div>
+                        {editEnderecos.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setEditEnderecos(
+                                editEnderecos.filter((_, i) => i !== index)
+                              )
+                            }
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
-                          </button>
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>CEP</Label>
+                          <Input
+                            placeholder="00000-000"
+                            value={endereco.cep}
+                            onChange={(e) => {
+                              const formatted = formatCEP(e.target.value);
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].cep = formatted;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                            maxLength={9}
+                          />
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                        <div className="space-y-2">
+                          <Label>Logradouro</Label>
+                          <Input
+                            placeholder="Rua, Avenida, etc."
+                            value={endereco.logradouro}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].logradouro = e.target.value;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Número</Label>
+                          <Input
+                            placeholder="123"
+                            value={endereco.numero}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].numero = e.target.value;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Complemento</Label>
+                          <Input
+                            placeholder="Apto, Sala, etc."
+                            value={endereco.complemento}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].complemento = e.target.value;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Bairro</Label>
+                          <Input
+                            placeholder="Nome do bairro"
+                            value={endereco.bairro}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].bairro = e.target.value;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Cidade</Label>
+                          <Input
+                            placeholder="Nome da cidade"
+                            value={endereco.cidade}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].cidade = e.target.value;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Estado (UF)</Label>
+                          <Input
+                            placeholder="SP"
+                            maxLength={2}
+                            value={endereco.estado}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].estado =
+                                e.target.value.toUpperCase();
+                              setEditEnderecos(newEnderecos);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                          <Label>Referência</Label>
+                          <Input
+                            placeholder="Ponto de referência (máx. 100 caracteres)"
+                            value={endereco.referencia}
+                            onChange={(e) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index].referencia = e.target.value;
+                              setEditEnderecos(newEnderecos);
+                            }}
+                            maxLength={100}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Seção: Contatos */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-cyan-500/10">
+                      <PhoneIcon className="w-5 h-5 text-cyan-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">Contatos</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Informações de contato do cliente
+                      </p>
+                    </div>
+                  </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setEditContatos([
+                          ...editContatos,
+                          {
+                            telefone: "",
+                            email: "",
+                            nomeContato: "",
+                            outroTelefone: "",
+                            nomeOutroTelefone: "",
+                            observacao: "",
+                          },
+                        ])
+                      }
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Contato
+                    </Button>
+                  </div>
+
+                  {editContatos.map((contato, index) => (
+                    <div
+                      key={index}
+                      className="space-y-4 p-4 border rounded-lg bg-background"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                          <Label className="text-sm font-semibold">
+                            Contato {index + 1}
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                          <Label
+                            htmlFor={`ativo-${index}`}
+                            className="text-sm font-medium"
+                          >
+                              Ativo
+                            </Label>
+                            <Switch
+                              id={`ativo-${index}`}
+                            checked={
+                              contato.ativo !== undefined ? contato.ativo : true
+                            }
+                              onCheckedChange={(checked) => {
+                                const newContatos = [...editContatos];
+                                newContatos[index].ativo = checked;
+                                setEditContatos(newContatos);
+                              }}
+                            />
+                          </div>
+                          {editContatos.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setEditContatos(
+                                  editContatos.filter((_, i) => i !== index)
+                                )
+                              }
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="flex items-center gap-2">
+                              <PhoneIcon className="w-4 h-4 text-muted-foreground" />
+                              Telefone
+                            </Label>
+                            <Input
+                              placeholder="(00) 00000-0000"
+                              value={contato.telefone}
+                              onChange={(e) => {
+                                const formatted = formatTelefone(e.target.value);
+                                const newContatos = [...editContatos];
+                                newContatos[index].telefone = formatted;
+                                setEditContatos(newContatos);
+                              }}
+                              maxLength={15}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="flex items-center gap-2">
+                              <MailIcon className="w-4 h-4 text-muted-foreground" />
+                              E-mail
+                            </Label>
+                            <Input
+                              type="email"
+                              placeholder="exemplo@email.com"
+                              value={contato.email}
+                              onChange={(e) => {
+                                const newContatos = [...editContatos];
+                                newContatos[index].email = e.target.value;
+                                setEditContatos(newContatos);
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon className="w-4 h-4 text-muted-foreground" />
+                            Nome do Contato
+                          </Label>
+                          <Input
+                            placeholder="Nome do responsável"
+                            value={contato.nomeContato}
+                            onChange={(e) => {
+                              const newContatos = [...editContatos];
+                              newContatos[index].nomeContato = e.target.value;
+                              setEditContatos(newContatos);
+                            }}
+                          />
+                        </div>
+                      {editEnderecos.length > 1 && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                          <Label>Nome do Outro Telefone</Label>
+                            <Input
+                            placeholder="Nome do responsável"
+                            value={contato.nomeOutroTelefone}
+                              onChange={(e) => {
+                                const newContatos = [...editContatos];
+                              newContatos[index].nomeOutroTelefone =
+                                  e.target.value;
+                                setEditContatos(newContatos);
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                          <Label>Outro Telefone</Label>
+                            <Input
+                            placeholder="(00) 00000-0000"
+                            value={contato.outroTelefone}
+                              onChange={(e) => {
+                                const formatted = formatTelefone(e.target.value);
+                                const newContatos = [...editContatos];
+                                newContatos[index].outroTelefone = formatted;
+                                setEditContatos(newContatos);
+                              }}
+                              maxLength={15}
+                            />
+                          </div>
+                        </div>
+                      )}
+                        <div className="space-y-2">
+                          <Label>Observação</Label>
+                          <Input
+                            placeholder="Observações sobre o contato (máx. 500 caracteres)"
+                            value={contato.observacao}
+                            onChange={(e) => {
+                              const newContatos = [...editContatos];
+                              newContatos[index].observacao = e.target.value;
+                              setEditContatos(newContatos);
+                            }}
+                            maxLength={500}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              {/* Botões de Ação */}
+              <div className="flex gap-3 pt-4 border-t mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditDialogOpen(false);
+                    setSelectedClienteId(null);
+                    setEditCurrentStep(1);
+                  }}
+                  className="flex-1"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Limpar Formulário
+                </Button>
+                    <Button
+                      type="button"
+                      variant="gradient"
+                      onClick={async () => {
+                        if (selectedClienteId) {
+                          setIsUpdatingCliente(true);
+                          try {
+                            // Conforme GUIA-FRONTEND-ATUALIZACAO-CLIENTE.md
+                            // Preparar payload completo com contatos e endereços incluindo IDs
+                            
+                            // Conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md e GUIA-FRONTEND-ATUALIZACAO-CLIENTE.md
+                            // Preparar payload de atualização do cliente
+                            const updateData: Partial<CreateClienteDto> = {};
+                            
+                            // Dados básicos - apenas incluir se foram modificados
+                            // Para Pessoa Jurídica: apenas nome_razao e nome_fantasia (SEM nome)
+                            // Para Pessoa Física: apenas nome (SEM nome_razao)
+                            if (editNewCliente.tipoPessoa === "PESSOA_JURIDICA") {
+                              // Pessoa Jurídica: usar nome_razao (NÃO enviar nome)
+                          if (
+                            editNewCliente.nome_razao &&
+                            editNewCliente.nome_razao !==
+                              (selectedCliente.nome_razao ||
+                                selectedCliente.nome)
+                          ) {
+                                updateData.nome_razao = editNewCliente.nome_razao;
+                              }
+                              // Nome fantasia
+                          if (
+                            editNewCliente.nome_fantasia !== undefined &&
+                            editNewCliente.nome_fantasia !==
+                              selectedCliente.nome_fantasia
+                          ) {
+                            updateData.nome_fantasia =
+                              editNewCliente.nome_fantasia;
+                              }
+                            } else {
+                              // Pessoa Física: usar nome (NÃO enviar nome_razao)
+                          if (
+                            editNewCliente.nome &&
+                            editNewCliente.nome !== selectedCliente.nome
+                          ) {
+                                updateData.nome = editNewCliente.nome;
+                              }
+                            }
+                            
+                        if (
+                          editNewCliente.tipoPessoa &&
+                          editNewCliente.tipoPessoa !==
+                            selectedCliente.tipoPessoa
+                        ) {
+                              updateData.tipoPessoa = editNewCliente.tipoPessoa;
+                            }
+                            
+                        // Atualizar status se mudou (verificar se está definido e diferente)
+                        // Conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md
+                        if (editNewCliente.statusCliente) {
+                          if (
+                            editNewCliente.statusCliente !==
+                            selectedCliente.statusCliente
+                          ) {
+                            updateData.statusCliente =
+                              editNewCliente.statusCliente;
+                            
+                            if (import.meta.env.DEV) {
+                              console.log(
+                                "📤 [Atualizar Status] Status mudou:",
+                                {
+                                antigo: selectedCliente.statusCliente,
+                                novo: editNewCliente.statusCliente,
+                                seráEnviado: true,
+                                }
+                              );
+                            }
+                          } else if (import.meta.env.DEV) {
+                            console.log(
+                              "ℹ️ [Atualizar Status] Status não mudou:",
+                              {
+                              atual: selectedCliente.statusCliente,
+                              editado: editNewCliente.statusCliente,
+                              seráEnviado: false,
+                              }
+                            );
+                          }
+                        } else if (import.meta.env.DEV) {
+                          console.warn(
+                            "⚠️ [Atualizar Status] statusCliente não está definido em editNewCliente"
+                          );
+                            }
+                            
+                        if (
+                          editNewCliente.cpf_cnpj &&
+                          editNewCliente.cpf_cnpj !== selectedCliente.cpf_cnpj
+                        ) {
+                              updateData.cpf_cnpj = editNewCliente.cpf_cnpj;
+                            }
+
+                            // Campos específicos para pessoa jurídica
+                        if (
+                          editNewCliente.tipoPessoa === "PESSOA_JURIDICA" ||
+                          selectedCliente.tipoPessoa === "PESSOA_JURIDICA"
+                        ) {
+                          const nomeRazaAtual =
+                            editNewCliente.nome_razao ||
+                            selectedCliente.nome_razao ||
+                            "";
+                          const nomeRazaOriginal =
+                            selectedCliente.nome_razao || "";
+                              if (nomeRazaAtual !== nomeRazaOriginal) {
+                                updateData.nome_razao = nomeRazaAtual;
+                              }
+                              
+                          const nomeFantasiaAtual =
+                            editNewCliente.nome_fantasia ||
+                            selectedCliente.nome_fantasia ||
+                            "";
+                          const nomeFantasiaOriginal =
+                            selectedCliente.nome_fantasia || "";
+                              if (nomeFantasiaAtual !== nomeFantasiaOriginal) {
+                                updateData.nome_fantasia = nomeFantasiaAtual;
+                              }
+                              
+                          const inscricaoAtual =
+                            editNewCliente.inscricao_estadual ||
+                            selectedCliente.inscricao_estadual ||
+                            "";
+                          const inscricaoOriginal =
+                            selectedCliente.inscricao_estadual || "";
+                              if (inscricaoAtual !== inscricaoOriginal) {
+                                updateData.inscricao_estadual = inscricaoAtual;
+                              }
+                            }
+
+                            // ⚠️ CRUCIAL: Preparar contatos COM IDs (conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md)
+                            // IDs são OBRIGATÓRIOS para atualizar contatos existentes
+                            // Sem ID = cria novo contato | Com ID = atualiza existente
+                            const contatosValidos = editContatos.filter(
+                              (cont) => cont.telefone?.trim() // Telefone é obrigatório
+                            );
+                            
+                            if (contatosValidos.length > 0) {
+                          updateData.contatos = contatosValidos.map(
+                            (contato) => {
+                                const contatoPayload: any = {};
+                                
+                                // ⚠️ OBRIGATÓRIO: Incluir ID se o contato já existe (para atualizar)
+                                // Sem ID = backend cria novo contato
+                                if (contato.id && contato.id > 0) {
+                                  contatoPayload.id = contato.id;
+                                }
+                                
+                                // Telefone é obrigatório se contato for fornecido
+                                contatoPayload.telefone = contato.telefone.trim();
+                                
+                              // Buscar contato original para comparação
+                              const contatoOriginal =
+                                selectedCliente.contato?.find(
+                                  (c: any) => c.id === contato.id
+                                );
+
+                              // Função auxiliar para normalizar e comparar valores
+                              const normalizeValue = (
+                                val: any
+                              ): string | undefined => {
+                                if (val === null || val === undefined)
+                                  return undefined;
+                                if (typeof val === "string") {
+                                  const trimmed = val.trim();
+                                  return trimmed === "" ? undefined : trimmed;
+                                }
+                                return val;
+                              };
+
+                              const hasChanged = (
+                                newVal: any,
+                                originalVal: any
+                              ): boolean => {
+                                const normalizedNew = normalizeValue(newVal);
+                                const normalizedOriginal =
+                                  normalizeValue(originalVal);
+                                return normalizedNew !== normalizedOriginal;
+                              };
+
+                              // ⚠️ IMPORTANTE: Backend espera receber TODOS os campos quando atualiza
+                              // Formato esperado: { id, telefone, nome_contato, email }
+                              // Sempre enviar campos obrigatórios, mesmo que não tenham mudado
+                              // ⚠️ ATENÇÃO: O serviço de clientes espera camelCase e converte para snake_case
+                              // Enviar nomeContato (camelCase), não nome_contato (snake_case)
+
+                              // Email - sempre enviar (backend espera receber)
+                              const emailAtual = contato.email?.trim() ?? "";
+                              contatoPayload.email = emailAtual;
+
+                              // Nome do contato - sempre enviar (backend espera receber)
+                              // Enviar em camelCase (nomeContato) - o serviço converte para snake_case
+                              const nomeContatoAtual =
+                                contato.nomeContato?.trim() ?? "";
+                              contatoPayload.nomeContato = nomeContatoAtual;
+
+                              // Outro telefone - enviar em camelCase
+                              const outroTelefoneAtual =
+                                contato.outroTelefone?.trim() ?? "";
+                              const outroTelefoneOriginal =
+                                contatoOriginal?.outroTelefone?.trim() ??
+                                contatoOriginal?.outro_telefone?.trim() ??
+                                "";
+                              if (
+                                hasChanged(
+                                  outroTelefoneAtual,
+                                  outroTelefoneOriginal
+                                )
+                              ) {
+                                contatoPayload.outroTelefone =
+                                  outroTelefoneAtual;
+                              }
+
+                              // Nome do outro telefone - enviar em camelCase
+                              const nomeOutroTelefoneAtual =
+                                contato.nomeOutroTelefone?.trim() ?? "";
+                              const nomeOutroTelefoneOriginal =
+                                contatoOriginal?.nomeOutroTelefone?.trim() ??
+                                contatoOriginal?.nome_outro_telefone?.trim() ??
+                                "";
+                              if (
+                                hasChanged(
+                                  nomeOutroTelefoneAtual,
+                                  nomeOutroTelefoneOriginal
+                                )
+                              ) {
+                                contatoPayload.nomeOutroTelefone =
+                                  nomeOutroTelefoneAtual;
+                              }
+
+                              // Observação - enviar em camelCase
+                              const observacaoAtual =
+                                contato.observacao?.trim() ?? "";
+                              const observacaoOriginal =
+                                contatoOriginal?.observacao?.trim() ?? "";
+                              if (
+                                hasChanged(observacaoAtual, observacaoOriginal)
+                              ) {
+                                contatoPayload.observacao = observacaoAtual;
+                              }
+                                
+                              // Ativo - comparar apenas se foi definido
+                                if (contato.ativo !== undefined) {
+                                const ativoOriginal =
+                                  contatoOriginal?.ativo !== undefined
+                                    ? contatoOriginal.ativo
+                                    : true;
+                                if (contato.ativo !== ativoOriginal) {
+                                  contatoPayload.ativo = contato.ativo;
+                                }
+                              }
+
+                              if (import.meta.env.DEV) {
+                                console.log(
+                                  "📤 [Salvar Cliente] Contato payload:",
+                                  {
+                                    id: contato.id,
+                                    payload: contatoPayload,
+                                    camposEnviados: Object.keys(contatoPayload),
+                                    formatoEsperado: {
+                                      id: contatoPayload.id,
+                                      telefone: contatoPayload.telefone,
+                                      nomeContato: contatoPayload.nomeContato,
+                                      email: contatoPayload.email,
+                                    },
+                                    nota: "Serviço converte camelCase para snake_case antes de enviar ao backend",
+                                    payloadJSON: JSON.stringify(
+                                      contatoPayload,
+                                      null,
+                                      2
+                                    ),
+                                  }
+                                );
+                                }
+                                
+                                return contatoPayload;
+                            }
+                          );
+                            }
+
+                        // ⚠️ IMPORTANTE: Endereços devem ser atualizados via endpoint específico
+                        // Conforme documentação: PATCH /api/v1/clientes/:id NÃO processa endereços
+                        // Usar PATCH /api/v1/endereco/:id para cada endereço individualmente
+
+                        // Filtrar endereços válidos (tem pelo menos um campo preenchido)
+                            const enderecosValidos = editEnderecos.filter(
+                          (end) =>
+                            end.cep?.trim() ||
+                            end.logradouro?.trim() ||
+                            end.cidade?.trim()
+                            );
+                            
+                        // Debug: mostrar o que será enviado
+                        if (import.meta.env.DEV) {
+                          console.log(
+                            "📤 [Atualizar Cliente] Dados que serão enviados:",
+                            {
+                            clienteId: selectedClienteId,
+                            updateData: updateData,
+                            camposNoUpdateData: Object.keys(updateData),
+                              statusIncluido: "statusCliente" in updateData,
+                            valorStatus: updateData.statusCliente,
+                            }
+                          );
+                        }
+
+                        // Atualizar cliente (sem endereços - eles serão atualizados separadamente)
+                        await clientesService.atualizar(
+                          selectedClienteId,
+                          updateData
+                        );
+
+                        // Atualizar endereços individualmente usando endpoint específico
+                        if (enderecosValidos.length > 0) {
+                          const enderecosPromises = enderecosValidos.map(
+                            async (endereco) => {
+                              // Se tem ID, atualiza endereço existente
+                                if (endereco.id && endereco.id > 0) {
+                                // Buscar endereço original para comparação
+                                const enderecoOriginal =
+                                  selectedCliente.enderecos?.find(
+                                    (e: any) => e.id === endereco.id
+                                  );
+
+                                // Preparar payload apenas com campos modificados
+                                const enderecoPayload: UpdateEnderecoDto = {};
+
+                                // Comparar e incluir apenas campos que mudaram
+                                if (
+                                  endereco.cep?.trim() !==
+                                  enderecoOriginal?.cep?.trim()
+                                ) {
+                                  enderecoPayload.cep =
+                                    endereco.cep?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.logradouro?.trim() !==
+                                  enderecoOriginal?.logradouro?.trim()
+                                ) {
+                                  enderecoPayload.logradouro =
+                                    endereco.logradouro?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.numero?.trim() !==
+                                  enderecoOriginal?.numero?.trim()
+                                ) {
+                                  enderecoPayload.numero =
+                                    endereco.numero?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.complemento?.trim() !==
+                                  enderecoOriginal?.complemento?.trim()
+                                ) {
+                                  enderecoPayload.complemento =
+                                    endereco.complemento?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.bairro?.trim() !==
+                                  enderecoOriginal?.bairro?.trim()
+                                ) {
+                                  enderecoPayload.bairro =
+                                    endereco.bairro?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.cidade?.trim() !==
+                                  enderecoOriginal?.cidade?.trim()
+                                ) {
+                                  enderecoPayload.cidade =
+                                    endereco.cidade?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.estado?.trim() !==
+                                  enderecoOriginal?.estado?.trim()
+                                ) {
+                                  enderecoPayload.estado =
+                                    endereco.estado?.trim() ?? "";
+                                }
+                                if (
+                                  endereco.referencia?.trim() !==
+                                  enderecoOriginal?.referencia?.trim()
+                                ) {
+                                  enderecoPayload.referencia =
+                                    endereco.referencia?.trim() ?? "";
+                                }
+
+                                // Só atualiza se houver campos modificados
+                                if (Object.keys(enderecoPayload).length > 0) {
+                                  if (import.meta.env.DEV) {
+                                    console.log(
+                                      "📤 [Salvar Cliente] Atualizando endereço:",
+                                      {
+                                        id: endereco.id,
+                                        payload: enderecoPayload,
+                                        clienteId: selectedClienteId,
+                                      }
+                                    );
+                            }
+                                  // ⚠️ IMPORTANTE: clienteId é obrigatório para validação de segurança
+                                  if (!selectedClienteId) {
+                                    throw new Error(
+                                      "ID do cliente não encontrado para atualizar endereço"
+                                    );
+                                  }
+
+                                  if (import.meta.env.DEV) {
+                                    console.log(
+                                      "📤 [Salvar Cliente] Atualizando endereço:",
+                                      {
+                                        id: endereco.id,
+                                        payload: enderecoPayload,
+                                        clienteId: selectedClienteId,
+                                        url: `/endereco/${endereco.id}?clienteId=${selectedClienteId}`,
+                                      }
+                                    );
+                                  }
+
+                                  return await enderecosService.atualizar(
+                                    endereco.id,
+                                    enderecoPayload,
+                                    selectedClienteId
+                                  );
+                                }
+                              } else {
+                                // Se não tem ID, cria novo endereço
+                                if (import.meta.env.DEV) {
+                                  console.log(
+                                    "📤 [Salvar Cliente] Criando novo endereço:",
+                                    {
+                                      dados: endereco,
+                                      clienteId: selectedClienteId,
+                                    }
+                                  );
+                                }
+                                return await enderecosService.criar({
+                                  cep: endereco.cep?.trim() ?? "",
+                                  logradouro: endereco.logradouro?.trim() ?? "",
+                                  numero: endereco.numero?.trim() ?? "",
+                                  complemento: endereco.complemento?.trim(),
+                                  bairro: endereco.bairro?.trim() ?? "",
+                                  cidade: endereco.cidade?.trim() ?? "",
+                                  estado: endereco.estado?.trim() ?? "",
+                                  referencia: endereco.referencia?.trim(),
+                                  clienteId: selectedClienteId,
+                                });
+                              }
+                            }
+                          );
+
+                          // Aguardar todas as atualizações de endereços
+                          await Promise.all(enderecosPromises);
+                        }
+
+                            // Invalidar queries e mostrar sucesso
+                            await queryClient.invalidateQueries({ 
+                              queryKey: ["clientes"],
+                          exact: false,
+                            });
+                            await queryClient.invalidateQueries({
+                              queryKey: ["cliente", selectedClienteId],
+                            });
+                            await queryClient.refetchQueries({ 
+                              queryKey: ["clientes"],
+                          exact: false,
+                            });
+                            
+                            toast.success("Cliente atualizado com sucesso!");
+                            setEditDialogOpen(false);
+                            setSelectedClienteId(null);
+                            setEditCurrentStep(1);
+                          } catch (error: any) {
+                            setIsUpdatingCliente(false);
+                            const errorMessage =
+                              error?.response?.data?.message ||
+                              (Array.isArray(error?.response?.data?.message)
+                                ? error.response.data.message.join(", ")
+                                : null) ||
+                              error?.message ||
+                              "Erro ao atualizar cliente";
+                            toast.error(
+                              typeof errorMessage === "string"
+                                ? errorMessage
+                                : "Erro ao atualizar cliente"
+                            );
+                          } finally {
+                            setIsUpdatingCliente(false);
+                          }
+                        }
+                      }}
+                      disabled={isUpdatingCliente}
+                      className="flex-1"
+                    >
+                      {isUpdatingCliente ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Salvar Cliente
+                        </>
+                      )}
+                    </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              Cliente não encontrado
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setSelectedClienteId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              Confirmar Exclusão
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Deseja realmente excluir este cliente?
+            </p>
+            {selectedCliente && (
+              <p className="mt-2 font-medium">{selectedCliente.nome}</p>
+            )}
           </div>
-        </motion.div>
-      </div>
+
+          <div className="flex gap-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setSelectedClienteId(null);
+              }}
+              className="flex-1"
+              disabled={deleteClienteMutation.isPending}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleteClienteMutation.isPending}
+              className="flex-1"
+            >
+              {deleteClienteMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição de Endereço */}
+      <Dialog
+        open={editEnderecoDialogOpen}
+        onOpenChange={setEditEnderecoDialogOpen}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Endereço</DialogTitle>
+            <DialogDescription>
+              Atualize as informações do endereço
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-cep">CEP</Label>
+                <Input
+                  id="edit-cep"
+                  value={editingEndereco.cep || ""}
+                  onChange={(e) => {
+                    const formatted = formatCEP(e.target.value);
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      cep: formatted,
+                    });
+                  }}
+                  placeholder="00000-000"
+                  maxLength={9}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-logradouro">Logradouro</Label>
+                <Input
+                  id="edit-logradouro"
+                  value={editingEndereco.logradouro || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      logradouro: e.target.value,
+                    })
+                  }
+                  placeholder="Rua, Avenida, etc."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-numero">Número</Label>
+                <Input
+                  id="edit-numero"
+                  value={editingEndereco.numero || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      numero: e.target.value,
+                    })
+                  }
+                  placeholder="123"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-complemento">Complemento</Label>
+                <Input
+                  id="edit-complemento"
+                  value={editingEndereco.complemento || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      complemento: e.target.value,
+                    })
+                  }
+                  placeholder="Apto, Bloco, etc."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-bairro">Bairro</Label>
+                <Input
+                  id="edit-bairro"
+                  value={editingEndereco.bairro || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      bairro: e.target.value,
+                    })
+                  }
+                  placeholder="Bairro"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-cidade">Cidade</Label>
+                <Input
+                  id="edit-cidade"
+                  value={editingEndereco.cidade || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      cidade: e.target.value,
+                    })
+                  }
+                  placeholder="Cidade"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-estado">Estado (UF)</Label>
+                <Input
+                  id="edit-estado"
+                  value={editingEndereco.estado || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      estado: e.target.value.toUpperCase(),
+                    })
+                  }
+                  placeholder="PE"
+                  maxLength={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-referencia">Referência</Label>
+                <Input
+                  id="edit-referencia"
+                  value={editingEndereco.referencia || ""}
+                  onChange={(e) =>
+                    setEditingEndereco({
+                      ...editingEndereco,
+                      referencia: e.target.value,
+                    })
+                  }
+                  placeholder="Ponto de referência"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditEnderecoDialogOpen(false);
+                  setSelectedEnderecoId(null);
+                  setEditingEndereco({});
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="gradient"
+                onClick={() => {
+                  if (selectedEnderecoId) {
+                    // ⚠️ IMPORTANTE: clienteId é obrigatório para validação de segurança
+                    // O backend valida que o endereço pertence ao cliente
+                    if (!selectedClienteId) {
+                      toast.error(
+                        "Erro: ID do cliente não encontrado. Recarregue a página e tente novamente."
+                      );
+                      return;
+                    }
+
+                    if (import.meta.env.DEV) {
+                      console.log("📤 [Editar Endereço] Dados:", {
+                        enderecoId: selectedEnderecoId,
+                        clienteId: selectedClienteId,
+                        dados: editingEndereco,
+                      });
+                    }
+
+                    updateEnderecoMutation.mutate({
+                      id: selectedEnderecoId,
+                      data: editingEndereco,
+                      clienteId: selectedClienteId, // Sempre passar clienteId
+                    });
+                  } else {
+                    toast.error("ID do endereço não encontrado");
+                  }
+                }}
+                disabled={updateEnderecoMutation.isPending}
+              >
+                {updateEnderecoMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar Alterações"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição de Contato */}
+      <Dialog
+        open={editContatoDialogOpen}
+        onOpenChange={setEditContatoDialogOpen}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Contato</DialogTitle>
+            <DialogDescription>
+              Atualize as informações do contato
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-contato-nome">Nome do Contato</Label>
+                <Input
+                  id="edit-contato-nome"
+                  value={editingContato.nomeContato ?? ""}
+                  onChange={(e) =>
+                    setEditingContato({
+                      ...editingContato,
+                      nomeContato: e.target.value,
+                    })
+                  }
+                  placeholder="Nome do contato"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-contato-telefone">Telefone *</Label>
+                <Input
+                  id="edit-contato-telefone"
+                  value={editingContato.telefone ?? ""}
+                  onChange={(e) => {
+                    const formatted = formatTelefone(e.target.value);
+                    setEditingContato({
+                      ...editingContato,
+                      telefone: formatted,
+                    });
+                  }}
+                  placeholder="(00) 00000-0000"
+                  maxLength={15}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-contato-email">E-mail</Label>
+                <Input
+                  id="edit-contato-email"
+                  type="email"
+                  value={editingContato.email ?? ""}
+                  onChange={(e) =>
+                    setEditingContato({
+                      ...editingContato,
+                      email: e.target.value,
+                    })
+                  }
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              {(selectedCliente?.enderecos?.length ?? 0) > 1 && (
+                <>
+              <div className="space-y-2">
+                <Label htmlFor="edit-contato-outro-telefone">
+                  Outro Telefone
+                </Label>
+                <Input
+                  id="edit-contato-outro-telefone"
+                  value={editingContato.outroTelefone ?? ""}
+                  onChange={(e) => {
+                    const formatted = formatTelefone(e.target.value);
+                    setEditingContato({
+                      ...editingContato,
+                      outroTelefone: formatted,
+                    });
+                  }}
+                  placeholder="(00) 00000-0000"
+                  maxLength={15}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-contato-nome-outro-telefone">
+                  Nome do Outro Telefone
+                </Label>
+                <Input
+                  id="edit-contato-nome-outro-telefone"
+                  value={editingContato.nomeOutroTelefone ?? ""}
+                  onChange={(e) =>
+                    setEditingContato({
+                      ...editingContato,
+                      nomeOutroTelefone: e.target.value,
+                    })
+                  }
+                  placeholder="Nome"
+                />
+              </div>
+                </>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="edit-contato-ativo">Status</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-contato-ativo"
+                    checked={editingContato.ativo !== false}
+                    onChange={(e) =>
+                      setEditingContato({
+                        ...editingContato,
+                        ativo: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4"
+                  />
+                  <Label
+                    htmlFor="edit-contato-ativo"
+                    className="cursor-pointer"
+                  >
+                    Ativo
+                  </Label>
+                </div>
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="edit-contato-observacao">Observação</Label>
+                <Input
+                  id="edit-contato-observacao"
+                  value={editingContato.observacao ?? ""}
+                  onChange={(e) =>
+                    setEditingContato({
+                      ...editingContato,
+                      observacao: e.target.value,
+                    })
+                  }
+                  placeholder="Observações sobre o contato"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditContatoDialogOpen(false);
+                  setSelectedContatoId(null);
+                  setEditingContato({});
+                  setOriginalContato(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="gradient"
+                onClick={() => {
+                  if (selectedContatoId) {
+                    if (import.meta.env.DEV) {
+                      console.log("🔄 Iniciando atualização de contato:", {
+                        id: selectedContatoId,
+                        dadosEditados: editingContato,
+                        dadosOriginais: originalContato,
+                      });
+                    }
+                    updateContatoMutation.mutate({
+                      id: selectedContatoId,
+                      data: editingContato,
+                    });
+                  } else {
+                    toast.error("ID do contato não encontrado");
+                  }
+                }}
+                disabled={updateContatoMutation.isPending}
+              >
+                {updateContatoMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar Alterações"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

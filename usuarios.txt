@@ -1,0 +1,67 @@
+painel administrativo: 
+eduardu0220@gmail.com
+03022005Eds
+
+# ============================================
+# EMPRESA 1 - Tecnologia Tenant 1
+# ============================================
+
+## ADMINISTRADOR
+Nome: Administrador
+Email: admin@tecnologia-tenant-1.com
+Senha: Admin@tecnologia-tenant-1123!
+Role: ADMIN
+Status: Ativo
+
+## GERENTE
+Nome: gerente Tenant 1
+Email: gerente@email.com
+Senha: gerente123!
+Role: GERENTE
+Status: Ativo
+
+## VENDEDOR
+Nome: vendedor tenant 1
+Email: vendedor@email.com
+Senha: vendedor123!
+Role: VENDEDOR
+Status: Ativo
+
+## FINANCEIRO
+Nome: financeiro tenant 1
+Email: financeiro@email.com
+Senha: financeiro123!
+Role: FINANCEIRO
+Status: Ativo
+
+# ============================================
+# EXEMPLOS ADICIONAIS PARA TESTES
+# ============================================
+
+## ADMINISTRADOR (Alternativo)
+Nome: Carlos Administrador
+Email: carlos.admin@empresa.com
+Senha: Admin@2024!
+Role: ADMIN
+Status: Ativo
+
+## GERENTE (Alternativo)
+Nome: Ana Gerente
+Email: ana.gerente@empresa.com
+Senha: Gerente@2024!
+Role: GERENTE
+Status: Ativo
+
+## VENDEDOR (Inativo - para testar ativação)
+Nome: Pedro Vendedor
+Email: pedro.vendedor@empresa.com
+Senha: Vendedor@2024!
+Role: VENDEDOR
+Status: Inativo
+
+## FINANCEIRO (Inativo - para testar ativação)
+Nome: Julia Financeiro
+Email: julia.financeiro@empresa.com
+Senha: Financeiro@2024!
+Role: FINANCEIRO
+Status: Inativo

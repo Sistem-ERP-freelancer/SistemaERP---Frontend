@@ -13,6 +13,8 @@ import {
   Shield,
   TrendingUp
 } from "lucide-react";
+import { TopERPLogo } from "@/components/TopERPLogo";
+import { openWhatsApp } from "@/lib/whatsapp";
 
 const features = [
   {
@@ -55,12 +57,7 @@ const Landing = () => {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl primary-gradient flex items-center justify-center">
-              <Zap className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold text-foreground">GestãoPro</span>
-          </div>
+          <TopERPLogo variant="landing" showText={false} />
           <Link to="/login">
             <Button variant="gradient" size="lg">
               Acessar Sistema
@@ -97,15 +94,13 @@ const Landing = () => {
               Uma plataforma completa para controlar estoque, finanças, pedidos, 
               fornecedores e clientes em um só lugar.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/login">
-                <Button variant="gradient" size="xl">
-                  Começar Agora
-                  <ArrowRight className="w-5 h-5" />
-                </Button>
-              </Link>
-              <Button variant="hero" size="xl">
-                Ver Demonstração
+            <div className="flex justify-center">
+              <Button 
+                variant="hero" 
+                size="xl"
+                onClick={openWhatsApp}
+              >
+                Falar com Consultor
               </Button>
             </div>
           </motion.div>
@@ -182,12 +177,14 @@ const Landing = () => {
               <p className="text-primary-foreground/80 mb-4">
                 Relatórios, integrações, suporte dedicado e atualizações constantes.
               </p>
-              <Link to="/login">
-                <Button variant="hero" className="w-fit">
-                  Explorar Recursos
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+              <Button 
+                variant="hero" 
+                className="w-fit"
+                onClick={openWhatsApp}
+              >
+                Falar com Consultor
+                <ArrowRight className="w-4 h-4" />
+              </Button>
             </motion.div>
           </div>
         </div>
@@ -198,10 +195,10 @@ const Landing = () => {
         <div className="container mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {[
-              { value: "500+", label: "Empresas Ativas" },
-              { value: "99.9%", label: "Uptime Garantido" },
-              { value: "24/7", label: "Suporte Técnico" },
-              { value: "10x", label: "Mais Produtividade" }
+              { value: "0", label: "Empresas Ativas" },
+              { value: "0%", label: "Uptime Garantido" },
+              { value: "0/0", label: "Suporte Técnico" },
+              { value: "0x", label: "Mais Produtividade" }
             ].map((stat, index) => (
               <motion.div
                 key={index}
@@ -240,15 +237,22 @@ const Landing = () => {
               <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground mb-4">
                 Pronto para transformar sua gestão?
               </h2>
-              <p className="text-primary-foreground/80 text-lg mb-8 max-w-xl mx-auto">
+              <p className="text-primary-foreground/80 text-lg mb-4 max-w-xl mx-auto">
                 Comece agora mesmo e veja como é fácil ter controle total do seu negócio.
               </p>
-              <Link to="/login">
-                <Button variant="hero" size="xl">
-                  Acessar o Sistema
-                  <ArrowRight className="w-5 h-5" />
+              <p className="text-primary-foreground/90 text-xl font-semibold mb-8 max-w-xl mx-auto">
+                Não espere sua empresa entrar no vermelho
+              </p>
+              <div className="flex justify-center">
+                <Button 
+                  variant="hero" 
+                  size="xl"
+                  onClick={openWhatsApp}
+                  className="bg-white text-foreground hover:bg-white/90 border border-cyan"
+                >
+                  Fale com um Consultor
                 </Button>
-              </Link>
+              </div>
             </div>
           </motion.div>
         </div>
@@ -257,14 +261,9 @@ const Landing = () => {
       {/* Footer */}
       <footer className="py-8 px-6 border-t border-border">
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg primary-gradient flex items-center justify-center">
-              <Zap className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-semibold text-foreground">GestãoPro</span>
-          </div>
+          <TopERPLogo variant="landing" showText={false} />
           <p className="text-muted-foreground text-sm">
-            © 2024 GestãoPro. Todos os direitos reservados.
+            © 2025 TopERP. Todos os direitos reservados.
           </p>
         </div>
       </footer>

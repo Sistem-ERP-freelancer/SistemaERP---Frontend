@@ -11,23 +11,47 @@ import {
   LogOut,
   Menu,
   X,
-  Search,
-  Bell,
-  TruckIcon
+  TruckIcon,
+  Shield,
+  Settings,
+  User,
+  ChevronDown
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Notifications } from "@/components/Notifications";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { TopERPLogo } from "@/components/TopERPLogo";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: ShoppingCart, label: "Pedidos", href: "/pedidos" },
-  { icon: DollarSign, label: "Financeiro", href: "/financeiro" },
-  { icon: Truck, label: "Fornecedores", href: "/fornecedores" },
-  { icon: Users, label: "Clientes", href: "/clientes" },
-  { icon: Package, label: "Produtos", href: "/produtos" },
-  { icon: Boxes, label: "Estoque", href: "/estoque" },
-  { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
-];
+const getMenuItems = (isSuperAdmin: boolean) => {
+  const baseItems = [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+    { icon: ShoppingCart, label: "Pedidos", href: "/pedidos" },
+    { icon: DollarSign, label: "Financeiro", href: "/financeiro" },
+    { icon: Truck, label: "Fornecedores", href: "/fornecedores" },
+    { icon: Users, label: "Clientes", href: "/clientes" },
+    { icon: Package, label: "Produtos", href: "/produtos" },
+    { icon: Boxes, label: "Estoque", href: "/estoque" },
+    { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
+    { icon: Settings, label: "Configurações", href: "/settings" },
+  ];
+
+  if (isSuperAdmin) {
+    return [
+      { icon: Shield, label: "Painel Admin", href: "/admin" },
+      ...baseItems,
+    ];
+  }
+
+  return baseItems;
+};
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -37,10 +61,27 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, isSuperAdmin } = useAuth();
+  const menuItems = getMenuItems(isSuperAdmin);
 
-  const handleLogout = () => {
-    toast.success("Logout realizado com sucesso!");
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
+  };
+
+  const getUserInitials = () => {
+    if (user?.nome) {
+      return user.nome
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    if (user?.email) {
+      return user.email[0].toUpperCase();
+    }
+    return 'U';
   };
 
   return (
@@ -62,11 +103,17 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
           {sidebarOpen && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg accent-gradient flex items-center justify-center">
-                <Package className="w-5 h-5 text-accent-foreground" />
-              </div>
-              <span className="font-bold text-sidebar-foreground">GestãoPro</span>
+            <TopERPLogo 
+              variant="sidebar"
+              showText={false}
+            />
+          )}
+          {!sidebarOpen && (
+            <div className="mx-auto">
+              <TopERPLogo 
+                variant="sidebar"
+                showText={false}
+              />
             </div>
           )}
           <button 
@@ -121,22 +168,75 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar..." 
-                className="pl-10 w-64 bg-background"
-              />
-            </div>
           </div>
           <div className="flex items-center gap-3">
-            <button className="relative p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-cyan rounded-full" />
-            </button>
+            <Notifications />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 p-1 rounded-full hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
             <div className="w-10 h-10 rounded-full primary-gradient flex items-center justify-center text-primary-foreground font-semibold">
-              U
+              {getUserInitials()}
             </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {user?.nome || "Usuário"}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.email}
+                    </p>
+                    {user?.role && (
+                      <p className="text-xs leading-none text-muted-foreground mt-1">
+                        {user.role === "ADMIN" && "Administrador"}
+                        {user.role === "GERENTE" && "Gerente"}
+                        {user.role === "VENDEDOR" && "Vendedor"}
+                        {user.role === "FINANCEIRO" && "Financeiro"}
+                        {user.role === "SUPER_ADMIN" && "Super Administrador"}
+                      </p>
+                    )}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {/* Opções apenas para ADMIN e GERENTE */}
+                {(user?.role === "ADMIN" || user?.role === "GERENTE") && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link to="/settings" className="flex items-center cursor-pointer">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Configurações
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/settings" className="flex items-center cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        Gerenciar Usuários
+                      </Link>
+                    </DropdownMenuItem>
+                    {isSuperAdmin && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin" className="flex items-center cursor-pointer">
+                          <Shield className="mr-2 h-4 w-4" />
+                          Painel Admin
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {/* Logout sempre disponível para todos */}
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
