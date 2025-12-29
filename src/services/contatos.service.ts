@@ -212,8 +212,62 @@ class ContatosService {
     return apiClient.patch<Contato>(`/contatos/${id}`, payload);
   }
 
-  async deletar(id: number): Promise<void> {
-    return apiClient.delete<void>(`/contatos/${id}`);
+  async deletar(id: number, clienteId?: number): Promise<void> {
+    // Log detalhado em desenvolvimento
+    if (import.meta.env.DEV) {
+      console.log("🗑️ [ContatosService] Deletando contato:", {
+        contatoId: id,
+        clienteId: clienteId || "não fornecido",
+      });
+    }
+
+    // O backend pode exigir clienteId no body da requisição DELETE (similar ao endereço)
+    const url = `/contatos/${id}`;
+    
+    // Se não tiver clienteId, tentar deletar sem body primeiro
+    if (!clienteId) {
+      try {
+        return await apiClient.delete<void>(url);
+      } catch (error: any) {
+        // Se der erro 400 pedindo clienteId, tentar novamente com clienteId
+        if (error?.response?.status === 400 && error?.response?.data?.message?.includes('clienteId')) {
+          throw new Error("clienteId é obrigatório para deletar contato");
+        }
+        throw error;
+      }
+    }
+    
+    try {
+      // Usar request com método DELETE e body contendo clienteId
+      const result = await apiClient.request<void>(url, {
+        method: "DELETE",
+        body: JSON.stringify({ clienteId }),
+      });
+      
+      if (import.meta.env.DEV) {
+        console.log("✅ [ContatosService] Contato deletado com sucesso:", {
+          contatoId: id,
+          clienteId,
+        });
+      }
+      
+      return result;
+    } catch (error: any) {
+      // Log detalhado do erro
+      if (import.meta.env.DEV) {
+        console.error("❌ [ContatosService] Erro ao deletar contato:", {
+          contatoId: id,
+          clienteId,
+          error,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          data: error?.response?.data,
+          message: error?.message,
+          url,
+        });
+      }
+      throw error;
+    }
   }
 }
 

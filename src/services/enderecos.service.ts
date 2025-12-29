@@ -196,24 +196,53 @@ class EnderecosService {
   }
 
   async deletar(id: number, clienteId?: number): Promise<void> {
-    // O DELETE de endereço aceita clienteId no body conforme documentação
-    // Mas o apiClient.delete não aceita body diretamente, então vamos usar request
+    // Log detalhado em desenvolvimento
+    if (import.meta.env.DEV) {
+      console.log("🗑️ [EnderecosService] Deletando endereço:", {
+        enderecoId: id,
+        clienteId: clienteId || "não fornecido",
+      });
+    }
+
+    // O backend exige clienteId no body da requisição DELETE
     const url = `/endereco/${id}`;
-    const payload: any = {};
-    if (clienteId) {
-      payload.clienteId = clienteId;
-    }
-
-    // Se não houver payload, usa delete normal
+    
+    // Se não tiver clienteId, lançar erro
     if (!clienteId) {
-      return apiClient.delete<void>(url);
+      throw new Error("clienteId é obrigatório para deletar endereço");
     }
-
-    // Se houver payload, precisa usar request diretamente
-    return apiClient.request<void>(url, {
-      method: "DELETE",
-      body: JSON.stringify(payload),
-    });
+    
+    try {
+      // Usar request com método DELETE e body contendo clienteId
+      const result = await apiClient.request<void>(url, {
+        method: "DELETE",
+        body: JSON.stringify({ clienteId }),
+      });
+      
+      if (import.meta.env.DEV) {
+        console.log("✅ [EnderecosService] Endereço deletado com sucesso:", {
+          enderecoId: id,
+          clienteId,
+        });
+      }
+      
+      return result;
+    } catch (error: any) {
+      // Log detalhado do erro
+      if (import.meta.env.DEV) {
+        console.error("❌ [EnderecosService] Erro ao deletar endereço:", {
+          enderecoId: id,
+          clienteId,
+          error,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          data: error?.response?.data,
+          message: error?.message,
+          url,
+        });
+      }
+      throw error;
+    }
   }
 }
 

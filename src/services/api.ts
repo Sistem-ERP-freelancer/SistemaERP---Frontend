@@ -111,8 +111,10 @@ class ApiClient {
         }
 
         // Tratamento de erros de autenticação (401/403)
-        if (response.status === 401 || response.status === 403) {
-          // Remove tokens inválidos
+        // IMPORTANTE: 401 = não autenticado (token inválido/expirado) - fazer logout
+        // IMPORTANTE: 403 = não autorizado (sem permissão) - NÃO fazer logout, apenas mostrar erro
+        if (response.status === 401) {
+          // 401 = Token inválido ou expirado - fazer logout
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           localStorage.removeItem('user');
@@ -128,6 +130,8 @@ class ApiClient {
             }, 100);
           }
         }
+        // 403 = Sem permissão - NÃO fazer logout, apenas lançar erro para ser tratado
+        // O componente pode tratar o erro 403 de forma específica
 
         // Cria um erro customizado com mais informações
         const error = new Error(

@@ -7,6 +7,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -88,12 +98,14 @@ const Clientes = () => {
   const [editingEndereco, setEditingEndereco] = useState<UpdateEnderecoDto>({});
   const [editingContato, setEditingContato] = useState<UpdateContatoDto>({});
   const [originalContato, setOriginalContato] = useState<any>(null); // Armazenar valores originais para comparação
-  const [isUpdatingCliente, setIsUpdatingCliente] = useState(false); // Estado de loading para atualização completa
+  const [isSavingCliente, setIsSavingCliente] = useState(false); // Estado de loading para atualização completa
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null); // ID do cliente que está tendo o status atualizado
+  const [enderecoParaDeletar, setEnderecoParaDeletar] = useState<{ index: number; endereco: any } | null>(null);
+  const [contatoParaDeletar, setContatoParaDeletar] = useState<{ index: number; contato: any } | null>(null);
   
   // Estados para o dialog de edição
   const [editCurrentStep, setEditCurrentStep] = useState(1);
-  const [editNewCliente, setEditNewCliente] = useState<CreateClienteDto>({
+  const [editCliente, setEditCliente] = useState<CreateClienteDto>({
     nome: "",
     nome_fantasia: "",
     nome_razao: "",
@@ -114,18 +126,7 @@ const Clientes = () => {
       estado: string;
       referencia: string;
     }>
-  >([
-    {
-      cep: "",
-      logradouro: "",
-      numero: "",
-      complemento: "",
-      bairro: "",
-      cidade: "",
-      estado: "",
-      referencia: "",
-    },
-  ]);
+  >([]);
   const [editContatos, setEditContatos] = useState<
     Array<{
       id?: number;
@@ -137,17 +138,8 @@ const Clientes = () => {
       observacao: string;
       ativo?: boolean;
     }>
-  >([
-    {
-      telefone: "",
-      email: "",
-      nomeContato: "",
-      outroTelefone: "",
-      nomeOutroTelefone: "",
-      observacao: "",
-      ativo: true,
-    },
-  ]);
+  >([]);
+  const [clienteOriginal, setClienteOriginal] = useState<any>(null);
   
   const [filtrosAvancados, setFiltrosAvancados] = useState<FiltrosClientes>({
     tipoPessoa: "",
@@ -412,7 +404,63 @@ const Clientes = () => {
     enabled: !!selectedClienteId && (viewDialogOpen || editDialogOpen),
   });
 
-  // Mutation para atualizar cliente
+  // Funções helper conforme GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md
+  /**
+   * Compara dois valores considerando null/undefined/string vazia como equivalentes
+   * Conforme guia: null, undefined e '' são tratados como equivalentes
+   */
+  const normalizarParaComparacao = (valor: any): any => {
+    if (valor === null || valor === undefined || valor === '') {
+      return null;
+    }
+    // Boolean não deve ser normalizado
+    if (typeof valor === 'boolean') {
+      return valor;
+    }
+    // String: trim antes de comparar
+    return typeof valor === 'string' ? valor.trim() : valor;
+  };
+
+  /**
+   * Prepara campo para envio ao backend
+   * - undefined = não altera (não inclui no payload)
+   * - "" = limpa (inclui no payload como "")
+   * - valor = atualiza (inclui no payload)
+   * 
+   * Conforme GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md:
+   * - undefined → não altera
+   * - "" → limpa (NULL no banco)
+   * - "valor" → atualiza
+   */
+  const prepararCampoParaEnvio = (valorNovo: any, valorOriginal: any): any => {
+    // Boolean: comparar diretamente
+    if (typeof valorNovo === 'boolean' || typeof valorOriginal === 'boolean') {
+      if (valorNovo !== valorOriginal) {
+        return valorNovo;
+      }
+      return undefined;
+    }
+
+    const novoNormalizado = normalizarParaComparacao(valorNovo);
+    const originalNormalizado = normalizarParaComparacao(valorOriginal);
+
+    // Se não mudou, não enviar (undefined = não altera)
+    if (novoNormalizado === originalNormalizado) {
+      return undefined;
+    }
+
+    // Se mudou, determinar o que enviar
+    // Conforme guia: "" limpa o campo (NULL no banco)
+    // Se o novo valor é null/undefined/string vazia, enviar "" para limpar
+    if (valorNovo === null || valorNovo === undefined || valorNovo === '') {
+      return '';
+    }
+
+    // Se tem valor, enviar o valor normalizado (trim se for string)
+    return typeof valorNovo === 'string' ? valorNovo.trim() : valorNovo;
+  };
+
+  // Mutation para atualizar cliente (mantida para compatibilidade, mas não será mais usada)
   const updateClienteMutation = useMutation({
     mutationFn: async ({
       id,
@@ -794,6 +842,183 @@ const Clientes = () => {
     },
   });
 
+  // Mutation para remover endereço
+  const removerEnderecoMutation = useMutation({
+    mutationFn: async ({ clienteId, enderecoId }: { clienteId: number; enderecoId: number }) => {
+      return await enderecosService.deletar(enderecoId, clienteId);
+    },
+    onSuccess: async (_, variables) => {
+      // Invalidar queries para atualizar a lista
+      await queryClient.invalidateQueries({
+        queryKey: ["cliente", variables.clienteId],
+        exact: true,
+      });
+      
+      // ⚠️ IMPORTANTE: Recarregar dados do cliente para garantir sincronização
+      // Isso atualiza o clienteOriginal com os dados corretos do servidor
+      if (variables.clienteId) {
+        const updatedCliente = await clientesService.buscarPorId(variables.clienteId);
+        
+        // ⚠️ CRÍTICO: Atualizar clienteOriginal com dados do servidor
+        // Isso garante que a validação de endereços/contatos funcione corretamente
+        setClienteOriginal(JSON.parse(JSON.stringify(updatedCliente)));
+        
+        if (updatedCliente.enderecos) {
+          setEditEnderecos(
+            updatedCliente.enderecos.map((end) => ({
+              // Garantir que ID seja número
+              id: end.id ? Number(end.id) : undefined,
+              cep: end.cep || "",
+              logradouro: end.logradouro || "",
+              numero: end.numero || "",
+              complemento: end.complemento || "",
+              bairro: end.bairro || "",
+              cidade: end.cidade || "",
+              estado: end.estado || "",
+              referencia: end.referencia || "",
+            }))
+          );
+        } else {
+          setEditEnderecos([]);
+        }
+      }
+      
+      toast.success("Endereço removido com sucesso!");
+    },
+    onError: (error: any) => {
+      // Log detalhado do erro
+      if (import.meta.env.DEV) {
+        console.error('[Remover Endereço Mutation] Erro completo:', {
+          error,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          data: error?.response?.data,
+          message: error?.message,
+        });
+      }
+      
+      const status = error?.response?.status;
+      const errorMessage = error?.response?.data?.message || error?.message;
+      
+      // Se for 404, o endereço já não existe - não mostrar erro crítico
+      if (status === 404) {
+        console.warn('[Remover Endereço] Endereço não encontrado (404):', errorMessage);
+        // Não mostrar toast de erro, pois já foi tratado no onClick
+        return;
+      }
+      
+      // Se for 403, é erro de permissão/validação - mostrar mensagem específica
+      // IMPORTANTE: 403 NÃO deve causar logout, apenas mostrar erro
+      if (status === 403) {
+        const msg = errorMessage || 
+          "Você não tem permissão para remover este endereço ou o endereço não pertence a este cliente";
+        toast.error(msg);
+        // NÃO fazer logout - erro tratado
+        return;
+      }
+      
+      // Se for 401, o interceptor já tratou (logout)
+      // Mas ainda assim, não propagar o erro
+      if (status === 401) {
+        console.error('[Remover Endereço] Erro de autenticação (401) - logout já foi feito pelo interceptor');
+        // Não fazer nada - logout já foi feito pelo interceptor
+        return;
+      }
+      
+      // Para outros erros, mostrar mensagem
+      toast.error(errorMessage || "Erro ao remover endereço");
+    },
+  });
+
+  // Mutation para remover contato
+  const removerContatoMutation = useMutation({
+    mutationFn: async ({ clienteId, contatoId }: { clienteId: number; contatoId: number }) => {
+      return await contatosService.deletar(contatoId, clienteId);
+    },
+    onSuccess: async (_, variables) => {
+      // Invalidar queries para atualizar a lista
+      await queryClient.invalidateQueries({
+        queryKey: ["cliente", variables.clienteId],
+        exact: true,
+      });
+      
+      // ⚠️ IMPORTANTE: Recarregar dados do cliente para garantir sincronização
+      // Isso atualiza o clienteOriginal com os dados corretos do servidor
+      if (variables.clienteId) {
+        const updatedCliente = await clientesService.buscarPorId(variables.clienteId);
+        
+        // ⚠️ CRÍTICO: Atualizar clienteOriginal com dados do servidor
+        // Isso garante que a validação de endereços/contatos funcione corretamente
+        setClienteOriginal(JSON.parse(JSON.stringify(updatedCliente)));
+        
+        if (updatedCliente.contato) {
+          setEditContatos(
+            updatedCliente.contato.map((cont: any) => ({
+              // Garantir que ID seja número
+              id: cont.id ? Number(cont.id) : undefined,
+              telefone: cont.telefone || "",
+              email: cont.email || "",
+              // Aceitar ambos os formatos (camelCase e snake_case)
+              nomeContato: cont.nomeContato ?? cont.nome_contato ?? "",
+              outroTelefone: cont.outroTelefone ?? cont.outro_telefone ?? "",
+              nomeOutroTelefone:
+                cont.nomeOutroTelefone ?? cont.nome_outro_telefone ?? "",
+              observacao: cont.observacao ?? "",
+              ativo: cont.ativo !== undefined ? cont.ativo : true,
+            }))
+          );
+        } else {
+          setEditContatos([]);
+        }
+      }
+      
+      toast.success("Contato removido com sucesso!");
+    },
+    onError: (error: any) => {
+      // Log detalhado do erro
+      if (import.meta.env.DEV) {
+        console.error('[Remover Contato Mutation] Erro completo:', {
+          error,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          data: error?.response?.data,
+          message: error?.message,
+        });
+      }
+      
+      const status = error?.response?.status;
+      const errorMessage = error?.response?.data?.message || error?.message;
+      
+      // Se for 404, o contato já não existe - não mostrar erro crítico
+      if (status === 404) {
+        console.warn('[Remover Contato] Contato não encontrado (404):', errorMessage);
+        // Não mostrar toast de erro, pois já foi tratado no onClick
+        return;
+      }
+      
+      // Se for 403, é erro de permissão/validação - mostrar mensagem específica
+      // IMPORTANTE: 403 NÃO deve causar logout, apenas mostrar erro
+      if (status === 403) {
+        const msg = errorMessage || 
+          "Você não tem permissão para remover este contato ou o contato não pertence a este cliente";
+        toast.error(msg);
+        // NÃO fazer logout - erro tratado
+        return;
+      }
+      
+      // Se for 401, o interceptor já tratou (logout)
+      // Mas ainda assim, não propagar o erro
+      if (status === 401) {
+        console.error('[Remover Contato] Erro de autenticação (401) - logout já foi feito pelo interceptor');
+        // Não fazer nada - logout já foi feito pelo interceptor
+        return;
+      }
+      
+      // Para outros erros, mostrar mensagem
+      toast.error(errorMessage || "Erro ao remover contato");
+    },
+  });
+
   // Mutation para atualizar contato
   const updateContatoMutation = useMutation({
     mutationFn: async ({
@@ -1021,6 +1246,17 @@ const Clientes = () => {
     },
   });
 
+  // Estado combinado para verificar se há alguma operação em andamento
+  // IMPORTANTE: Deve ser definido APÓS todas as mutations serem criadas
+  const isAnyOperationPending = 
+    isSavingCliente ||
+    createClienteMutation.isPending ||
+    deleteClienteMutation.isPending ||
+    removerEnderecoMutation.isPending ||
+    removerContatoMutation.isPending ||
+    updateEnderecoMutation.isPending ||
+    updateContatoMutation.isPending;
+
   const handleEditEndereco = (enderecoId: number, endereco: any) => {
     setSelectedEnderecoId(enderecoId);
     setEditingEndereco({
@@ -1082,10 +1318,23 @@ const Clientes = () => {
     setEditContatoDialogOpen(true);
   };
 
-  // Carregar dados do cliente selecionado no formulário de edição
+  // Carregar dados do cliente quando abrir o dialog de edição
   useEffect(() => {
-    if (selectedCliente && editDialogOpen) {
-      setEditNewCliente({
+    if (editDialogOpen && selectedCliente && selectedClienteId) {
+      // Debug: verificar dados carregados
+      if (import.meta.env.DEV) {
+        console.log("[Dialog Edição] Dados carregados:", {
+          selectedCliente,
+          enderecos: selectedCliente.enderecos,
+          contatos: selectedCliente.contato
+        });
+      }
+      
+      // Salvar dados originais para comparação (deep copy)
+      setClienteOriginal(JSON.parse(JSON.stringify(selectedCliente)));
+      
+      // Preencher formulário com dados do cliente
+      setEditCliente({
         nome: selectedCliente.nome,
         nome_fantasia: selectedCliente.nome_fantasia || "",
         nome_razao: selectedCliente.nome_razao || "",
@@ -1098,10 +1347,13 @@ const Clientes = () => {
         cpf_cnpj: selectedCliente.cpf_cnpj,
         inscricao_estadual: selectedCliente.inscricao_estadual || "",
       });
+
+      // Preencher endereços
       if (selectedCliente.enderecos && selectedCliente.enderecos.length > 0) {
         setEditEnderecos(
           selectedCliente.enderecos.map((end) => ({
-            id: end.id,
+            // Garantir que ID seja número
+            id: end.id ? Number(end.id) : undefined,
             cep: end.cep || "",
             logradouro: end.logradouro || "",
             numero: end.numero || "",
@@ -1113,27 +1365,17 @@ const Clientes = () => {
           }))
         );
       } else {
-        setEditEnderecos([
-          {
-            cep: "",
-            logradouro: "",
-            numero: "",
-            complemento: "",
-            bairro: "",
-            cidade: "",
-            estado: "",
-            referencia: "",
-          },
-        ]);
+        setEditEnderecos([]);
       }
+
+      // Preencher contatos
       if (selectedCliente.contato && selectedCliente.contato.length > 0) {
         setEditContatos(
           selectedCliente.contato.map((cont: any) => ({
-            id: cont.id,
-            // Preservar valores null/undefined como "" apenas para exibição no input
-            // Mas vamos comparar com os valores originais (null/undefined) na atualização
-            telefone: cont.telefone ?? "",
-            email: cont.email ?? "",
+            // Garantir que ID seja número
+            id: cont.id ? Number(cont.id) : undefined,
+            telefone: cont.telefone || "",
+            email: cont.email || "",
             // Aceitar ambos os formatos (camelCase e snake_case)
             nomeContato: cont.nomeContato ?? cont.nome_contato ?? "",
             outroTelefone: cont.outroTelefone ?? cont.outro_telefone ?? "",
@@ -1144,20 +1386,30 @@ const Clientes = () => {
           }))
         );
       } else {
-        setEditContatos([
-          {
-            telefone: "",
-            email: "",
-            nomeContato: "",
-            outroTelefone: "",
-            nomeOutroTelefone: "",
-            observacao: "",
-          },
-        ]);
+        setEditContatos([]);
       }
+      
       setEditCurrentStep(1);
     }
-  }, [selectedCliente, editDialogOpen]);
+  }, [editDialogOpen, selectedCliente, selectedClienteId]);
+
+  // Resetar estados quando fechar o dialog
+  useEffect(() => {
+    if (!editDialogOpen) {
+      setEditCliente({
+        nome: "",
+        nome_fantasia: "",
+        nome_razao: "",
+        tipoPessoa: "PESSOA_FISICA",
+        statusCliente: "ATIVO",
+        cpf_cnpj: "",
+        inscricao_estadual: "",
+      });
+      setEditEnderecos([]);
+      setEditContatos([]);
+      setClienteOriginal(null);
+    }
+  }, [editDialogOpen]);
 
   const handleDelete = (id: number) => {
     setSelectedClienteId(id);
@@ -1499,7 +1751,7 @@ const Clientes = () => {
                         </Label>
                         <Input
                           id="cidade"
-                          placeholder="Ex: São Paulo"
+                          placeholder="Digite o nome da cidade (Ex: São Paulo, Rio de Janeiro)"
                           value={filtrosAvancados.cidade}
                           onChange={(e) =>
                             setFiltrosAvancados({
@@ -1507,21 +1759,33 @@ const Clientes = () => {
                               cidade: e.target.value,
                             })
                           }
+                          className="w-full"
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Digite o nome completo ou parcial da cidade
+                        </p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="estado">Estado</Label>
+                        <Label htmlFor="estado" className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-muted-foreground" />
+                          Estado (UF)
+                        </Label>
                         <Input
                           id="estado"
-                          placeholder="UF"
+                          placeholder="Digite a UF do estado (Ex: SP, RJ, MG) ou nome completo"
                           value={filtrosAvancados.estado}
                           onChange={(e) =>
                             setFiltrosAvancados({
                               ...filtrosAvancados,
-                              estado: e.target.value,
+                              estado: e.target.value.toUpperCase(),
                             })
                           }
+                          maxLength={2}
+                          className="w-full"
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Digite a sigla (2 letras) ou o nome completo do estado
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1901,7 +2165,7 @@ const Clientes = () => {
           if (!open) {
             setSelectedClienteId(null);
             setEditCurrentStep(1);
-            setEditNewCliente({
+            setEditCliente({
               nome: "",
               nome_fantasia: "",
               nome_razao: "",
@@ -1954,7 +2218,7 @@ const Clientes = () => {
                   size="sm"
                   onClick={() => {
                     if (selectedCliente) {
-                      setEditNewCliente({
+                      setEditCliente({
                         nome: selectedCliente.nome,
                         nome_fantasia: selectedCliente.nome_fantasia || "",
                         nome_razao: selectedCliente.nome_razao || "",
@@ -2052,23 +2316,23 @@ const Clientes = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          setEditNewCliente({
-                            ...editNewCliente,
+                          setEditCliente({
+                            ...editCliente,
                             tipoPessoa: "PESSOA_JURIDICA",
                             cpf_cnpj:
-                              editNewCliente.tipoPessoa === "PESSOA_FISICA"
+                              editCliente.tipoPessoa === "PESSOA_FISICA"
                                 ? ""
-                                : editNewCliente.cpf_cnpj,
+                                : editCliente.cpf_cnpj,
                           })
                         }
                         className={`relative p-6 rounded-lg border-2 transition-all ${
-                          (editNewCliente.tipoPessoa ||
+                          (editCliente.tipoPessoa ||
                             selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
                             ? "border-primary bg-primary/5"
                             : "border-border bg-card hover:border-primary/50"
                         }`}
                       >
-                        {(editNewCliente.tipoPessoa ||
+                        {(editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_JURIDICA" && (
                           <div className="absolute top-3 right-3">
                             <Check className="w-5 h-5 text-primary" />
@@ -2077,7 +2341,7 @@ const Clientes = () => {
                         <div className="flex flex-col items-center gap-3">
                           <Building2
                             className={`w-8 h-8 ${
-                              (editNewCliente.tipoPessoa ||
+                              (editCliente.tipoPessoa ||
                                 selectedCliente.tipoPessoa) ===
                               "PESSOA_JURIDICA"
                                 ? "text-primary"
@@ -2095,23 +2359,23 @@ const Clientes = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          setEditNewCliente({
-                            ...editNewCliente,
+                          setEditCliente({
+                            ...editCliente,
                             tipoPessoa: "PESSOA_FISICA",
                             cpf_cnpj:
-                              editNewCliente.tipoPessoa === "PESSOA_JURIDICA"
+                              editCliente.tipoPessoa === "PESSOA_JURIDICA"
                                 ? ""
-                                : editNewCliente.cpf_cnpj,
+                                : editCliente.cpf_cnpj,
                           })
                         }
                         className={`relative p-6 rounded-lg border-2 transition-all ${
-                          (editNewCliente.tipoPessoa ||
+                          (editCliente.tipoPessoa ||
                             selectedCliente.tipoPessoa) === "PESSOA_FISICA"
                             ? "border-primary bg-primary/5"
                             : "border-border bg-card hover:border-primary/50"
                         }`}
                       >
-                        {(editNewCliente.tipoPessoa ||
+                        {(editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_FISICA" && (
                           <div className="absolute top-3 right-3">
                             <Check className="w-5 h-5 text-primary" />
@@ -2120,7 +2384,7 @@ const Clientes = () => {
                         <div className="flex flex-col items-center gap-3">
                           <User
                             className={`w-8 h-8 ${
-                              (editNewCliente.tipoPessoa ||
+                              (editCliente.tipoPessoa ||
                                 selectedCliente.tipoPessoa) === "PESSOA_FISICA"
                                 ? "text-primary"
                                 : "text-muted-foreground"
@@ -2138,7 +2402,7 @@ const Clientes = () => {
                   </div>
 
                   {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) */}
-                  {(editNewCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
+                  {(editCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
                     "PESSOA_JURIDICA" && (
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
@@ -2148,13 +2412,13 @@ const Clientes = () => {
                       <Input
                         placeholder="Nome Fantasia da Empresa"
                         value={
-                          editNewCliente.nome_fantasia ||
+                          editCliente.nome_fantasia ||
                           selectedCliente.nome_fantasia ||
                           ""
                         }
                         onChange={(e) =>
-                          setEditNewCliente({
-                            ...editNewCliente,
+                          setEditCliente({
+                            ...editCliente,
                             nome_fantasia: e.target.value,
                           })
                         }
@@ -2166,7 +2430,7 @@ const Clientes = () => {
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-muted-foreground" />
-                      {(editNewCliente.tipoPessoa ||
+                      {(editCliente.tipoPessoa ||
                         selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
                         ? "Razão Social"
                         : "Nome"}{" "}
@@ -2174,35 +2438,35 @@ const Clientes = () => {
                     </Label>
                     <Input
                       placeholder={
-                        (editNewCliente.tipoPessoa ||
+                        (editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
                           ? "Razão Social da Empresa"
                           : "Nome do cliente"
                       }
                       value={
-                        (editNewCliente.tipoPessoa ||
+                        (editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
-                          ? editNewCliente.nome_razao ||
+                          ? editCliente.nome_razao ||
                             selectedCliente.nome_razao ||
-                            editNewCliente.nome ||
+                            editCliente.nome ||
                             selectedCliente.nome
-                          : editNewCliente.nome || selectedCliente.nome
+                          : editCliente.nome || selectedCliente.nome
                       }
                       onChange={(e) => {
                         const tipo =
-                          editNewCliente.tipoPessoa ||
+                          editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa;
                         if (tipo === "PESSOA_JURIDICA") {
                           // Para Pessoa Jurídica, o campo "Razão Social" deve ser enviado como nome_razao
                           // NÃO enviar campo nome para Pessoa Jurídica
-                          setEditNewCliente({
-                            ...editNewCliente,
+                          setEditCliente({
+                            ...editCliente,
                             nome_razao: e.target.value, // Campo principal que será enviado ao backend
                           });
                         } else {
                           // Para Pessoa Física, usar apenas nome
-                          setEditNewCliente({
-                            ...editNewCliente,
+                          setEditCliente({
+                            ...editCliente,
                             nome: e.target.value,
                           });
                         }
@@ -2214,7 +2478,7 @@ const Clientes = () => {
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-muted-foreground" />
-                      {(editNewCliente.tipoPessoa ||
+                      {(editCliente.tipoPessoa ||
                         selectedCliente.tipoPessoa) === "PESSOA_FISICA"
                         ? "CPF"
                         : "CNPJ"}{" "}
@@ -2222,21 +2486,21 @@ const Clientes = () => {
                     </Label>
                     <Input
                       placeholder={
-                        (editNewCliente.tipoPessoa ||
+                        (editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_FISICA"
                           ? "000.000.000-00"
                           : "00.000.000/0000-00"
                       }
                       value={
-                        editNewCliente.cpf_cnpj !== undefined
-                          ? editNewCliente.cpf_cnpj
+                        editCliente.cpf_cnpj !== undefined
+                          ? editCliente.cpf_cnpj
                           : selectedCliente.cpf_cnpj || ""
                       }
                       onChange={(e) => {
                         const value = e.target.value;
                         const cleaned = cleanDocument(value);
                         const tipo =
-                          editNewCliente.tipoPessoa ||
+                          editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa;
                         const maxLength = tipo === "PESSOA_FISICA" ? 11 : 14;
                         const limited = cleaned.slice(0, maxLength);
@@ -2273,22 +2537,22 @@ const Clientes = () => {
                               .replace(/^(\d{2})$/, "$1");
                           }
                         }
-                        setEditNewCliente({
-                          ...editNewCliente,
+                        setEditCliente({
+                          ...editCliente,
                           cpf_cnpj: formatted || "",
                         });
                       }}
                     />
                     {/* Mensagem de validação em tempo real - apenas tamanho */}
-                    {(editNewCliente.tipoPessoa ||
+                    {(editCliente.tipoPessoa ||
                       selectedCliente.tipoPessoa) === "PESSOA_JURIDICA" &&
                       cleanDocument(
-                        editNewCliente.cpf_cnpj ||
+                        editCliente.cpf_cnpj ||
                           selectedCliente.cpf_cnpj ||
                           ""
                       ).length > 0 &&
                       cleanDocument(
-                        editNewCliente.cpf_cnpj ||
+                        editCliente.cpf_cnpj ||
                           selectedCliente.cpf_cnpj ||
                           ""
                       ).length !== 14 && (
@@ -2296,15 +2560,15 @@ const Clientes = () => {
                           CNPJ deve ter 14 dígitos.
                         </p>
                       )}
-                      {(editNewCliente.tipoPessoa ||
+                      {(editCliente.tipoPessoa ||
                       selectedCliente.tipoPessoa) === "PESSOA_FISICA" &&
                       cleanDocument(
-                        editNewCliente.cpf_cnpj ||
+                        editCliente.cpf_cnpj ||
                           selectedCliente.cpf_cnpj ||
                           ""
                       ).length > 0 &&
                       cleanDocument(
-                        editNewCliente.cpf_cnpj ||
+                        editCliente.cpf_cnpj ||
                           selectedCliente.cpf_cnpj ||
                           ""
                       ).length !== 11 && (
@@ -2315,7 +2579,7 @@ const Clientes = () => {
                   </div>
 
                   {/* Inscrição Estadual - Apenas para Pessoa Jurídica */}
-                  {(editNewCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
+                  {(editCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
                     "PESSOA_JURIDICA" && (
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
@@ -2325,13 +2589,13 @@ const Clientes = () => {
                       <Input
                         placeholder="000.000.000.000"
                         value={
-                          editNewCliente.inscricao_estadual ||
+                          editCliente.inscricao_estadual ||
                           selectedCliente.inscricao_estadual ||
                           ""
                         }
                         onChange={(e) =>
-                          setEditNewCliente({
-                            ...editNewCliente,
+                          setEditCliente({
+                            ...editCliente,
                             inscricao_estadual: e.target.value,
                           })
                         }
@@ -2355,13 +2619,13 @@ const Clientes = () => {
                           key={status}
                           type="button"
                           onClick={() =>
-                            setEditNewCliente({
-                              ...editNewCliente,
+                            setEditCliente({
+                              ...editCliente,
                               statusCliente: status,
                             })
                           }
                           className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                            (editNewCliente.statusCliente ||
+                            (editCliente.statusCliente ||
                               selectedCliente.statusCliente) === status
                               ? "border-primary bg-primary/5"
                               : "border-border bg-card hover:border-primary/50"
@@ -2369,7 +2633,7 @@ const Clientes = () => {
                         >
                           <Circle
                             className={`w-4 h-4 ${
-                              (editNewCliente.statusCliente ||
+                              (editCliente.statusCliente ||
                                 selectedCliente.statusCliente) === status
                                 ? status === "ATIVO"
                                   ? "text-green-500 fill-green-500"
@@ -2440,20 +2704,24 @@ const Clientes = () => {
                             Endereço {index + 1}
                           </Label>
                         </div>
-                        {editEnderecos.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            // Se tem ID, marcar para deletar do backend
+                            if (endereco.id) {
+                              setEnderecoParaDeletar({ index, endereco });
+                            } else {
+                              // Se não tem ID, apenas remover do array
                               setEditEnderecos(
                                 editEnderecos.filter((_, i) => i !== index)
-                              )
+                              );
                             }
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        )}
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -2631,20 +2899,24 @@ const Clientes = () => {
                               }}
                             />
                           </div>
-                          {editContatos.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              // Se tem ID, marcar para deletar do backend
+                              if (contato.id) {
+                                setContatoParaDeletar({ index, contato });
+                              } else {
+                                // Se não tem ID, apenas remover do array
                                 setEditContatos(
                                   editContatos.filter((_, i) => i !== index)
-                                )
+                                );
                               }
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          )}
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
                         </div>
                       </div>
                       <div className="space-y-4">
@@ -2766,78 +3038,161 @@ const Clientes = () => {
                       type="button"
                       variant="gradient"
                       onClick={async () => {
-                        if (selectedClienteId && selectedCliente) {
-                          setIsUpdatingCliente(true);
-                          try {
-                            // Conforme GUIA_FRONTEND_ATUALIZACAO_CLIENTES_E_FORNECEDORES.md
-                            // Usar método atualizarParcial que implementa a lógica completa do guia
-                            
-                            // Preparar dados do formulário para o formato esperado
-                            const dadosEditados = {
-                              nome: editNewCliente.nome,
-                              nome_fantasia: editNewCliente.nome_fantasia,
-                              nome_razao: editNewCliente.nome_razao,
-                              tipoPessoa: editNewCliente.tipoPessoa,
-                              statusCliente: editNewCliente.statusCliente,
-                              cpf_cnpj: editNewCliente.cpf_cnpj,
-                              inscricao_estadual: editNewCliente.inscricao_estadual,
-                              enderecos: editEnderecos,
-                              contatos: editContatos,
-                            };
-
-                            // Converter para ClienteFormState e identificar campos alterados
-                            const { formState, camposAlterados } = prepararAtualizacaoCliente(
-                              selectedCliente,
-                              dadosEditados
-                            );
-
-                            // Atualizar usando o método parcial conforme o guia
-                            await clientesService.atualizarParcial(
-                              selectedClienteId,
-                              formState,
-                              camposAlterados
-                            );
-
-                            // Invalidar queries e mostrar sucesso
-                            await queryClient.invalidateQueries({ 
-                              queryKey: ["clientes"],
-                              exact: false,
+                        if (!selectedClienteId || !clienteOriginal) return;
+                        
+                        setIsSavingCliente(true);
+                        // Declarar variáveis fora do try para uso no catch
+                        let formState: any = null;
+                        let camposAlterados: string[] = [];
+                        
+                        try {
+                          // Conforme GUIA_FRONTEND_ATUALIZACAO_CLIENTES_E_FORNECEDORES.md
+                          // Usar método atualizarParcial que implementa a lógica completa do guia
+                          
+                          // Debug: verificar dados antes de preparar
+                          if (import.meta.env.DEV) {
+                            console.log('[Salvar Cliente] Dados do formulário:', {
+                              editEnderecos: editEnderecos,
+                              editEnderecosCount: editEnderecos.length,
+                              enderecosNovos: editEnderecos.filter(e => !e.id).length,
+                              enderecosExistentes: editEnderecos.filter(e => e.id).length,
+                              clienteOriginalEnderecos: clienteOriginal.enderecos?.length || 0
                             });
-                            await queryClient.invalidateQueries({
-                              queryKey: ["cliente", selectedClienteId],
-                            });
-                            await queryClient.refetchQueries({ 
-                              queryKey: ["clientes"],
-                              exact: false,
-                            });
-                            
-                            toast.success("Cliente atualizado com sucesso!");
-                            setEditDialogOpen(false);
-                            setSelectedClienteId(null);
-                            setEditCurrentStep(1);
-                          } catch (error: any) {
-                            setIsUpdatingCliente(false);
-                            const errorMessage =
-                              error?.response?.data?.message ||
-                              (Array.isArray(error?.response?.data?.message)
-                                ? error.response.data.message.join(", ")
-                                : null) ||
-                              error?.message ||
-                              "Erro ao atualizar cliente";
-                            toast.error(
-                              typeof errorMessage === "string"
-                                ? errorMessage
-                                : "Erro ao atualizar cliente"
-                            );
-                          } finally {
-                            setIsUpdatingCliente(false);
                           }
+
+                          // Preparar dados do formulário para o formato esperado
+                          const dadosEditados = {
+                            nome: editCliente.nome,
+                            nome_fantasia: editCliente.nome_fantasia,
+                            nome_razao: editCliente.nome_razao,
+                            tipoPessoa: editCliente.tipoPessoa,
+                            statusCliente: editCliente.statusCliente,
+                            cpf_cnpj: editCliente.cpf_cnpj,
+                            inscricao_estadual: editCliente.inscricao_estadual,
+                            enderecos: editEnderecos, // Sempre enviar array se houver endereços
+                            contatos: editContatos,
+                          };
+
+                          // Converter para ClienteFormState e identificar campos alterados
+                          const resultado = prepararAtualizacaoCliente(
+                            clienteOriginal,
+                            dadosEditados
+                          );
+                          formState = resultado.formState;
+                          camposAlterados = resultado.camposAlterados;
+
+                          // Debug: log do que será enviado
+                          if (import.meta.env.DEV) {
+                            console.log('[Salvar Cliente] Dados preparados:', {
+                              camposAlterados,
+                              enderecosCount: formState.enderecos.length,
+                              enderecos: formState.enderecos,
+                              contatosCount: formState.contatos.length,
+                              contatos: formState.contatos
+                            });
+                          }
+
+                          // Validar que temos um ID válido
+                          if (!selectedClienteId) {
+                            throw new Error('ID do cliente não encontrado');
+                          }
+
+                          // Debug: log completo antes de enviar
+                          if (import.meta.env.DEV) {
+                            console.log('[Salvar Cliente] Antes de enviar:', {
+                              clienteId: selectedClienteId,
+                              camposAlterados,
+                              formState: {
+                                ...formState,
+                                enderecos: formState.enderecos.map(e => ({
+                                  id: e.id,
+                                  isNew: e.isNew,
+                                  cep: e.cep,
+                                  logradouro: e.logradouro,
+                                  cidade: e.cidade,
+                                  estado: e.estado
+                                }))
+                              }
+                            });
+                          }
+
+                          // Atualizar usando o método parcial conforme o guia
+                          const clienteAtualizado = await clientesService.atualizarParcial(
+                            selectedClienteId,
+                            formState,
+                            camposAlterados
+                          );
+
+                          // Debug: verificar resposta do backend
+                          if (import.meta.env.DEV) {
+                            console.log('[Salvar Cliente] Resposta do backend:', {
+                              cliente: clienteAtualizado,
+                              enderecos: clienteAtualizado.enderecos,
+                              contatos: clienteAtualizado.contato
+                            });
+                          }
+
+                          // Invalidar queries e mostrar sucesso
+                          await queryClient.invalidateQueries({ 
+                            queryKey: ["clientes"],
+                            exact: false,
+                          });
+                          await queryClient.invalidateQueries({
+                            queryKey: ["cliente", selectedClienteId],
+                          });
+                          await queryClient.refetchQueries({ 
+                            queryKey: ["clientes"],
+                            exact: false,
+                          });
+                          
+                          toast.success("Cliente atualizado com sucesso!");
+                          setEditDialogOpen(false);
+                          setSelectedClienteId(null);
+                        } catch (error: any) {
+                          // Log detalhado do erro
+                          console.error('[Salvar Cliente] Erro completo:', {
+                            error,
+                            response: error?.response,
+                            status: error?.response?.status,
+                            statusText: error?.response?.statusText,
+                            data: error?.response?.data,
+                            message: error?.message,
+                            clienteId: selectedClienteId,
+                            payloadEnviado: {
+                              camposAlterados,
+                              enderecosCount: formState.enderecos.length,
+                              enderecosNovos: formState.enderecos.filter(e => !e.id).length,
+                              enderecosExistentes: formState.enderecos.filter(e => e.id).length
+                            }
+                          });
+                          
+                          // Usar mensagem do erro tratado ou mensagem específica do backend
+                          let errorMessage = error?.message;
+                          
+                          // Se o erro tem response, tentar extrair mensagem específica
+                          if (error?.response?.data) {
+                            const backendMessage = error.response.data.message || error.response.data.error;
+                            if (backendMessage) {
+                              errorMessage = Array.isArray(backendMessage) 
+                                ? backendMessage.join(", ")
+                                : backendMessage;
+                            }
+                          }
+                          
+                          // Se não tem mensagem específica, usar mensagem padrão
+                          if (!errorMessage || errorMessage === 'Error') {
+                            errorMessage = "Erro ao atualizar cliente. Verifique os dados e tente novamente.";
+                          }
+                          
+                          toast.error(errorMessage);
+                        } finally {
+                          setIsSavingCliente(false);
                         }
                       }}
-                      disabled={isUpdatingCliente}
+                      disabled={isSavingCliente}
                       className="flex-1"
                     >
-                      {isUpdatingCliente ? (
+                      {isSavingCliente ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Salvando...
@@ -3292,6 +3647,265 @@ const Clientes = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de confirmação para deletar endereço */}
+      <AlertDialog open={enderecoParaDeletar !== null} onOpenChange={(open) => {
+        if (!open) {
+          setEnderecoParaDeletar(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este endereço? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+            {enderecoParaDeletar?.endereco?.logradouro && (
+              <div className="mt-2 p-2 bg-muted rounded text-sm">
+                <strong>Endereço:</strong> {enderecoParaDeletar.endereco.logradouro}
+                {enderecoParaDeletar.endereco.numero && `, ${enderecoParaDeletar.endereco.numero}`}
+                {enderecoParaDeletar.endereco.bairro && ` - ${enderecoParaDeletar.endereco.bairro}`}
+                {enderecoParaDeletar.endereco.cidade && `, ${enderecoParaDeletar.endereco.cidade}`}
+                {enderecoParaDeletar.endereco.estado && `-${enderecoParaDeletar.endereco.estado}`}
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!enderecoParaDeletar) return;
+                
+                const { index, endereco } = enderecoParaDeletar;
+                
+                // Se o endereço já existe no backend (tem ID), verificar se realmente existe
+                if (endereco.id && selectedClienteId && clienteOriginal) {
+                  // Verificar se o ID realmente existe nos endereços originais
+                  const idExiste = clienteOriginal.enderecos?.some(
+                    e => e.id && Number(e.id) === Number(endereco.id)
+                  );
+                  
+                  if (idExiste) {
+                    // ID existe, tentar deletar via endpoint
+                    try {
+                      await removerEnderecoMutation.mutateAsync({
+                        clienteId: selectedClienteId,
+                        enderecoId: Number(endereco.id)
+                      });
+                      // Se chegou aqui, a deleção foi bem-sucedida
+                      // O onSuccess da mutation já atualiza os dados
+                    } catch (error: any) {
+                      // IMPORTANTE: Prevenir que erros tratáveis causem logout
+                      // Capturar e tratar TODOS os erros aqui para evitar propagação
+                      
+                      const status = error?.response?.status;
+                      const errorMessage = error?.response?.data?.message || error?.message;
+                      
+                      // Se for 404, o endereço já não existe - apenas remover do estado local
+                      if (status === 404) {
+                        console.warn('[Remover Endereço] Endereço já não existe no backend, removendo apenas do estado local');
+                        setEditEnderecos(
+                          editEnderecos.filter((_, i) => i !== index)
+                        );
+                        toast.success("Endereço removido");
+                        setEnderecoParaDeletar(null);
+                        return; // Sair aqui para não continuar
+                      }
+                      
+                      // Se for 403, é erro de permissão/validação - NÃO fazer logout
+                      if (status === 403) {
+                        const msg = errorMessage || "Você não tem permissão para remover este endereço ou o endereço não pertence a este cliente";
+                        toast.error(msg);
+                        setEnderecoParaDeletar(null);
+                        return; // Sair aqui - erro tratado, não propagar
+                      }
+                      
+                      // Se for 401, o interceptor já tratou (logout)
+                      // Mas ainda assim, tratar aqui para não propagar
+                      if (status === 401) {
+                        console.error('[Remover Endereço] Erro de autenticação (401) - logout já foi feito pelo interceptor');
+                        setEnderecoParaDeletar(null);
+                        return; // Sair aqui - logout já foi feito
+                      }
+                      
+                      // Para outros erros, mostrar mensagem e fechar diálogo
+                      console.error('[Remover Endereço] Erro não tratado:', error);
+                      toast.error(errorMessage || "Erro ao remover endereço");
+                      setEnderecoParaDeletar(null);
+                      // Não propagar o erro - já foi tratado
+                    }
+                  } else {
+                    // ID não existe nos originais, apenas remover do estado local
+                    console.warn('[Remover Endereço] ID não encontrado nos endereços originais, removendo apenas do estado local');
+                    setEditEnderecos(
+                      editEnderecos.filter((_, i) => i !== index)
+                    );
+                    toast.success("Endereço removido");
+                  }
+                } else {
+                  // Se é um endereço novo (sem ID), apenas remover do estado local
+                  setEditEnderecos(
+                    editEnderecos.filter((_, i) => i !== index)
+                  );
+                  toast.success("Endereço removido");
+                }
+                
+                // Fechar diálogo
+                setEnderecoParaDeletar(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removerEnderecoMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Removendo...
+                </>
+              ) : (
+                "Remover"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de confirmação para deletar contato */}
+      <AlertDialog open={contatoParaDeletar !== null} onOpenChange={(open) => {
+        if (!open) {
+          setContatoParaDeletar(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este contato? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+            {contatoParaDeletar?.contato?.telefone && (
+              <div className="mt-2 p-2 bg-muted rounded text-sm">
+                <strong>Contato:</strong> {contatoParaDeletar.contato.telefone}
+                {contatoParaDeletar.contato.nomeContato && ` - ${contatoParaDeletar.contato.nomeContato}`}
+                {contatoParaDeletar.contato.email && ` (${contatoParaDeletar.contato.email})`}
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!contatoParaDeletar) return;
+                
+                const { index, contato } = contatoParaDeletar;
+                
+                // Se o contato já existe no backend (tem ID), verificar se realmente existe
+                if (contato.id && selectedClienteId && clienteOriginal) {
+                  // Verificar se o ID realmente existe nos contatos originais
+                  const idExiste = clienteOriginal.contato?.some(
+                    c => c.id && Number(c.id) === Number(contato.id)
+                  );
+                  
+                  if (idExiste) {
+                    // ID existe, tentar deletar via endpoint
+                    try {
+                      await removerContatoMutation.mutateAsync({
+                        clienteId: selectedClienteId,
+                        contatoId: Number(contato.id)
+                      });
+                      // Se chegou aqui, a deleção foi bem-sucedida
+                      // O onSuccess da mutation já atualiza os dados
+                    } catch (error: any) {
+                      // IMPORTANTE: Prevenir que erros tratáveis causem logout
+                      // Se for 404, o contato já não existe - apenas remover do estado local
+                      if (error?.response?.status === 404) {
+                        console.warn('[Remover Contato] Contato já não existe no backend, removendo apenas do estado local');
+                        setEditContatos(
+                          editContatos.filter((_, i) => i !== index)
+                        );
+                        toast.success("Contato removido");
+                        setContatoParaDeletar(null);
+                        return; // Sair aqui para não continuar
+                      }
+                      
+                      // Se for 403, é erro de permissão/validação - NÃO fazer logout
+                      if (error?.response?.status === 403) {
+                        const msg = error?.response?.data?.message || 
+                          "Você não tem permissão para remover este contato ou o contato não pertence a este cliente";
+                        toast.error(msg);
+                        setContatoParaDeletar(null);
+                        return; // Sair aqui - erro tratado, não propagar
+                      }
+                      
+                      // Se for 401, o interceptor já tratou (logout)
+                      // Mas ainda assim, tratar aqui para não propagar
+                      if (error?.response?.status === 401) {
+                        console.error('[Remover Contato] Erro de autenticação (401) - logout já foi feito pelo interceptor');
+                        setContatoParaDeletar(null);
+                        return; // Sair aqui - logout já foi feito
+                      }
+                      
+                      // Para outros erros, mostrar mensagem e fechar diálogo
+                      console.error('[Remover Contato] Erro não tratado:', error);
+                      toast.error(error?.response?.data?.message || error?.message || "Erro ao remover contato");
+                      setContatoParaDeletar(null);
+                      // Não propagar o erro - já foi tratado
+                    }
+                  } else {
+                    // ID não existe nos originais, apenas remover do estado local
+                    console.warn('[Remover Contato] ID não encontrado nos contatos originais, removendo apenas do estado local');
+                    setEditContatos(
+                      editContatos.filter((_, i) => i !== index)
+                    );
+                    toast.success("Contato removido");
+                    setContatoParaDeletar(null);
+                  }
+                } else {
+                  // Se é um contato novo (sem ID), apenas remover do estado local
+                  setEditContatos(
+                    editContatos.filter((_, i) => i !== index)
+                  );
+                  toast.success("Contato removido");
+                  setContatoParaDeletar(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removerContatoMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Removendo...
+                </>
+              ) : (
+                "Remover"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Overlay de Loading Global - aparece durante qualquer operação */}
+      {isAnyOperationPending && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center">
+          <div className="bg-card rounded-xl p-8 shadow-2xl border border-border flex flex-col items-center gap-4 min-w-[200px]">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-sm font-medium text-foreground">
+              {isSavingCliente && "Salvando cliente..."}
+              {createClienteMutation.isPending && "Criando cliente..."}
+              {deleteClienteMutation.isPending && "Excluindo cliente..."}
+              {removerEnderecoMutation.isPending && "Removendo endereço..."}
+              {removerContatoMutation.isPending && "Removendo contato..."}
+              {updateEnderecoMutation.isPending && "Atualizando endereço..."}
+              {updateContatoMutation.isPending && "Atualizando contato..."}
+              {!isSavingCliente && 
+               !createClienteMutation.isPending && 
+               !deleteClienteMutation.isPending &&
+               !removerEnderecoMutation.isPending &&
+               !removerContatoMutation.isPending &&
+               !updateEnderecoMutation.isPending &&
+               !updateContatoMutation.isPending && 
+               "Processando..."}
+            </p>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 };
