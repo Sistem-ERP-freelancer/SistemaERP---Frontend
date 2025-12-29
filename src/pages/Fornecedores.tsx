@@ -8,6 +8,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -42,6 +52,7 @@ import {
   CreateFornecedorDto,
   fornecedoresService,
 } from "@/services/fornecedores.service";
+import { prepararAtualizacaoFornecedor } from "@/features/fornecedores/utils/prepararAtualizacaoFornecedor";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -74,7 +85,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 
 const Fornecedores = () => {
@@ -86,8 +97,10 @@ const Fornecedores = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedFornecedorId, setSelectedFornecedorId] = useState<number | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
+  const [isSavingFornecedor, setIsSavingFornecedor] = useState(false);
+  const [enderecoParaDeletar, setEnderecoParaDeletar] = useState<{ index: number; endereco: any } | null>(null);
+  const [contatoParaDeletar, setContatoParaDeletar] = useState<{ index: number; contato: any } | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
-  const [editCurrentStep, setEditCurrentStep] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
   const [newFornecedor, setNewFornecedor] = useState<CreateFornecedorDto>({
@@ -141,16 +154,13 @@ const Fornecedores = () => {
     statusFornecedor: "",
     cidade: "",
     estado: "",
-    telefone: "",
-    email: "",
-    nomeContato: "",
   });
 
   // Estados para edição
-  const [editNewFornecedor, setEditNewFornecedor] = useState<CreateFornecedorDto>({
+  const [editFornecedor, setEditFornecedor] = useState<CreateFornecedorDto>({
     nome_fantasia: "",
     nome_razao: "",
-    tipoFornecedor: "PESSOA_JURIDICA",
+    tipoFornecedor: "PESSOA_FISICA",
     statusFornecedor: "ATIVO",
     cpf_cnpj: "",
     inscricao_estadual: "",
@@ -167,51 +177,100 @@ const Fornecedores = () => {
       estado: string;
       referencia: string;
     }>
-  >([
-    {
-      cep: "",
-      logradouro: "",
-      numero: "",
-      complemento: "",
-      bairro: "",
-      cidade: "",
-      estado: "",
-      referencia: "",
-    },
-  ]);
+  >([]);
   const [editContatos, setEditContatos] = useState<
     Array<{
       id?: number;
       telefone: string;
       email: string;
       nomeContato: string;
+      outroTelefone: string;
+      nomeOutroTelefone: string;
       observacao: string;
-      ativo?: boolean;
+      ativo: boolean;
     }>
-  >([
-    {
-      telefone: "",
-      email: "",
-      nomeContato: "",
-      observacao: "",
-      ativo: true,
-    },
-  ]);
+  >([]);
+  const [fornecedorOriginal, setFornecedorOriginal] = useState<any>(null);
 
-  // Buscar estatísticas
-  const { data: estatisticas, isLoading: isLoadingEstatisticas } = useQuery({
-    queryKey: ["fornecedores-estatisticas"],
-    queryFn: () => fornecedoresService.getEstatisticas(),
+  // Buscar todos os fornecedores para calcular estatísticas
+  const { data: todosFornecedoresData } = useQuery({
+    queryKey: ["fornecedores-todos-estatisticas"],
+    queryFn: async () => {
+      try {
+        const response = await fornecedoresService.listar({
+          limit: 10000, // Buscar um número grande para pegar todos
+        });
+        // Extrair array de fornecedores
+        if (Array.isArray(response)) {
+          return response;
+        } else if (Array.isArray(response.data)) {
+          return response.data;
+        } else if (Array.isArray(response.fornecedores)) {
+          return response.fornecedores;
+        }
+        return [];
+      } catch (error) {
+        console.error("Erro ao buscar todos os fornecedores para estatísticas:", error);
+        return [];
+      }
+    },
     refetchInterval: 30000, // Atualiza a cada 30 segundos
     retry: false,
   });
 
-  // Verificar se há filtros ativos
-  const temFiltrosAtivos = Object.values(filtrosAvancados).some(
-    (val) => val !== ""
-  );
+  // Calcular estatísticas localmente baseado nos fornecedores
+  const estatisticasCalculadas = useMemo(() => {
+    const todosFornecedores = todosFornecedoresData || [];
+    
+    const agora = new Date();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    
+    const novosNoMes = todosFornecedores.filter((fornecedor: any) => {
+      if (!fornecedor.criandoEm) return false;
+      const dataCriacao = new Date(fornecedor.criandoEm);
+      return dataCriacao >= inicioMes;
+    }).length;
 
-  // Buscar fornecedores - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
+    return {
+      total: todosFornecedores.length,
+      ativos: todosFornecedores.filter((f: any) => f.statusFornecedor === "ATIVO").length,
+      inativos: todosFornecedores.filter((f: any) => f.statusFornecedor === "INATIVO").length,
+      bloqueados: todosFornecedores.filter((f: any) => f.statusFornecedor === "BLOQUEADO").length,
+      novosNoMes,
+    };
+  }, [todosFornecedoresData]);
+
+  // Buscar estatísticas da API como fallback
+  const { data: estatisticasApi, isLoading: isLoadingEstatisticas } = useQuery({
+    queryKey: ["fornecedores-estatisticas"],
+    queryFn: () => fornecedoresService.getEstatisticas(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  // Usar estatísticas calculadas (sempre atualizadas) ao invés da API
+  const estatisticas = estatisticasCalculadas;
+
+  // Buscar cidades disponíveis
+  const [cidadeSearchTerm, setCidadeSearchTerm] = useState("");
+  const { data: cidades = [], isLoading: isLoadingCidades } = useQuery({
+    queryKey: ["fornecedores-cidades", cidadeSearchTerm],
+    queryFn: () => fornecedoresService.buscarCidades(cidadeSearchTerm || undefined),
+    enabled: filtrosDialogOpen, // Só busca quando o dialog de filtros está aberto
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+  });
+
+  // Verificar se há filtros ativos
+  // Verificar tipos de filtros conforme guia de endpoints
+  // Filtros básicos: tipoFornecedor, statusFornecedor (aceitos em /fornecedor)
+  // Filtros avançados: cidade, estado (aceitos apenas em /fornecedor/buscar-avancado)
+  const temFiltrosBasicos = !!(filtrosAvancados.tipoFornecedor?.trim() || filtrosAvancados.statusFornecedor?.trim());
+  const temFiltrosAvancados = !!(filtrosAvancados.cidade?.trim() || filtrosAvancados.estado?.trim());
+  const temTermo = !!searchTerm.trim();
+  // Variável para UI (verifica se há qualquer filtro ativo)
+  const temFiltrosAtivos = temFiltrosBasicos || temFiltrosAvancados;
+
+  // Buscar fornecedores conforme GUIA_ENDPOINTS_BUSCA_FILTRO.md
   const { 
     data: fornecedoresResponse, 
     isLoading: isLoadingFornecedores 
@@ -219,28 +278,102 @@ const Fornecedores = () => {
     queryKey: ["fornecedores", searchTerm, filtrosAvancados, currentPage],
     queryFn: async () => {
       try {
-        if (temFiltrosAtivos) {
-          // Usa busca avançada quando há filtros
-          const response = await fornecedoresService.buscarAvancado({
-            termo: searchTerm.trim() || undefined,
-            ...filtrosAvancados,
+        // Conforme GUIA_ENDPOINTS_BUSCA_FILTRO.md:
+        // - /fornecedor/buscar: busca em nome fantasia, razão social ou CNPJ (busca simples)
+        // - /fornecedor/buscar-avancado: busca em nome, razão social, CNPJ + aceita filtros adicionais
+        
+        if (temTermo && !temFiltrosAvancados && !temFiltrosBasicos) {
+          // Quando há apenas termo (sem filtros), usa busca simples
+          // Busca em: nome fantasia, razão social ou CNPJ/CPF
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Usando buscar (termo apenas):', searchTerm.trim());
+            console.log('[Buscar Fornecedores] Busca em: nome fantasia, razão social, CNPJ/CPF');
+          }
+
+          const response = await fornecedoresService.buscar(searchTerm.trim(), {
             page: currentPage,
             limit: pageSize,
           });
+          
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Resposta buscar:', {
+              total: response.total,
+              fornecedoresCount: response.data?.length || response.fornecedores?.length || 0
+            });
+          }
+
           return response;
-        } else if (searchTerm.trim()) {
-          // Usa endpoint de busca quando há termo
-          const response = await fornecedoresService.buscar(searchTerm, {
+        } else if (temTermo || temFiltrosAvancados || temFiltrosBasicos) {
+          // Quando há termo + filtros OU apenas filtros, usa busca avançada
+          const params: any = {
             page: currentPage,
             limit: pageSize,
-          });
+          };
+
+          // Adicionar termo se houver (busca em nome, razão social, CNPJ)
+          if (temTermo) {
+            params.termo = searchTerm.trim();
+          }
+
+          // Adicionar todos os filtros (básicos e avançados)
+          if (filtrosAvancados.tipoFornecedor) {
+            params.tipoFornecedor = filtrosAvancados.tipoFornecedor;
+          }
+          if (filtrosAvancados.statusFornecedor) {
+            params.statusFornecedor = filtrosAvancados.statusFornecedor;
+          }
+          if (filtrosAvancados.cidade && filtrosAvancados.cidade.trim()) {
+            params.cidade = filtrosAvancados.cidade.trim();
+          }
+          if (filtrosAvancados.estado && filtrosAvancados.estado.trim()) {
+            params.estado = filtrosAvancados.estado.trim().toUpperCase();
+          }
+
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Usando buscarAvancado com parâmetros:', params);
+            console.log('[Buscar Fornecedores] O termo busca em: nome_fantasia, nome_razao, cpf_cnpj (CNPJ/CPF)');
+          }
+
+          const response = await fornecedoresService.buscarAvancado(params);
+          
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Resposta buscarAvancado:', {
+              total: response.total,
+              page: response.page,
+              totalPages: response.totalPages,
+              fornecedoresCount: response.data?.length || response.fornecedores?.length || 0
+            });
+          }
+
           return response;
         } else {
-          // Lista todos quando não há termo nem filtros
-          const response = await fornecedoresService.listar({
+          // Usa listar quando há apenas filtros básicos OU quando não há nada
+          // O endpoint /fornecedor aceita tipoFornecedor e statusFornecedor
+          const params: any = {
             page: currentPage,
             limit: pageSize,
-          });
+          };
+
+          if (filtrosAvancados.tipoFornecedor) {
+            params.tipoFornecedor = filtrosAvancados.tipoFornecedor;
+          }
+          if (filtrosAvancados.statusFornecedor) {
+            params.statusFornecedor = filtrosAvancados.statusFornecedor;
+          }
+
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Usando listar com parâmetros:', params);
+          }
+
+          const response = await fornecedoresService.listar(params);
+          
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Resposta listar:', {
+              total: response.total,
+              fornecedoresCount: response.data?.length || response.fornecedores?.length || 0
+            });
+          }
+
           return response;
         }
       } catch (error: any) {
@@ -250,6 +383,7 @@ const Fornecedores = () => {
             message: error?.message,
             response: error?.response?.data,
             status: error?.response?.status,
+            url: error?.config?.url,
           });
         }
         return {
@@ -265,7 +399,7 @@ const Fornecedores = () => {
     retry: false,
   });
 
-  // Extrair fornecedores - pode vir em data, fornecedores, ou ser um array direto
+  // Extrair fornecedores - pode vir em data, fornecedores, fornecedor (singular), ou ser um array direto
   let fornecedores: any[] = [];
   let totalFornecedores = 0;
   
@@ -280,11 +414,28 @@ const Fornecedores = () => {
       fornecedores = fornecedoresResponse.data;
       totalFornecedores = fornecedoresResponse.total || fornecedoresResponse.data.length;
     }
-    // Se tiver propriedade fornecedores
+    // Se tiver propriedade fornecedores (plural)
     else if (Array.isArray(fornecedoresResponse.fornecedores)) {
       fornecedores = fornecedoresResponse.fornecedores;
       totalFornecedores = fornecedoresResponse.total || fornecedoresResponse.fornecedores.length;
     }
+    // Se tiver propriedade fornecedor (singular) - conforme GUIA_ENDPOINTS_BUSCA_FILTRO.md
+    else if (Array.isArray(fornecedoresResponse.fornecedor)) {
+      fornecedores = fornecedoresResponse.fornecedor;
+      totalFornecedores = fornecedoresResponse.total || fornecedoresResponse.fornecedor.length;
+    }
+  }
+  
+  // Debug: Log detalhado em desenvolvimento
+  if (import.meta.env.DEV && fornecedoresResponse) {
+    console.log('[Fornecedores] Extração de dados:', {
+      responseKeys: Object.keys(fornecedoresResponse),
+      temData: !!fornecedoresResponse.data,
+      temFornecedores: !!fornecedoresResponse.fornecedores,
+      temFornecedor: !!fornecedoresResponse.fornecedor,
+      total: fornecedoresResponse.total,
+      fornecedoresExtraidos: fornecedores.length,
+    });
   }
   
   const totalPages = fornecedoresResponse?.totalPages || Math.ceil(totalFornecedores / pageSize);
@@ -354,6 +505,9 @@ const Fornecedores = () => {
       queryClient.invalidateQueries({ queryKey: ["fornecedores"] });
       queryClient.invalidateQueries({
         queryKey: ["fornecedores-estatisticas"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["fornecedores-todos-estatisticas"],
       });
       toast.success("Fornecedor cadastrado com sucesso!");
       resetForm();
@@ -438,37 +592,36 @@ const Fornecedores = () => {
       return;
     }
 
-    // Preparar dados de endereços (filtrar endereços vazios)
-    const enderecosValidos = enderecos.filter(
-      (end) =>
-        end.cep ||
-        end.logradouro ||
-        end.numero ||
-        end.bairro ||
-        end.cidade ||
-        end.estado
-    );
+    // Preparar dados de endereços
+    // Conforme GUIA-FRONTEND-ATUALIZACAO-CAMPOS-VAZIOS.md:
+    // Campos de texto vazios: usar "" (será convertido para null no backend)
+    const enderecosFormatados = enderecos.map((end) => ({
+      cep: end.cep ?? "",
+      logradouro: end.logradouro ?? "",
+      numero: end.numero ?? "",
+      complemento: end.complemento ?? "",
+      bairro: end.bairro ?? "",
+      cidade: end.cidade ?? "",
+      estado: end.estado ?? "",
+      referencia: end.referencia ?? "",
+    }));
 
-    // Preparar dados de contatos (filtrar contatos vazios)
-    const contatosValidos = contatos.filter(
-      (cont) => cont.telefone || cont.email || cont.nomeContato
-    );
-
-    // Mapear contatos para o formato da API (snake_case)
-    const contatosFormatados = contatosValidos.map((cont) => ({
-      nome_contato: cont.nomeContato || undefined,
-      email: cont.email || undefined,
-      telefone: cont.telefone || undefined,
-      observacao: cont.observacao || undefined,
-      ativo: true,
+    // Preparar dados de contatos (formato snake_case para API)
+    // Campos de texto vazios: usar "" (será convertido para null no backend)
+    const contatosFormatados = contatos.map((cont) => ({
+      nome_contato: cont.nomeContato ?? "",
+      email: cont.email ?? "",
+      telefone: cont.telefone ?? "",
+      observacao: cont.observacao ?? "",
+      ativo: cont.ativo !== undefined ? cont.ativo : true,
     }));
 
     // Preparar payload completo
     const payload = {
       ...newFornecedor,
       nome_fantasia: nomeFantasia,
-      enderecos: enderecosValidos.length > 0 ? enderecosValidos : undefined,
-      contato: contatosFormatados.length > 0 ? contatosFormatados : undefined,
+      enderecos: enderecosFormatados.length > 0 ? enderecosFormatados : [],
+      contato: contatosFormatados.length > 0 ? contatosFormatados : [],
     };
 
     createFornecedorMutation.mutate(payload);
@@ -504,7 +657,10 @@ const Fornecedores = () => {
     },
     enabled: !!selectedFornecedorId && (viewDialogOpen || editDialogOpen),
     retry: false,
+    staleTime: 0, // Sempre considerar os dados como "stale" para buscar dados frescos
+    gcTime: 0, // Não manter em cache para garantir dados atualizados (gcTime substitui cacheTime no React Query v5)
   });
+
 
   // Mutation para atualizar status do fornecedor
   const updateStatusMutation = useMutation({
@@ -527,6 +683,9 @@ const Fornecedores = () => {
         queryClient.invalidateQueries({
           queryKey: ["fornecedor", data.id],
         }),
+        queryClient.invalidateQueries({
+          queryKey: ["fornecedores-todos-estatisticas"],
+        }),
       ]);
       
       // Buscar estatísticas atualizadas diretamente e atualizar o cache
@@ -541,6 +700,9 @@ const Fornecedores = () => {
         queryClient.invalidateQueries({
           queryKey: ["fornecedores-estatisticas"],
           exact: true,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["fornecedores-todos-estatisticas"],
         });
       }
       
@@ -597,6 +759,837 @@ const Fornecedores = () => {
     updateStatusMutation.mutate({ id, status: novoStatus });
   };
 
+  // Mutation para atualizar fornecedor
+  const updateFornecedorMutation = useMutation({
+    mutationFn: async (data: Partial<CreateFornecedorDto>) => {
+      if (!selectedFornecedorId) throw new Error("ID do fornecedor não encontrado");
+      
+      // Debug: log detalhado do que está sendo enviado
+      console.log("📤 [Atualizar Fornecedor] Enviando requisição:", {
+        id: selectedFornecedorId,
+        payload: data,
+        payloadJSON: JSON.stringify(data, null, 2),
+        endpoint: `/fornecedor/${selectedFornecedorId}`
+      });
+      
+      try {
+        const response = await fornecedoresService.atualizar(selectedFornecedorId, data);
+        
+        // Debug: log da resposta
+        console.log("✅ [Atualizar Fornecedor] Resposta do backend:", {
+          response,
+          enderecos: response.enderecos,
+          contatos: response.contato
+        });
+        
+        return response;
+      } catch (error: any) {
+        // Debug: log detalhado do erro
+        console.error("❌ [Atualizar Fornecedor] Erro na requisição:", {
+          error,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          data: error?.response?.data,
+          message: error?.message,
+          stack: error?.stack
+        });
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      // Invalidar todas as queries de fornecedores (incluindo variações com filtros e busca)
+      await queryClient.invalidateQueries({ 
+        queryKey: ["fornecedores"],
+        exact: false,
+      });
+      
+      // Invalidar estatísticas para garantir atualização
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedores-estatisticas"],
+        exact: true,
+      });
+      
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedores-todos-estatisticas"],
+        exact: true,
+      });
+      
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedor", selectedFornecedorId],
+        exact: true,
+      });
+      
+      // Forçar refetch imediato de todas as queries relacionadas
+      await Promise.all([
+        queryClient.refetchQueries({ 
+          queryKey: ["fornecedores"],
+          exact: false,
+        }),
+        queryClient.refetchQueries({ 
+          queryKey: ["fornecedores-estatisticas"],
+          exact: true,
+        }),
+        queryClient.refetchQueries({ 
+          queryKey: ["fornecedores-todos-estatisticas"],
+          exact: true,
+        }),
+        queryClient.refetchQueries({ 
+          queryKey: ["fornecedor", selectedFornecedorId],
+          exact: true,
+        }),
+      ]);
+      
+      toast.success("Fornecedor atualizado com sucesso!");
+      setEditDialogOpen(false);
+      setSelectedFornecedorId(null);
+      // Resetar estados
+      setEditFornecedor({
+        nome_fantasia: "",
+        nome_razao: "",
+        tipoFornecedor: "PESSOA_FISICA",
+        statusFornecedor: "ATIVO",
+        cpf_cnpj: "",
+        inscricao_estadual: "",
+      });
+      setEditEnderecos([]);
+      setEditContatos([]);
+      setFornecedorOriginal(null);
+    },
+    onError: (error: unknown) => {
+      const isErrorWithResponse = (
+        err: unknown
+      ): err is {
+        response?: { status?: number; data?: { message?: string | string[] } };
+        message?: string;
+      } => {
+        return typeof err === "object" && err !== null;
+      };
+
+      if (isErrorWithResponse(error)) {
+        const errorResponse = error.response?.data;
+        const errorMessage =
+          errorResponse?.message ||
+          (Array.isArray(errorResponse?.message)
+            ? errorResponse.message.join(", ")
+            : null) ||
+          error.message ||
+          "Erro ao atualizar fornecedor";
+        
+        console.error("❌ [Atualizar Fornecedor] Erro completo:", {
+          error,
+          errorMessage,
+          status: error.response?.status,
+          data: errorResponse
+        });
+        
+        toast.error(
+          typeof errorMessage === "string"
+            ? errorMessage
+            : "Erro ao atualizar fornecedor"
+        );
+      } else {
+        console.error("❌ [Atualizar Fornecedor] Erro desconhecido:", error);
+        toast.error("Erro ao atualizar fornecedor");
+      }
+    },
+  });
+
+  // Mutation para remover endereço
+  const removerEnderecoMutation = useMutation({
+    mutationFn: async ({ fornecedorId, enderecoId }: { fornecedorId: number; enderecoId: number }) => {
+      return await fornecedoresService.removerEndereco(fornecedorId, enderecoId);
+    },
+    onSuccess: async (_, variables) => {
+      // Invalidar queries para atualizar a lista
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedor", variables.fornecedorId],
+        exact: true,
+      });
+      
+      // ⚠️ IMPORTANTE: Recarregar dados do fornecedor para garantir sincronização
+      // Isso atualiza o fornecedorOriginal com os dados corretos do servidor
+      if (variables.fornecedorId) {
+        const updatedFornecedor = await fornecedoresService.buscarPorId(variables.fornecedorId);
+        
+        // ⚠️ CRÍTICO: Atualizar fornecedorOriginal com dados do servidor
+        // Isso garante que a validação de endereços/contatos funcione corretamente
+        setFornecedorOriginal(JSON.parse(JSON.stringify(updatedFornecedor)));
+        
+        if (updatedFornecedor.enderecos) {
+          setEditEnderecos(
+            updatedFornecedor.enderecos.map((end) => ({
+              // Garantir que ID seja número
+              id: end.id ? Number(end.id) : undefined,
+              cep: end.cep || "",
+              logradouro: end.logradouro || "",
+              numero: end.numero || "",
+              complemento: end.complemento || "",
+              bairro: end.bairro || "",
+              cidade: end.cidade || "",
+              estado: end.estado || "",
+              referencia: end.referencia || "",
+            }))
+          );
+        } else {
+          setEditEnderecos([]);
+        }
+      }
+      
+      toast.success("Endereço removido com sucesso!");
+    },
+    onError: (error: any) => {
+      // Se for 404, o endereço já não existe - não mostrar erro crítico
+      if (error?.response?.status === 404) {
+        const errorMessage = error?.response?.data?.message || "Endereço já não existe";
+        console.warn('[Remover Endereço] Endereço não encontrado (404):', errorMessage);
+        // Não mostrar toast de erro, pois já foi tratado no onClick
+        return;
+      }
+      
+      const errorMessage = error?.response?.data?.message || error?.message || "Erro ao remover endereço";
+      toast.error(errorMessage);
+    },
+  });
+
+  // Mutation para adicionar endereço
+  const adicionarEnderecoMutation = useMutation({
+    mutationFn: async ({ fornecedorId, endereco }: { fornecedorId: number; endereco: any }) => {
+      return await fornecedoresService.adicionarEndereco(fornecedorId, endereco);
+    },
+    onSuccess: async (novoEndereco, variables) => {
+      // Invalidar queries para atualizar a lista
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedor", variables.fornecedorId],
+        exact: true,
+      });
+      
+      // ⚠️ IMPORTANTE: Recarregar dados do fornecedor para garantir sincronização
+      // Isso atualiza o fornecedorOriginal com os dados corretos do servidor
+      if (variables.fornecedorId) {
+        const updatedFornecedor = await fornecedoresService.buscarPorId(variables.fornecedorId);
+        
+        // ⚠️ CRÍTICO: Atualizar fornecedorOriginal com dados do servidor
+        // Isso garante que a validação de endereços/contatos funcione corretamente
+        setFornecedorOriginal(JSON.parse(JSON.stringify(updatedFornecedor)));
+        
+        if (updatedFornecedor.enderecos) {
+          setEditEnderecos(
+            updatedFornecedor.enderecos.map((end) => ({
+              id: end.id,
+              cep: end.cep || "",
+              logradouro: end.logradouro || "",
+              numero: end.numero || "",
+              complemento: end.complemento || "",
+              bairro: end.bairro || "",
+              cidade: end.cidade || "",
+              estado: end.estado || "",
+              referencia: end.referencia || "",
+            }))
+          );
+        }
+      }
+      
+      toast.success("Endereço adicionado com sucesso!");
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || "Erro ao adicionar endereço";
+      toast.error(errorMessage);
+    },
+  });
+
+  // Mutation para remover contato
+  const removerContatoMutation = useMutation({
+    mutationFn: async ({ fornecedorId, contatoId }: { fornecedorId: number; contatoId: number }) => {
+      return await fornecedoresService.removerContato(fornecedorId, contatoId);
+    },
+    onSuccess: async (_, variables) => {
+      // Invalidar e remover do cache antes de buscar novamente
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedor", variables.fornecedorId],
+        exact: true,
+      });
+      
+      // Remover do cache para forçar busca fresca
+      queryClient.removeQueries({
+        queryKey: ["fornecedor", variables.fornecedorId],
+        exact: true,
+      });
+      
+      // Aguardar um pouco para garantir que o backend processou a remoção
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // ⚠️ IMPORTANTE: Recarregar dados do fornecedor para garantir sincronização
+      // Isso atualiza o fornecedorOriginal com os dados corretos do servidor
+      if (variables.fornecedorId) {
+        // Buscar diretamente sem usar cache
+        const updatedFornecedor = await fornecedoresService.buscarPorId(variables.fornecedorId);
+        
+        if (import.meta.env.DEV) {
+          console.log('[Remover Contato] Dados atualizados do servidor:', {
+            contatosRecebidos: updatedFornecedor.contato?.length || 0,
+            contatos: updatedFornecedor.contato?.map(c => ({
+              id: c.id,
+              telefone: c.telefone,
+              nomeContato: c.nomeContato || c.nome_contato
+            }))
+          });
+        }
+        
+        // ⚠️ CRÍTICO: Atualizar fornecedorOriginal com dados do servidor
+        // Isso garante que a validação de endereços/contatos funcione corretamente
+        setFornecedorOriginal(JSON.parse(JSON.stringify(updatedFornecedor)));
+        
+        // Atualizar estado local com os dados do servidor (sem o contato removido)
+        if (updatedFornecedor.contato) {
+          setEditContatos(
+            updatedFornecedor.contato.map((cont) => ({
+              // Garantir que ID seja número
+              id: cont.id ? Number(cont.id) : undefined,
+              telefone: cont.telefone || "",
+              email: cont.email || "",
+              nomeContato: cont.nomeContato || cont.nome_contato || "",
+              outroTelefone: cont.outroTelefone || cont.outro_telefone || "",
+              nomeOutroTelefone: cont.nomeOutroTelefone || cont.nome_outro_telefone || "",
+              observacao: cont.observacao || "",
+              ativo: cont.ativo !== undefined ? cont.ativo : true,
+            }))
+          );
+        } else {
+          setEditContatos([]);
+        }
+      }
+      
+      toast.success("Contato removido com sucesso!");
+    },
+    onError: (error: any) => {
+      // Se for 404, o contato já não existe - não mostrar erro crítico
+      if (error?.response?.status === 404) {
+        const errorMessage = error?.response?.data?.message || "Contato já não existe";
+        console.warn('[Remover Contato] Contato não encontrado (404):', errorMessage);
+        // Não mostrar toast de erro, pois já foi tratado no onClick
+        return;
+      }
+      
+      const errorMessage = error?.response?.data?.message || error?.message || "Erro ao remover contato";
+      toast.error(errorMessage);
+    },
+  });
+
+  // Mutation para adicionar contato
+  const adicionarContatoMutation = useMutation({
+    mutationFn: async ({ fornecedorId, contato }: { fornecedorId: number; contato: any }) => {
+      return await fornecedoresService.adicionarContato(fornecedorId, contato);
+    },
+    onSuccess: async (novoContato, variables) => {
+      // Invalidar queries para atualizar a lista
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedor", variables.fornecedorId],
+        exact: true,
+      });
+      
+      // ⚠️ IMPORTANTE: Recarregar dados do fornecedor para garantir sincronização
+      // Isso atualiza o fornecedorOriginal com os dados corretos do servidor
+      if (variables.fornecedorId) {
+        const updatedFornecedor = await fornecedoresService.buscarPorId(variables.fornecedorId);
+        
+        // ⚠️ CRÍTICO: Atualizar fornecedorOriginal com dados do servidor
+        // Isso garante que a validação de endereços/contatos funcione corretamente
+        setFornecedorOriginal(JSON.parse(JSON.stringify(updatedFornecedor)));
+        
+        if (updatedFornecedor.contato) {
+          setEditContatos(
+            updatedFornecedor.contato.map((cont) => ({
+              id: cont.id,
+              telefone: cont.telefone || "",
+              email: cont.email || "",
+              nomeContato: cont.nomeContato || cont.nome_contato || "",
+              outroTelefone: cont.outroTelefone || cont.outro_telefone || "",
+              nomeOutroTelefone: cont.nomeOutroTelefone || cont.nome_outro_telefone || "",
+              observacao: cont.observacao || "",
+              ativo: cont.ativo !== undefined ? cont.ativo : true,
+            }))
+          );
+        }
+      }
+      
+      toast.success("Contato adicionado com sucesso!");
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || "Erro ao adicionar contato";
+      toast.error(errorMessage);
+    },
+  });
+
+  // Forçar refetch quando o dialog de edição abrir
+  // ⚠️ IMPORTANTE: Sempre buscar dados atualizados do servidor ao abrir o dialog
+  // Isso garante que temos os dados mais recentes e evita problemas de sincronização
+  useEffect(() => {
+    if (editDialogOpen && selectedFornecedorId) {
+      // Forçar busca de dados atualizados do servidor
+      queryClient.refetchQueries({
+        queryKey: ["fornecedor", selectedFornecedorId],
+      }).then(() => {
+        // Após refetch, garantir que os dados estão sincronizados
+        if (import.meta.env.DEV) {
+          console.log("[Dialog] Dados recarregados do servidor para garantir sincronização");
+        }
+      });
+    }
+  }, [editDialogOpen, selectedFornecedorId, queryClient]);
+
+  // Carregar dados do fornecedor quando abrir o dialog de edição
+  useEffect(() => {
+    if (editDialogOpen && selectedFornecedor && selectedFornecedorId) {
+      // Debug: verificar dados carregados
+      if (import.meta.env.DEV) {
+        console.log("[Dialog Edição] Dados carregados:", {
+          selectedFornecedor,
+          enderecos: selectedFornecedor.enderecos,
+          contatos: selectedFornecedor.contato
+        });
+      }
+      
+      // Salvar dados originais para comparação (deep copy)
+      setFornecedorOriginal(JSON.parse(JSON.stringify(selectedFornecedor)));
+      
+      // Preencher formulário com dados do fornecedor
+      setEditFornecedor({
+        nome_fantasia: selectedFornecedor.nome_fantasia || "",
+        nome_razao: selectedFornecedor.nome_razao || "",
+        tipoFornecedor: selectedFornecedor.tipoFornecedor || "PESSOA_FISICA",
+        statusFornecedor: selectedFornecedor.statusFornecedor || "ATIVO",
+        cpf_cnpj: selectedFornecedor.cpf_cnpj || "",
+        inscricao_estadual: selectedFornecedor.inscricao_estadual || "",
+      });
+
+      // Preencher endereços
+      if (selectedFornecedor.enderecos && selectedFornecedor.enderecos.length > 0) {
+        setEditEnderecos(
+          selectedFornecedor.enderecos.map((end) => ({
+            // Garantir que ID seja número
+            id: end.id ? Number(end.id) : undefined,
+            cep: end.cep || "",
+            logradouro: end.logradouro || "",
+            numero: end.numero || "",
+            complemento: end.complemento || "",
+            bairro: end.bairro || "",
+            cidade: end.cidade || "",
+            estado: end.estado || "",
+            referencia: end.referencia || "",
+          }))
+        );
+      } else {
+        setEditEnderecos([]);
+      }
+
+      // Preencher contatos
+      if (selectedFornecedor.contato && selectedFornecedor.contato.length > 0) {
+        setEditContatos(
+          selectedFornecedor.contato.map((cont) => ({
+            // Garantir que ID seja número
+            id: cont.id ? Number(cont.id) : undefined,
+            telefone: cont.telefone || "",
+            email: cont.email || "",
+            nomeContato: cont.nomeContato || cont.nome_contato || "",
+            outroTelefone: cont.outroTelefone || cont.outro_telefone || "",
+            nomeOutroTelefone: cont.nomeOutroTelefone || cont.nome_outro_telefone || "",
+            observacao: cont.observacao || "",
+            ativo: cont.ativo !== undefined ? cont.ativo : true,
+          }))
+        );
+      } else {
+        setEditContatos([]);
+      }
+    }
+  }, [editDialogOpen, selectedFornecedor, selectedFornecedorId]);
+
+  // Resetar estados quando fechar o dialog
+  useEffect(() => {
+    if (!editDialogOpen) {
+      setEditFornecedor({
+        nome_fantasia: "",
+        nome_razao: "",
+        tipoFornecedor: "PESSOA_FISICA",
+        statusFornecedor: "ATIVO",
+        cpf_cnpj: "",
+        inscricao_estadual: "",
+      });
+      setEditEnderecos([]);
+      setEditContatos([]);
+      setFornecedorOriginal(null);
+    }
+  }, [editDialogOpen]);
+
+  // Funções helper conforme GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md
+  /**
+   * Compara dois valores considerando null/undefined/string vazia como equivalentes
+   * Conforme guia: null, undefined e '' são tratados como equivalentes
+   */
+  const normalizarParaComparacao = (valor: any): any => {
+    if (valor === null || valor === undefined || valor === '') {
+      return null;
+    }
+    // Boolean não deve ser normalizado
+    if (typeof valor === 'boolean') {
+      return valor;
+    }
+    // String: trim antes de comparar
+    return typeof valor === 'string' ? valor.trim() : valor;
+  };
+
+  /**
+   * Prepara campo para envio ao backend
+   * - undefined = não altera (não inclui no payload)
+   * - "" = limpa (inclui no payload como "")
+   * - valor = atualiza (inclui no payload)
+   * 
+   * Conforme GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md:
+   * - undefined → não altera
+   * - "" → limpa (NULL no banco)
+   * - "valor" → atualiza
+   */
+  const prepararCampoParaEnvio = (valorNovo: any, valorOriginal: any): any => {
+    // Boolean: comparar diretamente
+    if (typeof valorNovo === 'boolean' || typeof valorOriginal === 'boolean') {
+      if (valorNovo !== valorOriginal) {
+        return valorNovo;
+      }
+      return undefined;
+    }
+
+    const novoNormalizado = normalizarParaComparacao(valorNovo);
+    const originalNormalizado = normalizarParaComparacao(valorOriginal);
+
+    // Se não mudou, não enviar (undefined = não altera)
+    if (novoNormalizado === originalNormalizado) {
+      return undefined;
+    }
+
+    // Se mudou, determinar o que enviar
+    // Conforme guia: "" limpa o campo (NULL no banco)
+    // Se o novo valor é null/undefined/string vazia, enviar "" para limpar
+    if (valorNovo === null || valorNovo === undefined || valorNovo === '') {
+      return '';
+    }
+
+    // Se tem valor, enviar o valor normalizado (trim se for string)
+    return typeof valorNovo === 'string' ? valorNovo.trim() : valorNovo;
+  };
+
+  // Função para preparar payload conforme GUIA_FRONTEND_ATUALIZACAO_FORNECEDOR.md
+  // e GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md
+  // 
+  // Regras principais:
+  // 1. Campos do fornecedor: apenas se alterados
+  // 2. Endereços: incluir TODOS os existentes (com ID) quando atualizar via payload
+  // 3. Contatos: incluir TODOS os existentes (com ID) quando atualizar via payload
+  // 4. Campos vazios "" são enviados para limpar (NULL no banco)
+  // 5. Campos undefined não são enviados (não alteram)
+  const prepararPayload = (): Partial<CreateFornecedorDto> => {
+    const payload: Partial<CreateFornecedorDto> = {};
+
+    // ⚠️ VALIDAÇÃO CRÍTICA: Verificar se temos dados válidos do fornecedor original
+    if (!fornecedorOriginal || !fornecedorOriginal.id) {
+      if (import.meta.env.DEV) {
+        console.error("[prepararPayload] Fornecedor original não encontrado ou inválido!", {
+          fornecedorOriginal,
+          selectedFornecedorId
+        });
+      }
+      return payload;
+    }
+    
+    // ⚠️ VALIDAÇÃO: Garantir que o fornecedor original tem ID válido
+    const fornecedorId = Number(fornecedorOriginal.id);
+    if (!fornecedorId || isNaN(fornecedorId) || fornecedorId <= 0) {
+      if (import.meta.env.DEV) {
+        console.error("[prepararPayload] ID do fornecedor inválido!", {
+          fornecedorId: fornecedorOriginal.id,
+          fornecedorOriginal
+        });
+      }
+      return payload;
+    }
+
+    // Campos do fornecedor - apenas se alterados
+    // Conforme guia: comparar antes de enviar, undefined = não altera
+    
+    // nome_fantasia (snake_case, string)
+    const nomeFantasia = prepararCampoParaEnvio(
+      editFornecedor.nome_fantasia,
+      fornecedorOriginal.nome_fantasia
+    );
+    if (nomeFantasia !== undefined) {
+      payload.nome_fantasia = nomeFantasia;
+    }
+    
+    // nome_razao (snake_case, string)
+    const nomeRazao = prepararCampoParaEnvio(
+      editFornecedor.nome_razao,
+      fornecedorOriginal.nome_razao
+    );
+    if (nomeRazao !== undefined) {
+      payload.nome_razao = nomeRazao;
+    }
+    
+    // tipoFornecedor (camelCase, enum)
+    if (editFornecedor.tipoFornecedor !== fornecedorOriginal.tipoFornecedor) {
+      payload.tipoFornecedor = editFornecedor.tipoFornecedor;
+    }
+    
+    // statusFornecedor (camelCase, enum)
+    if (editFornecedor.statusFornecedor !== fornecedorOriginal.statusFornecedor) {
+      payload.statusFornecedor = editFornecedor.statusFornecedor;
+    }
+    
+    // cpf_cnpj (snake_case, string)
+    const cpfCnpj = prepararCampoParaEnvio(
+      editFornecedor.cpf_cnpj,
+      fornecedorOriginal.cpf_cnpj
+    );
+    if (cpfCnpj !== undefined) {
+      payload.cpf_cnpj = cpfCnpj;
+    }
+    
+    // inscricao_estadual (snake_case, string | null)
+    // Campo opcional: "" limpa (NULL), undefined não altera
+    // Conforme GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md: "" será convertido para NULL no backend
+    const inscricaoEstadual = prepararCampoParaEnvio(
+      editFornecedor.inscricao_estadual,
+      fornecedorOriginal.inscricao_estadual
+    );
+    if (inscricaoEstadual !== undefined) {
+      // Enviar "" quando limpar (backend converte para NULL)
+      // Enviar valor quando atualizar
+      payload.inscricao_estadual = inscricaoEstadual;
+    }
+
+    // Endereços - Conforme GUIA_FRONTEND_ATUALIZACAO_FORNECEDOR.md
+    // ⚠️ IMPORTANTE: Quando enviar array de endereços, deve incluir TODOS os endereços que devem ser mantidos
+    // - Array enviado → Apenas os itens no array serão mantidos (os outros serão removidos)
+    // - Array vazio [] → Remove TODOS os endereços
+    // - Array não enviado (undefined) → Mantém TODOS os endereços existentes (não altera)
+    // 
+    // Novos endereços (sem ID) são adicionados via endpoint POST /fornecedor/:id/enderecos
+    // Endereços removidos são deletados via endpoint DELETE /fornecedor/:id/enderecos/:enderecoId
+    // Aqui processamos apenas atualizações de endereços existentes via payload principal
+    
+    // Processar apenas endereços EXISTENTES (com ID) para atualização via payload
+    // ⚠️ VALIDAÇÃO CRÍTICA: Garantir que apenas endereços que pertencem ao fornecedor sejam incluídos
+    const enderecosExistentes = editEnderecos.filter(end => end.id);
+    if (enderecosExistentes.length > 0) {
+      const enderecosProcessados = enderecosExistentes.map((end) => {
+        const endId = Number(end.id);
+        
+        // ⚠️ VALIDAÇÃO: Verificar se o endereço existe no fornecedor original
+        // Isso garante que apenas endereços que realmente pertencem ao fornecedor sejam incluídos
+        const original = fornecedorOriginal.enderecos?.find((e: any) => {
+          const originalId = Number(e.id);
+          return originalId === endId;
+        });
+
+        if (!original) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Endereço ${endId}] Endereço não encontrado no fornecedor original! Este endereço será ignorado.`, {
+              enderecoId: endId,
+              fornecedorId: fornecedorOriginal.id,
+              enderecosOriginais: fornecedorOriginal.enderecos?.map((e: any) => e.id)
+            });
+          }
+          // ⚠️ IMPORTANTE: Não incluir endereços que não pertencem ao fornecedor
+          // Isso evita o erro "Endereço com ID X não pertence a este fornecedor"
+          return null;
+        }
+
+        // ⚠️ VALIDAÇÃO ADICIONAL: Verificar se o ID é válido
+        if (!endId || isNaN(endId) || endId <= 0) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Endereço] ID inválido: ${end.id}. Endereço será ignorado.`);
+          }
+          return null;
+        }
+
+        // ⚠️ Conforme guia: Sempre incluir TODOS os campos do endereço
+        // Campos vazios "" são enviados para limpar (NULL no banco)
+        const enderecoPayload: any = { 
+          id: endId,
+          // Campos obrigatórios - sempre enviar (mesmo que vazios)
+          cep: end.cep?.trim() ?? "",
+          logradouro: end.logradouro?.trim() ?? "",
+          numero: end.numero?.trim() ?? "",
+          bairro: end.bairro?.trim() ?? "",
+          cidade: end.cidade?.trim() ?? "",
+          estado: end.estado?.trim() ?? "",
+          // Campos opcionais - sempre enviar ("" limpa, valor atualiza)
+          complemento: end.complemento?.trim() ?? "",
+          referencia: end.referencia?.trim() ?? ""
+        };
+
+        return enderecoPayload;
+      }).filter((e) => e !== null) as any;
+
+      // ⚠️ IMPORTANTE: Incluir TODOS os endereços existentes no payload
+      // Conforme guia: apenas os itens no array serão mantidos
+      if (enderecosProcessados.length > 0) {
+        // ⚠️ VALIDAÇÃO FINAL: Verificar se todos os IDs são válidos e pertencem ao fornecedor
+        const enderecosValidos = enderecosProcessados.filter(end => {
+          const isValid = end.id && 
+                         Number(end.id) > 0 && 
+                         fornecedorOriginal.enderecos?.some((e: any) => Number(e.id) === Number(end.id));
+          
+          if (!isValid && import.meta.env.DEV) {
+            console.error(`[VALIDAÇÃO] Endereço com ID ${end.id} não pertence ao fornecedor ${fornecedorOriginal.id}!`, {
+              enderecoId: end.id,
+              fornecedorId: fornecedorOriginal.id,
+              enderecosOriginais: fornecedorOriginal.enderecos?.map((e: any) => ({ id: e.id, fornecedorId: e.fornecedorId }))
+            });
+          }
+          
+          return isValid;
+        });
+        
+        if (enderecosValidos.length !== enderecosProcessados.length && import.meta.env.DEV) {
+          console.warn(`[VALIDAÇÃO] ${enderecosProcessados.length - enderecosValidos.length} endereço(s) inválido(s) foram filtrados!`, {
+            totalProcessados: enderecosProcessados.length,
+            totalValidos: enderecosValidos.length,
+            enderecosInvalidos: enderecosProcessados.filter(end => 
+              !enderecosValidos.some(e => e.id === end.id)
+            )
+          });
+        }
+        
+        // Só incluir se houver endereços válidos
+        if (enderecosValidos.length > 0) {
+          payload.enderecos = enderecosValidos;
+          
+          // Debug: log dos endereços processados
+          if (import.meta.env.DEV) {
+            console.log("[Endereços Processados (Conforme Guia)]:", {
+              totalProcessados: enderecosProcessados.length,
+              totalValidos: enderecosValidos.length,
+              fornecedorId: fornecedorOriginal.id,
+              enderecosProcessados: enderecosValidos,
+              nota: "Apenas endereços válidos que pertencem ao fornecedor incluídos no payload"
+            });
+          }
+        }
+      }
+    }
+
+    // Contatos - Conforme GUIA_FRONTEND_ATUALIZACAO_FORNECEDOR.md
+    // ⚠️ IMPORTANTE: Quando enviar array de contatos, deve incluir TODOS os contatos que devem ser mantidos
+    // - Array enviado → Apenas os itens no array serão mantidos (os outros serão removidos)
+    // - Array vazio [] → Remove TODOS os contatos
+    // - Array não enviado (undefined) → Mantém TODOS os contatos existentes (não altera)
+    //
+    // Novos contatos (sem ID) são adicionados via endpoint POST /fornecedor/:id/contatos
+    // Contatos removidos são deletados via endpoint DELETE /fornecedor/:id/contatos/:contatoId
+    // Aqui processamos apenas atualizações de contatos existentes via payload principal
+    
+    // Processar apenas contatos EXISTENTES (com ID) para atualização via payload
+    // ⚠️ VALIDAÇÃO CRÍTICA: Garantir que apenas contatos que pertencem ao fornecedor sejam incluídos
+    const contatosExistentes = editContatos.filter(cont => cont.id);
+    if (contatosExistentes.length > 0) {
+      const contatosProcessados = contatosExistentes.map((cont) => {
+        const contId = Number(cont.id);
+        
+        // ⚠️ VALIDAÇÃO: Verificar se o contato existe no fornecedor original
+        // Isso garante que apenas contatos que realmente pertencem ao fornecedor sejam incluídos
+        const original = fornecedorOriginal.contato?.find((c: any) => {
+          const originalId = Number(c.id);
+          return originalId === contId;
+        });
+
+        if (!original) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Contato ${contId}] Contato não encontrado no fornecedor original! Este contato será ignorado.`, {
+              contatoId: contId,
+              fornecedorId: fornecedorOriginal.id,
+              contatosOriginais: fornecedorOriginal.contato?.map((c: any) => c.id)
+            });
+          }
+          // ⚠️ IMPORTANTE: Não incluir contatos que não pertencem ao fornecedor
+          // Isso evita o erro "Contato com ID X não pertence a este fornecedor"
+          return null;
+        }
+
+        // ⚠️ VALIDAÇÃO ADICIONAL: Verificar se o ID é válido
+        if (!contId || isNaN(contId) || contId <= 0) {
+          if (import.meta.env.DEV) {
+            console.warn(`[Contato] ID inválido: ${cont.id}. Contato será ignorado.`);
+          }
+          return null;
+        }
+
+        // ⚠️ Conforme guia e padrão do módulo de cliente: Sempre incluir TODOS os campos
+        // Campos vazios "" são enviados para limpar (NULL no banco)
+        const contatoPayload: any = { 
+          id: contId,
+          // Campos obrigatórios - sempre enviar (mesmo que vazios)
+          telefone: cont.telefone?.trim() ?? "",
+          email: cont.email?.trim() ?? "",
+          nome_contato: cont.nomeContato?.trim() ?? "",
+          // Campos opcionais - sempre enviar ("" limpa, valor atualiza)
+          outro_telefone: cont.outroTelefone?.trim() ?? "",
+          nome_outro_telefone: cont.nomeOutroTelefone?.trim() ?? "",
+          observacao: cont.observacao?.trim() ?? "",
+          ativo: cont.ativo !== undefined ? cont.ativo : (original.ativo !== undefined ? original.ativo : true)
+        };
+
+        return contatoPayload;
+      }).filter((c) => c !== null) as any;
+
+      // ⚠️ IMPORTANTE: Incluir TODOS os contatos existentes no payload
+      // Conforme guia: apenas os itens no array serão mantidos
+      if (contatosProcessados.length > 0) {
+        // ⚠️ VALIDAÇÃO FINAL: Verificar se todos os IDs são válidos e pertencem ao fornecedor
+        const contatosValidos = contatosProcessados.filter(cont => {
+          const isValid = cont.id && 
+                         Number(cont.id) > 0 && 
+                         fornecedorOriginal.contato?.some((c: any) => Number(c.id) === Number(cont.id));
+          
+          if (!isValid && import.meta.env.DEV) {
+            console.error(`[VALIDAÇÃO] Contato com ID ${cont.id} não pertence ao fornecedor ${fornecedorOriginal.id}!`, {
+              contatoId: cont.id,
+              fornecedorId: fornecedorOriginal.id,
+              contatosOriginais: fornecedorOriginal.contato?.map((c: any) => ({ id: c.id, fornecedorId: c.fornecedorId }))
+            });
+          }
+          
+          return isValid;
+        });
+        
+        if (contatosValidos.length !== contatosProcessados.length && import.meta.env.DEV) {
+          console.warn(`[VALIDAÇÃO] ${contatosProcessados.length - contatosValidos.length} contato(s) inválido(s) foram filtrados!`, {
+            totalProcessados: contatosProcessados.length,
+            totalValidos: contatosValidos.length,
+            contatosInvalidos: contatosProcessados.filter(cont => 
+              !contatosValidos.some(c => c.id === cont.id)
+            )
+          });
+        }
+        
+        // Só incluir se houver contatos válidos
+        if (contatosValidos.length > 0) {
+          payload.contato = contatosValidos;
+          
+          // Debug: log dos contatos processados
+          if (import.meta.env.DEV) {
+            console.log("[Contatos Processados (Conforme Guia)]:", {
+              totalProcessados: contatosProcessados.length,
+              totalValidos: contatosValidos.length,
+              fornecedorId: fornecedorOriginal.id,
+              contatosProcessados: contatosValidos,
+              nota: "Apenas contatos válidos que pertencem ao fornecedor incluídos no payload"
+            });
+          }
+        }
+      }
+    }
+
+    return payload;
+  };
+
   // Mutation para deletar fornecedor
   const deleteFornecedorMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -610,6 +1603,9 @@ const Fornecedores = () => {
       await queryClient.invalidateQueries({
         queryKey: ["fornecedores-estatisticas"],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["fornecedores-todos-estatisticas"],
+      });
       toast.success("Fornecedor excluído com sucesso!");
       setDeleteDialogOpen(false);
       setSelectedFornecedorId(null);
@@ -622,99 +1618,6 @@ const Fornecedores = () => {
     },
   });
 
-  // Mutation para atualizar fornecedor
-  const updateFornecedorMutation = useMutation({
-    mutationFn: async (data: Partial<CreateFornecedorDto>) => {
-      if (!selectedFornecedorId) throw new Error("ID do fornecedor não encontrado");
-      return await fornecedoresService.atualizar(selectedFornecedorId, data);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["fornecedores"],
-        exact: false,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["fornecedor", selectedFornecedorId],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["fornecedores-estatisticas"],
-      });
-      toast.success("Fornecedor atualizado com sucesso!");
-      setEditDialogOpen(false);
-      setSelectedFornecedorId(null);
-    },
-    onError: (error: unknown) => {
-      const errorMessage = (
-        error as { response?: { data?: { message?: string } } }
-      )?.response?.data?.message;
-      toast.error(errorMessage || "Erro ao atualizar fornecedor");
-    },
-  });
-
-  // Carregar dados do fornecedor selecionado no formulário de edição
-  useEffect(() => {
-    if (selectedFornecedor && editDialogOpen) {
-      setEditNewFornecedor({
-        nome_fantasia: selectedFornecedor.nome_fantasia || "",
-        nome_razao: selectedFornecedor.nome_razao || "",
-        tipoFornecedor: selectedFornecedor.tipoFornecedor,
-        statusFornecedor: selectedFornecedor.statusFornecedor,
-        cpf_cnpj: selectedFornecedor.cpf_cnpj || "",
-        inscricao_estadual: selectedFornecedor.inscricao_estadual || "",
-      });
-      if (selectedFornecedor.enderecos && selectedFornecedor.enderecos.length > 0) {
-        setEditEnderecos(
-          selectedFornecedor.enderecos.map((end) => ({
-            id: end.id,
-            cep: end.cep || "",
-            logradouro: end.logradouro || "",
-            numero: end.numero || "",
-            complemento: end.complemento || "",
-            bairro: end.bairro || "",
-            cidade: end.cidade || "",
-            estado: end.estado || "",
-            referencia: end.referencia || "",
-          }))
-        );
-      } else {
-        setEditEnderecos([
-          {
-            cep: "",
-            logradouro: "",
-            numero: "",
-            complemento: "",
-            bairro: "",
-            cidade: "",
-            estado: "",
-            referencia: "",
-          },
-        ]);
-      }
-      if (selectedFornecedor.contato && selectedFornecedor.contato.length > 0) {
-        setEditContatos(
-          selectedFornecedor.contato.map((cont: any) => ({
-            id: cont.id,
-            telefone: cont.telefone || "",
-            email: cont.email || "",
-            nomeContato: cont.nomeContato || cont.nome_contato || "",
-            observacao: cont.observacao || "",
-            ativo: cont.ativo !== undefined ? cont.ativo : true,
-          }))
-        );
-      } else {
-        setEditContatos([
-          {
-            telefone: "",
-            email: "",
-            nomeContato: "",
-            observacao: "",
-            ativo: true,
-          },
-        ]);
-      }
-      setEditCurrentStep(1);
-    }
-  }, [selectedFornecedor, editDialogOpen]);
 
   const handleAplicarFiltros = () => {
     setFiltrosDialogOpen(false);
@@ -1677,108 +2580,95 @@ const Fornecedores = () => {
                           <MapPin className="w-4 h-4 text-muted-foreground" />
                           Cidade
                         </Label>
-                        <Input
-                          id="cidade"
-                          placeholder="Ex: São Paulo"
-                          value={filtrosAvancados.cidade}
-                          onChange={(e) =>
-                            setFiltrosAvancados({
-                              ...filtrosAvancados,
-                              cidade: e.target.value,
-                            })
-                          }
-                        />
+                        <div className="relative">
+                          <Input
+                            id="cidade"
+                            placeholder="Buscar cidade..."
+                            value={cidadeSearchTerm}
+                            onChange={(e) => setCidadeSearchTerm(e.target.value)}
+                            onFocus={() => {
+                              // Buscar cidades quando o campo recebe foco
+                              if (cidadeSearchTerm === "" && filtrosAvancados.cidade) {
+                                setCidadeSearchTerm(filtrosAvancados.cidade);
+                              }
+                            }}
+                            className="pr-8"
+                          />
+                          {isLoadingCidades && (
+                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                          )}
+                        </div>
+                        {cidadeSearchTerm && cidades.length > 0 && (
+                          <div className="max-h-40 overflow-y-auto border rounded-md bg-card">
+                            {cidades.map((cidade) => (
+                              <button
+                                key={cidade}
+                                type="button"
+                                onClick={() => {
+                                  setFiltrosAvancados({
+                                    ...filtrosAvancados,
+                                    cidade: cidade,
+                                  });
+                                  setCidadeSearchTerm(cidade);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors ${
+                                  filtrosAvancados.cidade === cidade
+                                    ? "bg-primary/10 text-primary font-medium"
+                                    : ""
+                                }`}
+                              >
+                                {cidade}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {filtrosAvancados.cidade && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">
+                              Selecionado: {filtrosAvancados.cidade}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => {
+                                setFiltrosAvancados({
+                                  ...filtrosAvancados,
+                                  cidade: "",
+                                });
+                                setCidadeSearchTerm("");
+                              }}
+                            >
+                              <XCircle className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="estado">Estado</Label>
+                        <Label htmlFor="estado">Estado (UF)</Label>
                         <Input
                           id="estado"
-                          placeholder="UF"
+                          placeholder="Digite a UF (ex: PE, SP, RJ)"
                           value={filtrosAvancados.estado}
                           onChange={(e) =>
                             setFiltrosAvancados({
                               ...filtrosAvancados,
-                              estado: e.target.value,
+                              estado: e.target.value.toUpperCase().trim(),
                             })
                           }
+                          maxLength={2}
+                          className="uppercase"
                         />
+                        {filtrosAvancados.estado && filtrosAvancados.estado.length === 2 && (
+                          <p className="text-xs text-muted-foreground">
+                            Filtrando por: {filtrosAvancados.estado}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <Separator />
-
-                  {/* Contato */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-                      CONTATO
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="telefone"
-                          className="flex items-center gap-2"
-                        >
-                          <Phone className="w-4 h-4 text-muted-foreground" />
-                          Telefone
-                        </Label>
-                        <Input
-                          id="telefone"
-                          placeholder="(00) 00000-0000"
-                          value={filtrosAvancados.telefone}
-                          onChange={(e) =>
-                            setFiltrosAvancados({
-                              ...filtrosAvancados,
-                              telefone: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="email"
-                          className="flex items-center gap-2"
-                        >
-                          <Mail className="w-4 h-4 text-muted-foreground" />
-                          E-mail
-                        </Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="exemplo@email.com"
-                          value={filtrosAvancados.email}
-                          onChange={(e) =>
-                            setFiltrosAvancados({
-                              ...filtrosAvancados,
-                              email: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="nomeContato"
-                          className="flex items-center gap-2"
-                        >
-                          <User className="w-4 h-4 text-muted-foreground" />
-                          Nome do Contato
-                        </Label>
-                        <Input
-                          id="nomeContato"
-                          placeholder="Nome do responsável"
-                          value={filtrosAvancados.nomeContato}
-                          onChange={(e) =>
-                            setFiltrosAvancados({
-                              ...filtrosAvancados,
-                              nomeContato: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator />
 
                   {/* Botões de ação */}
                   <div className="flex gap-2 pt-2">
@@ -1804,7 +2694,7 @@ const Fornecedores = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome ou CNPJ..."
+                placeholder="Buscar por razão social, nome fantasia, CNPJ ou CPF..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1978,8 +2868,19 @@ const Fornecedores = () => {
                       key={fornecedor.id}
                       className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
                     >
-                      <td className="py-3 px-4 text-sm font-medium text-foreground">
-                        {fornecedor.nome_fantasia || fornecedor.nome_razao || "-"}
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold text-foreground">
+                            {fornecedor.nome_fantasia || fornecedor.nome_razao || "-"}
+                          </span>
+                          {fornecedor.tipoFornecedor === "PESSOA_JURIDICA" &&
+                            fornecedor.nome_razao &&
+                            fornecedor.nome_fantasia !== fornecedor.nome_razao && (
+                            <span className="text-xs text-muted-foreground mt-0.5">
+                              {fornecedor.nome_razao}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-sm text-muted-foreground">
                         {fornecedor.cpf_cnpj || "-"}
@@ -2338,52 +3239,50 @@ const Fornecedores = () => {
                               <Label className="text-xs text-muted-foreground">
                                 CEP
                               </Label>
-                              <p>{endereco.cep || "-"}</p>
+                              <p>{endereco.cep || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Logradouro
                               </Label>
-                              <p>{endereco.logradouro || "-"}</p>
+                              <p>{endereco.logradouro || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Número
                               </Label>
-                              <p>{endereco.numero || "-"}</p>
+                              <p>{endereco.numero || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Complemento
                               </Label>
-                              <p>{endereco.complemento || "-"}</p>
+                              <p>{endereco.complemento || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Bairro
                               </Label>
-                              <p>{endereco.bairro || "-"}</p>
+                              <p>{endereco.bairro || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Cidade
                               </Label>
-                              <p>{endereco.cidade || "-"}</p>
+                              <p>{endereco.cidade || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Estado
                               </Label>
-                              <p>{endereco.estado || "-"}</p>
+                              <p>{endereco.estado || ""}</p>
                             </div>
-                            {endereco.referencia && (
-                              <div className="col-span-2">
-                                <Label className="text-xs text-muted-foreground">
-                                  Referência
-                                </Label>
-                                <p>{endereco.referencia}</p>
-                              </div>
-                            )}
+                            <div className="col-span-2">
+                              <Label className="text-xs text-muted-foreground">
+                                Referência
+                              </Label>
+                              <p>{endereco.referencia || ""}</p>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2410,34 +3309,29 @@ const Fornecedores = () => {
                               <Label className="text-xs text-muted-foreground">
                                 Telefone
                               </Label>
-                              <p>{contato.telefone || "-"}</p>
+                              <p>{contato.telefone || ""}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 E-mail
                               </Label>
-                              <p>{contato.email || "-"}</p>
+                              <p>{contato.email || ""}</p>
                             </div>
-                            {(contato.nomeContato ||
-                              (contato as any).nome_contato) && (
-                              <div>
-                                <Label className="text-xs text-muted-foreground">
-                                  Nome do Contato
-                                </Label>
-                                <p>
-                                  {contato.nomeContato ||
-                                    (contato as any).nome_contato}
-                                </p>
-                              </div>
-                            )}
-                            {contato.observacao && (
-                              <div className="col-span-2">
-                                <Label className="text-xs text-muted-foreground">
-                                  Observação
-                                </Label>
-                                <p>{contato.observacao}</p>
-                              </div>
-                            )}
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Nome do Contato
+                              </Label>
+                              <p>
+                                {contato.nomeContato ||
+                                  (contato as any).nome_contato || ""}
+                              </p>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-xs text-muted-foreground">
+                                Observação
+                              </Label>
+                              <p>{contato.observacao || ""}</p>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2553,100 +3447,17 @@ const Fornecedores = () => {
           setEditDialogOpen(open);
           if (!open) {
             setSelectedFornecedorId(null);
-            setEditCurrentStep(1);
-            setEditNewFornecedor({
-              nome_fantasia: "",
-              nome_razao: "",
-              tipoFornecedor: "PESSOA_JURIDICA",
-              statusFornecedor: "ATIVO",
-              cpf_cnpj: "",
-              inscricao_estadual: "",
-            });
-            setEditEnderecos([
-              {
-                cep: "",
-                logradouro: "",
-                numero: "",
-                complemento: "",
-                bairro: "",
-                cidade: "",
-                estado: "",
-                referencia: "",
-              },
-            ]);
-            setEditContatos([
-              {
-                telefone: "",
-                email: "",
-                nomeContato: "",
-                observacao: "",
-                ativo: true,
-              },
-            ]);
           }
         }}
       >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle className="text-2xl font-bold">
-                  Editar Fornecedor
-                </DialogTitle>
-                <DialogDescription className="mt-1">
-                  Atualize as informações do fornecedor
-                </DialogDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (selectedFornecedor) {
-                      setEditNewFornecedor({
-                        nome_fantasia: selectedFornecedor.nome_fantasia || "",
-                        nome_razao: selectedFornecedor.nome_razao || "",
-                        tipoFornecedor: selectedFornecedor.tipoFornecedor,
-                        statusFornecedor: selectedFornecedor.statusFornecedor,
-                        cpf_cnpj: selectedFornecedor.cpf_cnpj || "",
-                        inscricao_estadual: selectedFornecedor.inscricao_estadual || "",
-                      });
-                      if (selectedFornecedor.enderecos && selectedFornecedor.enderecos.length > 0) {
-                        setEditEnderecos(
-                          selectedFornecedor.enderecos.map((end) => ({
-                            id: end.id,
-                            cep: end.cep || "",
-                            logradouro: end.logradouro || "",
-                            numero: end.numero || "",
-                            complemento: end.complemento || "",
-                            bairro: end.bairro || "",
-                            cidade: end.cidade || "",
-                            estado: end.estado || "",
-                            referencia: end.referencia || "",
-                          }))
-                        );
-                      }
-                      if (selectedFornecedor.contato && selectedFornecedor.contato.length > 0) {
-                        setEditContatos(
-                          selectedFornecedor.contato.map((cont: any) => ({
-                            id: cont.id,
-                            telefone: cont.telefone || "",
-                            email: cont.email || "",
-                            nomeContato: cont.nomeContato || cont.nome_contato || "",
-                            observacao: cont.observacao || "",
-                            ativo: cont.ativo !== undefined ? cont.ativo : true,
-                          }))
-                        );
-                      }
-                    }
-                  }}
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  Restaurar
-                </Button>
-              </div>
-            </div>
+            <DialogTitle className="text-2xl font-bold">
+              Editar Fornecedor
+            </DialogTitle>
+            <DialogDescription className="mt-1">
+              Atualize as informações do fornecedor
+            </DialogDescription>
           </DialogHeader>
 
           {isLoadingFornecedor ? (
@@ -2670,7 +3481,7 @@ const Fornecedores = () => {
                     </p>
                   </div>
                 </div>
-                <div className="space-y-8">
+                <div className="space-y-6">
                   {/* Tipo de Fornecedor */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">
@@ -2680,26 +3491,18 @@ const Fornecedores = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          setEditNewFornecedor({
-                            ...editNewFornecedor,
+                          setEditFornecedor({
+                            ...editFornecedor,
                             tipoFornecedor: "PESSOA_JURIDICA",
-                            cpf_cnpj:
-                              editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
-                                ? ""
-                                : editNewFornecedor.cpf_cnpj,
-                            nome_fantasia:
-                              editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
-                                ? ""
-                                : editNewFornecedor.nome_fantasia,
                           })
                         }
                         className={`relative p-6 rounded-lg border-2 transition-all ${
-                          editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
+                          editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
                             ? "border-primary bg-primary/5"
                             : "border-border bg-card hover:border-primary/50"
                         }`}
                       >
-                        {editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
+                        {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
                           <div className="absolute top-3 right-3">
                             <Check className="w-5 h-5 text-primary" />
                           </div>
@@ -2707,7 +3510,7 @@ const Fornecedores = () => {
                         <div className="flex flex-col items-center gap-3">
                           <Building2
                             className={`w-8 h-8 ${
-                              editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
+                              editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
                                 ? "text-primary"
                                 : "text-muted-foreground"
                             }`}
@@ -2723,23 +3526,18 @@ const Fornecedores = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          setEditNewFornecedor({
-                            ...editNewFornecedor,
+                          setEditFornecedor({
+                            ...editFornecedor,
                             tipoFornecedor: "PESSOA_FISICA",
-                            cpf_cnpj:
-                              editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                                ? ""
-                                : editNewFornecedor.cpf_cnpj,
-                            nome_fantasia: "",
                           })
                         }
                         className={`relative p-6 rounded-lg border-2 transition-all ${
-                          editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
+                          editFornecedor.tipoFornecedor === "PESSOA_FISICA"
                             ? "border-primary bg-primary/5"
                             : "border-border bg-card hover:border-primary/50"
                         }`}
                       >
-                        {editNewFornecedor.tipoFornecedor === "PESSOA_FISICA" && (
+                        {editFornecedor.tipoFornecedor === "PESSOA_FISICA" && (
                           <div className="absolute top-3 right-3">
                             <Check className="w-5 h-5 text-primary" />
                           </div>
@@ -2747,7 +3545,7 @@ const Fornecedores = () => {
                         <div className="flex flex-col items-center gap-3">
                           <User
                             className={`w-8 h-8 ${
-                              editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
+                              editFornecedor.tipoFornecedor === "PESSOA_FISICA"
                                 ? "text-primary"
                                 : "text-muted-foreground"
                             }`}
@@ -2764,7 +3562,7 @@ const Fornecedores = () => {
                   </div>
 
                   {/* Nome Fantasia - Apenas para Pessoa Jurídica */}
-                  {editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
+                  {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-muted-foreground" />
@@ -2772,10 +3570,10 @@ const Fornecedores = () => {
                       </Label>
                       <Input
                         placeholder="Nome Fantasia da Empresa"
-                        value={editNewFornecedor.nome_fantasia || ""}
+                        value={editFornecedor.nome_fantasia || ""}
                         onChange={(e) =>
-                          setEditNewFornecedor({
-                            ...editNewFornecedor,
+                          setEditFornecedor({
+                            ...editFornecedor,
                             nome_fantasia: e.target.value,
                           })
                         }
@@ -2787,27 +3585,27 @@ const Fornecedores = () => {
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-muted-foreground" />
-                      {editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
+                      {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
                         ? "Razão Social"
                         : "Nome"}{" "}
                       *
                     </Label>
                     <Input
                       placeholder={
-                        editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
+                        editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
                           ? "Razão Social da Empresa"
                           : "Nome do fornecedor"
                       }
-                      value={editNewFornecedor.nome_razao || ""}
+                      value={editFornecedor.nome_razao || ""}
                       onChange={(e) => {
                         const nomeRazao = e.target.value;
-                        setEditNewFornecedor({
-                          ...editNewFornecedor,
+                        setEditFornecedor({
+                          ...editFornecedor,
                           nome_razao: nomeRazao,
                           nome_fantasia:
-                            editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
+                            editFornecedor.tipoFornecedor === "PESSOA_FISICA"
                               ? nomeRazao
-                              : editNewFornecedor.nome_fantasia,
+                              : editFornecedor.nome_fantasia,
                         });
                       }}
                     />
@@ -2817,22 +3615,22 @@ const Fornecedores = () => {
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-muted-foreground" />
-                      {editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
+                      {editFornecedor.tipoFornecedor === "PESSOA_FISICA"
                         ? "CPF"
                         : "CNPJ"}{" "}
                       *
                     </Label>
                     <Input
                       placeholder={
-                        editNewFornecedor.tipoFornecedor === "PESSOA_FISICA"
+                        editFornecedor.tipoFornecedor === "PESSOA_FISICA"
                           ? "000.000.000-00"
                           : "00.000.000/0000-00"
                       }
-                      value={editNewFornecedor.cpf_cnpj || ""}
+                      value={editFornecedor.cpf_cnpj || ""}
                       onChange={(e) => {
                         const value = e.target.value;
                         const cleaned = cleanDocument(value);
-                        const tipo = editNewFornecedor.tipoFornecedor;
+                        const tipo = editFornecedor.tipoFornecedor;
                         const maxLength = tipo === "PESSOA_FISICA" ? 11 : 14;
                         const limited = cleaned.slice(0, maxLength);
                         let formatted = limited;
@@ -2868,8 +3666,8 @@ const Fornecedores = () => {
                               .replace(/^(\d{2})$/, "$1");
                           }
                         }
-                        setEditNewFornecedor({
-                          ...editNewFornecedor,
+                        setEditFornecedor({
+                          ...editFornecedor,
                           cpf_cnpj: formatted,
                         });
                       }}
@@ -2877,7 +3675,7 @@ const Fornecedores = () => {
                   </div>
 
                   {/* Inscrição Estadual - Apenas para Pessoa Jurídica */}
-                  {editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
+                  {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Hash className="w-4 h-4 text-muted-foreground" />
@@ -2885,10 +3683,10 @@ const Fornecedores = () => {
                       </Label>
                       <Input
                         placeholder="000.000.000.000"
-                        value={editNewFornecedor.inscricao_estadual || ""}
+                        value={editFornecedor.inscricao_estadual || ""}
                         onChange={(e) =>
-                          setEditNewFornecedor({
-                            ...editNewFornecedor,
+                          setEditFornecedor({
+                            ...editFornecedor,
                             inscricao_estadual: e.target.value,
                           })
                         }
@@ -2905,20 +3703,20 @@ const Fornecedores = () => {
                           key={status}
                           type="button"
                           onClick={() =>
-                            setEditNewFornecedor({
-                              ...editNewFornecedor,
+                            setEditFornecedor({
+                              ...editFornecedor,
                               statusFornecedor: status,
                             })
                           }
                           className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                            editNewFornecedor.statusFornecedor === status
+                            editFornecedor.statusFornecedor === status
                               ? "border-primary bg-primary/5"
                               : "border-border bg-card hover:border-primary/50"
                           }`}
                         >
                           <Circle
                             className={`w-4 h-4 ${
-                              editNewFornecedor.statusFornecedor === status
+                              editFornecedor.statusFornecedor === status
                                 ? status === "ATIVO"
                                   ? "text-green-500 fill-green-500"
                                   : status === "INATIVO"
@@ -2959,6 +3757,7 @@ const Fornecedores = () => {
                       setEditEnderecos([
                         ...editEnderecos,
                         {
+                          id: undefined,
                           cep: "",
                           logradouro: "",
                           numero: "",
@@ -2978,7 +3777,7 @@ const Fornecedores = () => {
 
                 {editEnderecos.map((endereco, index) => (
                   <div
-                    key={index}
+                    key={endereco.id ?? `new-${index}`}
                     className="space-y-4 p-4 border rounded-lg bg-background"
                   >
                     <div className="flex items-center justify-between mb-4">
@@ -2988,20 +3787,18 @@ const Fornecedores = () => {
                           Endereço {index + 1}
                         </Label>
                       </div>
-                      {editEnderecos.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setEditEnderecos(
-                              editEnderecos.filter((_, i) => i !== index)
-                            )
-                          }
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          // Abrir diálogo de confirmação
+                          setEnderecoParaDeletar({ index, endereco: editEnderecos[index] });
+                        }}
+                        disabled={removerEnderecoMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
                     </div>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
@@ -3012,9 +3809,11 @@ const Fornecedores = () => {
                             value={endereco.cep}
                             onChange={(e) => {
                               const formatted = formatCEP(e.target.value);
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].cep = formatted;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, cep: formatted } : end
+                                )
+                              );
                             }}
                             maxLength={9}
                           />
@@ -3025,9 +3824,11 @@ const Fornecedores = () => {
                             placeholder="Rua, Avenida, etc."
                             value={endereco.logradouro}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].logradouro = e.target.value;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, logradouro: e.target.value } : end
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3039,9 +3840,11 @@ const Fornecedores = () => {
                             placeholder="123"
                             value={endereco.numero}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].numero = e.target.value;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, numero: e.target.value } : end
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3051,9 +3854,11 @@ const Fornecedores = () => {
                             placeholder="Apto, Sala, etc."
                             value={endereco.complemento}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].complemento = e.target.value;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, complemento: e.target.value } : end
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3065,9 +3870,11 @@ const Fornecedores = () => {
                             placeholder="Nome do bairro"
                             value={endereco.bairro}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].bairro = e.target.value;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, bairro: e.target.value } : end
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3077,9 +3884,11 @@ const Fornecedores = () => {
                             placeholder="Nome da cidade"
                             value={endereco.cidade}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].cidade = e.target.value;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, cidade: e.target.value } : end
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3092,10 +3901,11 @@ const Fornecedores = () => {
                             maxLength={2}
                             value={endereco.estado}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].estado =
-                                e.target.value.toUpperCase();
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, estado: e.target.value.toUpperCase() } : end
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3105,9 +3915,11 @@ const Fornecedores = () => {
                             placeholder="Ponto de referência (máx. 100 caracteres)"
                             value={endereco.referencia}
                             onChange={(e) => {
-                              const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].referencia = e.target.value;
-                              setEditEnderecos(newEnderecos);
+                              setEditEnderecos(prev =>
+                                prev.map((end, i) =>
+                                  i === index ? { ...end, referencia: e.target.value } : end
+                                )
+                              );
                             }}
                             maxLength={100}
                           />
@@ -3137,16 +3949,19 @@ const Fornecedores = () => {
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                        setEditContatos([
-                          ...editContatos,
-                          {
-                            telefone: "",
-                            email: "",
-                            nomeContato: "",
-                            observacao: "",
-                            ativo: true,
-                          },
-                        ])
+                      setEditContatos([
+                        ...editContatos,
+                        {
+                          id: undefined,
+                          telefone: "",
+                          email: "",
+                          nomeContato: "",
+                          outroTelefone: "",
+                          nomeOutroTelefone: "",
+                          observacao: "",
+                          ativo: true,
+                        },
+                      ])
                     }
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -3156,7 +3971,7 @@ const Fornecedores = () => {
 
                 {editContatos.map((contato, index) => (
                   <div
-                    key={index}
+                    key={contato.id ?? `new-${index}`}
                     className="space-y-4 p-4 border rounded-lg bg-background"
                   >
                     <div className="flex items-center justify-between mb-4">
@@ -3176,30 +3991,28 @@ const Fornecedores = () => {
                           </Label>
                           <Switch
                             id={`edit-ativo-${index}`}
-                            checked={
-                              contato.ativo !== undefined ? contato.ativo : true
-                            }
+                            checked={contato.ativo}
                             onCheckedChange={(checked) => {
-                              const newContatos = [...editContatos];
-                              newContatos[index].ativo = checked;
-                              setEditContatos(newContatos);
+                              setEditContatos(prev =>
+                                prev.map((cont, i) =>
+                                  i === index ? { ...cont, ativo: checked } : cont
+                                )
+                              );
                             }}
                           />
                         </div>
-                        {editContatos.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setEditContatos(
-                                editContatos.filter((_, i) => i !== index)
-                              )
-                            }
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            // Abrir diálogo de confirmação
+                            setContatoParaDeletar({ index, contato: editContatos[index] });
+                          }}
+                          disabled={removerContatoMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
                       </div>
                     </div>
                     <div className="space-y-4">
@@ -3207,16 +4020,18 @@ const Fornecedores = () => {
                         <div className="space-y-2">
                           <Label className="flex items-center gap-2">
                             <PhoneIcon className="w-4 h-4 text-muted-foreground" />
-                            Telefone
+                            Telefone *
                           </Label>
                           <Input
                             placeholder="(00) 00000-0000"
                             value={contato.telefone}
                             onChange={(e) => {
                               const formatted = formatTelefone(e.target.value);
-                              const newContatos = [...editContatos];
-                              newContatos[index].telefone = formatted;
-                              setEditContatos(newContatos);
+                              setEditContatos(prev =>
+                                prev.map((cont, i) =>
+                                  i === index ? { ...cont, telefone: formatted } : cont
+                                )
+                              );
                             }}
                             maxLength={15}
                           />
@@ -3231,9 +4046,11 @@ const Fornecedores = () => {
                             placeholder="exemplo@email.com"
                             value={contato.email}
                             onChange={(e) => {
-                              const newContatos = [...editContatos];
-                              newContatos[index].email = e.target.value;
-                              setEditContatos(newContatos);
+                              setEditContatos(prev =>
+                                prev.map((cont, i) =>
+                                  i === index ? { ...cont, email: e.target.value } : cont
+                                )
+                              );
                             }}
                           />
                         </div>
@@ -3247,9 +4064,11 @@ const Fornecedores = () => {
                           placeholder="Nome do responsável"
                           value={contato.nomeContato}
                           onChange={(e) => {
-                            const newContatos = [...editContatos];
-                            newContatos[index].nomeContato = e.target.value;
-                            setEditContatos(newContatos);
+                            setEditContatos(prev =>
+                              prev.map((cont, i) =>
+                                i === index ? { ...cont, nomeContato: e.target.value } : cont
+                              )
+                            );
                           }}
                         />
                       </div>
@@ -3259,9 +4078,11 @@ const Fornecedores = () => {
                           placeholder="Observações sobre o contato (máx. 500 caracteres)"
                           value={contato.observacao}
                           onChange={(e) => {
-                            const newContatos = [...editContatos];
-                            newContatos[index].observacao = e.target.value;
-                            setEditContatos(newContatos);
+                            setEditContatos(prev =>
+                              prev.map((cont, i) =>
+                                i === index ? { ...cont, observacao: e.target.value } : cont
+                              )
+                            );
                           }}
                           maxLength={500}
                         />
@@ -3279,7 +4100,6 @@ const Fornecedores = () => {
                   onClick={() => {
                     setEditDialogOpen(false);
                     setSelectedFornecedorId(null);
-                    setEditCurrentStep(1);
                   }}
                   className="flex-1"
                 >
@@ -3290,112 +4110,160 @@ const Fornecedores = () => {
                   type="button"
                   variant="gradient"
                   onClick={async () => {
-                    if (selectedFornecedorId) {
-                      try {
-                        // Preparar payload de atualização
-                        const updateData: Partial<CreateFornecedorDto> = {};
-
-                        // Dados básicos - apenas incluir se foram modificados
-                        if (
-                          editNewFornecedor.nome_fantasia !== undefined &&
-                          editNewFornecedor.nome_fantasia !==
-                            selectedFornecedor.nome_fantasia
-                        ) {
-                          updateData.nome_fantasia = editNewFornecedor.nome_fantasia;
-                        }
-
-                        if (
-                          editNewFornecedor.nome_razao &&
-                          editNewFornecedor.nome_razao !== selectedFornecedor.nome_razao
-                        ) {
-                          updateData.nome_razao = editNewFornecedor.nome_razao;
-                        }
-
-                        if (
-                          editNewFornecedor.tipoFornecedor &&
-                          editNewFornecedor.tipoFornecedor !== selectedFornecedor.tipoFornecedor
-                        ) {
-                          updateData.tipoFornecedor = editNewFornecedor.tipoFornecedor;
-                        }
-
-                        if (
-                          editNewFornecedor.statusFornecedor &&
-                          editNewFornecedor.statusFornecedor !== selectedFornecedor.statusFornecedor
-                        ) {
-                          updateData.statusFornecedor = editNewFornecedor.statusFornecedor;
-                        }
-
-                        if (
-                          editNewFornecedor.cpf_cnpj &&
-                          editNewFornecedor.cpf_cnpj !== selectedFornecedor.cpf_cnpj
-                        ) {
-                          updateData.cpf_cnpj = editNewFornecedor.cpf_cnpj;
-                        }
-
-                        if (
-                          editNewFornecedor.tipoFornecedor === "PESSOA_JURIDICA" ||
-                          selectedFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                        ) {
-                          const inscricaoAtual = editNewFornecedor.inscricao_estadual || "";
-                          const inscricaoOriginal = selectedFornecedor.inscricao_estadual || "";
-                          if (inscricaoAtual !== inscricaoOriginal) {
-                            updateData.inscricao_estadual = inscricaoAtual;
-                          }
-                        }
-
-                        // Preparar endereços com IDs
-                        const enderecosValidos = editEnderecos.filter(
-                          (end) =>
-                            end.cep?.trim() ||
-                            end.logradouro?.trim() ||
-                            end.cidade?.trim()
-                        );
-
-                        if (enderecosValidos.length > 0) {
-                          updateData.enderecos = enderecosValidos.map((end) => ({
-                            id: end.id,
-                            cep: end.cep?.trim() || "",
-                            logradouro: end.logradouro?.trim() || "",
-                            numero: end.numero?.trim() || "",
-                            complemento: end.complemento?.trim(),
-                            bairro: end.bairro?.trim() || "",
-                            cidade: end.cidade?.trim() || "",
-                            estado: end.estado?.trim() || "",
-                            referencia: end.referencia?.trim(),
-                          }));
-                        }
-
-                        // Preparar contatos com IDs (formato snake_case para API)
-                        const contatosValidos = editContatos.filter(
-                          (cont) => cont.telefone?.trim()
-                        );
-
-                        if (contatosValidos.length > 0) {
-                          updateData.contato = contatosValidos.map((cont) => ({
-                            id: cont.id,
-                            nome_contato: cont.nomeContato?.trim(),
-                            email: cont.email?.trim(),
-                            telefone: cont.telefone.trim(),
-                            observacao: cont.observacao?.trim(),
-                            ativo: cont.ativo !== undefined ? cont.ativo : true,
-                          }));
-                        }
-
-                        // Atualizar fornecedor
-                        updateFornecedorMutation.mutate(updateData);
-                      } catch (error: any) {
-                        const errorMessage =
-                          error?.response?.data?.message ||
-                          error?.message ||
-                          "Erro ao atualizar fornecedor";
-                        toast.error(errorMessage);
+                    if (!selectedFornecedorId || !fornecedorOriginal) return;
+                    
+                    setIsSavingFornecedor(true);
+                    // Declarar variáveis fora do try para uso no catch
+                    let formState: any = null;
+                    let camposAlterados: string[] = [];
+                    
+                    try {
+                      // Conforme GUIA_FRONTEND_ATUALIZACAO_CLIENTES_E_FORNECEDORES.md
+                      // Usar método atualizarParcial que implementa a lógica completa do guia
+                      
+                      // Debug: verificar dados antes de preparar
+                      if (import.meta.env.DEV) {
+                        console.log('[Salvar Fornecedor] Dados do formulário:', {
+                          editEnderecos: editEnderecos,
+                          editEnderecosCount: editEnderecos.length,
+                          enderecosNovos: editEnderecos.filter(e => !e.id).length,
+                          enderecosExistentes: editEnderecos.filter(e => e.id).length,
+                          fornecedorOriginalEnderecos: fornecedorOriginal.enderecos?.length || 0
+                        });
                       }
+
+                      // Preparar dados do formulário para o formato esperado
+                      const dadosEditados = {
+                        nome_fantasia: editFornecedor.nome_fantasia,
+                        nome_razao: editFornecedor.nome_razao,
+                        tipoFornecedor: editFornecedor.tipoFornecedor,
+                        statusFornecedor: editFornecedor.statusFornecedor,
+                        cpf_cnpj: editFornecedor.cpf_cnpj,
+                        inscricao_estadual: editFornecedor.inscricao_estadual,
+                        enderecos: editEnderecos, // Sempre enviar array se houver endereços
+                        contato: editContatos,
+                      };
+
+                      // Converter para FornecedorFormState e identificar campos alterados
+                      const resultado = prepararAtualizacaoFornecedor(
+                        fornecedorOriginal,
+                        dadosEditados
+                      );
+                      formState = resultado.formState;
+                      camposAlterados = resultado.camposAlterados;
+
+                      // Debug: log do que será enviado
+                      if (import.meta.env.DEV) {
+                        console.log('[Salvar Fornecedor] Dados preparados:', {
+                          camposAlterados,
+                          enderecosCount: formState.enderecos.length,
+                          enderecos: formState.enderecos,
+                          contatosCount: formState.contato.length,
+                          contatos: formState.contato
+                        });
+                      }
+
+                      // Validar que temos um ID válido
+                      if (!selectedFornecedorId) {
+                        throw new Error('ID do fornecedor não encontrado');
+                      }
+
+                      // Debug: log completo antes de enviar
+                      if (import.meta.env.DEV) {
+                        console.log('[Salvar Fornecedor] Antes de enviar:', {
+                          fornecedorId: selectedFornecedorId,
+                          camposAlterados,
+                          formState: {
+                            ...formState,
+                            enderecos: formState.enderecos.map(e => ({
+                              id: e.id,
+                              isNew: e.isNew,
+                              cep: e.cep,
+                              logradouro: e.logradouro,
+                              cidade: e.cidade,
+                              estado: e.estado
+                            }))
+                          }
+                        });
+                      }
+
+                      // Atualizar usando o método parcial conforme o guia
+                      const fornecedorAtualizado = await fornecedoresService.atualizarParcial(
+                        selectedFornecedorId,
+                        formState,
+                        camposAlterados
+                      );
+
+                      // Debug: verificar resposta do backend
+                      if (import.meta.env.DEV) {
+                        console.log('[Salvar Fornecedor] Resposta do backend:', {
+                          fornecedor: fornecedorAtualizado,
+                          enderecos: fornecedorAtualizado.enderecos,
+                          contatos: fornecedorAtualizado.contato
+                        });
+                      }
+
+                      // Invalidar queries e mostrar sucesso
+                      await queryClient.invalidateQueries({ 
+                        queryKey: ["fornecedores"],
+                        exact: false,
+                      });
+                      await queryClient.invalidateQueries({
+                        queryKey: ["fornecedor", selectedFornecedorId],
+                      });
+                      await queryClient.refetchQueries({ 
+                        queryKey: ["fornecedores"],
+                        exact: false,
+                      });
+                      
+                      toast.success("Fornecedor atualizado com sucesso!");
+                      setEditDialogOpen(false);
+                      setSelectedFornecedorId(null);
+                    } catch (error: any) {
+                      // Log detalhado do erro
+                      console.error('[Salvar Fornecedor] Erro completo:', {
+                        error,
+                        response: error?.response,
+                        status: error?.response?.status,
+                        statusText: error?.response?.statusText,
+                        data: error?.response?.data,
+                        message: error?.message,
+                        fornecedorId: selectedFornecedorId,
+                        payloadEnviado: {
+                          camposAlterados,
+                          enderecosCount: formState.enderecos.length,
+                          enderecosNovos: formState.enderecos.filter(e => !e.id).length,
+                          enderecosExistentes: formState.enderecos.filter(e => e.id).length
+                        }
+                      });
+                      
+                      // Usar mensagem do erro tratado ou mensagem específica do backend
+                      let errorMessage = error?.message;
+                      
+                      // Se o erro tem response, tentar extrair mensagem específica
+                      if (error?.response?.data) {
+                        const backendMessage = error.response.data.message || error.response.data.error;
+                        if (backendMessage) {
+                          errorMessage = Array.isArray(backendMessage) 
+                            ? backendMessage.join(", ")
+                            : backendMessage;
+                        }
+                      }
+                      
+                      // Se não tem mensagem específica, usar mensagem padrão
+                      if (!errorMessage || errorMessage === 'Error') {
+                        errorMessage = "Erro ao atualizar fornecedor";
+                      }
+                      
+                      toast.error(errorMessage);
+                    } finally {
+                      setIsSavingFornecedor(false);
                     }
                   }}
-                  disabled={updateFornecedorMutation.isPending}
+                  disabled={isSavingFornecedor}
                   className="flex-1"
                 >
-                  {updateFornecedorMutation.isPending ? (
+                  {isSavingFornecedor ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Salvando...
@@ -3416,6 +4284,188 @@ const Fornecedores = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de confirmação para deletar endereço */}
+      <AlertDialog open={enderecoParaDeletar !== null} onOpenChange={(open) => {
+        if (!open) {
+          setEnderecoParaDeletar(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este endereço? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+            {enderecoParaDeletar?.endereco?.logradouro && (
+              <div className="mt-2 p-2 bg-muted rounded text-sm">
+                <strong>Endereço:</strong> {enderecoParaDeletar.endereco.logradouro}
+                {enderecoParaDeletar.endereco.numero && `, ${enderecoParaDeletar.endereco.numero}`}
+                {enderecoParaDeletar.endereco.bairro && ` - ${enderecoParaDeletar.endereco.bairro}`}
+                {enderecoParaDeletar.endereco.cidade && `, ${enderecoParaDeletar.endereco.cidade}`}
+                {enderecoParaDeletar.endereco.estado && `-${enderecoParaDeletar.endereco.estado}`}
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!enderecoParaDeletar) return;
+                
+                const { index, endereco } = enderecoParaDeletar;
+                
+                // Se o endereço já existe no backend (tem ID), verificar se realmente existe
+                if (endereco.id && selectedFornecedorId && fornecedorOriginal) {
+                  // Verificar se o ID realmente existe nos endereços originais
+                  const idExiste = fornecedorOriginal.enderecos?.some(
+                    e => e.id && Number(e.id) === Number(endereco.id)
+                  );
+                  
+                  if (idExiste) {
+                    // ID existe, tentar deletar via endpoint
+                    try {
+                      await removerEnderecoMutation.mutateAsync({
+                        fornecedorId: selectedFornecedorId,
+                        enderecoId: Number(endereco.id)
+                      });
+                    } catch (error: any) {
+                      // Se for 404, o endereço já não existe - apenas remover do estado local
+                      if (error?.response?.status === 404) {
+                        console.warn('[Remover Endereço] Endereço já não existe no backend, removendo apenas do estado local');
+                        setEditEnderecos(
+                          editEnderecos.filter((_, i) => i !== index)
+                        );
+                        toast.success("Endereço removido");
+                      }
+                      // Outros erros já são tratados na mutation
+                    }
+                  } else {
+                    // ID não existe nos originais, apenas remover do estado local
+                    console.warn('[Remover Endereço] ID não encontrado nos endereços originais, removendo apenas do estado local');
+                    setEditEnderecos(
+                      editEnderecos.filter((_, i) => i !== index)
+                    );
+                    toast.success("Endereço removido");
+                  }
+                } else {
+                  // Se é um endereço novo (sem ID), apenas remover do estado local
+                  setEditEnderecos(
+                    editEnderecos.filter((_, i) => i !== index)
+                  );
+                  toast.success("Endereço removido");
+                }
+                
+                // Fechar diálogo
+                setEnderecoParaDeletar(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removerEnderecoMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Removendo...
+                </>
+              ) : (
+                "Remover"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de confirmação para deletar contato */}
+      <AlertDialog open={contatoParaDeletar !== null} onOpenChange={(open) => {
+        if (!open) {
+          setContatoParaDeletar(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este contato? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+            {contatoParaDeletar?.contato?.telefone && (
+              <div className="mt-2 p-2 bg-muted rounded text-sm">
+                <strong>Contato:</strong> {contatoParaDeletar.contato.telefone}
+                {contatoParaDeletar.contato.nomeContato && ` - ${contatoParaDeletar.contato.nomeContato}`}
+                {contatoParaDeletar.contato.email && ` (${contatoParaDeletar.contato.email})`}
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!contatoParaDeletar) return;
+                
+                const { index, contato } = contatoParaDeletar;
+                
+                // Se o contato já existe no backend (tem ID), verificar se realmente existe
+                if (contato.id && selectedFornecedorId && fornecedorOriginal) {
+                  // Verificar se o ID realmente existe nos contatos originais
+                  const idExiste = fornecedorOriginal.contato?.some(
+                    c => c.id && Number(c.id) === Number(contato.id)
+                  );
+                  
+                  if (idExiste) {
+                    // ID existe, tentar deletar via endpoint
+                    // O onSuccess da mutation vai atualizar o estado com os dados do servidor
+                    try {
+                      await removerContatoMutation.mutateAsync({
+                        fornecedorId: selectedFornecedorId,
+                        contatoId: Number(contato.id)
+                      });
+                      // Fechar diálogo após sucesso
+                      setContatoParaDeletar(null);
+                    } catch (error: any) {
+                      // Se for 404, o contato já não existe - apenas remover do estado local
+                      if (error?.response?.status === 404) {
+                        console.warn('[Remover Contato] Contato já não existe no backend, removendo apenas do estado local');
+                        setEditContatos(
+                          editContatos.filter((_, i) => i !== index)
+                        );
+                        toast.success("Contato removido");
+                        // Fechar diálogo
+                        setContatoParaDeletar(null);
+                      }
+                      // Outros erros já são tratados na mutation
+                    }
+                  } else {
+                    // ID não existe nos originais, apenas remover do estado local
+                    console.warn('[Remover Contato] ID não encontrado nos contatos originais, removendo apenas do estado local');
+                    setEditContatos(
+                      editContatos.filter((_, i) => i !== index)
+                    );
+                    toast.success("Contato removido");
+                    // Fechar diálogo
+                    setContatoParaDeletar(null);
+                  }
+                } else {
+                  // Se é um contato novo (sem ID), apenas remover do estado local
+                  setEditContatos(
+                    editContatos.filter((_, i) => i !== index)
+                  );
+                  toast.success("Contato removido");
+                  // Fechar diálogo
+                  setContatoParaDeletar(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removerContatoMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Removendo...
+                </>
+              ) : (
+                "Remover"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 };

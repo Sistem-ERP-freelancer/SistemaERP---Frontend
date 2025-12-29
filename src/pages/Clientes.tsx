@@ -33,6 +33,7 @@ import {
     clientesService,
     extractClientesFromResponse,
 } from "@/services/clientes.service";
+import { prepararAtualizacaoCliente } from "@/features/clientes/utils/prepararAtualizacaoCliente";
 import { UpdateContatoDto, contatosService } from "@/services/contatos.service";
 import {
   UpdateEnderecoDto,
@@ -2765,468 +2766,49 @@ const Clientes = () => {
                       type="button"
                       variant="gradient"
                       onClick={async () => {
-                        if (selectedClienteId) {
+                        if (selectedClienteId && selectedCliente) {
                           setIsUpdatingCliente(true);
                           try {
-                            // Conforme GUIA-FRONTEND-ATUALIZACAO-CLIENTE.md
-                            // Preparar payload completo com contatos e endereços incluindo IDs
+                            // Conforme GUIA_FRONTEND_ATUALIZACAO_CLIENTES_E_FORNECEDORES.md
+                            // Usar método atualizarParcial que implementa a lógica completa do guia
                             
-                            // Conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md e GUIA-FRONTEND-ATUALIZACAO-CLIENTE.md
-                            // Preparar payload de atualização do cliente
-                            const updateData: Partial<CreateClienteDto> = {};
-                            
-                            // Dados básicos - apenas incluir se foram modificados
-                            // Para Pessoa Jurídica: apenas nome_razao e nome_fantasia (SEM nome)
-                            // Para Pessoa Física: apenas nome (SEM nome_razao)
-                            if (editNewCliente.tipoPessoa === "PESSOA_JURIDICA") {
-                              // Pessoa Jurídica: usar nome_razao (NÃO enviar nome)
-                          if (
-                            editNewCliente.nome_razao &&
-                            editNewCliente.nome_razao !==
-                              (selectedCliente.nome_razao ||
-                                selectedCliente.nome)
-                          ) {
-                                updateData.nome_razao = editNewCliente.nome_razao;
-                              }
-                              // Nome fantasia
-                          if (
-                            editNewCliente.nome_fantasia !== undefined &&
-                            editNewCliente.nome_fantasia !==
-                              selectedCliente.nome_fantasia
-                          ) {
-                            updateData.nome_fantasia =
-                              editNewCliente.nome_fantasia;
-                              }
-                            } else {
-                              // Pessoa Física: usar nome (NÃO enviar nome_razao)
-                          if (
-                            editNewCliente.nome &&
-                            editNewCliente.nome !== selectedCliente.nome
-                          ) {
-                                updateData.nome = editNewCliente.nome;
-                              }
-                            }
-                            
-                        if (
-                          editNewCliente.tipoPessoa &&
-                          editNewCliente.tipoPessoa !==
-                            selectedCliente.tipoPessoa
-                        ) {
-                              updateData.tipoPessoa = editNewCliente.tipoPessoa;
-                            }
-                            
-                        // Atualizar status se mudou (verificar se está definido e diferente)
-                        // Conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md
-                        if (editNewCliente.statusCliente) {
-                          if (
-                            editNewCliente.statusCliente !==
-                            selectedCliente.statusCliente
-                          ) {
-                            updateData.statusCliente =
-                              editNewCliente.statusCliente;
-                            
-                            if (import.meta.env.DEV) {
-                              console.log(
-                                "📤 [Atualizar Status] Status mudou:",
-                                {
-                                antigo: selectedCliente.statusCliente,
-                                novo: editNewCliente.statusCliente,
-                                seráEnviado: true,
-                                }
-                              );
-                            }
-                          } else if (import.meta.env.DEV) {
-                            console.log(
-                              "ℹ️ [Atualizar Status] Status não mudou:",
-                              {
-                              atual: selectedCliente.statusCliente,
-                              editado: editNewCliente.statusCliente,
-                              seráEnviado: false,
-                              }
+                            // Preparar dados do formulário para o formato esperado
+                            const dadosEditados = {
+                              nome: editNewCliente.nome,
+                              nome_fantasia: editNewCliente.nome_fantasia,
+                              nome_razao: editNewCliente.nome_razao,
+                              tipoPessoa: editNewCliente.tipoPessoa,
+                              statusCliente: editNewCliente.statusCliente,
+                              cpf_cnpj: editNewCliente.cpf_cnpj,
+                              inscricao_estadual: editNewCliente.inscricao_estadual,
+                              enderecos: editEnderecos,
+                              contatos: editContatos,
+                            };
+
+                            // Converter para ClienteFormState e identificar campos alterados
+                            const { formState, camposAlterados } = prepararAtualizacaoCliente(
+                              selectedCliente,
+                              dadosEditados
                             );
-                          }
-                        } else if (import.meta.env.DEV) {
-                          console.warn(
-                            "⚠️ [Atualizar Status] statusCliente não está definido em editNewCliente"
-                          );
-                            }
-                            
-                        if (
-                          editNewCliente.cpf_cnpj &&
-                          editNewCliente.cpf_cnpj !== selectedCliente.cpf_cnpj
-                        ) {
-                              updateData.cpf_cnpj = editNewCliente.cpf_cnpj;
-                            }
 
-                            // Campos específicos para pessoa jurídica
-                        if (
-                          editNewCliente.tipoPessoa === "PESSOA_JURIDICA" ||
-                          selectedCliente.tipoPessoa === "PESSOA_JURIDICA"
-                        ) {
-                          const nomeRazaAtual =
-                            editNewCliente.nome_razao ||
-                            selectedCliente.nome_razao ||
-                            "";
-                          const nomeRazaOriginal =
-                            selectedCliente.nome_razao || "";
-                              if (nomeRazaAtual !== nomeRazaOriginal) {
-                                updateData.nome_razao = nomeRazaAtual;
-                              }
-                              
-                          const nomeFantasiaAtual =
-                            editNewCliente.nome_fantasia ||
-                            selectedCliente.nome_fantasia ||
-                            "";
-                          const nomeFantasiaOriginal =
-                            selectedCliente.nome_fantasia || "";
-                              if (nomeFantasiaAtual !== nomeFantasiaOriginal) {
-                                updateData.nome_fantasia = nomeFantasiaAtual;
-                              }
-                              
-                          const inscricaoAtual =
-                            editNewCliente.inscricao_estadual ||
-                            selectedCliente.inscricao_estadual ||
-                            "";
-                          const inscricaoOriginal =
-                            selectedCliente.inscricao_estadual || "";
-                              if (inscricaoAtual !== inscricaoOriginal) {
-                                updateData.inscricao_estadual = inscricaoAtual;
-                              }
-                            }
-
-                            // ⚠️ CRUCIAL: Preparar contatos COM IDs (conforme DOCUMENTACAO-ENDPOINTS-CLIENTES.md)
-                            // IDs são OBRIGATÓRIOS para atualizar contatos existentes
-                            // Sem ID = cria novo contato | Com ID = atualiza existente
-                            const contatosValidos = editContatos.filter(
-                              (cont) => cont.telefone?.trim() // Telefone é obrigatório
+                            // Atualizar usando o método parcial conforme o guia
+                            await clientesService.atualizarParcial(
+                              selectedClienteId,
+                              formState,
+                              camposAlterados
                             );
-                            
-                            if (contatosValidos.length > 0) {
-                          updateData.contatos = contatosValidos.map(
-                            (contato) => {
-                                const contatoPayload: any = {};
-                                
-                                // ⚠️ OBRIGATÓRIO: Incluir ID se o contato já existe (para atualizar)
-                                // Sem ID = backend cria novo contato
-                                if (contato.id && contato.id > 0) {
-                                  contatoPayload.id = contato.id;
-                                }
-                                
-                                // Telefone é obrigatório se contato for fornecido
-                                contatoPayload.telefone = contato.telefone.trim();
-                                
-                              // Buscar contato original para comparação
-                              const contatoOriginal =
-                                selectedCliente.contato?.find(
-                                  (c: any) => c.id === contato.id
-                                );
-
-                              // Função auxiliar para normalizar e comparar valores
-                              const normalizeValue = (
-                                val: any
-                              ): string | undefined => {
-                                if (val === null || val === undefined)
-                                  return undefined;
-                                if (typeof val === "string") {
-                                  const trimmed = val.trim();
-                                  return trimmed === "" ? undefined : trimmed;
-                                }
-                                return val;
-                              };
-
-                              const hasChanged = (
-                                newVal: any,
-                                originalVal: any
-                              ): boolean => {
-                                const normalizedNew = normalizeValue(newVal);
-                                const normalizedOriginal =
-                                  normalizeValue(originalVal);
-                                return normalizedNew !== normalizedOriginal;
-                              };
-
-                              // ⚠️ IMPORTANTE: Backend espera receber TODOS os campos quando atualiza
-                              // Formato esperado: { id, telefone, nome_contato, email }
-                              // Sempre enviar campos obrigatórios, mesmo que não tenham mudado
-                              // ⚠️ ATENÇÃO: O serviço de clientes espera camelCase e converte para snake_case
-                              // Enviar nomeContato (camelCase), não nome_contato (snake_case)
-
-                              // Email - sempre enviar (backend espera receber)
-                              const emailAtual = contato.email?.trim() ?? "";
-                              contatoPayload.email = emailAtual;
-
-                              // Nome do contato - sempre enviar (backend espera receber)
-                              // Enviar em camelCase (nomeContato) - o serviço converte para snake_case
-                              const nomeContatoAtual =
-                                contato.nomeContato?.trim() ?? "";
-                              contatoPayload.nomeContato = nomeContatoAtual;
-
-                              // Outro telefone - enviar em camelCase
-                              const outroTelefoneAtual =
-                                contato.outroTelefone?.trim() ?? "";
-                              const outroTelefoneOriginal =
-                                contatoOriginal?.outroTelefone?.trim() ??
-                                contatoOriginal?.outro_telefone?.trim() ??
-                                "";
-                              if (
-                                hasChanged(
-                                  outroTelefoneAtual,
-                                  outroTelefoneOriginal
-                                )
-                              ) {
-                                contatoPayload.outroTelefone =
-                                  outroTelefoneAtual;
-                              }
-
-                              // Nome do outro telefone - enviar em camelCase
-                              const nomeOutroTelefoneAtual =
-                                contato.nomeOutroTelefone?.trim() ?? "";
-                              const nomeOutroTelefoneOriginal =
-                                contatoOriginal?.nomeOutroTelefone?.trim() ??
-                                contatoOriginal?.nome_outro_telefone?.trim() ??
-                                "";
-                              if (
-                                hasChanged(
-                                  nomeOutroTelefoneAtual,
-                                  nomeOutroTelefoneOriginal
-                                )
-                              ) {
-                                contatoPayload.nomeOutroTelefone =
-                                  nomeOutroTelefoneAtual;
-                              }
-
-                              // Observação - enviar em camelCase
-                              const observacaoAtual =
-                                contato.observacao?.trim() ?? "";
-                              const observacaoOriginal =
-                                contatoOriginal?.observacao?.trim() ?? "";
-                              if (
-                                hasChanged(observacaoAtual, observacaoOriginal)
-                              ) {
-                                contatoPayload.observacao = observacaoAtual;
-                              }
-                                
-                              // Ativo - comparar apenas se foi definido
-                                if (contato.ativo !== undefined) {
-                                const ativoOriginal =
-                                  contatoOriginal?.ativo !== undefined
-                                    ? contatoOriginal.ativo
-                                    : true;
-                                if (contato.ativo !== ativoOriginal) {
-                                  contatoPayload.ativo = contato.ativo;
-                                }
-                              }
-
-                              if (import.meta.env.DEV) {
-                                console.log(
-                                  "📤 [Salvar Cliente] Contato payload:",
-                                  {
-                                    id: contato.id,
-                                    payload: contatoPayload,
-                                    camposEnviados: Object.keys(contatoPayload),
-                                    formatoEsperado: {
-                                      id: contatoPayload.id,
-                                      telefone: contatoPayload.telefone,
-                                      nomeContato: contatoPayload.nomeContato,
-                                      email: contatoPayload.email,
-                                    },
-                                    nota: "Serviço converte camelCase para snake_case antes de enviar ao backend",
-                                    payloadJSON: JSON.stringify(
-                                      contatoPayload,
-                                      null,
-                                      2
-                                    ),
-                                  }
-                                );
-                                }
-                                
-                                return contatoPayload;
-                            }
-                          );
-                            }
-
-                        // ⚠️ IMPORTANTE: Endereços devem ser atualizados via endpoint específico
-                        // Conforme documentação: PATCH /api/v1/clientes/:id NÃO processa endereços
-                        // Usar PATCH /api/v1/endereco/:id para cada endereço individualmente
-
-                        // Filtrar endereços válidos (tem pelo menos um campo preenchido)
-                            const enderecosValidos = editEnderecos.filter(
-                          (end) =>
-                            end.cep?.trim() ||
-                            end.logradouro?.trim() ||
-                            end.cidade?.trim()
-                            );
-                            
-                        // Debug: mostrar o que será enviado
-                        if (import.meta.env.DEV) {
-                          console.log(
-                            "📤 [Atualizar Cliente] Dados que serão enviados:",
-                            {
-                            clienteId: selectedClienteId,
-                            updateData: updateData,
-                            camposNoUpdateData: Object.keys(updateData),
-                              statusIncluido: "statusCliente" in updateData,
-                            valorStatus: updateData.statusCliente,
-                            }
-                          );
-                        }
-
-                        // Atualizar cliente (sem endereços - eles serão atualizados separadamente)
-                        await clientesService.atualizar(
-                          selectedClienteId,
-                          updateData
-                        );
-
-                        // Atualizar endereços individualmente usando endpoint específico
-                        if (enderecosValidos.length > 0) {
-                          const enderecosPromises = enderecosValidos.map(
-                            async (endereco) => {
-                              // Se tem ID, atualiza endereço existente
-                                if (endereco.id && endereco.id > 0) {
-                                // Buscar endereço original para comparação
-                                const enderecoOriginal =
-                                  selectedCliente.enderecos?.find(
-                                    (e: any) => e.id === endereco.id
-                                  );
-
-                                // Preparar payload apenas com campos modificados
-                                const enderecoPayload: UpdateEnderecoDto = {};
-
-                                // Comparar e incluir apenas campos que mudaram
-                                if (
-                                  endereco.cep?.trim() !==
-                                  enderecoOriginal?.cep?.trim()
-                                ) {
-                                  enderecoPayload.cep =
-                                    endereco.cep?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.logradouro?.trim() !==
-                                  enderecoOriginal?.logradouro?.trim()
-                                ) {
-                                  enderecoPayload.logradouro =
-                                    endereco.logradouro?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.numero?.trim() !==
-                                  enderecoOriginal?.numero?.trim()
-                                ) {
-                                  enderecoPayload.numero =
-                                    endereco.numero?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.complemento?.trim() !==
-                                  enderecoOriginal?.complemento?.trim()
-                                ) {
-                                  enderecoPayload.complemento =
-                                    endereco.complemento?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.bairro?.trim() !==
-                                  enderecoOriginal?.bairro?.trim()
-                                ) {
-                                  enderecoPayload.bairro =
-                                    endereco.bairro?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.cidade?.trim() !==
-                                  enderecoOriginal?.cidade?.trim()
-                                ) {
-                                  enderecoPayload.cidade =
-                                    endereco.cidade?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.estado?.trim() !==
-                                  enderecoOriginal?.estado?.trim()
-                                ) {
-                                  enderecoPayload.estado =
-                                    endereco.estado?.trim() ?? "";
-                                }
-                                if (
-                                  endereco.referencia?.trim() !==
-                                  enderecoOriginal?.referencia?.trim()
-                                ) {
-                                  enderecoPayload.referencia =
-                                    endereco.referencia?.trim() ?? "";
-                                }
-
-                                // Só atualiza se houver campos modificados
-                                if (Object.keys(enderecoPayload).length > 0) {
-                                  if (import.meta.env.DEV) {
-                                    console.log(
-                                      "📤 [Salvar Cliente] Atualizando endereço:",
-                                      {
-                                        id: endereco.id,
-                                        payload: enderecoPayload,
-                                        clienteId: selectedClienteId,
-                                      }
-                                    );
-                            }
-                                  // ⚠️ IMPORTANTE: clienteId é obrigatório para validação de segurança
-                                  if (!selectedClienteId) {
-                                    throw new Error(
-                                      "ID do cliente não encontrado para atualizar endereço"
-                                    );
-                                  }
-
-                                  if (import.meta.env.DEV) {
-                                    console.log(
-                                      "📤 [Salvar Cliente] Atualizando endereço:",
-                                      {
-                                        id: endereco.id,
-                                        payload: enderecoPayload,
-                                        clienteId: selectedClienteId,
-                                        url: `/endereco/${endereco.id}?clienteId=${selectedClienteId}`,
-                                      }
-                                    );
-                                  }
-
-                                  return await enderecosService.atualizar(
-                                    endereco.id,
-                                    enderecoPayload,
-                                    selectedClienteId
-                                  );
-                                }
-                              } else {
-                                // Se não tem ID, cria novo endereço
-                                if (import.meta.env.DEV) {
-                                  console.log(
-                                    "📤 [Salvar Cliente] Criando novo endereço:",
-                                    {
-                                      dados: endereco,
-                                      clienteId: selectedClienteId,
-                                    }
-                                  );
-                                }
-                                return await enderecosService.criar({
-                                  cep: endereco.cep?.trim() ?? "",
-                                  logradouro: endereco.logradouro?.trim() ?? "",
-                                  numero: endereco.numero?.trim() ?? "",
-                                  complemento: endereco.complemento?.trim(),
-                                  bairro: endereco.bairro?.trim() ?? "",
-                                  cidade: endereco.cidade?.trim() ?? "",
-                                  estado: endereco.estado?.trim() ?? "",
-                                  referencia: endereco.referencia?.trim(),
-                                  clienteId: selectedClienteId,
-                                });
-                              }
-                            }
-                          );
-
-                          // Aguardar todas as atualizações de endereços
-                          await Promise.all(enderecosPromises);
-                        }
 
                             // Invalidar queries e mostrar sucesso
                             await queryClient.invalidateQueries({ 
                               queryKey: ["clientes"],
-                          exact: false,
+                              exact: false,
                             });
                             await queryClient.invalidateQueries({
                               queryKey: ["cliente", selectedClienteId],
                             });
                             await queryClient.refetchQueries({ 
                               queryKey: ["clientes"],
-                          exact: false,
+                              exact: false,
                             });
                             
                             toast.success("Cliente atualizado com sucesso!");

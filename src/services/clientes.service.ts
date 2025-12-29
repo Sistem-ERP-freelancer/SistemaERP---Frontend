@@ -1,4 +1,7 @@
 import { apiClient } from "./api";
+import { UpdateClientePayload } from "@/shared/types/update.types";
+import { prepararPayloadAtualizacaoCliente, tratarErroAtualizacao } from "@/lib/update-payload";
+import { ClienteFormState } from "@/shared/types/update.types";
 
 // Enum de Status do Cliente (conforme GUIA-FRONTEND-ATUALIZACAO-STATUS-CLIENTE.md)
 export enum StatusCliente {
@@ -159,6 +162,55 @@ class ClientesService {
     data: Partial<CreateClienteDto>
   ): Promise<Cliente> {
     return apiClient.patch<Cliente>(`/clientes/${id}`, data);
+  }
+
+  /**
+   * Atualiza parcialmente um cliente conforme GUIA_FRONTEND_ATUALIZACAO_CLIENTES_E_FORNECEDORES.md
+   * 
+   * @param id - ID do cliente
+   * @param dadosForm - Dados do formulário com estado completo
+   * @param camposAlterados - Array de nomes dos campos que foram alterados
+   * @returns Cliente atualizado
+   * 
+   * Comportamento:
+   * - Apenas campos enviados são atualizados
+   * - Campos não enviados permanecem inalterados
+   * - Campos vazios são convertidos para NULL
+   * - Arrays não enviados mantêm os itens existentes
+   * - Arrays vazios removem todos os itens
+   */
+  async atualizarParcial(
+    id: number,
+    dadosForm: ClienteFormState,
+    camposAlterados: string[]
+  ): Promise<Cliente> {
+    try {
+      const payload = prepararPayloadAtualizacaoCliente(dadosForm, camposAlterados);
+      
+      if (import.meta.env.DEV) {
+        console.log("📤 [Atualizar Parcial Cliente] Enviando payload:", {
+          id,
+          payload,
+          camposAlterados,
+          payloadJSON: JSON.stringify(payload, null, 2),
+        });
+      }
+      
+      const response = await apiClient.patch<Cliente>(`/clientes/${id}`, payload);
+      
+      if (import.meta.env.DEV) {
+        console.log("✅ [Atualizar Parcial Cliente] Cliente atualizado:", response);
+      }
+      
+      return response;
+    } catch (error: any) {
+      if (import.meta.env.DEV) {
+        console.error("❌ [Atualizar Parcial Cliente] Erro:", error);
+      }
+      
+      const erroTratado = tratarErroAtualizacao(error);
+      throw new Error(erroTratado.error);
+    }
   }
 
   /**
