@@ -39,6 +39,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { financeiroService, CreateContaFinanceiraDto } from "@/services/financeiro.service";
@@ -58,6 +67,8 @@ const initialTransacoes = [
 const Financeiro = () => {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(15); // Padrão do backend para contas financeiras
   const [transacoes, setTransacoes] = useState(initialTransacoes);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -172,10 +183,28 @@ const Financeiro = () => {
     retry: false,
   });
 
-  // Buscar contas financeiras filtradas para exibir na tabela
-  const { data: contasData, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "tabela", activeTab],
+  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
+  const validarParametrosPaginação = (page: number, limit: number): boolean => {
+    if (page < 1) {
+      console.error('Page deve ser maior ou igual a 1');
+      return false;
+    }
+    if (limit < 1 || limit > 100) {
+      console.error('Limit deve estar entre 1 e 100');
+      return false;
+    }
+    return true;
+  };
+
+  // Buscar contas financeiras filtradas para exibir na tabela com paginação
+  const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
+    queryKey: ["contas-financeiras", "tabela", activeTab, currentPage],
     queryFn: async () => {
+      // Validar parâmetros antes de fazer a requisição
+      if (!validarParametrosPaginação(currentPage, pageSize)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+
       try {
         let tipo: string | undefined;
         let status: string | undefined;
@@ -193,22 +222,43 @@ const Financeiro = () => {
         }
 
         const response = await financeiroService.listar({
-          page: 1,
-          limit: 1000,
+          page: currentPage,
+          limit: pageSize,
           tipo,
           status,
         });
-        return response.data || [];
+        return {
+          data: response.data || [],
+          total: response.total || 0,
+        };
       } catch (error) {
         console.warn("API de contas financeiras não disponível:", error);
-        return [];
+        return { data: [], total: 0 };
       }
     },
-    retry: false,
+    retry: (failureCount, error: any) => {
+      // Não tentar novamente para erros 400, 401, 403, 404
+      if (error?.response) {
+        const status = error.response.status;
+        if ([400, 401, 403, 404].includes(status)) {
+          return false;
+        }
+      }
+      // Tentar até 2 vezes para outros erros
+      return failureCount < 2;
+    },
+    retryDelay: 1000,
   });
 
-  const contas = contasData || [];
+  const contas = contasResponse?.data || [];
+  const totalContas = contasResponse?.total || 0;
+  const totalPages = Math.ceil(totalContas / pageSize);
   const contasDashboard = contasDashboardData || [];
+
+  // Resetar página quando tab ou busca mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm]);
 
   // Calcular estatísticas
   const stats = useMemo(() => {
@@ -1036,6 +1086,97 @@ const Financeiro = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <div className="border-t border-border p-4">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  
+                  {/* Primeira página */}
+                  {currentPage > 3 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(1)}
+                          className="cursor-pointer"
+                        >
+                          1
+                        </PaginationLink>
+                      </PaginationItem>
+                      {currentPage > 4 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Páginas ao redor da atual */}
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  
+                  {/* Última página */}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      {currentPage < totalPages - 3 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(totalPages)}
+                          className="cursor-pointer"
+                        >
+                          {totalPages}
+                        </PaginationLink>
+                      </PaginationItem>
+                    </>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                Mostrando {contas.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalContas)} de {totalContas} contas
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Dialog de Visualização */}
@@ -1527,3 +1668,4 @@ const Financeiro = () => {
 };
 
 export default Financeiro;
+

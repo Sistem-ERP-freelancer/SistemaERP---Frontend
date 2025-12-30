@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   ShoppingCart, 
@@ -39,6 +39,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { clientesService, Cliente } from "@/services/clientes.service";
@@ -60,6 +69,8 @@ interface PedidoDisplay {
 const Pedidos = () => {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(15); // Padrão do backend para pedidos
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newPedido, setNewPedido] = useState<CreatePedidoDto & { itens: Array<ItemPedido & { produto_nome?: string }> }>({
     tipo: "VENDA",
@@ -140,10 +151,28 @@ const Pedidos = () => {
     ? produtosData 
     : produtosData?.data || [];
 
-  // Buscar pedidos
+  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
+  const validarParametrosPaginação = (page: number, limit: number): boolean => {
+    if (page < 1) {
+      console.error('Page deve ser maior ou igual a 1');
+      return false;
+    }
+    if (limit < 1 || limit > 100) {
+      console.error('Limit deve estar entre 1 e 100');
+      return false;
+    }
+    return true;
+  };
+
+  // Buscar pedidos com paginação
   const { data: pedidosData, isLoading: isLoadingPedidos } = useQuery({
-    queryKey: ["pedidos", activeTab],
+    queryKey: ["pedidos", activeTab, currentPage],
     queryFn: async () => {
+      // Validar parâmetros antes de fazer a requisição
+      if (!validarParametrosPaginação(currentPage, pageSize)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+
       try {
         let tipo: string | undefined;
         let status: string | undefined;
@@ -166,21 +195,39 @@ const Pedidos = () => {
         }
 
         const response = await pedidosService.listar({
-          page: 1,
-          limit: 100,
+          page: currentPage,
+          limit: pageSize,
           tipo,
           status,
         });
         return response;
       } catch (error) {
         console.warn("API de pedidos não disponível:", error);
-        return { data: [], total: 0, page: 1, limit: 100 };
+        return { data: [], total: 0, page: 1, limit: pageSize };
       }
     },
-    retry: false,
+    retry: (failureCount, error: any) => {
+      // Não tentar novamente para erros 400, 401, 403, 404
+      if (error?.response) {
+        const status = error.response.status;
+        if ([400, 401, 403, 404].includes(status)) {
+          return false;
+        }
+      }
+      // Tentar até 2 vezes para outros erros
+      return failureCount < 2;
+    },
+    retryDelay: 1000,
   });
 
   const pedidos: Pedido[] = pedidosData?.data || [];
+  const totalPedidos = pedidosData?.total || 0;
+  const totalPages = Math.ceil(totalPedidos / pageSize);
+
+  // Resetar página quando tab ou busca mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm]);
 
   // Mutation para criar pedido
   const createPedidoMutation = useMutation({
@@ -536,6 +583,97 @@ const Pedidos = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <div className="border-t border-border p-4">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  
+                  {/* Primeira página */}
+                  {currentPage > 3 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(1)}
+                          className="cursor-pointer"
+                        >
+                          1
+                        </PaginationLink>
+                      </PaginationItem>
+                      {currentPage > 4 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Páginas ao redor da atual */}
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  
+                  {/* Última página */}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      {currentPage < totalPages - 3 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(totalPages)}
+                          className="cursor-pointer"
+                        >
+                          {totalPages}
+                        </PaginationLink>
+                      </PaginationItem>
+                    </>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                Mostrando {pedidos.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalPedidos)} de {totalPedidos} pedidos
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Dialog de Criação */}
@@ -952,3 +1090,4 @@ const Pedidos = () => {
 };
 
 export default Pedidos;
+

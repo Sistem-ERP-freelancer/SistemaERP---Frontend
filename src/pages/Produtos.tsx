@@ -36,6 +36,15 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { FiltrosProdutos } from "@/services/produtos.service";
 import {
   Categoria,
@@ -86,14 +95,19 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   History,
+  RotateCcw,
+  AlertTriangle,
+  Settings,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 
 const Produtos = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(15); // Padrão do backend para produtos
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [filtrosAvancados, setFiltrosAvancados] = useState<FiltrosProdutos>({
     statusProduto: "",
@@ -219,10 +233,28 @@ const Produtos = () => {
     (val) => val !== "" && val !== undefined
   );
 
-  // Buscar produtos - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
-  const { data: produtosData, isLoading: isLoadingProdutos, error: errorProdutos } = useQuery({
-    queryKey: ["produtos", searchTerm, filtrosAvancados],
+  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
+  const validarParametrosPaginação = (page: number, limit: number): boolean => {
+    if (page < 1) {
+      console.error('Page deve ser maior ou igual a 1');
+      return false;
+    }
+    if (limit < 1 || limit > 100) {
+      console.error('Limit deve estar entre 1 e 100');
+      return false;
+    }
+    return true;
+  };
+
+  // Buscar produtos com paginação - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
+  const { data: produtosResponse, isLoading: isLoadingProdutos, error: errorProdutos } = useQuery({
+    queryKey: ["produtos", searchTerm, filtrosAvancados, currentPage],
     queryFn: async () => {
+      // Validar parâmetros antes de fazer a requisição
+      if (!validarParametrosPaginação(currentPage, pageSize)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+
       try {
         let response;
         
@@ -231,53 +263,61 @@ const Produtos = () => {
           response = await produtosService.buscarAvancado({
             termo: searchTerm.trim() || undefined,
             ...filtrosAvancados,
-            page: 1,
-            limit: 100,
+            page: currentPage,
+            limit: pageSize,
           });
         } else if (searchTerm.trim()) {
           // Busca local por termo (já que não há endpoint de busca simples)
+          // Busca todos e filtra localmente, mas com paginação
           response = await produtosService.listar({
-            page: 1,
-            limit: 100,
+            page: currentPage,
+            limit: pageSize,
           });
         } else {
           // Lista todos quando não há termo nem filtros
           response = await produtosService.listar({
-            page: 1,
-            limit: 100,
+            page: currentPage,
+            limit: pageSize,
           });
         }
 
-        // Extrair produtos da resposta - pode estar em data, produtos, ou ser um array direto
+        // Extrair produtos e total da resposta
         let produtos: Produto[] = [];
+        let total = 0;
         
         if (Array.isArray(response)) {
           produtos = response;
+          total = response.length;
         } else if (response?.produtos && Array.isArray(response.produtos)) {
           produtos = response.produtos;
+          total = response.total || response.produtos.length;
         } else if (response?.data && Array.isArray(response.data)) {
           produtos = response.data;
+          total = response.total || response.data.length;
         }
 
         // Se houver termo de busca e não houver filtros, filtrar localmente
+        // Nota: Isso pode não funcionar bem com paginação, idealmente o backend deveria fazer a busca
         if (searchTerm.trim() && !temFiltrosAtivos) {
-          produtos = produtos.filter((p) =>
+          const produtosFiltrados = produtos.filter((p) =>
             p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.sku.toLowerCase().includes(searchTerm.toLowerCase())
           );
+          // Se filtrou localmente, o total pode estar incorreto
+          return { produtos: produtosFiltrados, total: produtosFiltrados.length };
         }
 
         if (import.meta.env.DEV) {
-          console.log("Produtos carregados:", produtos.length, produtos);
+          console.log("Produtos carregados:", produtos.length, "Total:", total);
         }
-        return produtos;
+        return { produtos, total };
       } catch (error: any) {
         // Se for erro 404 ou resposta vazia, não é um erro real
         if (error?.response?.status === 404 || error?.status === 404) {
           if (import.meta.env.DEV) {
             console.log("Nenhum produto encontrado (404)");
           }
-          return [];
+          return { produtos: [], total: 0 };
         }
         
         // Se for erro de autenticação, não retornar array vazio silenciosamente
@@ -285,20 +325,38 @@ const Produtos = () => {
           if (import.meta.env.DEV) {
             console.error("Erro de autenticação ao buscar produtos");
           }
-          return [];
+          return { produtos: [], total: 0 };
         }
         
         if (import.meta.env.DEV) {
           console.error("Erro ao buscar produtos:", error);
         }
-        return [];
+        return { produtos: [], total: 0 };
       }
     },
-    retry: 1,
+    retry: (failureCount, error: any) => {
+      // Não tentar novamente para erros 400, 401, 403, 404
+      if (error?.response) {
+        const status = error.response.status;
+        if ([400, 401, 403, 404].includes(status)) {
+          return false;
+        }
+      }
+      // Tentar até 1 vez para outros erros
+      return failureCount < 1;
+    },
+    retryDelay: 1000,
   });
 
-  const produtos = produtosData || [];
+  const produtos = produtosResponse?.produtos || [];
+  const totalProdutos = produtosResponse?.total || 0;
+  const totalPages = Math.ceil(totalProdutos / pageSize);
   const filteredProdutos = produtos;
+
+  // Resetar página quando filtro ou busca mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filtrosAvancados]);
 
   // Calcular contagem de produtos por categoria
   const getProdutosCountByCategoria = (categoriaId: number) => {
@@ -1820,6 +1878,97 @@ const Produtos = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <div className="border-t border-border p-4">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  
+                  {/* Primeira página */}
+                  {currentPage > 3 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(1)}
+                          className="cursor-pointer"
+                        >
+                          1
+                        </PaginationLink>
+                      </PaginationItem>
+                      {currentPage > 4 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Páginas ao redor da atual */}
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  
+                  {/* Última página */}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      {currentPage < totalPages - 3 && (
+                        <PaginationItem>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )}
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(totalPages)}
+                          className="cursor-pointer"
+                        >
+                          {totalPages}
+                        </PaginationLink>
+                      </PaginationItem>
+                    </>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                Mostrando {produtos.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalProdutos)} de {totalProdutos} produtos
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Dialog de Visualização de Produto */}
@@ -2658,14 +2807,12 @@ const Produtos = () => {
                 </div>
                 <SheetTitle className="text-xl">Histórico de Movimentações</SheetTitle>
               </div>
-              <SheetDescription>
-                {selectedProduto && (
-                  <div>
-                    <p className="font-medium text-foreground">{selectedProduto.nome}</p>
-                    <p className="text-sm text-muted-foreground">SKU: {selectedProduto.sku}</p>
-                  </div>
-                )}
-              </SheetDescription>
+              {selectedProduto && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">{selectedProduto.nome}</p>
+                  <p className="text-sm text-muted-foreground">SKU: {selectedProduto.sku}</p>
+                </div>
+              )}
             </SheetHeader>
 
             <div className="mt-6">
@@ -2677,10 +2824,6 @@ const Produtos = () => {
               ) : historicoData?.movimentacoes && historicoData.movimentacoes.length > 0 ? (
                 <div className="space-y-3">
                   {historicoData.movimentacoes.map((mov) => {
-                    const isEntrada = mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO";
-                    const isSaida = mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA";
-                    const isAjuste = mov.tipo === "AJUSTE";
-
                     return (
                       <div
                         key={mov.id}
@@ -2688,16 +2831,35 @@ const Produtos = () => {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            {isEntrada && (
-                              <ArrowUpCircle className="w-5 h-5 text-green-600" />
+                            {mov.tipo === "ENTRADA" && (
+                              <ArrowDownCircle className="w-5 h-5" style={{ color: "#1E8449" }} />
                             )}
-                            {isSaida && (
-                              <ArrowDownCircle className="w-5 h-5 text-red-600" />
+                            {mov.tipo === "DEVOLUCAO" && (
+                              <RotateCcw className="w-5 h-5" style={{ color: "#21618C" }} />
                             )}
-                            {isAjuste && (
-                              <Package className="w-5 h-5 text-blue-600" />
+                            {mov.tipo === "SAIDA" && (
+                              <ArrowUpCircle className="w-5 h-5" style={{ color: "#922B21" }} />
                             )}
-                            <span className="font-semibold text-foreground">
+                            {mov.tipo === "PERDA" && (
+                              <AlertTriangle className="w-5 h-5" style={{ color: "#9C640C" }} />
+                            )}
+                            {mov.tipo === "TRANSFERENCIA" && (
+                              <Truck className="w-5 h-5" style={{ color: "#5B2C6F" }} />
+                            )}
+                            {mov.tipo === "AJUSTE" && (
+                              <Settings className="w-5 h-5" style={{ color: "#21618C" }} />
+                            )}
+                            <span 
+                              className="font-semibold"
+                              style={{
+                                color: mov.tipo === "ENTRADA" ? "#1E8449" :
+                                       mov.tipo === "DEVOLUCAO" ? "#21618C" :
+                                       mov.tipo === "SAIDA" ? "#922B21" :
+                                       mov.tipo === "PERDA" ? "#9C640C" :
+                                       mov.tipo === "TRANSFERENCIA" ? "#5B2C6F" :
+                                       "#21618C"
+                              }}
+                            >
                               {mov.tipo}
                             </span>
                           </div>
@@ -2709,8 +2871,17 @@ const Produtos = () => {
                         <div className="grid grid-cols-2 gap-4 mt-3">
                           <div>
                             <Label className="text-xs text-muted-foreground">Quantidade</Label>
-                            <p className={`font-medium ${isEntrada ? "text-green-600" : isSaida ? "text-red-600" : "text-blue-600"}`}>
-                              {isEntrada ? "+" : isSaida ? "-" : ""}{mov.quantidade}
+                            <p 
+                              className="font-medium"
+                              style={{
+                                color: mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO" ? "#1E8449" :
+                                       mov.tipo === "PERDA" ? "#9C640C" :
+                                       mov.tipo === "TRANSFERENCIA" ? "#5B2C6F" :
+                                       mov.tipo === "SAIDA" ? "#922B21" :
+                                       "#21618C"
+                              }}
+                            >
+                              {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") ? "+" : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") ? "-" : ""}{mov.quantidade}
                             </p>
                           </div>
                           <div>
@@ -2763,3 +2934,4 @@ const Produtos = () => {
 };
 
 export default Produtos;
+

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowUpCircle,
@@ -10,6 +10,12 @@ import {
   Package,
   Loader2,
   X,
+  ArrowDown,
+  ArrowUp,
+  RotateCcw,
+  AlertTriangle,
+  Truck,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +36,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { produtosService, Produto } from "@/services/produtos.service";
@@ -44,6 +59,8 @@ const Estoque = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("Todos");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
   const [dialogMovimentacaoOpen, setDialogMovimentacaoOpen] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [movimentacao, setMovimentacao] = useState<MovimentacaoEstoqueDto>({
@@ -58,51 +75,70 @@ const Estoque = () => {
   const { data: produtosData } = useQuery({
     queryKey: ["produtos-movimentacao"],
     queryFn: async () => {
-      const response = await produtosService.listar({ page: 1, limit: 100 });
-      return response.data || [];
+      try {
+        const response = await produtosService.listar({ page: 1, limit: 100 });
+        // A API pode retornar em diferentes formatos
+        if (Array.isArray(response)) {
+          return response;
+        }
+        if (response?.data && Array.isArray(response.data)) {
+          return response.data;
+        }
+        if (response?.produtos && Array.isArray(response.produtos)) {
+          return response.produtos;
+        }
+        return [];
+      } catch (error) {
+        console.error("Erro ao buscar produtos:", error);
+        return [];
+      }
     },
   });
 
   const produtos: Produto[] = produtosData || [];
 
-  // Buscar todas as movimentações
-  const { data: movimentacoesData, isLoading: isLoadingMovimentacoes } = useQuery({
-    queryKey: ["movimentacoes", filtroTipo, produtos.length],
-    queryFn: async () => {
-      try {
-        // Tenta primeiro usar o endpoint de listar todas as movimentações
-        try {
-          const params: any = { page: 1, limit: 100 };
-          if (filtroTipo !== "Todos") {
-            params.tipo = filtroTipo;
-          }
-          const response = await estoqueService.listarMovimentacoes(params);
-          if (response?.movimentacoes) {
-            return response;
-          }
-        } catch (endpointError: any) {
-          // Se o endpoint não existir (404), usa abordagem alternativa
-          if (endpointError?.response?.status !== 404) {
-            throw endpointError;
-          }
-        }
+  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
+  const validarParametrosPaginação = (page: number, limit: number): boolean => {
+    if (page < 1) {
+      console.error('Page deve ser maior ou igual a 1');
+      return false;
+    }
+    if (limit < 1 || limit > 100) {
+      console.error('Limit deve estar entre 1 e 100');
+      return false;
+    }
+    return true;
+  };
 
-        // Abordagem alternativa: busca histórico de cada produto e agrega
-        const todasMovimentacoes: MovimentacaoEstoque[] = [];
-        
-        // Limita a 30 produtos para não sobrecarregar
-        const produtosLimitados = produtos.slice(0, 30);
-        
-        await Promise.all(
-          produtosLimitados.map(async (produto) => {
-            try {
+  // Buscar todas as movimentações com paginação
+  const { data: movimentacoesData, isLoading: isLoadingMovimentacoes } = useQuery({
+    queryKey: ["movimentacoes", filtroTipo, currentPage, itemsPerPage, produtos.length],
+    queryFn: async () => {
+      // Validar parâmetros antes de fazer a requisição
+      if (!validarParametrosPaginação(currentPage, itemsPerPage)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+      // Como o endpoint /estoque/movimentacoes não existe no backend,
+      // usamos a abordagem de buscar histórico de cada produto e agregar
+      const todasMovimentacoes: MovimentacaoEstoque[] = [];
+      
+      // Busca histórico de cada produto em paralelo com paginação
+      const resultados = await Promise.allSettled(
+        produtos.map(async (produto) => {
+          try {
+            // Busca todas as páginas do histórico de cada produto
+            let todasMovimentacoesProduto: MovimentacaoEstoque[] = [];
+            let page = 1;
+            let hasMore = true;
+            
+            while (hasMore) {
               const historico = await estoqueService.obterHistorico(produto.id, {
-                page: 1,
+                page,
                 limit: 50,
               });
               
-              if (historico?.movimentacoes) {
-                historico.movimentacoes.forEach((mov) => {
+              if (historico?.movimentacoes && historico.movimentacoes.length > 0) {
+                const movimentacoesComProduto = historico.movimentacoes.map((mov) => {
                   // Adiciona informações do produto se não vierem
                   if (!mov.produto) {
                     mov.produto = {
@@ -111,44 +147,80 @@ const Estoque = () => {
                       sku: produto.sku,
                     };
                   }
-                  todasMovimentacoes.push(mov);
+                  return mov;
                 });
+                todasMovimentacoesProduto.push(...movimentacoesComProduto);
+                
+                // Se retornou menos que o limite, não há mais páginas
+                if (historico.movimentacoes.length < 50) {
+                  hasMore = false;
+                } else {
+                  page++;
+                }
+              } else {
+                hasMore = false;
               }
-            } catch (error) {
-              // Ignora erros de produtos individuais
             }
-          })
-        );
+            
+            return todasMovimentacoesProduto;
+          } catch (error) {
+            // Ignora erros de produtos individuais silenciosamente
+            return [];
+          }
+        })
+      );
 
-        // Ordena por data (mais recentes primeiro)
-        todasMovimentacoes.sort((a, b) => {
-          return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
-        });
-
-        // Filtra por tipo se necessário
-        let movimentacoesFiltradas = todasMovimentacoes;
-        if (filtroTipo !== "Todos") {
-          movimentacoesFiltradas = todasMovimentacoes.filter(
-            (mov) => mov.tipo === filtroTipo
-          );
+      // Agrega todas as movimentações
+      resultados.forEach((resultado) => {
+        if (resultado.status === "fulfilled" && Array.isArray(resultado.value)) {
+          todasMovimentacoes.push(...resultado.value);
         }
+      });
 
-        return {
-          movimentacoes: movimentacoesFiltradas,
-          total: movimentacoesFiltradas.length,
-        };
-      } catch (error: any) {
-        console.error("Erro ao buscar movimentações:", error);
-        return { movimentacoes: [], total: 0 };
+      // Ordena por data (mais recentes primeiro)
+      todasMovimentacoes.sort((a, b) => {
+        return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
+      });
+
+      // Filtra por tipo se necessário
+      let movimentacoesFiltradas = todasMovimentacoes;
+      if (filtroTipo !== "Todos") {
+        movimentacoesFiltradas = todasMovimentacoes.filter(
+          (mov) => mov.tipo === filtroTipo
+        );
       }
+
+      // Aplica paginação
+      const total = movimentacoesFiltradas.length;
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      const movimentacoesPaginadas = movimentacoesFiltradas.slice(startIndex, endIndex);
+
+      return {
+        movimentacoes: movimentacoesPaginadas,
+        total,
+      };
     },
     enabled: produtos.length > 0,
-    retry: 1,
+    retry: (failureCount, error: any) => {
+      // Não tentar novamente para erros 400, 401, 403, 404
+      if (error?.response) {
+        const status = error.response.status;
+        if ([400, 401, 403, 404].includes(status)) {
+          return false;
+        }
+      }
+      // Tentar até 2 vezes para outros erros
+      return failureCount < 2;
+    },
+    retryDelay: 1000, // Esperar 1 segundo entre tentativas
   });
 
   const movimentacoes: MovimentacaoEstoque[] = movimentacoesData?.movimentacoes || [];
+  const totalMovimentacoes = movimentacoesData?.total || 0;
+  const totalPages = Math.ceil(totalMovimentacoes / itemsPerPage);
 
-  // Filtrar movimentações por busca
+  // Filtrar movimentações por busca (já vem paginado do backend, mas aplicamos busca local)
   const movimentacoesFiltradas = useMemo(() => {
     if (!searchTerm.trim()) return movimentacoes;
     
@@ -159,6 +231,11 @@ const Estoque = () => {
       return produtoNome.includes(termo) || produtoSku.includes(termo);
     });
   }, [movimentacoes, searchTerm]);
+
+  // Resetar página quando filtro ou busca mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filtroTipo, searchTerm]);
 
   // Calcular totais
   const { totalEntradas, totalSaidas, balanco } = useMemo(() => {
@@ -184,9 +261,22 @@ const Estoque = () => {
   const movimentarEstoqueMutation = useMutation({
     mutationFn: ({ produtoId, data }: { produtoId: number; data: MovimentacaoEstoqueDto }) =>
       estoqueService.movimentar(produtoId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["movimentacoes"] });
-      queryClient.invalidateQueries({ queryKey: ["produtos"] });
+    onSuccess: async (_, variables) => {
+      // Invalida todas as queries relacionadas para atualizar os dados
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["movimentacoes"], exact: false }),
+        queryClient.invalidateQueries({ queryKey: ["produtos"], exact: false }),
+        queryClient.invalidateQueries({ queryKey: ["produtos-movimentacao"], exact: false }),
+        // Invalida o histórico de estoque para TODOS os produtos (incluindo o específico)
+        queryClient.invalidateQueries({ queryKey: ["historico-estoque"], exact: false }),
+      ]);
+      
+      // Refetch do histórico específico do produto movimentado para atualizar imediatamente
+      await queryClient.refetchQueries({ 
+        queryKey: ["historico-estoque", variables.produtoId],
+        exact: true 
+      });
+      
       setDialogMovimentacaoOpen(false);
       setProdutoSelecionado(null);
       setMovimentacao({
@@ -199,9 +289,103 @@ const Estoque = () => {
       toast.success("Movimentação realizada com sucesso!");
     },
     onError: (error: any) => {
-      toast.error(error?.message || "Erro ao realizar movimentação");
+      // Tratamento de erros conforme TROUBLESHOOTING_MOVIMENTACAO_ESTOQUE.md
+      if (error?.response) {
+        const status = error.response.status;
+        const errorData = error.response.data;
+
+        switch (status) {
+          case 400:
+            // Erro de validação
+            let mensagemErro = 'Erro de validação';
+            if (errorData?.message) {
+              if (Array.isArray(errorData.message)) {
+                mensagemErro = errorData.message.join(', ');
+              } else {
+                mensagemErro = errorData.message;
+              }
+            }
+            toast.error(mensagemErro);
+            break;
+
+          case 401:
+            // Token inválido ou expirado
+            toast.error('Sessão expirada. Faça login novamente.');
+            // Opcional: redirecionar para login
+            break;
+
+          case 403:
+            // Sem permissão
+            toast.error('Sem permissão para realizar esta operação');
+            break;
+
+          case 404:
+            // Produto não encontrado
+            toast.error('Produto não encontrado');
+            break;
+
+          case 409:
+            // Conflito (ex: estoque insuficiente)
+            const mensagemConflito = errorData?.message || 'Não foi possível realizar a movimentação';
+            toast.error(mensagemConflito);
+            break;
+
+          case 500:
+            // Erro interno do servidor
+            toast.error('Erro interno do servidor. Tente novamente mais tarde.');
+            break;
+
+          default:
+            const mensagemPadrao = errorData?.message || error?.message || 'Erro ao realizar movimentação';
+            toast.error(mensagemPadrao);
+        }
+      } else if (error?.request) {
+        // Erro de rede
+        toast.error('Erro de conexão. Verifique sua internet.');
+      } else {
+        // Outro erro
+        toast.error(error?.message || 'Erro inesperado ao realizar movimentação');
+      }
     },
   });
+
+  // Função de validação conforme TROUBLESHOOTING_MOVIMENTACAO_ESTOQUE.md
+  const validarMovimentacao = (dados: MovimentacaoEstoqueDto): { valido: boolean; erros: string[] } => {
+    const erros: string[] = [];
+
+    // Validar tipo
+    const tiposValidos: TipoMovimentacao[] = ['ENTRADA', 'SAIDA', 'AJUSTE', 'DEVOLUCAO', 'PERDA', 'TRANSFERENCIA'];
+    if (!dados.tipo || !tiposValidos.includes(dados.tipo)) {
+      erros.push('Tipo de movimentação inválido ou ausente. Valores aceitos: ENTRADA, SAIDA, AJUSTE, DEVOLUCAO, PERDA, TRANSFERENCIA');
+    }
+
+    // Validar quantidade
+    if (!dados.quantidade || typeof dados.quantidade !== 'number') {
+      erros.push('A quantidade é obrigatória e deve ser um número');
+    } else {
+      if (!Number.isInteger(dados.quantidade)) {
+        erros.push('A quantidade deve ser um número inteiro');
+      } else if (dados.quantidade < 1) {
+        erros.push('A quantidade deve ser maior ou igual a 1');
+      }
+    }
+
+    // Validar campos opcionais (devem ser strings se enviados)
+    if (dados.observacao !== undefined && typeof dados.observacao !== 'string') {
+      erros.push('Observação deve ser uma string');
+    }
+    if (dados.motivo !== undefined && typeof dados.motivo !== 'string') {
+      erros.push('Motivo deve ser uma string');
+    }
+    if (dados.documento_referencia !== undefined && typeof dados.documento_referencia !== 'string') {
+      erros.push('Documento de referência deve ser uma string');
+    }
+
+    return {
+      valido: erros.length === 0,
+      erros,
+    };
+  };
 
   const handleMovimentar = () => {
     if (!produtoSelecionado) {
@@ -209,14 +393,30 @@ const Estoque = () => {
       return;
     }
 
-    if (!movimentacao.quantidade || movimentacao.quantidade <= 0) {
-      toast.error("Informe uma quantidade válida");
+    if (!movimentacao.tipo) {
+      toast.error("Selecione um tipo de movimentação");
+      return;
+    }
+
+    // Prepara os dados conforme a documentação da API
+    const dadosMovimentacao: MovimentacaoEstoqueDto = {
+      tipo: movimentacao.tipo,
+      quantidade: movimentacao.quantidade,
+      observacao: movimentacao.observacao?.trim() || undefined,
+      motivo: movimentacao.motivo?.trim() || undefined,
+      documento_referencia: movimentacao.documento_referencia?.trim() || undefined,
+    };
+
+    // Validar dados antes de enviar
+    const validacao = validarMovimentacao(dadosMovimentacao);
+    if (!validacao.valido) {
+      validacao.erros.forEach((erro) => toast.error(erro));
       return;
     }
 
     movimentarEstoqueMutation.mutate({
       produtoId: produtoSelecionado.id,
-      data: movimentacao,
+      data: dadosMovimentacao,
     });
   };
 
@@ -322,7 +522,13 @@ const Estoque = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <Select 
+              value={filtroTipo} 
+              onValueChange={(value) => {
+                setFiltroTipo(value);
+                setCurrentPage(1);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue />
@@ -374,9 +580,6 @@ const Estoque = () => {
                     Data/Hora
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Responsável
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Motivo
                   </th>
                 </tr>
@@ -384,7 +587,7 @@ const Estoque = () => {
               <tbody>
                 {isLoadingMovimentacoes ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Carregando movimentações...
@@ -393,7 +596,7 @@ const Estoque = () => {
                   </tr>
                 ) : movimentacoesFiltradas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
                       Nenhuma movimentação encontrada
                     </td>
                   </tr>
@@ -409,21 +612,81 @@ const Estoque = () => {
                       >
                         <td className="py-3 px-4 align-middle">
                           <div className="flex items-center gap-2">
-                            {entrada && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-600 border border-green-500/20">
+                            {mov.tipo === "ENTRADA" && (
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: "#EAF7F0",
+                                  color: "#1E8449",
+                                  borderColor: "#2ECC71",
+                                }}
+                              >
                                 <ArrowDownCircle className="w-3 h-3" />
                                 Entrada
                               </span>
                             )}
-                            {saida && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-600 border border-red-500/20">
+                            {mov.tipo === "DEVOLUCAO" && (
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: "#EBF3FB",
+                                  color: "#21618C",
+                                  borderColor: "#3498DB",
+                                }}
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Devolução
+                              </span>
+                            )}
+                            {mov.tipo === "SAIDA" && (
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: "#FDEDEC",
+                                  color: "#922B21",
+                                  borderColor: "#E74C3C",
+                                }}
+                              >
                                 <ArrowUpCircle className="w-3 h-3" />
                                 Saída
                               </span>
                             )}
+                            {mov.tipo === "PERDA" && (
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: "#FEF5E7",
+                                  color: "#9C640C",
+                                  borderColor: "#F39C12",
+                                }}
+                              >
+                                <AlertTriangle className="w-3 h-3" />
+                                Perda
+                              </span>
+                            )}
+                            {mov.tipo === "TRANSFERENCIA" && (
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: "#F4ECF7",
+                                  color: "#5B2C6F",
+                                  borderColor: "#9B59B6",
+                                }}
+                              >
+                                <Truck className="w-3 h-3" />
+                                Transferência
+                              </span>
+                            )}
                             {mov.tipo === "AJUSTE" && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                                <Package className="w-3 h-3" />
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor: "#EBF3FB",
+                                  color: "#21618C",
+                                  borderColor: "#3498DB",
+                                }}
+                              >
+                                <Settings className="w-3 h-3" />
                                 Ajuste
                               </span>
                             )}
@@ -437,18 +700,20 @@ const Estoque = () => {
                         </td>
                         <td className="py-3 px-4 align-middle">
                           <span
-                            className={`text-sm font-medium ${
-                              entrada ? "text-green-600" : saida ? "text-red-600" : "text-blue-600"
-                            }`}
+                            className="text-sm font-medium"
+                            style={{
+                              color: mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO" 
+                                ? "#1E8449" 
+                                : mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA"
+                                ? mov.tipo === "PERDA" ? "#9C640C" : mov.tipo === "TRANSFERENCIA" ? "#5B2C6F" : "#922B21"
+                                : "#21618C"
+                            }}
                           >
-                            {entrada ? "+" : saida ? "-" : ""}{mov.quantidade}
+                            {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") ? "+" : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") ? "-" : ""}{mov.quantidade}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
                           {formatarDataHora(mov.criado_em)}
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
-                          {mov.usuario?.nome || "-"}
                         </td>
                         <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
                           {mov.motivo || "-"}
@@ -460,6 +725,76 @@ const Estoque = () => {
               </tbody>
             </table>
           </div>
+          
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-border">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  
+                  {totalPages > 5 && currentPage < totalPages - 2 && (
+                    <PaginationItem>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  )}
+                  
+                  {totalPages > 5 && (
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(totalPages)}
+                        isActive={currentPage === totalPages}
+                        className="cursor-pointer"
+                      >
+                        {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalMovimentacoes)} de {totalMovimentacoes} movimentações
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Dialog de Nova Movimentação */}
@@ -479,130 +814,275 @@ const Estoque = () => {
               }
             }}
           >
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
               <DialogHeader>
               <DialogTitle>Nova Movimentação</DialogTitle>
                 <DialogDescription>
                 Registre uma entrada ou saída de estoque.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 pt-4">
+              <div className="space-y-6 pt-4 overflow-y-auto flex-1 pr-2">
+                {/* Seleção de Tipo de Movimentação */}
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Tipo de Movimentação *</Label>
+                  
+                  {/* Tipos de Entrada */}
                   <div className="space-y-2">
-                <Label>Tipo de Movimentação *</Label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setMovimentacao({ ...movimentacao, tipo: "ENTRADA" })}
-                            className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
-                              movimentacao.tipo === "ENTRADA" || movimentacao.tipo === "DEVOLUCAO"
-                                ? "border-green-500 bg-green-500/10"
-                                : "border-green-500/30 bg-green-500/5 hover:bg-green-500/10"
-                            }`}
-                          >
-                            <ArrowDownCircle className={`w-6 h-6 mb-2 ${movimentacao.tipo === "ENTRADA" || movimentacao.tipo === "DEVOLUCAO" ? "text-green-600" : "text-green-500"}`} />
-                            <span className={`font-semibold ${movimentacao.tipo === "ENTRADA" || movimentacao.tipo === "DEVOLUCAO" ? "text-green-600" : "text-green-600"}`}>
-                              Entrada
-                            </span>
-                            <span className="text-xs text-muted-foreground mt-1">
-                              Adicionar ao estoque
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMovimentacao({ ...movimentacao, tipo: "SAIDA" })}
-                            className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
-                              movimentacao.tipo === "SAIDA" || movimentacao.tipo === "PERDA" || movimentacao.tipo === "TRANSFERENCIA"
-                                ? "border-red-500 bg-red-500/10"
-                                : "border-red-500/30 bg-red-500/5 hover:bg-red-500/10"
-                            }`}
-                          >
-                            <ArrowUpCircle className={`w-6 h-6 mb-2 ${movimentacao.tipo === "SAIDA" || movimentacao.tipo === "PERDA" || movimentacao.tipo === "TRANSFERENCIA" ? "text-red-600" : "text-red-500"}`} />
-                            <span className={`font-semibold ${movimentacao.tipo === "SAIDA" || movimentacao.tipo === "PERDA" || movimentacao.tipo === "TRANSFERENCIA" ? "text-red-600" : "text-red-600"}`}>
-                              Saída
-                            </span>
-                            <span className="text-xs text-muted-foreground mt-1">
-                              Remover do estoque
-                            </span>
-                          </button>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Entradas</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* ENTRADA */}
+                      <button
+                        type="button"
+                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "ENTRADA" })}
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                          movimentacao.tipo === "ENTRADA" ? "shadow-md" : ""
+                        }`}
+                        style={{
+                          borderColor: movimentacao.tipo === "ENTRADA" ? "#2ECC71" : "rgba(46, 204, 113, 0.3)",
+                          backgroundColor: movimentacao.tipo === "ENTRADA" ? "#EAF7F0" : "rgba(234, 247, 240, 0.3)",
+                        }}
+                      >
+                        <div 
+                          className="p-2 rounded-full mb-2"
+                          style={{
+                            backgroundColor: movimentacao.tipo === "ENTRADA" ? "#EAF7F0" : "rgba(234, 247, 240, 0.5)",
+                          }}
+                        >
+                          <ArrowDownCircle 
+                            className="w-6 h-6"
+                            style={{ color: "#1E8449" }}
+                          />
                         </div>
-                        
-                        {/* Opções adicionais para tipos específicos */}
-                        {(movimentacao.tipo === "ENTRADA" || movimentacao.tipo === "SAIDA") && (
-                          <div className="grid grid-cols-2 gap-2 mt-2">
-                            {movimentacao.tipo === "ENTRADA" && (
-                              <button
-                                type="button"
-                                onClick={() => setMovimentacao({ ...movimentacao, tipo: "DEVOLUCAO" })}
-                                className={`px-3 py-2 text-xs rounded-lg border transition-all ${
-                                  movimentacao.tipo === "DEVOLUCAO"
-                                    ? "border-green-500 bg-green-500/10 text-green-600"
-                                    : "border-border hover:bg-secondary"
-                                }`}
-                              >
-                                Devolução
-                              </button>
-                            )}
-                            {movimentacao.tipo === "SAIDA" && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => setMovimentacao({ ...movimentacao, tipo: "PERDA" })}
-                                  className={`px-3 py-2 text-xs rounded-lg border transition-all ${
-                                    movimentacao.tipo === "PERDA"
-                                      ? "border-red-500 bg-red-500/10 text-red-600"
-                                      : "border-border hover:bg-secondary"
-                                  }`}
-                                >
-                                  Perda
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setMovimentacao({ ...movimentacao, tipo: "TRANSFERENCIA" })}
-                                  className={`px-3 py-2 text-xs rounded-lg border transition-all ${
-                                    movimentacao.tipo === "TRANSFERENCIA"
-                                      ? "border-red-500 bg-red-500/10 text-red-600"
-                                      : "border-border hover:bg-secondary"
-                                  }`}
-                                >
-                                  Transferência
-                                </button>
-                              </>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setMovimentacao({ ...movimentacao, tipo: "AJUSTE" })}
-                              className={`px-3 py-2 text-xs rounded-lg border transition-all ${
-                                movimentacao.tipo === "AJUSTE"
-                                  ? "border-blue-500 bg-blue-500/10 text-blue-600"
-                                  : "border-border hover:bg-secondary"
-                              }`}
-                            >
-                              Ajuste
-                            </button>
-                          </div>
-                        )}
+                        <span 
+                          className="font-semibold text-sm"
+                          style={{ color: "#1E8449" }}
+                        >
+                          Entrada
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1 text-center">
+                          Adicionar ao estoque
+                        </span>
+                      </button>
+
+                      {/* DEVOLUCAO */}
+                      <button
+                        type="button"
+                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "DEVOLUCAO" })}
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                          movimentacao.tipo === "DEVOLUCAO" ? "shadow-md" : ""
+                        }`}
+                        style={{
+                          borderColor: movimentacao.tipo === "DEVOLUCAO" ? "#3498DB" : "rgba(52, 152, 219, 0.3)",
+                          backgroundColor: movimentacao.tipo === "DEVOLUCAO" ? "#EBF3FB" : "rgba(235, 243, 251, 0.3)",
+                        }}
+                      >
+                        <div 
+                          className="p-2 rounded-full mb-2"
+                          style={{
+                            backgroundColor: movimentacao.tipo === "DEVOLUCAO" ? "#EBF3FB" : "rgba(235, 243, 251, 0.5)",
+                          }}
+                        >
+                          <RotateCcw 
+                            className="w-6 h-6"
+                            style={{ color: "#21618C" }}
+                          />
+                        </div>
+                        <span 
+                          className="font-semibold text-sm"
+                          style={{ color: "#21618C" }}
+                        >
+                          Devolução
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1 text-center">
+                          Retorno de produtos
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tipos de Saída */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Saídas</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* SAIDA */}
+                      <button
+                        type="button"
+                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "SAIDA" })}
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                          movimentacao.tipo === "SAIDA" ? "shadow-md" : ""
+                        }`}
+                        style={{
+                          borderColor: movimentacao.tipo === "SAIDA" ? "#E74C3C" : "rgba(231, 76, 60, 0.3)",
+                          backgroundColor: movimentacao.tipo === "SAIDA" ? "#FDEDEC" : "rgba(253, 237, 236, 0.3)",
+                        }}
+                      >
+                        <div 
+                          className="p-2 rounded-full mb-2"
+                          style={{
+                            backgroundColor: movimentacao.tipo === "SAIDA" ? "#FDEDEC" : "rgba(253, 237, 236, 0.5)",
+                          }}
+                        >
+                          <ArrowUpCircle 
+                            className="w-5 h-5"
+                            style={{ color: "#922B21" }}
+                          />
+                        </div>
+                        <span 
+                          className="font-semibold text-xs"
+                          style={{ color: "#922B21" }}
+                        >
+                          Saída
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1 text-center">
+                          Remover estoque
+                        </span>
+                      </button>
+
+                      {/* PERDA */}
+                      <button
+                        type="button"
+                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "PERDA" })}
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                          movimentacao.tipo === "PERDA" ? "shadow-md" : ""
+                        }`}
+                        style={{
+                          borderColor: movimentacao.tipo === "PERDA" ? "#F39C12" : "rgba(243, 156, 18, 0.3)",
+                          backgroundColor: movimentacao.tipo === "PERDA" ? "#FEF5E7" : "rgba(254, 245, 231, 0.3)",
+                        }}
+                      >
+                        <div 
+                          className="p-2 rounded-full mb-2"
+                          style={{
+                            backgroundColor: movimentacao.tipo === "PERDA" ? "#FEF5E7" : "rgba(254, 245, 231, 0.5)",
+                          }}
+                        >
+                          <AlertTriangle 
+                            className="w-5 h-5"
+                            style={{ color: "#9C640C" }}
+                          />
+                        </div>
+                        <span 
+                          className="font-semibold text-xs"
+                          style={{ color: "#9C640C" }}
+                        >
+                          Perda
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1 text-center">
+                          Produto perdido
+                        </span>
+                      </button>
+
+                      {/* TRANSFERENCIA */}
+                      <button
+                        type="button"
+                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "TRANSFERENCIA" })}
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                          movimentacao.tipo === "TRANSFERENCIA" ? "shadow-md" : ""
+                        }`}
+                        style={{
+                          borderColor: movimentacao.tipo === "TRANSFERENCIA" ? "#9B59B6" : "rgba(155, 89, 182, 0.3)",
+                          backgroundColor: movimentacao.tipo === "TRANSFERENCIA" ? "#F4ECF7" : "rgba(244, 236, 247, 0.3)",
+                        }}
+                      >
+                        <div 
+                          className="p-2 rounded-full mb-2"
+                          style={{
+                            backgroundColor: movimentacao.tipo === "TRANSFERENCIA" ? "#F4ECF7" : "rgba(244, 236, 247, 0.5)",
+                          }}
+                        >
+                          <Truck 
+                            className="w-5 h-5"
+                            style={{ color: "#5B2C6F" }}
+                          />
+                        </div>
+                        <span 
+                          className="font-semibold text-xs"
+                          style={{ color: "#5B2C6F" }}
+                        >
+                          Transferência
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1 text-center">
+                          Entre estoques
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Ajuste */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ajustes</p>
+                    <button
+                      type="button"
+                      onClick={() => setMovimentacao({ ...movimentacao, tipo: "AJUSTE" })}
+                      className={`w-full flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
+                        movimentacao.tipo === "AJUSTE" ? "shadow-md" : ""
+                      }`}
+                      style={{
+                        borderColor: movimentacao.tipo === "AJUSTE" ? "#3498DB" : "rgba(52, 152, 219, 0.3)",
+                        backgroundColor: movimentacao.tipo === "AJUSTE" ? "#EBF3FB" : "rgba(235, 243, 251, 0.3)",
+                      }}
+                    >
+                      <div 
+                        className="p-2 rounded-full mb-2"
+                        style={{
+                          backgroundColor: movimentacao.tipo === "AJUSTE" ? "#EBF3FB" : "rgba(235, 243, 251, 0.5)",
+                        }}
+                      >
+                        <Settings 
+                          className="w-6 h-6"
+                          style={{ color: "#21618C" }}
+                        />
                       </div>
+                      <span 
+                        className="font-semibold text-sm"
+                        style={{ color: "#21618C" }}
+                      >
+                        Ajuste
+                      </span>
+                      <span className="text-xs text-muted-foreground mt-1 text-center">
+                        Definir estoque atual
+                      </span>
+                    </button>
+                  </div>
+                </div>
 
                   <div className="space-y-2">
                 <Label>Produto *</Label>
-                    <Select
-                  value={produtoSelecionado?.id.toString() || ""}
-                      onValueChange={(value) => {
-                        const produto = produtos.find((p) => p.id === Number(value));
-                    setProdutoSelecionado(produto || null);
-                      }}
-                    >
-                      <SelectTrigger>
-                    <SelectValue placeholder="Selecione um produto" />
-                      </SelectTrigger>
-                      <SelectContent>
-                    {produtos.map((produto) => (
-                          <SelectItem key={produto.id} value={produto.id.toString()}>
-                        {produto.nome} - {produto.sku}
-                          </SelectItem>
-                    ))}
-                      </SelectContent>
-                    </Select>
+                    {produtos.length === 0 ? (
+                      <div className="text-sm text-muted-foreground py-2">
+                        Carregando produtos...
+                      </div>
+                    ) : (
+                      <Select
+                        value={produtoSelecionado?.id?.toString() || ""}
+                        onValueChange={(value) => {
+                          const produto = produtos.find((p) => {
+                            const produtoId = p.id?.toString();
+                            const valueId = value?.toString();
+                            return produtoId === valueId || Number(produtoId) === Number(valueId);
+                          });
+                          if (produto) {
+                            setProdutoSelecionado(produto);
+                          }
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um produto">
+                            {produtoSelecionado ? `${produtoSelecionado.nome} - ${produtoSelecionado.sku}` : ""}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="z-[100]">
+                          {produtos.map((produto) => (
+                            <SelectItem 
+                              key={produto.id} 
+                              value={produto.id?.toString() || ""}
+                            >
+                              {produto.nome} - {produto.sku}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     </div>
 
                       <div className="space-y-2">
@@ -623,18 +1103,44 @@ const Estoque = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Motivo / Observação</Label>
+                      <Label>Documento de Referência</Label>
+                      <Input
+                        placeholder="Ex: NF-12345, Pedido #1234..."
+                        value={movimentacao.documento_referencia || ""}
+                        onChange={(e) =>
+                          setMovimentacao({
+                            ...movimentacao,
+                            documento_referencia: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Motivo</Label>
+                      <Input
+                        placeholder="Ex: Compra de fornecedor, Venda para cliente..."
+                        value={movimentacao.motivo || ""}
+                        onChange={(e) =>
+                          setMovimentacao({
+                            ...movimentacao,
+                            motivo: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Observação</Label>
                       <Textarea
-                        placeholder="Ex: Compra de fornecedor, Venda - Pedido #1234, Devolução..."
-                        value={movimentacao.motivo || movimentacao.observacao || ""}
-                        onChange={(e) => {
-                          const valor = e.target.value;
-                          setMovimentacao({ 
-                            ...movimentacao, 
-                            motivo: valor,
-                            observacao: valor 
-                          });
-                        }}
+                        placeholder="Observações adicionais sobre a movimentação..."
+                        value={movimentacao.observacao || ""}
+                        onChange={(e) =>
+                          setMovimentacao({
+                            ...movimentacao,
+                            observacao: e.target.value,
+                          })
+                        }
                         rows={3}
                       />
                     </div>
@@ -650,11 +1156,16 @@ const Estoque = () => {
                         </Button>
                         <Button
                           onClick={handleMovimentar}
-                          className={`flex-1 ${
-                            movimentacao.tipo === "ENTRADA" || movimentacao.tipo === "DEVOLUCAO"
-                              ? "bg-green-600 hover:bg-green-700"
-                              : "bg-red-600 hover:bg-red-700"
-                          }`}
+                          className="flex-1 text-white hover:opacity-90 transition-opacity"
+                          style={{
+                            backgroundColor: 
+                              movimentacao.tipo === "ENTRADA" ? "#2ECC71" :
+                              movimentacao.tipo === "DEVOLUCAO" ? "#3498DB" :
+                              movimentacao.tipo === "SAIDA" ? "#E74C3C" :
+                              movimentacao.tipo === "PERDA" ? "#F39C12" :
+                              movimentacao.tipo === "TRANSFERENCIA" ? "#9B59B6" :
+                              "#3498DB", // AJUSTE
+                          }}
                           disabled={movimentarEstoqueMutation.isPending}
                         >
                           {movimentarEstoqueMutation.isPending ? (
@@ -662,10 +1173,18 @@ const Estoque = () => {
                               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                               Processando...
                             </>
-                          ) : movimentacao.tipo === "ENTRADA" || movimentacao.tipo === "DEVOLUCAO" ? (
+                          ) : movimentacao.tipo === "ENTRADA" ? (
                             "Registrar Entrada"
-                          ) : (
+                          ) : movimentacao.tipo === "DEVOLUCAO" ? (
+                            "Registrar Devolução"
+                          ) : movimentacao.tipo === "SAIDA" ? (
                             "Registrar Saída"
+                          ) : movimentacao.tipo === "PERDA" ? (
+                            "Registrar Perda"
+                          ) : movimentacao.tipo === "TRANSFERENCIA" ? (
+                            "Registrar Transferência"
+                          ) : (
+                            "Registrar Ajuste"
                           )}
                         </Button>
                       </div>

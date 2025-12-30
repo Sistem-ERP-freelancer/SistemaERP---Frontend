@@ -30,6 +30,15 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   ClienteCreateDialog,
   ClienteStats,
   ClienteTable,
@@ -79,6 +88,8 @@ import { toast } from "sonner";
 
 const Clientes = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(15); // Padrão do backend para clientes
   const [dialogOpen, setDialogOpen] = useState(false);
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -199,14 +210,32 @@ const Clientes = () => {
     (val) => val !== ""
   );
 
-  // Buscar clientes - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
+  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
+  const validarParametrosPaginação = (page: number, limit: number): boolean => {
+    if (page < 1) {
+      console.error('Page deve ser maior ou igual a 1');
+      return false;
+    }
+    if (limit < 1 || limit > 100) {
+      console.error('Limit deve estar entre 1 e 100');
+      return false;
+    }
+    return true;
+  };
+
+  // Buscar clientes com paginação - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
   const {
-    data: clientesData,
+    data: clientesResponse,
     isLoading: isLoadingClientes,
     error: errorClientes,
   } = useQuery({
-    queryKey: ["clientes", searchTerm, filtrosAvancados],
+    queryKey: ["clientes", searchTerm, filtrosAvancados, currentPage],
     queryFn: async () => {
+      // Validar parâmetros antes de fazer a requisição
+      if (!validarParametrosPaginação(currentPage, pageSize)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+
       try {
         let response;
 
@@ -215,21 +244,29 @@ const Clientes = () => {
           response = await clientesService.buscarAvancado({
             termo: searchTerm.trim() || undefined,
             ...filtrosAvancados,
-            page: 1,
-            limit: 100,
+            page: currentPage,
+            limit: pageSize,
           });
         } else if (searchTerm.trim()) {
-          response = await clientesService.buscar(searchTerm, 1, 100);
+          response = await clientesService.buscar(searchTerm, currentPage, pageSize);
         } else {
           // Lista todos quando não há termo nem filtros
           response = await clientesService.listar({
-            page: 1,
-            limit: 100,
+            page: currentPage,
+            limit: pageSize,
           });
         }
 
         // Usar função helper para extrair clientes de forma consistente
         const clientes = extractClientesFromResponse(response);
+        
+        // Extrair total da resposta
+        let total = 0;
+        if (response && typeof response === "object" && !Array.isArray(response)) {
+          total = (response as any).total || (response as any).meta?.total || clientes.length;
+        } else {
+          total = clientes.length;
+        }
 
         // Debug temporário para verificar a resposta
         if (import.meta.env.DEV) {
@@ -250,9 +287,10 @@ const Clientes = () => {
           }
           console.log("🔍 [Clientes] Clientes extraídos:", clientes);
           console.log("🔍 [Clientes] Quantidade de clientes:", clientes.length);
+          console.log("🔍 [Clientes] Total:", total);
         }
 
-        return clientes;
+        return { clientes, total };
       } catch (error: unknown) {
         // Type guard para erro com response
         const isErrorWithResponse = (
@@ -293,7 +331,7 @@ const Clientes = () => {
           }
         }
 
-        return [];
+        return { clientes: [], total: 0 };
       }
     },
     retry: (failureCount, error: unknown) => {
@@ -317,8 +355,15 @@ const Clientes = () => {
     retryDelay: 1000, // Esperar 1 segundo entre tentativas
   });
 
-  const clientes = clientesData || [];
+  const clientes = clientesResponse?.clientes || [];
+  const totalClientes = clientesResponse?.total || 0;
+  const totalPages = Math.ceil(totalClientes / pageSize);
   const queryClient = useQueryClient();
+
+  // Resetar página quando filtro ou busca mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filtrosAvancados]);
 
   // Mutation para criar cliente
   const createClienteMutation = useMutation({
@@ -1838,6 +1883,97 @@ const Clientes = () => {
           onStatusChange={handleStatusChange}
           updatingStatusId={updatingStatusId}
         />
+        
+        {/* Paginação */}
+        {totalPages > 1 && (
+          <div className="border-t border-border p-4 mt-4">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+                
+                {/* Primeira página */}
+                {currentPage > 3 && (
+                  <>
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(1)}
+                        className="cursor-pointer"
+                      >
+                        1
+                      </PaginationLink>
+                    </PaginationItem>
+                    {currentPage > 4 && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                  </>
+                )}
+                
+                {/* Páginas ao redor da atual */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(pageNum)}
+                        isActive={currentPage === pageNum}
+                        className="cursor-pointer"
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+                
+                {/* Última página */}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(totalPages)}
+                        className="cursor-pointer"
+                      >
+                        {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+                  </>
+                )}
+                
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+            
+            <div className="text-center text-sm text-muted-foreground mt-2">
+              Mostrando {clientes.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalClientes)} de {totalClientes} clientes
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal de Visualização */}
