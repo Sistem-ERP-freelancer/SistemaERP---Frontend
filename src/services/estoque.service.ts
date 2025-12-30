@@ -28,6 +28,15 @@ export interface MovimentacaoEstoque {
   documento_referencia?: string;
   usuario_id: string;
   criado_em: string;
+  produto?: {
+    id: number;
+    nome: string;
+    sku: string;
+  };
+  usuario?: {
+    id: string;
+    nome: string;
+  };
 }
 
 export interface HistoricoMovimentacao {
@@ -112,6 +121,27 @@ class EstoqueService {
     const query = queryParams.toString();
     return apiClient.get<ProdutosEstoqueResponse>(
       `/estoque/critico${query ? `?${query}` : ''}`
+    );
+  }
+
+  /**
+   * Lista todas as movimentações de estoque
+   */
+  async listarMovimentacoes(params?: {
+    page?: number;
+    limit?: number;
+    tipo?: TipoMovimentacao;
+    produtoId?: number;
+  }): Promise<HistoricoMovimentacao> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.tipo) queryParams.append('tipo', params.tipo);
+    if (params?.produtoId) queryParams.append('produtoId', params.produtoId.toString());
+
+    const query = queryParams.toString();
+    return apiClient.get<HistoricoMovimentacao>(
+      `/estoque/movimentacoes${query ? `?${query}` : ''}`
     );
   }
 }

@@ -38,7 +38,7 @@ const getMenuItems = (isSuperAdmin: boolean) => {
     { icon: Truck, label: "Fornecedores", href: "/fornecedores" },
     { icon: Users, label: "Clientes", href: "/clientes" },
     { icon: Package, label: "Produtos", href: "/produtos" },
-    { icon: Boxes, label: "Estoque", href: "/estoque" },
+    { icon: Boxes, label: "Movimentações", href: "/estoque" },
     { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
     { icon: Settings, label: "Configurações", href: "/settings" },
   ];

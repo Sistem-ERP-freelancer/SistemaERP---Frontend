@@ -7,6 +7,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,13 +49,19 @@ import {
 import {
   produtosService,
   CreateProdutoDto,
+  Produto,
 } from "@/services/produtos.service";
+import {
+  estoqueService,
+  MovimentacaoEstoque,
+} from "@/services/estoque.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Box,
   Building2,
   Calendar,
+  Check,
   Circle,
   DollarSign,
   Edit,
@@ -58,6 +74,7 @@ import {
   Info,
   LayoutGrid,
   Loader2,
+  MapPin,
   Package,
   Plus,
   Ruler,
@@ -65,8 +82,10 @@ import {
   Tag,
   Truck,
   Trash2,
-  Warehouse,
   X,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  History,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -91,6 +110,36 @@ const Produtos = () => {
   });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [categoriasDialogOpen, setCategoriasDialogOpen] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [historicoSheetOpen, setHistoricoSheetOpen] = useState(false);
+  const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
+  const [editingProduto, setEditingProduto] = useState<Partial<CreateProdutoDto> & { estoque_maximo?: number; localizacao?: string }>({
+    nome: "",
+    descricao: "",
+    sku: "",
+    preco_custo: 0,
+    preco_venda: 0,
+    preco_promocional: undefined,
+    estoque_atual: 0,
+    estoque_minimo: 0,
+    estoque_maximo: undefined,
+    unidade_medida: "UN",
+    statusProduto: "ATIVO",
+    categoriaId: undefined,
+    fornecedorId: undefined,
+    data_validade: undefined,
+    ncm: "",
+    cest: "",
+    cfop: "",
+    observacoes: "",
+    peso: undefined,
+    altura: undefined,
+    largura: undefined,
+    localizacao: undefined,
+  });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [produtoToDelete, setProdutoToDelete] = useState<number | null>(null);
   const [newProduto, setNewProduto] = useState<Partial<CreateProdutoDto>>({
     nome: "",
     descricao: "",
@@ -119,15 +168,26 @@ const Produtos = () => {
   const [newCategoriaNome, setNewCategoriaNome] = useState("");
   const [newCategoriaDescricao, setNewCategoriaDescricao] = useState("");
 
-  // Buscar categorias
+  // Buscar categorias (busca todas, não apenas ativas, para garantir que encontre as categorias dos produtos)
   const { data: categorias = [], isLoading: isLoadingCategorias } = useQuery({
     queryKey: ["categorias"],
     queryFn: async () => {
-      const response = await categoriasService.listar({
-        limit: 100,
-        statusCategoria: "ATIVO",
-      });
-      return Array.isArray(response) ? response : response.data || [];
+      try {
+        const response = await categoriasService.listar({
+          limit: 100,
+          // Não filtra por status para garantir que encontre todas as categorias vinculadas aos produtos
+        });
+        const categoriasList = Array.isArray(response) ? response : response.data || [];
+        
+        if (import.meta.env.DEV) {
+          console.log("Categorias carregadas:", categoriasList.length, categoriasList);
+        }
+        
+        return categoriasList;
+      } catch (error) {
+        console.error("Erro ao buscar categorias:", error);
+        return [];
+      }
     },
   });
 
@@ -160,44 +220,81 @@ const Produtos = () => {
   );
 
   // Buscar produtos - usa busca avançada se houver filtros, busca simples se houver termo, senão lista todos
-  const { data: produtosData, isLoading: isLoadingProdutos } = useQuery({
+  const { data: produtosData, isLoading: isLoadingProdutos, error: errorProdutos } = useQuery({
     queryKey: ["produtos", searchTerm, filtrosAvancados],
     queryFn: async () => {
       try {
+        let response;
+        
         if (temFiltrosAtivos) {
           // Usa busca avançada quando há filtros
-          const response = await produtosService.buscarAvancado({
+          response = await produtosService.buscarAvancado({
             termo: searchTerm.trim() || undefined,
             ...filtrosAvancados,
             page: 1,
             limit: 100,
           });
-          return response.produtos || response.data || [];
         } else if (searchTerm.trim()) {
           // Busca local por termo (já que não há endpoint de busca simples)
-          const response = await produtosService.listar({
+          response = await produtosService.listar({
             page: 1,
             limit: 100,
           });
-          const produtos = response.data || [];
-          return produtos.filter((p) =>
+        } else {
+          // Lista todos quando não há termo nem filtros
+          response = await produtosService.listar({
+            page: 1,
+            limit: 100,
+          });
+        }
+
+        // Extrair produtos da resposta - pode estar em data, produtos, ou ser um array direto
+        let produtos: Produto[] = [];
+        
+        if (Array.isArray(response)) {
+          produtos = response;
+        } else if (response?.produtos && Array.isArray(response.produtos)) {
+          produtos = response.produtos;
+        } else if (response?.data && Array.isArray(response.data)) {
+          produtos = response.data;
+        }
+
+        // Se houver termo de busca e não houver filtros, filtrar localmente
+        if (searchTerm.trim() && !temFiltrosAtivos) {
+          produtos = produtos.filter((p) =>
             p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.sku.toLowerCase().includes(searchTerm.toLowerCase())
           );
-        } else {
-          // Lista todos quando não há termo nem filtros
-          const response = await produtosService.listar({
-            page: 1,
-            limit: 100,
-          });
-          return response.data || [];
         }
-      } catch (error) {
-        console.warn("API de produtos não disponível:", error);
+
+        if (import.meta.env.DEV) {
+          console.log("Produtos carregados:", produtos.length, produtos);
+        }
+        return produtos;
+      } catch (error: any) {
+        // Se for erro 404 ou resposta vazia, não é um erro real
+        if (error?.response?.status === 404 || error?.status === 404) {
+          if (import.meta.env.DEV) {
+            console.log("Nenhum produto encontrado (404)");
+          }
+          return [];
+        }
+        
+        // Se for erro de autenticação, não retornar array vazio silenciosamente
+        if (error?.response?.status === 401 || error?.status === 401) {
+          if (import.meta.env.DEV) {
+            console.error("Erro de autenticação ao buscar produtos");
+          }
+          return [];
+        }
+        
+        if (import.meta.env.DEV) {
+          console.error("Erro ao buscar produtos:", error);
+        }
         return [];
       }
     },
-    retry: false,
+    retry: 1,
   });
 
   const produtos = produtosData || [];
@@ -206,6 +303,27 @@ const Produtos = () => {
   // Calcular contagem de produtos por categoria
   const getProdutosCountByCategoria = (categoriaId: number) => {
     return produtos.filter((p) => p.categoriaId === categoriaId).length;
+  };
+
+  // Função para determinar a cor do estoque baseada nas regras
+  const getEstoqueColor = (estoqueAtual: number, estoqueMinimo: number): string => {
+    // Vermelho (crítico): estoque_atual < estoque_minimo
+    if (estoqueAtual < estoqueMinimo) {
+      return "#dc2626";
+    }
+    
+    // Laranja forte (alerta máximo): estoque_atual == estoque_minimo
+    if (Math.abs(estoqueAtual - estoqueMinimo) < 0.01) {
+      return "#ea580c";
+    }
+    
+    // Amarelo (atenção): estoque_atual > estoque_minimo e estoque_atual <= estoque_minimo * 1.3
+    if (estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.3) {
+      return "#facc15";
+    }
+    
+    // Verde (seguro): estoque_atual > estoque_minimo * 1.3
+    return "#16a34a";
   };
 
   // Mutation para criar produto
@@ -249,6 +367,16 @@ const Produtos = () => {
       return;
     }
 
+    if (!newProduto.categoriaId) {
+      toast.error("Selecione uma categoria");
+      return;
+    }
+
+    if (!newProduto.fornecedorId) {
+      toast.error("Selecione um fornecedor");
+      return;
+    }
+
     const produtoData: CreateProdutoDto = {
       nome: newProduto.nome!,
       sku: newProduto.sku!,
@@ -260,8 +388,8 @@ const Produtos = () => {
       statusProduto: newProduto.statusProduto || "ATIVO",
       descricao: newProduto.descricao || undefined,
       preco_promocional: newProduto.preco_promocional ? Number(newProduto.preco_promocional) : undefined,
-      categoriaId: newProduto.categoriaId || undefined,
-      fornecedorId: newProduto.fornecedorId || undefined,
+      categoriaId: newProduto.categoriaId,
+      fornecedorId: newProduto.fornecedorId,
       data_validade: newProduto.data_validade || undefined,
       ncm: newProduto.ncm || undefined,
       cest: newProduto.cest || undefined,
@@ -275,11 +403,182 @@ const Produtos = () => {
     createProdutoMutation.mutate(produtoData);
   };
 
-  const handleDelete = (id: number) => {
-    // TODO: Implementar exclusão via API
-    queryClient.invalidateQueries({ queryKey: ["produtos"] });
-    toast.success("Produto excluído!");
+  // Mutation para atualizar produto
+  const updateProdutoMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<CreateProdutoDto> }) =>
+      produtosService.atualizar(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["produtos"] });
+      setEditDialogOpen(false);
+      setEditingProduto({
+        nome: "",
+        descricao: "",
+        sku: "",
+        preco_custo: 0,
+        preco_venda: 0,
+        preco_promocional: undefined,
+        estoque_atual: 0,
+        estoque_minimo: 0,
+        estoque_maximo: undefined,
+        unidade_medida: "UN",
+        statusProduto: "ATIVO",
+        categoriaId: undefined,
+        fornecedorId: undefined,
+        data_validade: undefined,
+        ncm: "",
+        cest: "",
+        cfop: "",
+        observacoes: "",
+        peso: undefined,
+        altura: undefined,
+        largura: undefined,
+        localizacao: undefined,
+      });
+      setSelectedProduto(null);
+      toast.success("Produto atualizado com sucesso!");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Erro ao atualizar produto");
+    },
+  });
+
+  // Mutation para deletar produto
+  const deleteProdutoMutation = useMutation({
+    mutationFn: (id: number) => produtosService.deletar(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["produtos"] });
+      setDeleteConfirmOpen(false);
+      setProdutoToDelete(null);
+      toast.success("Produto excluído com sucesso!");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Erro ao excluir produto");
+    },
+  });
+
+  const handleEdit = (produto: Produto) => {
+    setSelectedProduto(produto);
+    
+    // Converter data_validade para formato YYYY-MM-DD se existir
+    let dataValidadeFormatada = "";
+    if (produto.data_validade) {
+      try {
+        const data = new Date(produto.data_validade);
+        if (!isNaN(data.getTime())) {
+          // Formato YYYY-MM-DD para input type="date"
+          const year = data.getFullYear();
+          const month = String(data.getMonth() + 1).padStart(2, "0");
+          const day = String(data.getDate()).padStart(2, "0");
+          dataValidadeFormatada = `${year}-${month}-${day}`;
+        }
+      } catch (error) {
+        console.error("Erro ao formatar data de validade:", error);
+      }
+    }
+    
+    setEditingProduto({
+      nome: produto.nome || "",
+      descricao: produto.descricao || "",
+      sku: produto.sku || "",
+      preco_custo: produto.preco_custo || 0,
+      preco_venda: produto.preco_venda || 0,
+      preco_promocional: produto.preco_promocional,
+      estoque_atual: produto.estoque_atual || 0,
+      estoque_minimo: produto.estoque_minimo || 0,
+      estoque_maximo: produto.estoque_maximo,
+      unidade_medida: produto.unidade_medida || "UN",
+      statusProduto: produto.statusProduto || "ATIVO",
+      categoriaId: produto.categoriaId,
+      fornecedorId: produto.fornecedorId,
+      data_validade: dataValidadeFormatada || undefined,
+      ncm: produto.ncm || "",
+      cest: produto.cest || "",
+      cfop: produto.cfop || "",
+      observacoes: produto.observacoes || "",
+      peso: produto.peso,
+      altura: produto.altura,
+      largura: produto.largura,
+      localizacao: produto.localizacao,
+    });
+    setEditDialogOpen(true);
   };
+
+  const handleUpdate = () => {
+    if (!selectedProduto) {
+      toast.error("Selecione um produto");
+      return;
+    }
+
+    if (!editingProduto.nome || !editingProduto.sku || !editingProduto.preco_custo || !editingProduto.preco_venda) {
+      toast.error("Preencha os campos obrigatórios (Nome, SKU, Preço de Custo e Preço de Venda)");
+      return;
+    }
+
+    if (!editingProduto.categoriaId) {
+      toast.error("Selecione uma categoria");
+      return;
+    }
+
+    if (!editingProduto.fornecedorId) {
+      toast.error("Selecione um fornecedor");
+      return;
+    }
+
+    const produtoData: Partial<CreateProdutoDto> & { estoque_maximo?: number; localizacao?: string } = {
+      nome: editingProduto.nome!,
+      sku: editingProduto.sku!,
+      preco_custo: Number(editingProduto.preco_custo),
+      preco_venda: Number(editingProduto.preco_venda),
+      estoque_atual: Number(editingProduto.estoque_atual) || 0,
+      estoque_minimo: Number(editingProduto.estoque_minimo) || 0,
+      unidade_medida: editingProduto.unidade_medida || "UN",
+      statusProduto: editingProduto.statusProduto || "ATIVO",
+      descricao: editingProduto.descricao || undefined,
+      preco_promocional: editingProduto.preco_promocional ? Number(editingProduto.preco_promocional) : undefined,
+      categoriaId: editingProduto.categoriaId,
+      fornecedorId: editingProduto.fornecedorId,
+      data_validade: editingProduto.data_validade || undefined,
+      ncm: editingProduto.ncm || undefined,
+      cest: editingProduto.cest || undefined,
+      cfop: editingProduto.cfop || undefined,
+      observacoes: editingProduto.observacoes || undefined,
+      peso: editingProduto.peso ? Number(editingProduto.peso) : undefined,
+      altura: editingProduto.altura ? Number(editingProduto.altura) : undefined,
+      largura: editingProduto.largura ? Number(editingProduto.largura) : undefined,
+      estoque_maximo: editingProduto.estoque_maximo ? Number(editingProduto.estoque_maximo) : undefined,
+      localizacao: editingProduto.localizacao || undefined,
+    };
+
+    updateProdutoMutation.mutate({
+      id: selectedProduto.id,
+      data: produtoData,
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    setProdutoToDelete(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (produtoToDelete) {
+      deleteProdutoMutation.mutate(produtoToDelete);
+    }
+  };
+
+
+  // Query para buscar histórico de movimentações
+  const { data: historicoData, isLoading: isLoadingHistorico } = useQuery({
+    queryKey: ["historico-estoque", selectedProduto?.id],
+    queryFn: async () => {
+      if (!selectedProduto?.id) return null;
+      return await estoqueService.obterHistorico(selectedProduto.id, {
+        page: 1,
+        limit: 50,
+      });
+    },
+    enabled: !!selectedProduto?.id && historicoSheetOpen,
+  });
 
   // Mutations para categorias
   const createCategoriaMutation = useMutation({
@@ -411,16 +710,16 @@ const Produtos = () => {
             </Button>
             <Dialog open={categoriasDialogOpen} onOpenChange={setCategoriasDialogOpen}>
               <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-gradient-to-br from-card to-secondary/30">
-                <div className="bg-gradient-to-r from-primary to-primary/80 p-6 text-primary-foreground">
+                <div className="p-6">
                   <DialogHeader>
-                    <DialogTitle className="text-base font-bold text-primary-foreground flex items-center gap-2">
-                      <div className="bg-primary-foreground/20 p-2 rounded-lg">
-                        <LayoutGrid className="w-5 h-5" />
+                    <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                      <div className="bg-primary p-2 rounded-lg">
+                        <LayoutGrid className="w-5 h-5 text-primary-foreground" />
                       </div>
                       Gerenciar Categorias
                     </DialogTitle>
                   </DialogHeader>
-                  <p className="text-primary-foreground/70 text-sm mt-2">
+                  <p className="text-muted-foreground text-sm mt-2">
                     Organize seus produtos em categorias para melhor controle
                   </p>
                 </div>
@@ -688,13 +987,13 @@ const Produtos = () => {
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Categoria</Label>
+                        <Label>Categoria *</Label>
                         <Select
                           value={newProduto.categoriaId?.toString() || undefined}
                           onValueChange={(value) =>
                             setNewProduto({
                               ...newProduto,
-                              categoriaId: value && value !== "none" ? Number(value) : undefined,
+                              categoriaId: Number(value),
                             })
                           }
                         >
@@ -702,7 +1001,6 @@ const Produtos = () => {
                             <SelectValue placeholder="Selecione uma categoria" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">Nenhuma</SelectItem>
                             {categorias.map((cat) => (
                               <SelectItem key={cat.id} value={cat.id.toString()}>
                                 {cat.nome}
@@ -712,13 +1010,13 @@ const Produtos = () => {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Fornecedor</Label>
+                        <Label>Fornecedor *</Label>
                         <Select
                           value={newProduto.fornecedorId?.toString() || undefined}
                           onValueChange={(value) =>
                             setNewProduto({
                               ...newProduto,
-                              fornecedorId: value && value !== "none" ? Number(value) : undefined,
+                              fornecedorId: Number(value),
                             })
                           }
                         >
@@ -726,7 +1024,6 @@ const Produtos = () => {
                             <SelectValue placeholder="Selecione um fornecedor" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">Nenhum</SelectItem>
                             {fornecedores.map((forn) => (
                               <SelectItem key={forn.id} value={forn.id.toString()}>
                                 {forn.nome_fantasia}
@@ -796,7 +1093,7 @@ const Produtos = () => {
                   {/* Estoque */}
                   <div className="space-y-4">
                     <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Warehouse className="w-4 h-4 text-blue-500" />
+                      <Package className="w-4 h-4 text-blue-500" />
                       Estoque
                     </h3>
                     <div className="grid grid-cols-3 gap-4">
@@ -1356,31 +1653,52 @@ const Produtos = () => {
             <table className="w-full">
               <thead>
                 <tr className="bg-sidebar text-sidebar-foreground">
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Nome
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     SKU
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Preço
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Estoque
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Categoria
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Status
                   </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
+                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {filteredProdutos.length === 0 ? (
+                {isLoadingProdutos ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Carregando produtos...
+                      </div>
+                    </td>
+                  </tr>
+                ) : errorProdutos ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="py-8 text-center text-destructive"
+                    >
+                      Erro ao carregar produtos. Tente novamente.
+                    </td>
+                  </tr>
+                ) : filteredProdutos.length === 0 ? (
                   <tr>
                     <td
                       colSpan={7}
@@ -1391,36 +1709,62 @@ const Produtos = () => {
                   </tr>
                 ) : (
                   filteredProdutos.map((produto) => {
-                    const categoriaNome = categorias.find(c => c.id === produto.categoriaId)?.nome || "-";
+                    // Primeiro tenta usar a categoria que vem no produto (se populada pela API)
+                    let categoriaNome = produto.categoria?.nome;
+                    
+                    // Se não tiver categoria populada, busca no array de categorias
+                    if (!categoriaNome && produto.categoriaId) {
+                      const categoriaEncontrada = categorias.find(c => {
+                        // Compara tanto como número quanto como string para garantir compatibilidade
+                        return Number(c.id) === Number(produto.categoriaId) || 
+                               String(c.id) === String(produto.categoriaId);
+                      });
+                      categoriaNome = categoriaEncontrada?.nome;
+                    }
+                    
+                    // Se ainda não encontrou, usa "-"
+                    if (!categoriaNome) {
+                      categoriaNome = "-";
+                      
+                      // Log de debug em desenvolvimento
+                      if (import.meta.env.DEV && produto.categoriaId) {
+                        console.log("Categoria não encontrada para produto:", {
+                          produtoId: produto.id,
+                          produtoNome: produto.nome,
+                          categoriaId: produto.categoriaId,
+                          categoriasDisponiveis: categorias.map(c => ({ id: c.id, nome: c.nome })),
+                        });
+                      }
+                    }
+                    
                     return (
                       <tr
                         key={produto.id}
                         className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
                       >
-                        <td className="py-3 px-4 text-sm font-medium text-foreground">
+                        <td className="py-3 px-4 text-sm font-medium text-foreground align-middle">
                           {produto.nome}
                         </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">
+                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
                           {produto.sku}
                         </td>
-                        <td className="py-3 px-4 text-sm font-medium text-foreground">
+                        <td className="py-3 px-4 text-sm font-medium text-foreground align-middle">
                           R$ {produto.preco_venda.toFixed(2).replace(".", ",")}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 align-middle">
                           <span
-                            className={`text-sm font-medium ${
-                              produto.estoque_atual < 10
-                                ? "text-destructive"
-                                : "text-foreground"
-                            }`}
+                            className="text-sm font-medium"
+                            style={{
+                              color: getEstoqueColor(produto.estoque_atual, produto.estoque_minimo)
+                            }}
                           >
                             {produto.estoque_atual}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">
+                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
                           {categoriaNome}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 align-middle">
                           <span
                             className={`text-xs px-2 py-1 rounded-full font-medium ${
                               produto.statusProduto === "ATIVO"
@@ -1431,22 +1775,44 @@ const Produtos = () => {
                             {produto.statusProduto === "ATIVO" ? "Ativo" : "Inativo"}
                           </span>
                         </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-1">
-                          <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
-                            <Eye className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button 
-                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                            onClick={() => handleDelete(produto.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </button>
-                        </div>
-                      </td>
+                        <td className="py-3 px-4 align-middle">
+                          <div className="flex gap-1">
+                            <button 
+                              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                              onClick={() => {
+                                setSelectedProduto(produto);
+                                setViewDialogOpen(true);
+                              }}
+                              title="Visualizar produto"
+                            >
+                              <Eye className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                            <button 
+                              className="p-2 hover:bg-purple-500/10 rounded-lg transition-colors"
+                              onClick={() => {
+                                setSelectedProduto(produto);
+                                setHistoricoSheetOpen(true);
+                              }}
+                              title="Ver histórico de movimentações"
+                            >
+                              <History className="w-4 h-4 text-purple-600" />
+                            </button>
+                            <button 
+                              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                              onClick={() => handleEdit(produto)}
+                              title="Editar produto"
+                            >
+                              <Edit className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                            <button 
+                              className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+                              onClick={() => handleDelete(produto.id)}
+                              title="Excluir produto"
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </button>
+                          </div>
+                        </td>
                     </tr>
                     );
                   })
@@ -1455,6 +1821,942 @@ const Produtos = () => {
             </table>
           </div>
         </motion.div>
+
+        {/* Dialog de Visualização de Produto */}
+        <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Detalhes do Produto</DialogTitle>
+            </DialogHeader>
+            {selectedProduto && (
+              <div className="space-y-6 pt-4">
+                {/* Informações Básicas */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Informações Básicas</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Nome</Label>
+                      <p className="font-medium">{selectedProduto.nome || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">SKU</Label>
+                      <p className="font-medium">{selectedProduto.sku || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Descrição</Label>
+                      <p className="font-medium">{selectedProduto.descricao || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Status</Label>
+                      <p className="font-medium">{selectedProduto.statusProduto || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Unidade de Medida</Label>
+                      <p className="font-medium">{selectedProduto.unidade_medida || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Categoria</Label>
+                      <p className="font-medium">
+                        {selectedProduto.categoria?.nome || categorias.find(c => c.id === selectedProduto.categoriaId)?.nome || "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Fornecedor</Label>
+                      <p className="font-medium">
+                        {selectedProduto.fornecedor?.nome_fantasia || fornecedores.find(f => f.id === selectedProduto.fornecedorId)?.nome_fantasia || "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preços */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Preços</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Preço de Custo</Label>
+                      <p className="font-medium">
+                        {selectedProduto.preco_custo !== undefined && selectedProduto.preco_custo !== null
+                          ? `R$ ${selectedProduto.preco_custo.toFixed(2).replace(".", ",")}`
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Preço de Venda</Label>
+                      <p className="font-medium">
+                        {selectedProduto.preco_venda !== undefined && selectedProduto.preco_venda !== null
+                          ? `R$ ${selectedProduto.preco_venda.toFixed(2).replace(".", ",")}`
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Preço Promocional</Label>
+                      <p className="font-medium">
+                        {selectedProduto.preco_promocional !== undefined && selectedProduto.preco_promocional !== null
+                          ? `R$ ${selectedProduto.preco_promocional.toFixed(2).replace(".", ",")}`
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Estoque */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Estoque</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Estoque Atual</Label>
+                      <p className="font-medium" style={{ color: getEstoqueColor(selectedProduto.estoque_atual, selectedProduto.estoque_minimo) }}>
+                        {selectedProduto.estoque_atual !== undefined && selectedProduto.estoque_atual !== null
+                          ? selectedProduto.estoque_atual
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Estoque Mínimo</Label>
+                      <p className="font-medium">
+                        {selectedProduto.estoque_minimo !== undefined && selectedProduto.estoque_minimo !== null
+                          ? selectedProduto.estoque_minimo
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Estoque Máximo</Label>
+                      <p className="font-medium">
+                        {selectedProduto.estoque_maximo !== undefined && selectedProduto.estoque_maximo !== null
+                          ? selectedProduto.estoque_maximo
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Localização</Label>
+                      <p className="font-medium">{selectedProduto.localizacao || "--"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dimensões e Peso */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Dimensões e Peso</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Peso (kg)</Label>
+                      <p className="font-medium">
+                        {selectedProduto.peso !== undefined && selectedProduto.peso !== null
+                          ? `${selectedProduto.peso} kg`
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Altura (cm)</Label>
+                      <p className="font-medium">
+                        {selectedProduto.altura !== undefined && selectedProduto.altura !== null
+                          ? `${selectedProduto.altura} cm`
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Largura (cm)</Label>
+                      <p className="font-medium">
+                        {selectedProduto.largura !== undefined && selectedProduto.largura !== null
+                          ? `${selectedProduto.largura} cm`
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Informações Fiscais */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Informações Fiscais</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">NCM</Label>
+                      <p className="font-medium">{selectedProduto.ncm || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">CEST</Label>
+                      <p className="font-medium">{selectedProduto.cest || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">CFOP</Label>
+                      <p className="font-medium">{selectedProduto.cfop || "--"}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Data de Validade</Label>
+                      <p className="font-medium">
+                        {selectedProduto.data_validade
+                          ? new Date(selectedProduto.data_validade).toLocaleDateString("pt-BR")
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Observações */}
+                {selectedProduto.observacoes && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-foreground border-b pb-2">Observações</h3>
+                    <p className="text-sm text-muted-foreground">{selectedProduto.observacoes}</p>
+                  </div>
+                )}
+
+                {/* Datas */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Datas</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Criado em</Label>
+                      <p className="font-medium">
+                        {selectedProduto.criadoEm
+                          ? new Date(selectedProduto.criadoEm).toLocaleString("pt-BR")
+                          : "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Atualizado em</Label>
+                      <p className="font-medium">
+                        {selectedProduto.atualizadoEm
+                          ? new Date(selectedProduto.atualizadoEm).toLocaleString("pt-BR")
+                          : "--"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Edição de Produto */}
+        <Dialog 
+          open={editDialogOpen} 
+          onOpenChange={(open) => {
+            setEditDialogOpen(open);
+            if (!open) {
+              setSelectedProduto(null);
+              setEditingProduto({
+                nome: "",
+                descricao: "",
+                sku: "",
+                preco_custo: 0,
+                preco_venda: 0,
+                preco_promocional: undefined,
+                estoque_atual: 0,
+                estoque_minimo: 0,
+                unidade_medida: "UN",
+                statusProduto: "ATIVO",
+                categoriaId: undefined,
+                fornecedorId: undefined,
+                data_validade: undefined,
+                ncm: "",
+                cest: "",
+                cfop: "",
+                observacoes: "",
+                peso: undefined,
+                altura: undefined,
+                largura: undefined,
+              });
+            }
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold">
+                Editar Produto
+              </DialogTitle>
+              <DialogDescription className="mt-1">
+                Atualize as informações do produto no sistema
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-8 pt-6">
+              {/* Seção: Informações Básicas */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-orange-500/10">
+                    <Package className="w-5 h-5 text-orange-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Informações Básicas
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Dados principais do produto
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      Nome do Produto *
+                    </Label>
+                    <Input 
+                      placeholder="Ex: Notebook Dell Inspiron"
+                      value={editingProduto.nome || ""}
+                      onChange={(e) =>
+                        setEditingProduto({ ...editingProduto, nome: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      Descrição
+                    </Label>
+                    <Textarea
+                      placeholder="Descrição detalhada do produto"
+                      value={editingProduto.descricao || ""}
+                      onChange={(e) =>
+                        setEditingProduto({ ...editingProduto, descricao: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-muted-foreground" />
+                      SKU *
+                    </Label>
+                    <Input 
+                      placeholder="Ex: NB-DELL-001"
+                      value={editingProduto.sku || ""}
+                      onChange={(e) =>
+                        setEditingProduto({ ...editingProduto, sku: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Categorização */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <LayoutGrid className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Categorização
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Categoria e fornecedor do produto
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <LayoutGrid className="w-4 h-4 text-muted-foreground" />
+                        Categoria *
+                      </Label>
+                      <Select
+                        value={editingProduto.categoriaId?.toString() || undefined}
+                        onValueChange={(value) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            categoriaId: Number(value),
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categorias.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id.toString()}>
+                              {cat.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-muted-foreground" />
+                        Fornecedor *
+                      </Label>
+                      <Select
+                        value={editingProduto.fornecedorId?.toString() || undefined}
+                        onValueChange={(value) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            fornecedorId: Number(value),
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um fornecedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fornecedores.map((forn) => (
+                            <SelectItem key={forn.id} value={forn.id.toString()}>
+                              {forn.nome_fantasia}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Preços */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <DollarSign className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Preços
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Valores de custo e venda
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-muted-foreground" />
+                        Preço de Custo *
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={editingProduto.preco_custo || ""}
+                        onChange={(e) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            preco_custo: e.target.value ? Number(e.target.value) : 0,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-muted-foreground" />
+                        Preço de Venda *
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={editingProduto.preco_venda || ""}
+                        onChange={(e) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            preco_venda: e.target.value ? Number(e.target.value) : 0,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-muted-foreground" />
+                        Preço Promocional
+                      </Label>
+                      <Input 
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={editingProduto.preco_promocional || ""}
+                        onChange={(e) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            preco_promocional: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Estoque */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <Package className="w-5 h-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Estoque
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Controle de estoque e localização
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Estoque Atual *</Label>
+                    <Input 
+                      type="number"
+                      placeholder="0"
+                      value={editingProduto.estoque_atual || ""}
+                      onChange={(e) =>
+                        setEditingProduto({
+                          ...editingProduto,
+                          estoque_atual: e.target.value ? Number(e.target.value) : 0,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estoque Mínimo *</Label>
+                    <Input 
+                      type="number"
+                      placeholder="0"
+                      value={editingProduto.estoque_minimo || ""}
+                      onChange={(e) =>
+                        setEditingProduto({
+                          ...editingProduto,
+                          estoque_minimo: e.target.value ? Number(e.target.value) : 0,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estoque Máximo</Label>
+                    <Input 
+                      type="number"
+                      placeholder="0"
+                      value={editingProduto.estoque_maximo || ""}
+                      onChange={(e) =>
+                        setEditingProduto({
+                          ...editingProduto,
+                          estoque_maximo: e.target.value ? Number(e.target.value) : undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Unidade de Medida *</Label>
+                    <Select
+                      value={editingProduto.unidade_medida || "UN"}
+                      onValueChange={(value: "UN" | "KG" | "LT" | "CX") =>
+                        setEditingProduto({
+                          ...editingProduto,
+                          unidade_medida: value,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UN">Unidade (UN)</SelectItem>
+                        <SelectItem value="KG">Quilograma (KG)</SelectItem>
+                        <SelectItem value="LT">Litro (LT)</SelectItem>
+                        <SelectItem value="CX">Caixa (CX)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      Localização
+                    </Label>
+                    <Input
+                      placeholder="Ex: Prateleira A-01"
+                      value={editingProduto.localizacao || ""}
+                      onChange={(e) =>
+                        setEditingProduto({ ...editingProduto, localizacao: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Informações Fiscais */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-indigo-500/10">
+                    <FileCheck className="w-5 h-5 text-indigo-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Informações Fiscais
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Códigos fiscais e tributários
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-muted-foreground" />
+                        NCM
+                      </Label>
+                      <Input
+                        placeholder="Ex: 8517.12.00"
+                        maxLength={20}
+                        value={editingProduto.ncm || ""}
+                        onChange={(e) =>
+                          setEditingProduto({ ...editingProduto, ncm: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-muted-foreground" />
+                        CEST
+                      </Label>
+                      <Input
+                        placeholder="Ex: 0100100"
+                        maxLength={20}
+                        value={editingProduto.cest || ""}
+                        onChange={(e) =>
+                          setEditingProduto({ ...editingProduto, cest: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-muted-foreground" />
+                        CFOP
+                      </Label>
+                      <Input
+                        placeholder="Ex: 5102"
+                        maxLength={20}
+                        value={editingProduto.cfop || ""}
+                        onChange={(e) =>
+                          setEditingProduto({ ...editingProduto, cfop: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Dimensões e Peso */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-teal-500/10">
+                    <Ruler className="w-5 h-5 text-teal-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Dimensões e Peso
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Medidas físicas do produto
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Ruler className="w-4 h-4 text-muted-foreground" />
+                        Peso (kg)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.001"
+                        placeholder="0.000"
+                        value={editingProduto.peso || ""}
+                        onChange={(e) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            peso: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Ruler className="w-4 h-4 text-muted-foreground" />
+                        Altura (cm)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={editingProduto.altura || ""}
+                        onChange={(e) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            altura: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Ruler className="w-4 h-4 text-muted-foreground" />
+                        Largura (cm)
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={editingProduto.largura || ""}
+                        onChange={(e) =>
+                          setEditingProduto({
+                            ...editingProduto,
+                            largura: e.target.value ? Number(e.target.value) : undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        Data de Validade
+                      </Label>
+                      <Input
+                        type="date"
+                        value={editingProduto.data_validade || ""}
+                        onChange={(e) =>
+                          setEditingProduto({ ...editingProduto, data_validade: e.target.value || undefined })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seção: Outros */}
+              <div className="bg-card border rounded-lg p-6 space-y-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-gray-500/10">
+                    <Info className="w-5 h-5 text-gray-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      Outros
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Observações e status do produto
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      Observações
+                    </Label>
+                    <Textarea
+                      placeholder="Observações adicionais sobre o produto"
+                      value={editingProduto.observacoes || ""}
+                      onChange={(e) =>
+                        setEditingProduto({ ...editingProduto, observacoes: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {(["ATIVO", "INATIVO"] as const).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() =>
+                            setEditingProduto({
+                              ...editingProduto,
+                              statusProduto: status,
+                            })
+                          }
+                          className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                            editingProduto.statusProduto === status
+                              ? "border-primary bg-primary/5"
+                              : "border-border bg-card hover:border-primary/50"
+                          }`}
+                        >
+                          <Circle
+                            className={`w-4 h-4 ${
+                              editingProduto.statusProduto === status
+                                ? status === "ATIVO"
+                                  ? "text-green-500 fill-green-500"
+                                  : "text-muted-foreground fill-muted-foreground"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                          <span className="font-medium">{status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleUpdate}
+                className="w-full"
+                variant="gradient"
+                disabled={updateProdutoMutation.isPending}
+              >
+                {updateProdutoMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Atualizando...
+                  </>
+                ) : (
+                  "Atualizar Produto"
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Confirmação de Exclusão */}
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir este produto? Esta ação não pode ser desfeita.
+                {produtoToDelete && (
+                  <span className="block mt-2 font-medium text-foreground">
+                    Produto ID: {produtoToDelete}
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setProdutoToDelete(null)}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteProdutoMutation.isPending}
+              >
+                {deleteProdutoMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Sheet de Histórico de Movimentações */}
+        <Sheet open={historicoSheetOpen} onOpenChange={setHistoricoSheetOpen}>
+          <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+            <SheetHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg bg-purple-500/10">
+                  <History className="w-5 h-5 text-purple-600" />
+                </div>
+                <SheetTitle className="text-xl">Histórico de Movimentações</SheetTitle>
+              </div>
+              <SheetDescription>
+                {selectedProduto && (
+                  <div>
+                    <p className="font-medium text-foreground">{selectedProduto.nome}</p>
+                    <p className="text-sm text-muted-foreground">SKU: {selectedProduto.sku}</p>
+                  </div>
+                )}
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="mt-6">
+              {isLoadingHistorico ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Carregando histórico...</span>
+                </div>
+              ) : historicoData?.movimentacoes && historicoData.movimentacoes.length > 0 ? (
+                <div className="space-y-3">
+                  {historicoData.movimentacoes.map((mov) => {
+                    const isEntrada = mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO";
+                    const isSaida = mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA";
+                    const isAjuste = mov.tipo === "AJUSTE";
+
+                    return (
+                      <div
+                        key={mov.id}
+                        className="border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {isEntrada && (
+                              <ArrowUpCircle className="w-5 h-5 text-green-600" />
+                            )}
+                            {isSaida && (
+                              <ArrowDownCircle className="w-5 h-5 text-red-600" />
+                            )}
+                            {isAjuste && (
+                              <Package className="w-5 h-5 text-blue-600" />
+                            )}
+                            <span className="font-semibold text-foreground">
+                              {mov.tipo}
+                            </span>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(mov.criado_em).toLocaleString("pt-BR")}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Quantidade</Label>
+                            <p className={`font-medium ${isEntrada ? "text-green-600" : isSaida ? "text-red-600" : "text-blue-600"}`}>
+                              {isEntrada ? "+" : isSaida ? "-" : ""}{mov.quantidade}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Estoque Anterior</Label>
+                            <p className="font-medium">{mov.estoque_anterior}</p>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Estoque Atual</Label>
+                            <p className="font-medium" style={{ color: getEstoqueColor(mov.estoque_atual, selectedProduto?.estoque_minimo || 0) }}>
+                              {mov.estoque_atual}
+                            </p>
+                          </div>
+                          {mov.documento_referencia && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Documento</Label>
+                              <p className="font-medium text-sm">{mov.documento_referencia}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {mov.motivo && (
+                          <div className="mt-3">
+                            <Label className="text-xs text-muted-foreground">Motivo</Label>
+                            <p className="text-sm">{mov.motivo}</p>
+                          </div>
+                        )}
+
+                        {mov.observacao && (
+                          <div className="mt-2">
+                            <Label className="text-xs text-muted-foreground">Observação</Label>
+                            <p className="text-sm text-muted-foreground">{mov.observacao}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>Nenhuma movimentação registrada para este produto</p>
+                </div>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </AppLayout>
   );
