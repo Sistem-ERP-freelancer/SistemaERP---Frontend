@@ -18,7 +18,9 @@ import {
   FileText,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Phone,
+  Hash
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,22 +33,24 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { tenantsService, Tenant, CreateTenantDto } from "@/services/tenants.service";
+import { tenantsService, Tenant, CreateTenantDto, UpdateTenantInfoDto } from "@/services/tenants.service";
 import { formatDate } from "@/lib/utils";
-import { formatDocument } from "@/lib/validators";
-import { DocumentPreview } from "@/components/ui/document-preview";
+import { formatDocument, cleanDocument, formatCNPJ, formatCPF, formatTelefone, cleanTelefone } from "@/lib/validators";
 
 const AdminPanel = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [cnpjError, setCnpjError] = useState<string>("");
-  const [formData, setFormData] = useState<CreateTenantDto>({
+  const [formData, setFormData] = useState<CreateTenantDto & { telefone?: string }>({
     nome: "",
     cnpj: "",
     email: "",
     senha: "",
+    telefone: "",
   });
   const queryClient = useQueryClient();
 
@@ -63,10 +67,22 @@ const AdminPanel = () => {
           created_at: data[0].created_at,
           createdAt: (data[0] as any).createdAt,
           dataCriacao: (data[0] as any).dataCriacao,
+          data_criacao: (data[0] as any).data_criacao,
         });
       }
       return data;
     },
+  });
+
+  // Buscar tenant selecionado para visualização
+  const { data: selectedTenant, isLoading: isLoadingTenant } = useQuery({
+    queryKey: ['tenant', selectedTenantId],
+    queryFn: async () => {
+      if (!selectedTenantId) return null;
+      return await tenantsService.buscarPorId(selectedTenantId);
+    },
+    enabled: !!selectedTenantId && viewDialogOpen,
+    retry: false,
   });
 
   // Filtrar tenants
@@ -82,7 +98,7 @@ const AdminPanel = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Tenant criado com sucesso!");
+      toast.success("Empresa criada com sucesso!");
       setDialogOpen(false);
       resetForm();
     },
@@ -98,7 +114,7 @@ const AdminPanel = () => {
       let errorMessage = 
         error?.response?.data?.message || 
         error?.message || 
-        "Erro ao criar tenant";
+        "Erro ao criar empresa";
       
       // Tratamento específico para erro 409 (Conflict)
       if (error?.response?.status === 409) {
@@ -126,17 +142,17 @@ const AdminPanel = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateTenantDto> }) =>
+    mutationFn: ({ id, data }: { id: string; data: UpdateTenantInfoDto }) =>
       tenantsService.atualizar(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Tenant atualizado com sucesso!");
+      toast.success("Empresa atualizada com sucesso!");
       setDialogOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao atualizar tenant");
+      toast.error(error.message || "Erro ao atualizar empresa");
     },
   });
 
@@ -145,10 +161,10 @@ const AdminPanel = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Tenant bloqueado com sucesso!");
+      toast.success("Empresa bloqueada com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao bloquear tenant");
+      toast.error(error.message || "Erro ao bloquear empresa");
     },
   });
 
@@ -157,10 +173,10 @@ const AdminPanel = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Tenant desbloqueado com sucesso!");
+      toast.success("Empresa desbloqueada com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao desbloquear tenant");
+      toast.error(error.message || "Erro ao desbloquear empresa");
     },
   });
 
@@ -169,10 +185,10 @@ const AdminPanel = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Tenant ativado com sucesso!");
+      toast.success("Empresa ativada com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao ativar tenant");
+      toast.error(error.message || "Erro ao ativar empresa");
     },
   });
 
@@ -181,30 +197,50 @@ const AdminPanel = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Tenant desativado com sucesso!");
+      toast.success("Empresa desativada com sucesso!");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Erro ao desativar tenant");
+      toast.error(error.message || "Erro ao desativar empresa");
     },
   });
 
   const resetForm = () => {
-    setFormData({ nome: "", cnpj: "", email: "", senha: "" });
+    setFormData({ nome: "", cnpj: "", email: "", senha: "", telefone: "" });
     setEditingTenant(null);
     setShowPassword(false);
     setCnpjError(""); // Limpa erro ao resetar formulário
   };
 
+  const handleView = (tenant: Tenant) => {
+    setSelectedTenantId(tenant.id);
+    setViewDialogOpen(true);
+  };
+
   const handleEdit = (tenant: Tenant) => {
     // Remove formatação do CNPJ ao editar (armazena apenas números)
-    const cleanedCnpj = tenant.cnpj.replace(/[^\d]/g, '');
+    const cleanedCnpj = cleanDocument(tenant.cnpj);
+    
+    // Formata o CNPJ/CPF para exibição no campo
+    let formattedCnpj = cleanedCnpj;
+    if (cleanedCnpj.length === 11) {
+      formattedCnpj = formatCPF(cleanedCnpj);
+    } else if (cleanedCnpj.length === 14) {
+      formattedCnpj = formatCNPJ(cleanedCnpj);
+    }
+    
+    // Formata o telefone se existir
+    let formattedTelefone = "";
+    if (tenant.telefone) {
+      formattedTelefone = formatTelefone(tenant.telefone);
+    }
     
     // Configura os dados do formulário primeiro
     setFormData({
       nome: tenant.nome,
-      cnpj: cleanedCnpj,
+      cnpj: formattedCnpj,
       email: tenant.email,
       senha: "",
+      telefone: formattedTelefone,
     });
     
     // Define o tenant sendo editado
@@ -218,14 +254,39 @@ const AdminPanel = () => {
   };
 
   const handleCnpjChange = (value: string) => {
-    // Remove TODOS os caracteres não numéricos (garante apenas números)
-    const cleaned = value.replace(/[^\d]/g, '');
+    // Remove TODOS os caracteres não numéricos
+    const cleaned = cleanDocument(value);
     
     // Limita o tamanho (máximo 14 dígitos para CNPJ)
     const limited = cleaned.slice(0, 14);
     
-    // Armazena APENAS números (sem formatação, sem caracteres especiais)
-    setFormData({ ...formData, cnpj: limited });
+    // Formata conforme o tamanho (formatação progressiva enquanto digita)
+    let formatted = limited;
+    if (limited.length === 11) {
+      formatted = formatCPF(limited);
+    } else if (limited.length === 14) {
+      formatted = formatCNPJ(limited);
+    } else if (limited.length > 0) {
+      // Formatação progressiva para CPF
+      if (limited.length <= 11) {
+        formatted = limited
+          .replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4")
+          .replace(/^(\d{3})(\d{3})(\d{3})$/, "$1.$2.$3")
+          .replace(/^(\d{3})(\d{3})$/, "$1.$2")
+          .replace(/^(\d{3})$/, "$1");
+      } else {
+        // Formatação progressiva para CNPJ
+        formatted = limited
+          .replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")
+          .replace(/^(\d{2})(\d{3})(\d{3})(\d{4})$/, "$1.$2.$3/$4")
+          .replace(/^(\d{2})(\d{3})(\d{3})$/, "$1.$2.$3")
+          .replace(/^(\d{2})(\d{3})$/, "$1.$2")
+          .replace(/^(\d{2})$/, "$1");
+      }
+    }
+    
+    // Armazena o valor formatado no estado (para exibição)
+    setFormData({ ...formData, cnpj: formatted });
     
     // Limpa erro se o campo estiver vazio
     if (limited.length === 0) {
@@ -267,33 +328,51 @@ const AdminPanel = () => {
     }
     
     // Prepara dados para envio - GARANTE que CNPJ é apenas números
-    const dataToSend: CreateTenantDto = {
+    const dataToSend: CreateTenantDto & { telefone?: string } = {
       nome: formData.nome.trim(),
       cnpj: cleanedCnpj, // SEMPRE apenas números, sem formatação
       email: formData.email.trim(),
     };
     
+    // Adiciona telefone se foi preenchido (remove formatação antes de enviar)
+    if (formData.telefone && formData.telefone.trim() !== '') {
+      dataToSend.telefone = cleanTelefone(formData.telefone);
+    }
+    
     if (editingTenant) {
-      // Na edição, só envia senha se foi preenchida
+      // Na edição, prepara dados com telefone (se preenchido)
+      const updateData: UpdateTenantInfoDto = {
+        nome: dataToSend.nome,
+        cnpj: dataToSend.cnpj,
+        email: dataToSend.email,
+      };
+      
+      // Adiciona telefone se foi preenchido
+      if (dataToSend.telefone) {
+        updateData.telefone = dataToSend.telefone;
+      }
+      
+      // Na edição, só envia senha se foi preenchida (usando Partial<CreateTenantDto> para senha)
       if (formData.senha && formData.senha.trim() !== '') {
-        dataToSend.senha = formData.senha;
+        (updateData as any).senha = formData.senha;
       }
       
       // Log para debug (apenas em desenvolvimento)
       if (import.meta.env.DEV) {
         console.log('📤 Dados sendo enviados (edição):', { 
-          ...dataToSend, 
-          senha: dataToSend.senha ? '***' : 'não enviada',
-          cnpj_length: dataToSend.cnpj.length,
-          cnpj_is_only_numbers: /^\d+$/.test(dataToSend.cnpj)
+          ...updateData, 
+          senha: (updateData as any).senha ? '***' : 'não enviada',
+          telefone: updateData.telefone || 'não enviado',
+          cnpj_length: updateData.cnpj.length,
+          cnpj_is_only_numbers: /^\d+$/.test(updateData.cnpj)
         });
       }
       
-      updateMutation.mutate({ id: editingTenant.id, data: dataToSend });
+      updateMutation.mutate({ id: editingTenant.id, data: updateData });
     } else {
       // Na criação, senha é obrigatória
       if (!formData.senha || formData.senha.trim() === '') {
-        toast.error("A senha é obrigatória para criar um tenant");
+        toast.error("A senha é obrigatória para criar uma empresa");
         return;
       }
       dataToSend.senha = formData.senha;
@@ -306,6 +385,7 @@ const AdminPanel = () => {
           cnpj_length: dataToSend.cnpj.length,
           cnpj_is_only_numbers: /^\d+$/.test(dataToSend.cnpj),
           email: dataToSend.email,
+          telefone: dataToSend.telefone || 'não enviado',
           senha: '***',
         });
       }
@@ -334,28 +414,28 @@ const AdminPanel = () => {
 
   const stats = [
     {
-      label: "Total de Tenants",
+      label: "Total de Empresas",
       value: tenants.length.toString(),
       icon: Building2,
       color: "text-cyan",
       bgColor: "bg-cyan/10",
     },
     {
-      label: "Tenants Ativos",
+      label: "Empresas Ativas",
       value: tenants.filter((t) => t.status === "ATIVO").length.toString(),
       icon: CheckCircle2,
       color: "text-cyan",
       bgColor: "bg-cyan/10",
     },
     {
-      label: "Tenants Inativos",
+      label: "Empresas Inativas",
       value: tenants.filter((t) => t.status === "INATIVO").length.toString(),
       icon: XCircle,
       color: "text-muted-foreground",
       bgColor: "bg-muted/10",
     },
     {
-      label: "Tenants Suspensos",
+      label: "Empresas Suspensas",
       value: tenants.filter((t) => t.status === "SUSPENSO").length.toString(),
       icon: AlertCircle,
       color: "text-destructive",
@@ -378,7 +458,7 @@ const AdminPanel = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Painel Administrativo</h1>
-              <p className="text-muted-foreground">Gerencie todos os tenants do sistema</p>
+              <p className="text-muted-foreground">Gerencie todas as empresas do sistema</p>
             </div>
           </div>
         </motion.div>
@@ -424,7 +504,7 @@ const AdminPanel = () => {
             }}
           >
             <Plus className="w-4 h-4" />
-            Criar Tenant
+            Criar Empresa
           </Button>
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             if (!open) {
@@ -436,7 +516,7 @@ const AdminPanel = () => {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>
-                  {editingTenant ? "Editar Tenant" : "Novo Tenant"}
+                  {editingTenant ? "Editar Empresa" : "Nova Empresa"}
                 </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -446,16 +526,17 @@ const AdminPanel = () => {
                     id="nome"
                     value={formData.nome}
                     onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                    placeholder="Digite o nome da empresa"
                     required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cnpj">
                     CNPJ ou CPF
-                    {formData.cnpj.length === 11 && (
+                    {cleanDocument(formData.cnpj).length === 11 && (
                       <span className="ml-2 text-xs text-muted-foreground font-normal">(CPF detectado)</span>
                     )}
-                    {formData.cnpj.length === 14 && (
+                    {cleanDocument(formData.cnpj).length === 14 && (
                       <span className="ml-2 text-xs text-muted-foreground font-normal">(CNPJ detectado)</span>
                     )}
                   </Label>
@@ -466,14 +547,14 @@ const AdminPanel = () => {
                       inputMode="numeric"
                       value={formData.cnpj}
                       onChange={(e) => handleCnpjChange(e.target.value)}
-                      placeholder="Digite apenas números (11 para CPF ou 14 para CNPJ)"
+                      placeholder="Digite o CNPJ ou CPF"
                       required
-                      maxLength={14}
-                      className={cnpjError ? "border-destructive pr-20" : formData.cnpj.length === 11 || formData.cnpj.length === 14 ? "border-green-500 pr-20" : "pr-20"}
+                      maxLength={18}
+                      className={cnpjError ? "border-destructive pr-20" : cleanDocument(formData.cnpj).length === 11 || cleanDocument(formData.cnpj).length === 14 ? "border-green-500 pr-20" : "pr-20"}
                     />
                     {formData.cnpj.length > 0 && (
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        {formData.cnpj.length} {formData.cnpj.length === 1 ? 'dígito' : 'dígitos'}
+                        {cleanDocument(formData.cnpj).length} {cleanDocument(formData.cnpj).length === 1 ? 'dígito' : 'dígitos'}
                       </span>
                     )}
                   </div>
@@ -482,19 +563,12 @@ const AdminPanel = () => {
                       <AlertCircle className="w-3 h-3" />
                       {cnpjError}
                     </p>
-                  ) : formData.cnpj.length > 0 && (formData.cnpj.length === 11 || formData.cnpj.length === 14) ? (
+                  ) : formData.cnpj.length > 0 && (cleanDocument(formData.cnpj).length === 11 || cleanDocument(formData.cnpj).length === 14) ? (
                     <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      {formData.cnpj.length === 11 ? "CPF válido ✓" : "CNPJ válido ✓"}
+                      {cleanDocument(formData.cnpj).length === 11 ? "CPF válido ✓" : "CNPJ válido ✓"}
                     </p>
                   ) : null}
-                  
-                  {/* Preview visual do CPF/CNPJ */}
-                  {formData.cnpj.length > 0 && (
-                    <div className="mt-3">
-                      <DocumentPreview value={formData.cnpj} />
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -503,7 +577,26 @@ const AdminPanel = () => {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="empresa@exemplo.com"
                     required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telefone" className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    Telefone
+                  </Label>
+                  <Input
+                    id="telefone"
+                    type="text"
+                    inputMode="tel"
+                    value={formData.telefone || ""}
+                    onChange={(e) => {
+                      const formatted = formatTelefone(e.target.value);
+                      setFormData({ ...formData, telefone: formatted });
+                    }}
+                    placeholder="(00) 00000-0000"
+                    maxLength={15}
                   />
                 </div>
                 <div className="space-y-2">
@@ -567,7 +660,7 @@ const AdminPanel = () => {
           </Dialog>
         </div>
 
-        {/* Tenants Table */}
+        {/* Tabela de Empresas */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -595,7 +688,7 @@ const AdminPanel = () => {
                 ) : filteredTenants.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                      Nenhum tenant encontrado
+                      Nenhuma empresa encontrada
                     </td>
                   </tr>
                 ) : (
@@ -618,10 +711,25 @@ const AdminPanel = () => {
                       </td>
                       <td className="py-3 px-4">{getStatusBadge(tenant.status)}</td>
                       <td className="py-3 px-4 text-sm text-muted-foreground">
-                        {tenant.created_at ? formatDate(tenant.created_at) : "N/A"}
+                        {(() => {
+                          const dataCriacao = tenant.created_at || 
+                                             (tenant as any).createdAt || 
+                                             (tenant as any).dataCriacao || 
+                                             (tenant as any).data_criacao;
+                          return dataCriacao ? formatDate(dataCriacao) : "N/A";
+                        })()}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleView(tenant)}
+                            className="h-8 w-8 p-0"
+                            title="Visualizar"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -686,6 +794,164 @@ const AdminPanel = () => {
             </table>
           </div>
         </motion.div>
+
+        {/* Dialog de Visualização */}
+        <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Detalhes da Empresa</DialogTitle>
+            </DialogHeader>
+            {isLoadingTenant ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : selectedTenant ? (
+              <div className="space-y-6 pt-4">
+                {/* Informações Básicas */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Informações Básicas
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Nome da Empresa</Label>
+                      <p className="text-sm font-medium">{selectedTenant.nome}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                        <Hash className="w-3 h-3" />
+                        CNPJ/CPF
+                      </Label>
+                      <p className="text-sm font-medium">{formatDocument(selectedTenant.cnpj)}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                        <Mail className="w-3 h-3" />
+                        Email
+                      </Label>
+                      <p className="text-sm font-medium">{selectedTenant.email}</p>
+                    </div>
+                    {selectedTenant.telefone && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                          <Phone className="w-3 h-3" />
+                          Telefone
+                        </Label>
+                        <p className="text-sm font-medium">{selectedTenant.telefone}</p>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Status</Label>
+                      <div>{getStatusBadge(selectedTenant.status)}</div>
+                    </div>
+                    {selectedTenant.codigo && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Código</Label>
+                        <p className="text-sm font-medium">{selectedTenant.codigo}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Informações Adicionais */}
+                {(selectedTenant.subdominio || selectedTenant.schema_name || selectedTenant.data_expiracao) && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-primary" />
+                      Informações Adicionais
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {selectedTenant.subdominio && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Subdomínio</Label>
+                          <p className="text-sm font-medium">{selectedTenant.subdominio}</p>
+                        </div>
+                      )}
+                      {selectedTenant.schema_name && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Schema</Label>
+                          <p className="text-sm font-medium">{selectedTenant.schema_name}</p>
+                        </div>
+                      )}
+                      {selectedTenant.data_expiracao && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Data de Expiração</Label>
+                          <p className="text-sm font-medium">{formatDate(selectedTenant.data_expiracao)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Datas do Sistema */}
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Informações do Sistema
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(() => {
+                      const dataCriacao = selectedTenant.created_at || 
+                                         (selectedTenant as any).createdAt || 
+                                         (selectedTenant as any).dataCriacao || 
+                                         (selectedTenant as any).data_criacao;
+                      return dataCriacao ? (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Criado em</Label>
+                          <p className="text-sm font-medium">{formatDate(dataCriacao)}</p>
+                        </div>
+                      ) : null;
+                    })()}
+                    {(() => {
+                      const dataAtualizacao = selectedTenant.updated_at || 
+                                             (selectedTenant as any).updatedAt || 
+                                             (selectedTenant as any).data_atualizacao;
+                      return dataAtualizacao ? (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Atualizado em</Label>
+                          <p className="text-sm font-medium">{formatDate(dataAtualizacao)}</p>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+
+                {/* Configurações */}
+                {selectedTenant.configuracoes && Object.keys(selectedTenant.configuracoes).length > 0 && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-primary" />
+                      Configurações
+                    </h3>
+                    <div className="bg-muted/50 rounded-lg p-4">
+                      <pre className="text-xs overflow-x-auto">
+                        {JSON.stringify(selectedTenant.configuracoes, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Botão de Fechar */}
+                <div className="flex justify-end pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setViewDialogOpen(false);
+                      setSelectedTenantId(null);
+                    }}
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center text-muted-foreground">
+                Empresa não encontrada
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

@@ -31,6 +31,7 @@ export interface CreateTenantDto {
   cnpj: string;
   email: string;
   senha?: string;
+  telefone?: string;
 }
 
 export interface UpdateTenantInfoDto {
@@ -46,13 +47,19 @@ class TenantsService {
     // Normaliza os dados, garantindo que created_at esteja presente
     return data.map((tenant) => ({
       ...tenant,
-      created_at: tenant.created_at || tenant.createdAt || tenant.dataCriacao,
-      updated_at: tenant.updated_at || tenant.updatedAt,
+      created_at: tenant.created_at || tenant.createdAt || tenant.dataCriacao || tenant.data_criacao,
+      updated_at: tenant.updated_at || tenant.updatedAt || tenant.data_atualizacao,
     })) as Tenant[];
   }
 
   async buscarPorId(id: string): Promise<Tenant> {
-    return apiClient.get<Tenant>(`/tenants/${id}`);
+    const data = await apiClient.get<any>(`/tenants/${id}`);
+    // Normaliza os dados
+    return {
+      ...data,
+      created_at: data.created_at || data.createdAt || data.dataCriacao || data.data_criacao,
+      updated_at: data.updated_at || data.updatedAt || data.data_atualizacao,
+    } as Tenant;
   }
 
   // Novo endpoint para ADMIN/GERENTE obter informações do próprio tenant
@@ -61,8 +68,8 @@ class TenantsService {
     // Normaliza os dados
     return {
       ...data,
-      created_at: data.created_at || data.dataCriacao,
-      updated_at: data.updated_at || data.updatedAt,
+      created_at: data.created_at || data.createdAt || data.dataCriacao || data.data_criacao,
+      updated_at: data.updated_at || data.updatedAt || data.data_atualizacao,
     } as Tenant;
   }
 
@@ -72,33 +79,69 @@ class TenantsService {
     // Normaliza os dados
     return {
       ...response,
-      created_at: response.created_at || response.dataCriacao,
-      updated_at: response.updated_at || response.updatedAt,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
     } as Tenant;
   }
 
   async criar(data: CreateTenantDto): Promise<Tenant> {
-    return apiClient.post<Tenant>('/tenants', data);
+    const response = await apiClient.post<any>('/tenants', data);
+    // Normaliza os dados
+    return {
+      ...response,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
+    } as Tenant;
   }
 
-  async atualizar(id: string, data: Partial<CreateTenantDto>): Promise<Tenant> {
-    return apiClient.put<Tenant>(`/tenants/${id}`, data);
+  async atualizar(id: string, data: UpdateTenantInfoDto | Partial<CreateTenantDto>): Promise<Tenant> {
+    const response = await apiClient.put<any>(`/tenants/${id}`, data);
+    // Normaliza os dados
+    return {
+      ...response,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
+    } as Tenant;
   }
 
   async bloquear(id: string): Promise<Tenant> {
-    return apiClient.put<Tenant>(`/tenants/${id}/bloquear`, {});
+    const response = await apiClient.put<any>(`/tenants/${id}/bloquear`, {});
+    // Normaliza os dados
+    return {
+      ...response,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
+    } as Tenant;
   }
 
   async desbloquear(id: string): Promise<Tenant> {
-    return apiClient.put<Tenant>(`/tenants/${id}/desbloquear`, {});
+    const response = await apiClient.put<any>(`/tenants/${id}/desbloquear`, {});
+    // Normaliza os dados
+    return {
+      ...response,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
+    } as Tenant;
   }
 
   async ativar(id: string): Promise<Tenant> {
-    return apiClient.put<Tenant>(`/tenants/${id}/ativar`, {});
+    const response = await apiClient.put<any>(`/tenants/${id}/ativar`, {});
+    // Normaliza os dados
+    return {
+      ...response,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
+    } as Tenant;
   }
 
   async desativar(id: string): Promise<Tenant> {
-    return apiClient.put<Tenant>(`/tenants/${id}/desativar`, {});
+    const response = await apiClient.put<any>(`/tenants/${id}/desativar`, {});
+    // Normaliza os dados
+    return {
+      ...response,
+      created_at: response.created_at || response.createdAt || response.dataCriacao || response.data_criacao,
+      updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
+    } as Tenant;
   }
 }
 
