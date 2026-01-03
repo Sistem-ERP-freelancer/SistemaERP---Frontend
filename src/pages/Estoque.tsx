@@ -814,7 +814,7 @@ const Estoque = () => {
               }
             }}
           >
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
               <DialogHeader>
               <DialogTitle>Nova Movimentação</DialogTitle>
                 <DialogDescription>
@@ -829,13 +829,13 @@ const Estoque = () => {
                   {/* Tipos de Entrada */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Entradas</p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 overflow-visible">
                       {/* ENTRADA */}
                       <button
                         type="button"
                         onClick={() => setMovimentacao({ ...movimentacao, tipo: "ENTRADA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
-                          movimentacao.tipo === "ENTRADA" ? "shadow-md" : ""
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
+                          movimentacao.tipo === "ENTRADA" ? "shadow-md border-[3px]" : "border-2"
                         }`}
                         style={{
                           borderColor: movimentacao.tipo === "ENTRADA" ? "#2ECC71" : "rgba(46, 204, 113, 0.3)",
@@ -868,8 +868,8 @@ const Estoque = () => {
                       <button
                         type="button"
                         onClick={() => setMovimentacao({ ...movimentacao, tipo: "DEVOLUCAO" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
-                          movimentacao.tipo === "DEVOLUCAO" ? "shadow-md" : ""
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
+                          movimentacao.tipo === "DEVOLUCAO" ? "shadow-md border-[3px]" : "border-2"
                         }`}
                         style={{
                           borderColor: movimentacao.tipo === "DEVOLUCAO" ? "#3498DB" : "rgba(52, 152, 219, 0.3)",
@@ -903,13 +903,13 @@ const Estoque = () => {
                   {/* Tipos de Saída */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Saídas</p>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-3 overflow-visible">
                       {/* SAIDA */}
                       <button
                         type="button"
                         onClick={() => setMovimentacao({ ...movimentacao, tipo: "SAIDA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
-                          movimentacao.tipo === "SAIDA" ? "shadow-md" : ""
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
+                          movimentacao.tipo === "SAIDA" ? "shadow-md border-[3px]" : "border-2"
                         }`}
                         style={{
                           borderColor: movimentacao.tipo === "SAIDA" ? "#E74C3C" : "rgba(231, 76, 60, 0.3)",
@@ -942,8 +942,8 @@ const Estoque = () => {
                       <button
                         type="button"
                         onClick={() => setMovimentacao({ ...movimentacao, tipo: "PERDA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
-                          movimentacao.tipo === "PERDA" ? "shadow-md" : ""
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
+                          movimentacao.tipo === "PERDA" ? "shadow-md border-[3px]" : "border-2"
                         }`}
                         style={{
                           borderColor: movimentacao.tipo === "PERDA" ? "#F39C12" : "rgba(243, 156, 18, 0.3)",
@@ -976,8 +976,8 @@ const Estoque = () => {
                       <button
                         type="button"
                         onClick={() => setMovimentacao({ ...movimentacao, tipo: "TRANSFERENCIA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
-                          movimentacao.tipo === "TRANSFERENCIA" ? "shadow-md" : ""
+                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
+                          movimentacao.tipo === "TRANSFERENCIA" ? "shadow-md border-[3px]" : "border-2"
                         }`}
                         style={{
                           borderColor: movimentacao.tipo === "TRANSFERENCIA" ? "#9B59B6" : "rgba(155, 89, 182, 0.3)",
@@ -1014,8 +1014,8 @@ const Estoque = () => {
                     <button
                       type="button"
                       onClick={() => setMovimentacao({ ...movimentacao, tipo: "AJUSTE" })}
-                      className={`w-full flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-[1.02] ${
-                        movimentacao.tipo === "AJUSTE" ? "shadow-md" : ""
+                      className={`w-full flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
+                        movimentacao.tipo === "AJUSTE" ? "shadow-md border-[3px]" : "border-2"
                       }`}
                       style={{
                         borderColor: movimentacao.tipo === "AJUSTE" ? "#3498DB" : "rgba(52, 152, 219, 0.3)",

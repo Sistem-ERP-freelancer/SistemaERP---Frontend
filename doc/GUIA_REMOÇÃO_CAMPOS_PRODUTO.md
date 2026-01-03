@@ -239,3 +239,4 @@ Em caso de dúvidas sobre a implementação deste comportamento, consulte o cód
 - `src/pages/Produtos.tsx` - Função `handleUpdate()`
 - `src/services/produtos.service.ts` - Interface `CreateProdutoDto`
 
+
