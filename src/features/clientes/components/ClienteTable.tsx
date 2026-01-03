@@ -9,6 +9,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import { StatusCliente } from "@/services/clientes.service";
 import { motion } from "framer-motion";
 import {
@@ -20,6 +35,7 @@ import {
   Trash2,
   Users,
   XCircle,
+  MoreVertical,
 } from "lucide-react";
 
 interface Cliente {
@@ -94,235 +110,217 @@ export const ClienteTable = ({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card rounded-xl border border-border overflow-hidden"
+      className="rounded-md border overflow-hidden"
     >
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-sidebar text-sidebar-foreground">
-              <th className="text-left py-3 px-4 text-sm font-medium">Nome</th>
-              <th className="text-left py-3 px-4 text-sm font-medium">
-                CPF/CNPJ
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium">
-                E-mail
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium">
-                Telefone
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium">Tipo</th>
-              <th className="text-left py-3 px-4 text-sm font-medium">
-                Status
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Carregando clientes...
-                  </div>
-                </td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan={7} className="py-8 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <XCircle className="w-8 h-8 text-destructive" />
-                    <p className="text-destructive font-medium">
-                      Erro ao carregar clientes
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Nome</TableHead>
+            <TableHead>CPF/CNPJ</TableHead>
+            <TableHead>E-mail</TableHead>
+            <TableHead>Telefone</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-[50px]"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Carregando clientes...
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : error ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-8 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <XCircle className="w-8 h-8 text-destructive" />
+                  <p className="text-destructive font-medium">
+                    Erro ao carregar clientes
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {error instanceof Error
+                      ? error.message
+                      : "Verifique sua conexão e tente novamente"}
+                  </p>
+                  {import.meta.env.DEV && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Verifique o console para mais detalhes
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      {error instanceof Error
-                        ? error.message
-                        : "Verifique sua conexão e tente novamente"}
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : clientes.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <Users className="w-12 h-12 text-muted-foreground/50" />
+                  <p className="font-medium">
+                    {searchTerm.trim() || hasActiveFilters
+                      ? "Nenhum cliente encontrado"
+                      : "Nenhum cliente cadastrado"}
+                  </p>
+                  {!searchTerm.trim() && !hasActiveFilters && (
+                    <p className="text-sm">
+                      Clique em "Criar Cliente" para adicionar o primeiro
+                      cliente
                     </p>
-                    {import.meta.env.DEV && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Verifique o console para mais detalhes
-                      </p>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : clientes.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <Users className="w-8 h-8 text-muted-foreground/50" />
-                    <p className="font-medium">
-                      {searchTerm.trim() || hasActiveFilters
-                        ? "Nenhum cliente encontrado"
-                        : "Nenhum cliente cadastrado"}
-                    </p>
-                    {!searchTerm.trim() && !hasActiveFilters && (
-                      <p className="text-sm">
-                        Clique em "Criar Cliente" para adicionar o primeiro
-                        cliente
-                      </p>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              clientes.map((cliente) => (
-                <tr
-                  key={cliente.id}
-                  className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
-                >
-                  <td className="py-3 px-4 text-sm">
-                    {cliente.tipoPessoa === "PESSOA_JURIDICA" ? (
-                      <div>
-                        {/* Exibir nome fantasia em destaque (ou razão social/nome se não tiver) */}
-                        <div className="font-medium text-foreground">
-                          {cliente.nome_fantasia ||
-                            cliente.nome_razao ||
-                            cliente.nome}
-                        </div>
-                        {/* Exibir razão social abaixo quando:
-                            - Tiver nome fantasia E razão social E forem diferentes, OU
-                            - Não tiver nome fantasia mas tiver razão social */}
-                        {((cliente.nome_fantasia &&
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : (
+            clientes.map((cliente) => (
+              <TableRow key={cliente.id}>
+                <TableCell>
+                  {cliente.tipoPessoa === "PESSOA_JURIDICA" ? (
+                    <div className="flex flex-col">
+                      <span className="font-medium">
+                        {cliente.nome_fantasia ||
+                          cliente.nome_razao ||
+                          cliente.nome}
+                      </span>
+                      {((cliente.nome_fantasia &&
+                        cliente.nome_razao &&
+                        cliente.nome_fantasia !== cliente.nome_razao) ||
+                        (!cliente.nome_fantasia &&
                           cliente.nome_razao &&
-                          cliente.nome_fantasia !== cliente.nome_razao) ||
-                          (!cliente.nome_fantasia &&
-                            cliente.nome_razao &&
-                            cliente.nome_razao !== cliente.nome)) && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {cliente.nome_razao}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="font-medium text-foreground">
-                        {cliente.nome}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-muted-foreground">
+                          cliente.nome_razao !== cliente.nome)) && (
+                        <span className="text-sm text-muted-foreground">
+                          {cliente.nome_razao}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="font-medium">{cliente.nome}</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-sm text-muted-foreground">
                     {cliente.cpf_cnpj}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Mail className="w-3 h-3" />
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Mail className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
                       {cliente.contato?.[0]?.email || "-"}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
-                      {cliente.contato?.[0]?.telefone || "-"}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-xs px-2 py-1 rounded-full font-medium bg-royal/10 text-royal">
-                      {cliente.tipoPessoa === "PESSOA_FISICA" ? "PF" : "PJ"}
                     </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    {onStatusChange ? (
-                      <Select
-                        value={cliente.statusCliente}
-                        onValueChange={(value) => {
-                          if (value !== cliente.statusCliente) {
-                            onStatusChange(cliente.id, value as StatusCliente);
-                          }
-                        }}
-                        disabled={updatingStatusId === cliente.id}
-                      >
-                        <SelectTrigger
-                          className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${getStatusColor(
-                            cliente.statusCliente
-                          )}`}
-                        >
-                          <SelectValue>
-                            {updatingStatusId === cliente.id ? (
-                              <div className="flex items-center gap-2">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                <span>Atualizando...</span>
-                              </div>
-                            ) : (
-                              getStatusLabel(cliente.statusCliente)
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={StatusCliente.ATIVO}>
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-cyan"></span>
-                              Ativo
-                            </div>
-                          </SelectItem>
-                          <SelectItem value={StatusCliente.INATIVO}>
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-muted-foreground"></span>
-                              Inativo
-                            </div>
-                          </SelectItem>
-                          <SelectItem value={StatusCliente.BLOQUEADO}>
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                              Bloqueado
-                            </div>
-                          </SelectItem>
-                          <SelectItem value={StatusCliente.INADIMPLENTE}>
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                              Inadimplente
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {cliente.contato?.[0]?.telefone || "-"}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                    {cliente.tipoPessoa === "PESSOA_FISICA" ? "PF" : "PJ"}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {onStatusChange ? (
+                    <Select
+                      value={cliente.statusCliente}
+                      onValueChange={(value) => {
+                        if (value !== cliente.statusCliente) {
+                          onStatusChange(cliente.id, value as StatusCliente);
+                        }
+                      }}
+                      disabled={updatingStatusId === cliente.id}
+                    >
+                      <SelectTrigger
+                        className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${getStatusColor(
                           cliente.statusCliente
                         )}`}
                       >
-                        {getStatusLabel(cliente.statusCliente)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex gap-1">
-                      <button
-                        className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                        onClick={() => onView(cliente.id)}
-                        title="Visualizar cliente"
-                      >
-                        <Eye className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button
-                        className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                        onClick={() => onEdit(cliente.id)}
-                        title="Editar cliente"
-                      >
-                        <Edit className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button
-                        className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+                        <SelectValue>
+                          {updatingStatusId === cliente.id ? (
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Atualizando...</span>
+                            </div>
+                          ) : (
+                            getStatusLabel(cliente.statusCliente)
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={StatusCliente.ATIVO}>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            Ativo
+                          </div>
+                        </SelectItem>
+                        <SelectItem value={StatusCliente.INATIVO}>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                            Inativo
+                          </div>
+                        </SelectItem>
+                        <SelectItem value={StatusCliente.BLOQUEADO}>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                            Bloqueado
+                          </div>
+                        </SelectItem>
+                        <SelectItem value={StatusCliente.INADIMPLENTE}>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                            Inadimplente
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(
+                        cliente.statusCliente
+                      )}`}
+                    >
+                      {getStatusLabel(cliente.statusCliente)}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onView(cliente.id)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Visualizar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEdit(cliente.id)}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         onClick={() => onDelete(cliente.id)}
-                        title="Excluir cliente"
+                        className="text-destructive focus:text-destructive"
                       >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </motion.div>
   );
 };

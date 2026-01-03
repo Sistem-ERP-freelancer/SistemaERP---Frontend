@@ -18,7 +18,8 @@ import {
   ShoppingCart,
   Loader2,
   Info,
-  Receipt
+  Receipt,
+  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,20 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { financeiroService, CreateContaFinanceiraDto } from "@/services/financeiro.service";
@@ -1000,92 +1015,109 @@ const Financeiro = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-xl border border-border overflow-hidden"
+          className="rounded-md border overflow-hidden"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-sidebar text-sidebar-foreground">
-                  <th className="text-left py-3 px-4 text-sm font-medium">ID</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Descrição</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Tipo</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Categoria</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Valor</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Data</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoadingContas ? (
-                  <tr>
-                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando contas...
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredTransacoes.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                      Nenhuma transação encontrada
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTransacoes.map((transacao) => (
-                    <tr key={transacao.id} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
-                      <td className="py-3 px-4 text-sm font-medium text-foreground">{transacao.id}</td>
-                      <td className="py-3 px-4 text-sm text-foreground">{transacao.descricao}</td>
-                      <td className="py-3 px-4">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                          transacao.tipo === "Receita" ? "bg-cyan/10 text-cyan" : "bg-destructive/10 text-destructive"
-                        }`}>
-                          {transacao.tipo}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">{transacao.categoria}</td>
-                      <td className="py-3 px-4 text-sm font-medium text-foreground">{transacao.valor}</td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">{transacao.data}</td>
-                      <td className="py-3 px-4">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
-                          {transacao.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-1">
-                          <button 
-                            className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                            onClick={() => {
-                              setSelectedContaId(transacao.contaId);
-                              setViewDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button 
-                            className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                            onClick={() => {
-                              setSelectedContaId(transacao.contaId);
-                              setEditDialogOpen(true);
-                            }}
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button 
-                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Descrição</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Valor</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingContas ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Carregando contas...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredTransacoes.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <DollarSign className="w-12 h-12 text-muted-foreground/50" />
+                      <p>Nenhuma transação encontrada</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredTransacoes.map((transacao) => (
+                  <TableRow key={transacao.id}>
+                    <TableCell>
+                      <span className="font-medium">{transacao.id}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{transacao.descricao}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        transacao.tipo === "Receita" 
+                          ? "bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800" 
+                          : "bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                      }`}>
+                        {transacao.tipo}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{transacao.categoria}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{transacao.valor}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{transacao.data}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
+                        {transacao.status}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => {
+                            setSelectedContaId(transacao.contaId);
+                            setViewDialogOpen(true);
+                          }}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Visualizar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            setSelectedContaId(transacao.contaId);
+                            setEditDialogOpen(true);
+                          }}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => handleDelete(transacao.id)}
+                            className="text-destructive focus:text-destructive"
                           >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
           
           {/* Paginação */}
           {totalPages > 1 && (
@@ -1668,6 +1700,7 @@ const Financeiro = () => {
 };
 
 export default Financeiro;
+
 
 
 

@@ -37,6 +37,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Pagination,
   PaginationContent,
   PaginationItem,
@@ -558,59 +566,46 @@ const Estoque = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-xl border border-border overflow-hidden"
+          className="rounded-md border overflow-hidden"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-sidebar text-sidebar-foreground">
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Tipo
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    SKU
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Produto
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Qtd
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Data/Hora
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Motivo
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoadingMovimentacoes ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando movimentações...
-                      </div>
-                    </td>
-                  </tr>
-                ) : movimentacoesFiltradas.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                      Nenhuma movimentação encontrada
-                    </td>
-                  </tr>
-                ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tipo</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Produto</TableHead>
+                <TableHead>Qtd</TableHead>
+                <TableHead>Data/Hora</TableHead>
+                <TableHead>Motivo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingMovimentacoes ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Carregando movimentações...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : movimentacoesFiltradas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <Package className="w-12 h-12 text-muted-foreground/50" />
+                      <p>Nenhuma movimentação encontrada</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
                   movimentacoesFiltradas.map((mov) => {
                     const entrada = isEntrada(mov.tipo);
                     const saida = isSaida(mov.tipo);
 
                     return (
-                      <tr
-                        key={mov.id}
-                        className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
-                      >
-                        <td className="py-3 px-4 align-middle">
+                      <TableRow key={mov.id}>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             {mov.tipo === "ENTRADA" && (
                               <span 
@@ -691,14 +686,16 @@ const Estoque = () => {
                               </span>
                             )}
                           </div>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
-                          {mov.produto?.sku || "-"}
-                        </td>
-                        <td className="py-3 px-4 text-sm font-medium text-foreground align-middle">
-                          {mov.produto?.nome || "-"}
-                        </td>
-                        <td className="py-3 px-4 align-middle">
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-sm text-muted-foreground">
+                            {mov.produto?.sku || "-"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">{mov.produto?.nome || "-"}</span>
+                        </TableCell>
+                        <TableCell>
                           <span
                             className="text-sm font-medium"
                             style={{
@@ -711,20 +708,23 @@ const Estoque = () => {
                           >
                             {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") ? "+" : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") ? "-" : ""}{mov.quantidade}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
-                          {formatarDataHora(mov.criado_em)}
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
-                          {mov.motivo || "-"}
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {formatarDataHora(mov.criado_em)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {mov.motivo || "-"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
-          </div>
+            </TableBody>
+          </Table>
           
           {/* Paginação */}
           {totalPages > 1 && (

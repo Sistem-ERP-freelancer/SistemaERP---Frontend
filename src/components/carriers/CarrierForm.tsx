@@ -1,0 +1,499 @@
+import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Transportadora, CreateTransportadoraDto } from '@/types/carrier';
+import { formatCNPJ, formatCEP, formatTelefone } from '@/lib/validators';
+import { Loader2, Building2, FileText, Hash, Mail, Phone, MapPin, Info, Circle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface CarrierFormProps {
+  /** Controla visibilidade do modal */
+  isOpen: boolean;
+  
+  /** Callback ao fechar */
+  onClose: () => void;
+  
+  /** Callback ao submeter formulário */
+  onSubmit: (data: CreateTransportadoraDto) => void;
+  
+  /** Transportadora para edição (null = criação) */
+  carrier?: Transportadora | null;
+  
+  /** Se está processando */
+  isPending?: boolean;
+}
+
+export function CarrierForm({
+  isOpen,
+  onClose,
+  onSubmit,
+  carrier,
+  isPending = false,
+}: CarrierFormProps) {
+  const [formData, setFormData] = useState<CreateTransportadoraDto>({
+    nome: '',
+    nome_fantasia: '',
+    cnpj: '',
+    inscricao_estadual: '',
+    telefone: '',
+    email: '',
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
+    ativo: true,
+    observacoes: '',
+  });
+
+  useEffect(() => {
+    if (carrier) {
+      setFormData({
+        nome: carrier.nome || '',
+        nome_fantasia: carrier.nome_fantasia || '',
+        cnpj: carrier.cnpj || '',
+        inscricao_estadual: carrier.inscricao_estadual || '',
+        telefone: carrier.telefone || '',
+        email: carrier.email || '',
+        cep: carrier.cep || '',
+        logradouro: carrier.logradouro || '',
+        numero: carrier.numero || '',
+        complemento: carrier.complemento || '',
+        bairro: carrier.bairro || '',
+        cidade: carrier.cidade || '',
+        estado: carrier.estado || '',
+        ativo: carrier.ativo ?? true,
+        observacoes: carrier.observacoes || '',
+      });
+    } else {
+      // Reset form
+      setFormData({
+        nome: '',
+        nome_fantasia: '',
+        cnpj: '',
+        inscricao_estadual: '',
+        telefone: '',
+        email: '',
+        cep: '',
+        logradouro: '',
+        numero: '',
+        complemento: '',
+        bairro: '',
+        cidade: '',
+        estado: '',
+        ativo: true,
+        observacoes: '',
+      });
+    }
+  }, [carrier, isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validação básica
+    if (!formData.nome || formData.nome.trim().length < 3) {
+      return;
+    }
+
+    onSubmit(formData);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold">
+            {carrier ? 'Editar Transportadora' : 'Nova Transportadora'}
+          </DialogTitle>
+          <DialogDescription className="mt-1">
+            {carrier
+              ? 'Atualize as informações da transportadora no sistema'
+              : 'Preencha os dados para criar uma nova transportadora'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-8 pt-6">
+          {/* Seção: Informações Básicas */}
+          <div className="bg-card border rounded-lg p-6 space-y-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <Building2 className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">
+                  Informações Básicas
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Dados principais da transportadora
+                </p>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Nome/Razão Social <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="nome"
+                  value={formData.nome}
+                  onChange={(e) =>
+                    setFormData({ ...formData, nome: e.target.value })
+                  }
+                  placeholder="Nome da transportadora"
+                  required
+                  minLength={3}
+                  maxLength={255}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Nome Fantasia
+                </Label>
+                <Input
+                  id="nome_fantasia"
+                  value={formData.nome_fantasia || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, nome_fantasia: e.target.value })
+                  }
+                  placeholder="Nome fantasia (opcional)"
+                  maxLength={255}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-muted-foreground" />
+                    CNPJ
+                  </Label>
+                  <Input
+                    id="cnpj"
+                    value={formData.cnpj || ''}
+                    onChange={(e) => {
+                      const formatted = formatCNPJ(e.target.value);
+                      setFormData({ ...formData, cnpj: formatted });
+                    }}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-muted-foreground" />
+                    Inscrição Estadual
+                  </Label>
+                  <Input
+                    id="inscricao_estadual"
+                    value={formData.inscricao_estadual || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        inscricao_estadual: e.target.value,
+                      })
+                    }
+                    placeholder="Inscrição estadual (opcional)"
+                    maxLength={50}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção: Contato */}
+          <div className="bg-card border rounded-lg p-6 space-y-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Phone className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">
+                  Contato
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Informações de contato da transportadora
+                </p>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    Telefone
+                  </Label>
+                  <Input
+                    id="telefone"
+                    value={formData.telefone || ''}
+                    onChange={(e) => {
+                      const formatted = formatTelefone(e.target.value);
+                      setFormData({ ...formData, telefone: formatted });
+                    }}
+                    placeholder="(00) 00000-0000"
+                    maxLength={20}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-muted-foreground" />
+                    E-mail
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção: Endereço */}
+          <div className="bg-card border rounded-lg p-6 space-y-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <MapPin className="w-5 h-5 text-green-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">
+                  Endereço
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Localização da transportadora
+                </p>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    CEP
+                  </Label>
+                  <Input
+                    id="cep"
+                    value={formData.cep || ''}
+                    onChange={(e) => {
+                      const formatted = formatCEP(e.target.value);
+                      setFormData({ ...formData, cep: formatted });
+                    }}
+                    placeholder="00000-000"
+                    maxLength={9}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    Estado (UF)
+                  </Label>
+                  <Input
+                    id="estado"
+                    value={formData.estado || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        estado: e.target.value.toUpperCase().slice(0, 2),
+                      })
+                    }
+                    placeholder="SP"
+                    maxLength={2}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  Logradouro
+                </Label>
+                <Input
+                  id="logradouro"
+                  value={formData.logradouro || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, logradouro: e.target.value })
+                  }
+                  placeholder="Rua, Avenida, etc."
+                  maxLength={255}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    Número
+                  </Label>
+                  <Input
+                    id="numero"
+                    value={formData.numero || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, numero: e.target.value })
+                    }
+                    placeholder="123"
+                    maxLength={20}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    Complemento
+                  </Label>
+                  <Input
+                    id="complemento"
+                    value={formData.complemento || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, complemento: e.target.value })
+                    }
+                    placeholder="Apto, Sala, etc."
+                    maxLength={100}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    Bairro
+                  </Label>
+                  <Input
+                    id="bairro"
+                    value={formData.bairro || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, bairro: e.target.value })
+                    }
+                    placeholder="Nome do bairro"
+                    maxLength={100}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    Cidade
+                  </Label>
+                  <Input
+                    id="cidade"
+                    value={formData.cidade || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, cidade: e.target.value })
+                    }
+                    placeholder="Nome da cidade"
+                    maxLength={100}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção: Outros */}
+          <div className="bg-card border rounded-lg p-6 space-y-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-gray-500/10">
+                <Info className="w-5 h-5 text-gray-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">
+                  Outros
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Observações e status da transportadora
+                </p>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Observações
+                </Label>
+                <Textarea
+                  id="observacoes"
+                  value={formData.observacoes || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, observacoes: e.target.value })
+                  }
+                  placeholder="Observações adicionais sobre a transportadora"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Status</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  {(['ATIVO', 'INATIVO'] as const).map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          ativo: status === 'ATIVO',
+                        })
+                      }
+                      className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                        (status === 'ATIVO' && formData.ativo) ||
+                        (status === 'INATIVO' && !formData.ativo)
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border bg-card hover:border-primary/50'
+                      }`}
+                    >
+                      <Circle
+                        className={`w-4 h-4 ${
+                          (status === 'ATIVO' && formData.ativo) ||
+                          (status === 'INATIVO' && !formData.ativo)
+                            ? status === 'ATIVO'
+                              ? 'text-green-500 fill-green-500'
+                              : 'text-muted-foreground fill-muted-foreground'
+                            : 'text-muted-foreground'
+                        }`}
+                      />
+                      <span className="font-medium">{status}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            className="w-full"
+            variant="gradient"
+            disabled={isPending}
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {carrier ? 'Atualizando...' : 'Criando...'}
+              </>
+            ) : (
+              carrier ? 'Atualizar Transportadora' : 'Criar Transportadora'
+            )}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

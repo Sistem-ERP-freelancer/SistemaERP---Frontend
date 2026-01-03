@@ -41,6 +41,20 @@ import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -111,6 +125,7 @@ import {
   RotateCcw,
   AlertTriangle,
   Settings,
+  MoreVertical,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -1991,67 +2006,46 @@ const Produtos = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-xl border border-border overflow-hidden"
+          className="rounded-md border overflow-hidden"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-sidebar text-sidebar-foreground">
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Nome
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    SKU
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Preço
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Estoque
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Categoria
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium align-middle">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoadingProdutos ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando produtos...
-                      </div>
-                    </td>
-                  </tr>
-                ) : errorProdutos ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-8 text-center text-destructive"
-                    >
-                      Erro ao carregar produtos. Tente novamente.
-                    </td>
-                  </tr>
-                ) : filteredProdutos.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      Nenhum produto encontrado
-                    </td>
-                  </tr>
-                ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Preço</TableHead>
+                <TableHead>Estoque</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingProdutos ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Carregando produtos...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : errorProdutos ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-destructive">
+                    Erro ao carregar produtos. Tente novamente.
+                  </TableCell>
+                </TableRow>
+              ) : filteredProdutos.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <Package className="w-12 h-12 text-muted-foreground/50" />
+                      <p>Nenhum produto encontrado</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
                   filteredProdutos.map((produto) => {
                     // Primeiro tenta usar a categoria que vem no produto (se populada pela API)
                     let categoriaNome = produto.categoria?.nome;
@@ -2082,20 +2076,19 @@ const Produtos = () => {
                     }
                     
                     return (
-                      <tr
-                        key={produto.id}
-                        className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
-                      >
-                        <td className="py-3 px-4 text-sm font-medium text-foreground align-middle">
-                          {produto.nome}
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
-                          {produto.sku}
-                        </td>
-                        <td className="py-3 px-4 text-sm font-medium text-foreground align-middle">
-                          R$ {produto.preco_venda.toFixed(2).replace(".", ",")}
-                        </td>
-                        <td className="py-3 px-4 align-middle">
+                      <TableRow key={produto.id}>
+                        <TableCell>
+                          <span className="font-medium">{produto.nome}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-sm text-muted-foreground">{produto.sku}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">
+                            R$ {produto.preco_venda.toFixed(2).replace(".", ",")}
+                          </span>
+                        </TableCell>
+                        <TableCell>
                           <span
                             className="text-sm font-medium"
                             style={{
@@ -2104,66 +2097,63 @@ const Produtos = () => {
                           >
                             {produto.estoque_atual}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground align-middle">
-                          {categoriaNome}
-                        </td>
-                        <td className="py-3 px-4 align-middle">
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">{categoriaNome}</span>
+                        </TableCell>
+                        <TableCell>
                           <span
                             className={`text-xs px-2 py-1 rounded-full font-medium ${
                               produto.statusProduto === "ATIVO"
-                                ? "bg-cyan/10 text-cyan"
-                                : "bg-muted text-muted-foreground"
+                                ? "bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                : "bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
                             }`}
                           >
                             {produto.statusProduto === "ATIVO" ? "Ativo" : "Inativo"}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 align-middle">
-                          <div className="flex gap-1">
-                            <button 
-                              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                              onClick={() => {
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
                                 setSelectedProduto(produto);
                                 setViewDialogOpen(true);
-                              }}
-                              title="Visualizar produto"
-                            >
-                              <Eye className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                            <button 
-                              className="p-2 hover:bg-purple-500/10 rounded-lg transition-colors"
-                              onClick={() => {
+                              }}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                Visualizar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => {
                                 setSelectedProduto(produto);
                                 setHistoricoSheetOpen(true);
-                              }}
-                              title="Ver histórico de movimentações"
-                            >
-                              <History className="w-4 h-4 text-purple-600" />
-                            </button>
-                            <button 
-                              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                              onClick={() => handleEdit(produto)}
-                              title="Editar produto"
-                            >
-                              <Edit className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                            <button 
-                              className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                              onClick={() => handleDelete(produto.id)}
-                              title="Excluir produto"
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </button>
-                          </div>
-                        </td>
-                    </tr>
+                              }}>
+                                <History className="w-4 h-4 mr-2" />
+                                Histórico
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEdit(produto)}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(produto.id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
-          </div>
+            </TableBody>
+          </Table>
           
           {/* Paginação */}
           {totalPages > 1 && (

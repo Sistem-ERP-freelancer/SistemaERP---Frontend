@@ -46,6 +46,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cleanDocument, formatCNPJ, formatCPF, formatCEP, formatTelefone } from "@/lib/validators";
 import {
   CreateFornecedorDto,
@@ -83,6 +97,7 @@ import {
   User as UserIcon,
   Users,
   XCircle,
+  MoreVertical,
 } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -2814,180 +2829,167 @@ const Fornecedores = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-card rounded-xl border border-border overflow-hidden"
+          className="rounded-md border overflow-hidden"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-sidebar text-sidebar-foreground">
-                  <th className="text-left py-3 px-4 text-sm font-medium">
-                    Nome
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
-                    CNPJ
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
-                    E-mail
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
-                    Telefone
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoadingFornecedores ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando fornecedores...
-                      </div>
-                    </td>
-                  </tr>
-                ) : fornecedores.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      Nenhum fornecedor encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  fornecedores.map((fornecedor) => (
-                    <tr
-                      key={fornecedor.id}
-                      className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors"
-                    >
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-foreground">
-                            {fornecedor.nome_fantasia || fornecedor.nome_razao || "-"}
-                          </span>
-                          {fornecedor.tipoFornecedor === "PESSOA_JURIDICA" &&
-                            fornecedor.nome_razao &&
-                            fornecedor.nome_fantasia !== fornecedor.nome_razao && (
-                            <span className="text-xs text-muted-foreground mt-0.5">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>CNPJ</TableHead>
+                <TableHead>E-mail</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingFornecedores ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Carregando fornecedores...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : fornecedores.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <Building2 className="w-12 h-12 text-muted-foreground/50" />
+                      <p>Nenhum fornecedor encontrado</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                fornecedores.map((fornecedor) => (
+                  <TableRow key={fornecedor.id}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">
+                          {fornecedor.nome_fantasia || fornecedor.nome_razao || "-"}
+                        </span>
+                        {fornecedor.tipoFornecedor === "PESSOA_JURIDICA" &&
+                          fornecedor.nome_razao &&
+                          fornecedor.nome_fantasia !== fornecedor.nome_razao && (
+                            <span className="text-sm text-muted-foreground">
                               {fornecedor.nome_razao}
                             </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-sm text-muted-foreground">
                         {fornecedor.cpf_cnpj || "-"}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
                           {fornecedor.contato && fornecedor.contato.length > 0
                             ? fornecedor.contato[0].email || "-"
                             : "-"}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
                           {fornecedor.contato && fornecedor.contato.length > 0
                             ? fornecedor.contato[0].telefone || "-"
                             : "-"}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <Select
-                          value={fornecedor.statusFornecedor}
-                          onValueChange={(value) => {
-                            if (value !== fornecedor.statusFornecedor) {
-                              handleStatusChange(fornecedor.id, value as "ATIVO" | "INATIVO" | "BLOQUEADO");
-                            }
-                          }}
-                          disabled={updatingStatusId === fornecedor.id}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={fornecedor.statusFornecedor}
+                        onValueChange={(value) => {
+                          if (value !== fornecedor.statusFornecedor) {
+                            handleStatusChange(fornecedor.id, value as "ATIVO" | "INATIVO" | "BLOQUEADO");
+                          }
+                        }}
+                        disabled={updatingStatusId === fornecedor.id}
+                      >
+                        <SelectTrigger
+                          className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
+                            fornecedor.statusFornecedor === "ATIVO"
+                              ? "bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                              : fornecedor.statusFornecedor === "INATIVO"
+                              ? "bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
+                              : "bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                          }`}
                         >
-                          <SelectTrigger
-                            className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
+                          <SelectValue>
+                            {updatingStatusId === fornecedor.id ? (
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Atualizando...</span>
+                              </div>
+                            ) : (
                               fornecedor.statusFornecedor === "ATIVO"
-                                ? "bg-cyan/10 text-cyan"
+                                ? "Ativo"
                                 : fornecedor.statusFornecedor === "INATIVO"
-                                ? "bg-muted text-muted-foreground"
-                                : "bg-red-500/10 text-red-500"
-                            }`}
-                          >
-                            <SelectValue>
-                              {updatingStatusId === fornecedor.id ? (
-                                <div className="flex items-center gap-2">
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  <span>Atualizando...</span>
-                                </div>
-                              ) : (
-                                fornecedor.statusFornecedor === "ATIVO"
-                                  ? "Ativo"
-                                  : fornecedor.statusFornecedor === "INATIVO"
-                                  ? "Inativo"
-                                  : "Bloqueado"
-                              )}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ATIVO">
-                              <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-cyan"></span>
-                                Ativo
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="INATIVO">
-                              <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-muted-foreground"></span>
-                                Inativo
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="BLOQUEADO">
-                              <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                                Bloqueado
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-1">
-                          <button 
-                            className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                            onClick={() => handleView(fornecedor.id)}
-                            title="Visualizar"
-                          >
-                            <Eye className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button 
-                            className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                            onClick={() => handleEdit(fornecedor.id)}
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                          <button
-                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+                                ? "Inativo"
+                                : "Bloqueado"
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ATIVO">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              Ativo
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="INATIVO">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                              Inativo
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="BLOQUEADO">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              Bloqueado
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleView(fornecedor.id)}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Visualizar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEdit(fornecedor.id)}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => handleDelete(fornecedor.id)}
-                            title="Excluir"
+                            className="text-destructive focus:text-destructive"
                           >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
           
           {/* Paginação */}
           {totalPages > 1 && (

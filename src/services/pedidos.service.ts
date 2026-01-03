@@ -1,79 +1,14 @@
 import { apiClient } from './api';
+import {
+  Pedido,
+  CreatePedidoDto,
+  PedidosResponse,
+  FiltrosPedidos,
+} from '@/types/pedido';
 
-export interface ItemPedido {
-  produto_id: number;
-  quantidade: number;
-  preco_unitario: number;
-  desconto?: number;
-}
-
-export interface Pedido {
-  id: number;
-  numero_pedido: string;
-  tipo: 'VENDA' | 'COMPRA';
-  status: 'PENDENTE' | 'APROVADO' | 'EM_PROCESSAMENTO' | 'CONCLUIDO' | 'CANCELADO';
-  cliente_id?: number;
-  fornecedor_id?: number;
-  transportadora_id?: number;
-  usuario_criacao_id?: string;
-  usuario_atualizacao_id?: string;
-  data_pedido: string;
-  data_entrega_prevista?: string;
-  data_entrega_realizada?: string;
-  condicao_pagamento?: string;
-  forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA';
-  prazo_entrega_dias?: number;
-  subtotal: number;
-  desconto_valor: number;
-  desconto_percentual: number;
-  frete: number;
-  outras_taxas: number;
-  valor_total: number;
-  observacoes_internas?: string;
-  observacoes_cliente?: string;
-  itens: ItemPedido[];
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface CreatePedidoDto {
-  tipo: 'VENDA' | 'COMPRA';
-  cliente_id?: number;
-  fornecedor_id?: number;
-  transportadora_id?: number;
-  data_pedido: string;
-  data_entrega_prevista?: string;
-  condicao_pagamento?: string;
-  forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA';
-  prazo_entrega_dias?: number;
-  subtotal?: number;
-  desconto_valor?: number;
-  desconto_percentual?: number;
-  frete?: number;
-  outras_taxas?: number;
-  observacoes_internas?: string;
-  observacoes_cliente?: string;
-  itens: ItemPedido[];
-}
-
-export interface PedidosResponse {
-  data: Pedido[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface FiltrosPedidos {
-  id?: number;
-  tipo?: 'VENDA' | 'COMPRA';
-  status?: 'PENDENTE' | 'APROVADO' | 'EM_PROCESSAMENTO' | 'CONCLUIDO' | 'CANCELADO';
-  cliente_id?: number;
-  cliente_nome?: string;
-  fornecedor_id?: number;
-  fornecedor_nome?: string;
-  page?: number;
-  limit?: number;
-}
+// Re-exportar tipos para compatibilidade
+export type { Pedido, CreatePedidoDto, PedidosResponse, FiltrosPedidos };
+export type { PedidoItem as ItemPedido } from '@/types/pedido';
 
 class PedidosService {
   async listar(params?: FiltrosPedidos): Promise<PedidosResponse> {
@@ -87,6 +22,8 @@ class PedidosService {
     if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
     if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
     if (params?.fornecedor_nome) queryParams.append('fornecedor_nome', params.fornecedor_nome);
+    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
+    if (params?.data_final) queryParams.append('data_final', params.data_final);
 
     const query = queryParams.toString();
     return apiClient.get<PedidosResponse>(`/pedidos${query ? `?${query}` : ''}`);
