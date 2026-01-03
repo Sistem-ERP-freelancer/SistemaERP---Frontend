@@ -68,9 +68,9 @@ export const ClienteTable = ({
       case "INATIVO":
         return "bg-muted text-muted-foreground";
       case "BLOQUEADO":
-        return "bg-amber-500/10 text-amber-500";
-      case "INADIMPLENTE":
         return "bg-red-500/10 text-red-500";
+      case "INADIMPLENTE":
+        return "bg-orange-500/10 text-orange-500";
       default:
         return "bg-muted text-muted-foreground";
     }
@@ -270,13 +270,13 @@ export const ClienteTable = ({
                           </SelectItem>
                           <SelectItem value={StatusCliente.BLOQUEADO}>
                             <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
                               Bloqueado
                             </div>
                           </SelectItem>
                           <SelectItem value={StatusCliente.INADIMPLENTE}>
                             <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
                               Inadimplente
                             </div>
                           </SelectItem>

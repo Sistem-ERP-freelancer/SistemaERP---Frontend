@@ -1758,7 +1758,7 @@ const Clientes = () => {
                           htmlFor="status-bloqueado"
                           className="flex items-center gap-2 cursor-pointer flex-1"
                         >
-                          <Circle className="w-3 h-3 text-amber-500" />
+                          <Circle className="w-3 h-3 text-red-500" />
                           <span>Bloqueado</span>
                         </Label>
                       </div>
@@ -1771,7 +1771,7 @@ const Clientes = () => {
                           htmlFor="status-inadimplente"
                           className="flex items-center gap-2 cursor-pointer flex-1"
                         >
-                          <Circle className="w-3 h-3 text-red-500" />
+                          <Circle className="w-3 h-3 text-orange-500" />
                           <span>Inadimplente</span>
                         </Label>
                       </div>
@@ -2066,8 +2066,8 @@ const Clientes = () => {
                             : selectedCliente.statusCliente === "INATIVO"
                             ? "bg-muted text-muted-foreground"
                             : selectedCliente.statusCliente === "BLOQUEADO"
-                            ? "bg-amber-500/10 text-amber-500"
-                            : "bg-red-500/10 text-red-500"
+                            ? "bg-red-500/10 text-red-500"
+                            : "bg-orange-500/10 text-orange-500"
                         }`}
                       >
                         {selectedCliente.statusCliente}
@@ -2739,53 +2739,6 @@ const Clientes = () => {
                     </div>
                   )}
 
-                  {/* Status */}
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Status</Label>
-                    <div className="grid grid-cols-2 gap-4">
-                      {(
-                        [
-                          "ATIVO",
-                          "INATIVO",
-                          "BLOQUEADO",
-                          "INADIMPLENTE",
-                        ] as const
-                      ).map((status) => (
-                        <button
-                          key={status}
-                          type="button"
-                          onClick={() =>
-                            setEditCliente({
-                              ...editCliente,
-                              statusCliente: status,
-                            })
-                          }
-                          className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                            (editCliente.statusCliente ||
-                              selectedCliente.statusCliente) === status
-                              ? "border-primary bg-primary/5"
-                              : "border-border bg-card hover:border-primary/50"
-                          }`}
-                        >
-                          <Circle
-                            className={`w-4 h-4 ${
-                              (editCliente.statusCliente ||
-                                selectedCliente.statusCliente) === status
-                                ? status === "ATIVO"
-                                  ? "text-green-500 fill-green-500"
-                                  : status === "INATIVO"
-                                  ? "text-muted-foreground fill-muted-foreground"
-                                  : status === "BLOQUEADO"
-                                  ? "text-red-500 fill-red-500"
-                                  : "text-primary fill-primary"
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                          <span className="font-medium">{status}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -3202,7 +3155,6 @@ const Clientes = () => {
                             nome_fantasia: editCliente.nome_fantasia,
                             nome_razao: editCliente.nome_razao,
                             tipoPessoa: editCliente.tipoPessoa,
-                            statusCliente: editCliente.statusCliente,
                             cpf_cnpj: editCliente.cpf_cnpj,
                             inscricao_estadual: editCliente.inscricao_estadual,
                             enderecos: editEnderecos, // Sempre enviar array se houver endereços

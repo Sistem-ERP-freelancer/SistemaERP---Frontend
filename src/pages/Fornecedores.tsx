@@ -6,7 +6,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -1337,10 +1336,6 @@ const Fornecedores = () => {
       payload.tipoFornecedor = editFornecedor.tipoFornecedor;
     }
     
-    // statusFornecedor (camelCase, enum)
-    if (editFornecedor.statusFornecedor !== fornecedorOriginal.statusFornecedor) {
-      payload.statusFornecedor = editFornecedor.statusFornecedor;
-    }
     
     // cpf_cnpj (snake_case, string)
     const cpfCnpj = prepararCampoParaEnvio(
@@ -1653,6 +1648,17 @@ const Fornecedores = () => {
             <h1 className="text-2xl font-bold text-foreground">Fornecedores</h1>
             <p className="text-muted-foreground">Gerencie seus fornecedores</p>
           </div>
+          <Button 
+            variant="gradient" 
+            className="gap-2"
+            onClick={() => {
+              resetForm();
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="w-4 h-4" />
+            Criar Fornecedor
+          </Button>
           <Dialog
             open={dialogOpen}
             onOpenChange={(open) => {
@@ -1662,12 +1668,6 @@ const Fornecedores = () => {
               }
             }}
           >
-            <DialogTrigger asChild>
-              <Button variant="gradient" className="gap-2">
-                <Plus className="w-4 h-4" />
-                Criar Fornecedor
-              </Button>
-            </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <div className="flex items-center justify-between">
@@ -3694,44 +3694,6 @@ const Fornecedores = () => {
                     </div>
                   )}
 
-                  {/* Status */}
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Status</Label>
-                    <div className="grid grid-cols-3 gap-4">
-                      {(["ATIVO", "INATIVO", "BLOQUEADO"] as const).map((status) => (
-                        <button
-                          key={status}
-                          type="button"
-                          onClick={() =>
-                            setEditFornecedor({
-                              ...editFornecedor,
-                              statusFornecedor: status,
-                            })
-                          }
-                          className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                            editFornecedor.statusFornecedor === status
-                              ? "border-primary bg-primary/5"
-                              : "border-border bg-card hover:border-primary/50"
-                          }`}
-                        >
-                          <Circle
-                            className={`w-4 h-4 ${
-                              editFornecedor.statusFornecedor === status
-                                ? status === "ATIVO"
-                                  ? "text-green-500 fill-green-500"
-                                  : status === "INATIVO"
-                                  ? "text-muted-foreground fill-muted-foreground"
-                                  : status === "BLOQUEADO"
-                                  ? "text-red-500 fill-red-500"
-                                  : "text-primary fill-primary"
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                          <span className="font-medium">{status}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -4137,7 +4099,6 @@ const Fornecedores = () => {
                         nome_fantasia: editFornecedor.nome_fantasia,
                         nome_razao: editFornecedor.nome_razao,
                         tipoFornecedor: editFornecedor.tipoFornecedor,
-                        statusFornecedor: editFornecedor.statusFornecedor,
                         cpf_cnpj: editFornecedor.cpf_cnpj,
                         inscricao_estadual: editFornecedor.inscricao_estadual,
                         enderecos: editEnderecos, // Sempre enviar array se houver endereços

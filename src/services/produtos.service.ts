@@ -45,6 +45,8 @@ export interface CreateProdutoDto {
   preco_promocional?: number;
   estoque_atual: number;
   estoque_minimo: number;
+  estoque_maximo?: number;
+  localizacao?: string;
   statusProduto?: 'ATIVO' | 'INATIVO';
   unidade_medida: 'UN' | 'KG' | 'LT' | 'CX';
   data_validade?: string;

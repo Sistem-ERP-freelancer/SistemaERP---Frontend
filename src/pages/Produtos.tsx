@@ -16,7 +16,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogOverlay,
+  AlertDialogPortal,
 } from "@/components/ui/alert-dialog";
+import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +39,15 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Pagination,
   PaginationContent,
@@ -71,6 +83,7 @@ import {
   Building2,
   Calendar,
   Check,
+  ChevronsUpDown,
   Circle,
   DollarSign,
   Edit,
@@ -101,6 +114,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 
 const Produtos = () => {
@@ -127,6 +141,8 @@ const Produtos = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [historicoSheetOpen, setHistoricoSheetOpen] = useState(false);
+  const [fornecedorPopoverOpen, setFornecedorPopoverOpen] = useState(false);
+  const [fornecedorSearchTerm, setFornecedorSearchTerm] = useState("");
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
   const [editingProduto, setEditingProduto] = useState<Partial<CreateProdutoDto> & { estoque_maximo?: number; localizacao?: string }>({
     nome: "",
@@ -163,6 +179,8 @@ const Produtos = () => {
     preco_promocional: undefined,
     estoque_atual: 0,
     estoque_minimo: 0,
+    estoque_maximo: undefined,
+    localizacao: undefined,
     unidade_medida: "UN",
     statusProduto: "ATIVO",
     categoriaId: undefined,
@@ -181,6 +199,8 @@ const Produtos = () => {
   );
   const [newCategoriaNome, setNewCategoriaNome] = useState("");
   const [newCategoriaDescricao, setNewCategoriaDescricao] = useState("");
+  const [deleteCategoriaDialogOpen, setDeleteCategoriaDialogOpen] = useState(false);
+  const [categoriaToDelete, setCategoriaToDelete] = useState<Categoria | null>(null);
 
   // Buscar categorias (busca todas, não apenas ativas, para garantir que encontre as categorias dos produtos)
   const { data: categorias = [], isLoading: isLoadingCategorias } = useQuery({
@@ -210,11 +230,28 @@ const Produtos = () => {
     queryKey: ["fornecedores"],
     queryFn: async () => {
       try {
+        // Buscar todos os fornecedores (sem filtro de status para mostrar todos)
         const response = await fornecedoresService.listar({
-          limit: 100,
-          statusFornecedor: "ATIVO",
+          limit: 1000, // Aumentar limite para buscar mais fornecedores
+          // Removido filtro de status para mostrar todos os fornecedores
         });
-        return Array.isArray(response) ? response : response.data || [];
+        
+        // A API pode retornar em diferentes formatos
+        let fornecedoresList: Fornecedor[] = [];
+        
+        if (Array.isArray(response)) {
+          fornecedoresList = response;
+        } else if (response?.data && Array.isArray(response.data)) {
+          fornecedoresList = response.data;
+        } else if (response?.fornecedores && Array.isArray(response.fornecedores)) {
+          fornecedoresList = response.fornecedores;
+        }
+        
+        if (import.meta.env.DEV) {
+          console.log('[Produtos] Fornecedores carregados:', fornecedoresList.length, fornecedoresList);
+        }
+        
+        return fornecedoresList;
       } catch (error) {
         // Se a API não existir ainda, retorna array vazio
         console.warn("API de fornecedores não disponível:", error);
@@ -226,7 +263,15 @@ const Produtos = () => {
 
   const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData) 
     ? fornecedoresData 
-    : fornecedoresData?.data || [];
+    : [];
+
+  // Debug: log dos fornecedores carregados
+  useEffect(() => {
+    if (import.meta.env.DEV && fornecedores.length > 0) {
+      console.log('[Produtos] Total de fornecedores disponíveis:', fornecedores.length);
+      console.log('[Produtos] Fornecedores:', fornecedores);
+    }
+  }, [fornecedores]);
 
   // Verificar se há filtros ativos
   const temFiltrosAtivos = Object.values(filtrosAvancados).some(
@@ -398,6 +443,8 @@ const Produtos = () => {
         preco_promocional: undefined,
         estoque_atual: 0,
         estoque_minimo: 0,
+        estoque_maximo: undefined,
+        localizacao: undefined,
         unidade_medida: "UN",
         statusProduto: "ATIVO",
         categoriaId: undefined,
@@ -412,6 +459,8 @@ const Produtos = () => {
         largura: undefined,
       });
       setDialogOpen(false);
+      setFornecedorPopoverOpen(false);
+      setFornecedorSearchTerm("");
       toast.success("Produto cadastrado com sucesso!");
     },
     onError: (error: any) => {
@@ -444,19 +493,40 @@ const Produtos = () => {
       estoque_minimo: Number(newProduto.estoque_minimo) || 0,
       unidade_medida: newProduto.unidade_medida || "UN",
       statusProduto: newProduto.statusProduto || "ATIVO",
-      descricao: newProduto.descricao || undefined,
-      preco_promocional: newProduto.preco_promocional ? Number(newProduto.preco_promocional) : undefined,
-      categoriaId: newProduto.categoriaId,
-      fornecedorId: newProduto.fornecedorId,
-      data_validade: newProduto.data_validade || undefined,
-      ncm: newProduto.ncm || undefined,
-      cest: newProduto.cest || undefined,
-      cfop: newProduto.cfop || undefined,
-      observacoes: newProduto.observacoes || undefined,
-      peso: newProduto.peso ? Number(newProduto.peso) : undefined,
-      altura: newProduto.altura ? Number(newProduto.altura) : undefined,
-      largura: newProduto.largura ? Number(newProduto.largura) : undefined,
     };
+
+    // Adicionar campos opcionais apenas se tiverem valor
+    if (newProduto.descricao) produtoData.descricao = newProduto.descricao;
+    if (newProduto.preco_promocional) produtoData.preco_promocional = Number(newProduto.preco_promocional);
+    if (newProduto.categoriaId) produtoData.categoriaId = newProduto.categoriaId;
+    if (newProduto.fornecedorId) produtoData.fornecedorId = newProduto.fornecedorId;
+    if (newProduto.data_validade) produtoData.data_validade = newProduto.data_validade;
+    if (newProduto.ncm) produtoData.ncm = newProduto.ncm;
+    if (newProduto.cest) produtoData.cest = newProduto.cest;
+    if (newProduto.cfop) produtoData.cfop = newProduto.cfop;
+    if (newProduto.observacoes) produtoData.observacoes = newProduto.observacoes;
+    if (newProduto.peso) produtoData.peso = Number(newProduto.peso);
+    if (newProduto.altura) produtoData.altura = Number(newProduto.altura);
+    if (newProduto.largura) produtoData.largura = Number(newProduto.largura);
+    
+    // ⭐ Campos estoque_maximo e localizacao - Conforme GUIA_FRONTEND_PRODUTO_COMPLETO.md
+    // estoque_maximo: number (opcional, inteiro ≥ 0)
+    // localizacao: string (opcional, máx 255 caracteres)
+    if (newProduto.estoque_maximo !== undefined && newProduto.estoque_maximo !== null && newProduto.estoque_maximo !== '') {
+      const estoqueMaximoNum = Number(newProduto.estoque_maximo);
+      if (!isNaN(estoqueMaximoNum) && estoqueMaximoNum >= 0) {
+        produtoData.estoque_maximo = estoqueMaximoNum;
+      }
+    }
+    if (newProduto.localizacao && typeof newProduto.localizacao === 'string' && newProduto.localizacao.trim() !== '') {
+      produtoData.localizacao = newProduto.localizacao.trim().substring(0, 255); // Máx 255 caracteres conforme guia
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[Produtos] Criando produto - Payload completo:', JSON.stringify(produtoData, null, 2));
+      console.log('[Produtos] estoque_maximo:', produtoData.estoque_maximo, '(tipo:', typeof produtoData.estoque_maximo, ')');
+      console.log('[Produtos] localizacao:', produtoData.localizacao, '(tipo:', typeof produtoData.localizacao, ')');
+    }
 
     createProdutoMutation.mutate(produtoData);
   };
@@ -582,7 +652,7 @@ const Produtos = () => {
       return;
     }
 
-    const produtoData: Partial<CreateProdutoDto> & { estoque_maximo?: number; localizacao?: string } = {
+    const produtoData: Partial<CreateProdutoDto> = {
       nome: editingProduto.nome!,
       sku: editingProduto.sku!,
       preco_custo: Number(editingProduto.preco_custo),
@@ -591,21 +661,151 @@ const Produtos = () => {
       estoque_minimo: Number(editingProduto.estoque_minimo) || 0,
       unidade_medida: editingProduto.unidade_medida || "UN",
       statusProduto: editingProduto.statusProduto || "ATIVO",
-      descricao: editingProduto.descricao || undefined,
-      preco_promocional: editingProduto.preco_promocional ? Number(editingProduto.preco_promocional) : undefined,
       categoriaId: editingProduto.categoriaId,
       fornecedorId: editingProduto.fornecedorId,
-      data_validade: editingProduto.data_validade || undefined,
-      ncm: editingProduto.ncm || undefined,
-      cest: editingProduto.cest || undefined,
-      cfop: editingProduto.cfop || undefined,
-      observacoes: editingProduto.observacoes || undefined,
-      peso: editingProduto.peso ? Number(editingProduto.peso) : undefined,
-      altura: editingProduto.altura ? Number(editingProduto.altura) : undefined,
-      largura: editingProduto.largura ? Number(editingProduto.largura) : undefined,
-      estoque_maximo: editingProduto.estoque_maximo ? Number(editingProduto.estoque_maximo) : undefined,
-      localizacao: editingProduto.localizacao || undefined,
     };
+
+    // ⭐ Lógica de detecção de remoção de campos opcionais
+    // Conforme GUIA_REMOÇÃO_CAMPOS_PRODUTO.md
+    // Compara valores originais com valores editados para detectar remoções
+    
+    // Função auxiliar para normalizar valores para comparação
+    const normalizeValue = (value: any): string | number | null | undefined => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        return trimmed === "" ? null : trimmed;
+      }
+      // Para números, converter string vazia para null
+      if (typeof value === "number") return value;
+      return value;
+    };
+
+    // Função auxiliar para normalizar valores numéricos
+    const normalizeNumericValue = (value: any): number | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed === "") return null;
+        const num = Number(trimmed);
+        return isNaN(num) ? null : num;
+      }
+      if (typeof value === "number") return value;
+      return null;
+    };
+
+    // Função auxiliar para verificar se um campo foi removido
+    const wasFieldRemoved = (originalValue: any, currentValue: any): boolean => {
+      const normalizedOriginal = normalizeValue(originalValue);
+      const normalizedCurrent = normalizeValue(currentValue);
+      // Campo tinha valor e agora está vazio/null
+      return normalizedOriginal !== null && normalizedCurrent === null;
+    };
+
+    // Função auxiliar para verificar se um campo numérico foi removido
+    const wasNumericFieldRemoved = (originalValue: any, currentValue: any): boolean => {
+      const normalizedOriginal = normalizeNumericValue(originalValue);
+      const normalizedCurrent = normalizeNumericValue(currentValue);
+      // Campo tinha valor numérico e agora está vazio/null
+      return normalizedOriginal !== null && normalizedCurrent === null;
+    };
+
+    // Função auxiliar para verificar se um campo foi modificado
+    const wasFieldModified = (originalValue: any, currentValue: any): boolean => {
+      const normalizedOriginal = normalizeValue(originalValue);
+      const normalizedCurrent = normalizeValue(currentValue);
+      return normalizedOriginal !== normalizedCurrent;
+    };
+
+    // Função auxiliar para verificar se um campo numérico foi modificado
+    const wasNumericFieldModified = (originalValue: any, currentValue: any): boolean => {
+      const normalizedOriginal = normalizeNumericValue(originalValue);
+      const normalizedCurrent = normalizeNumericValue(currentValue);
+      return normalizedOriginal !== normalizedCurrent;
+    };
+
+    // Campos de texto opcionais
+    const textFields: Array<keyof Produto> = ['descricao', 'ncm', 'cest', 'cfop', 'observacoes'];
+    textFields.forEach(field => {
+      const originalValue = selectedProduto[field];
+      const currentValue = editingProduto[field as keyof typeof editingProduto];
+      
+      if (wasFieldRemoved(originalValue, currentValue)) {
+        // Campo foi removido - enviar null explicitamente
+        produtoData[field as keyof CreateProdutoDto] = null as any;
+      } else if (wasFieldModified(originalValue, currentValue) && currentValue) {
+        // Campo foi modificado e tem novo valor
+        produtoData[field as keyof CreateProdutoDto] = currentValue as any;
+      }
+      // Se não foi modificado, não incluir no payload
+    });
+
+    // Campo localizacao (tratamento especial com trim e limite de 255 caracteres)
+    const originalLocalizacao = selectedProduto.localizacao;
+    const currentLocalizacao = editingProduto.localizacao;
+    if (wasFieldRemoved(originalLocalizacao, currentLocalizacao)) {
+      produtoData.localizacao = null as any;
+    } else if (wasFieldModified(originalLocalizacao, currentLocalizacao) && currentLocalizacao) {
+      const trimmedLocalizacao = typeof currentLocalizacao === 'string' 
+        ? currentLocalizacao.trim().substring(0, 255) 
+        : currentLocalizacao;
+      if (trimmedLocalizacao) {
+        produtoData.localizacao = trimmedLocalizacao;
+      }
+    }
+
+    // Campo data_validade (string especial)
+    const originalDataValidade = selectedProduto.data_validade;
+    const currentDataValidade = editingProduto.data_validade;
+    if (wasFieldRemoved(originalDataValidade, currentDataValidade)) {
+      produtoData.data_validade = null as any;
+    } else if (wasFieldModified(originalDataValidade, currentDataValidade) && currentDataValidade) {
+      produtoData.data_validade = currentDataValidade;
+    }
+
+    // Campos numéricos opcionais
+    const numericFields: Array<keyof Produto> = ['preco_promocional', 'peso', 'altura', 'largura', 'estoque_maximo'];
+    numericFields.forEach(field => {
+      const originalValue = selectedProduto[field];
+      const currentValue = editingProduto[field as keyof typeof editingProduto];
+      
+      if (wasNumericFieldRemoved(originalValue, currentValue)) {
+        // Campo foi removido - enviar null explicitamente
+        produtoData[field as keyof CreateProdutoDto] = null as any;
+      } else if (wasNumericFieldModified(originalValue, currentValue)) {
+        // Campo foi modificado - verificar se tem novo valor válido
+        const normalizedCurrent = normalizeNumericValue(currentValue);
+        if (normalizedCurrent !== null) {
+          // Validações específicas para estoque_maximo
+          if (field === 'estoque_maximo' && normalizedCurrent >= 0) {
+            produtoData[field as keyof CreateProdutoDto] = normalizedCurrent as any;
+          } else if (field !== 'estoque_maximo') {
+            produtoData[field as keyof CreateProdutoDto] = normalizedCurrent as any;
+          }
+        }
+      }
+      // Se não foi modificado, não incluir no payload
+    });
+
+    if (import.meta.env.DEV) {
+      console.log('[Produtos] Atualizando produto - Payload completo:', JSON.stringify(produtoData, null, 2));
+      console.log('[Produtos] Valores originais:', {
+        descricao: selectedProduto.descricao,
+        ncm: selectedProduto.ncm,
+        observacoes: selectedProduto.observacoes,
+        preco_promocional: selectedProduto.preco_promocional,
+        estoque_maximo: selectedProduto.estoque_maximo,
+        localizacao: selectedProduto.localizacao,
+      });
+      console.log('[Produtos] Valores editados:', {
+        descricao: editingProduto.descricao,
+        ncm: editingProduto.ncm,
+        observacoes: editingProduto.observacoes,
+        preco_promocional: editingProduto.preco_promocional,
+        estoque_maximo: editingProduto.estoque_maximo,
+        localizacao: editingProduto.localizacao,
+      });
+    }
 
     updateProdutoMutation.mutate({
       id: selectedProduto.id,
@@ -677,6 +877,8 @@ const Produtos = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categorias"] });
       toast.success("Categoria excluída com sucesso!");
+      setDeleteCategoriaDialogOpen(false);
+      setCategoriaToDelete(null);
     },
     onError: (error: any) => {
       toast.error(error?.message || "Erro ao excluir categoria");
@@ -712,9 +914,14 @@ const Produtos = () => {
     setNewCategoriaDescricao(categoria.descricao || "");
   };
 
-  const handleDeleteCategoria = (id: number) => {
-    if (window.confirm("Tem certeza que deseja excluir esta categoria?")) {
-      deleteCategoriaMutation.mutate(id);
+  const handleDeleteCategoria = (categoria: Categoria) => {
+    setCategoriaToDelete(categoria);
+    setDeleteCategoriaDialogOpen(true);
+  };
+
+  const confirmDeleteCategoria = () => {
+    if (categoriaToDelete) {
+      deleteCategoriaMutation.mutate(categoriaToDelete.id);
     }
   };
 
@@ -723,6 +930,18 @@ const Produtos = () => {
     setEditingCategoria(null);
     setNewCategoriaNome("");
     setNewCategoriaDescricao("");
+    setDeleteCategoriaDialogOpen(false);
+    setCategoriaToDelete(null);
+  };
+
+  const handleCategoriasDialogChange = (open: boolean) => {
+    if (!open) {
+      // Quando o dialog está sendo fechado, reseta todos os estados
+      handleCloseCategoriasDialog();
+    } else {
+      // Quando o dialog está sendo aberto, apenas abre
+      setCategoriasDialogOpen(true);
+    }
   };
 
   const handleAplicarFiltros = () => {
@@ -766,7 +985,7 @@ const Produtos = () => {
               <LayoutGrid className="w-4 h-4" />
               Gerenciar Categorias
             </Button>
-            <Dialog open={categoriasDialogOpen} onOpenChange={setCategoriasDialogOpen}>
+            <Dialog open={categoriasDialogOpen} onOpenChange={handleCategoriasDialogChange}>
               <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-gradient-to-br from-card to-secondary/30">
                 <div className="p-6">
                   <DialogHeader>
@@ -783,102 +1002,104 @@ const Produtos = () => {
                 </div>
                 
                 <div className="p-6 space-y-6">
-                  {/* Create new category */}
-                  <div className="bg-secondary/50 rounded-xl p-4 border border-border/50">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 block">
-                      Adicionar Nova Categoria
-                    </Label>
-                    <div className="space-y-3">
-                      {editingCategoria ? (
-                        <>
-                          <Input 
-                            placeholder="Nome da categoria..."
-                            value={newCategoriaNome}
-                            onChange={(e) => setNewCategoriaNome(e.target.value)}
-                            className="bg-card border-border/50 focus:border-primary"
-                          />
-                          <Input 
-                            placeholder="Descrição (opcional)..."
-                            value={newCategoriaDescricao}
-                            onChange={(e) => setNewCategoriaDescricao(e.target.value)}
-                            className="bg-card border-border/50 focus:border-primary"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleCreateOrUpdateCategoria();
-                              if (e.key === "Escape") {
-                                setEditingCategoria(null);
-                                setNewCategoriaNome("");
-                                setNewCategoriaDescricao("");
-                              }
-                            }}
-                          />
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="gradient" 
-                              onClick={handleCreateOrUpdateCategoria} 
-                              className="h-8 flex-1"
-                              disabled={updateCategoriaMutation.isPending || !newCategoriaNome.trim()}
-                            >
-                              {updateCategoriaMutation.isPending ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Salvando...
-                                </>
-                              ) : (
-                                "Salvar"
-                              )}
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              onClick={() => {
-                                setEditingCategoria(null);
-                                setNewCategoriaNome("");
-                                setNewCategoriaDescricao("");
-                              }} 
-                              className="h-8"
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Input 
-                            placeholder="Nome da categoria..."
-                            value={newCategoriaNome}
-                            onChange={(e) => setNewCategoriaNome(e.target.value)}
-                            className="bg-card border-border/50 focus:border-primary"
-                          />
-                          <Input 
-                            placeholder="Descrição (opcional)..."
-                            value={newCategoriaDescricao}
-                            onChange={(e) => setNewCategoriaDescricao(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleCreateOrUpdateCategoria()}
-                            className="bg-card border-border/50 focus:border-primary"
-                          />
+                  {/* Create new category or Edit category */}
+                  {editingCategoria ? (
+                    <div className="bg-secondary/50 rounded-xl p-4 border border-border/50 border-primary/30">
+                      <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 block">
+                        Editar Categoria
+                      </Label>
+                      <div className="space-y-3">
+                        <Input 
+                          placeholder="Nome da categoria..."
+                          value={newCategoriaNome}
+                          onChange={(e) => setNewCategoriaNome(e.target.value)}
+                          className="bg-card border-border/50 focus:border-primary"
+                          autoFocus
+                        />
+                        <Input 
+                          placeholder="Descrição (opcional)..."
+                          value={newCategoriaDescricao}
+                          onChange={(e) => setNewCategoriaDescricao(e.target.value)}
+                          className="bg-card border-border/50 focus:border-primary"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleCreateOrUpdateCategoria();
+                            if (e.key === "Escape") {
+                              setEditingCategoria(null);
+                              setNewCategoriaNome("");
+                              setNewCategoriaDescricao("");
+                            }
+                          }}
+                        />
+                        <div className="flex gap-2">
                           <Button 
                             onClick={handleCreateOrUpdateCategoria} 
                             variant="gradient" 
-                            className="w-full"
-                            disabled={createCategoriaMutation.isPending || !newCategoriaNome.trim()}
+                            className="flex-1"
+                            disabled={updateCategoriaMutation.isPending || !newCategoriaNome.trim()}
                           >
-                            {createCategoriaMutation.isPending ? (
+                            {updateCategoriaMutation.isPending ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Adicionando...
+                                Salvando...
                               </>
                             ) : (
-                              <>
-                                <Plus className="w-4 h-4 mr-1" />
-                                Adicionar Categoria
-                              </>
+                              "Salvar"
                             )}
                           </Button>
-                        </>
-                      )}
+                          <Button 
+                            variant="ghost" 
+                            onClick={() => {
+                              setEditingCategoria(null);
+                              setNewCategoriaNome("");
+                              setNewCategoriaDescricao("");
+                            }}
+                            disabled={updateCategoriaMutation.isPending}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-secondary/50 rounded-xl p-4 border border-border/50">
+                      <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 block">
+                        Adicionar Nova Categoria
+                      </Label>
+                      <div className="space-y-3">
+                        <Input 
+                          placeholder="Nome da categoria..."
+                          value={newCategoriaNome}
+                          onChange={(e) => setNewCategoriaNome(e.target.value)}
+                          className="bg-card border-border/50 focus:border-primary"
+                        />
+                        <Input 
+                          placeholder="Descrição (opcional)..."
+                          value={newCategoriaDescricao}
+                          onChange={(e) => setNewCategoriaDescricao(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleCreateOrUpdateCategoria()}
+                          className="bg-card border-border/50 focus:border-primary"
+                        />
+                        <Button 
+                          onClick={handleCreateOrUpdateCategoria} 
+                          variant="gradient" 
+                          className="w-full"
+                          disabled={createCategoriaMutation.isPending || !newCategoriaNome.trim()}
+                        >
+                          {createCategoriaMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Adicionando...
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4 mr-1" />
+                              Adicionar Categoria
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   {/* Categories list */}
                   <div>
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 block">
@@ -904,75 +1125,45 @@ const Produtos = () => {
                               initial={{ opacity: 0, x: -10 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: index * 0.05 }}
-                              className="group bg-card rounded-xl border border-border/50 p-3 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200"
+                              className={`group bg-card rounded-xl border p-3 transition-all duration-200 ${
+                                editingCategoria?.id === cat.id 
+                                  ? "border-primary/50 shadow-lg shadow-primary/10" 
+                                  : "border-border/50 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
+                              }`}
                             >
-                              {editingCategoria?.id === cat.id ? (
-                                <div className="space-y-2">
-                                  <Input 
-                                    value={newCategoriaNome}
-                                    onChange={(e) => setNewCategoriaNome(e.target.value)}
-                                    className="h-9 bg-secondary border-primary/30"
-                                    autoFocus
-                                    placeholder="Nome da categoria"
-                                  />
-                                  <Input 
-                                    value={newCategoriaDescricao}
-                                    onChange={(e) => setNewCategoriaDescricao(e.target.value)}
-                                    className="h-9 bg-secondary border-primary/30"
-                                    placeholder="Descrição (opcional)"
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleCreateOrUpdateCategoria();
-                                      if (e.key === "Escape") {
-                                        setEditingCategoria(null);
-                                        setNewCategoriaNome("");
-                                        setNewCategoriaDescricao("");
-                                      }
-                                    }}
-                                  />
-                                  <div className="flex gap-2">
-                                    <Button size="sm" variant="gradient" onClick={handleCreateOrUpdateCategoria} className="h-8 flex-1">
-                                      Salvar
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => {
-                                      setEditingCategoria(null);
-                                      setNewCategoriaNome("");
-                                      setNewCategoriaDescricao("");
-                                    }} className="h-8">
-                                      Cancelar
-                                    </Button>
-                                  </div>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
+                                  <Package className="w-5 h-5 text-primary" />
                                 </div>
-                              ) : (
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
-                                    <Package className="w-5 h-5 text-primary" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-foreground truncate">{cat.nome}</p>
-                                    <p className="text-xs text-muted-foreground truncate">
-                                      {cat.descricao || `${produtos.filter(p => p.categoriaId === cat.id).length} produtos vinculados`}
-                                    </p>
-                                  </div>
-                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
-                                      onClick={() => handleEditCategoria(cat)}
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                                      onClick={() => handleDeleteCategoria(cat.id)}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">{cat.nome}</p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {cat.descricao 
+                                      ? `${cat.descricao} • ${produtos.filter(p => p.categoriaId === cat.id).length} produtos vinculados`
+                                      : `${produtos.filter(p => p.categoriaId === cat.id).length} produtos vinculados`}
+                                  </p>
                                 </div>
-                              )}
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
+                                    onClick={() => handleEditCategoria(cat)}
+                                    disabled={!!editingCategoria && editingCategoria.id !== cat.id}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => handleDeleteCategoria(cat)}
+                                    disabled={!!editingCategoria}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
                             </motion.div>
                           ))
                         )}
@@ -990,7 +1181,16 @@ const Produtos = () => {
                 <Plus className="w-4 h-4" />
                 Criar Produto
               </Button>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog 
+              open={dialogOpen} 
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) {
+                  setFornecedorPopoverOpen(false);
+                  setFornecedorSearchTerm("");
+                }
+              }}
+            >
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Novo Produto</DialogTitle>
@@ -1069,26 +1269,83 @@ const Produtos = () => {
                       </div>
                       <div className="space-y-2">
                         <Label>Fornecedor *</Label>
-                        <Select
-                          value={newProduto.fornecedorId?.toString() || undefined}
-                          onValueChange={(value) =>
-                            setNewProduto({
-                              ...newProduto,
-                              fornecedorId: Number(value),
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione um fornecedor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {fornecedores.map((forn) => (
-                              <SelectItem key={forn.id} value={forn.id.toString()}>
-                                {forn.nome_fantasia}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={fornecedorPopoverOpen} onOpenChange={setFornecedorPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={fornecedorPopoverOpen}
+                              className="w-full justify-between bg-card"
+                            >
+                              {newProduto.fornecedorId
+                                ? fornecedores.find((forn) => forn.id === newProduto.fornecedorId)?.nome_fantasia ||
+                                  fornecedores.find((forn) => forn.id === newProduto.fornecedorId)?.nome_razao ||
+                                  "Selecione um fornecedor"
+                                : "Selecione um fornecedor"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[400px] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Buscar por nome, nome fantasia ou razão social..."
+                                value={fornecedorSearchTerm}
+                                onValueChange={setFornecedorSearchTerm}
+                              />
+                              <CommandList>
+                                <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {(() => {
+                                    const filteredFornecedores = fornecedores.filter((forn) => {
+                                      if (!fornecedorSearchTerm) return true;
+                                      const searchLower = fornecedorSearchTerm.toLowerCase();
+                                      return (
+                                        (forn.nome_fantasia?.toLowerCase().includes(searchLower) ?? false) ||
+                                        forn.nome_razao.toLowerCase().includes(searchLower)
+                                      );
+                                    });
+                                    
+                                    if (import.meta.env.DEV) {
+                                      console.log('[Produtos] Fornecedores filtrados:', filteredFornecedores.length, 'de', fornecedores.length);
+                                    }
+                                    
+                                    return filteredFornecedores.map((forn) => (
+                                      <CommandItem
+                                        key={forn.id}
+                                        value={`${forn.nome_fantasia || ''} ${forn.nome_razao}`.trim()}
+                                        onSelect={() => {
+                                          setNewProduto({
+                                            ...newProduto,
+                                            fornecedorId: forn.id,
+                                          });
+                                          setFornecedorPopoverOpen(false);
+                                          setFornecedorSearchTerm("");
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            newProduto.fornecedorId === forn.id ? "opacity-100" : "opacity-0"
+                                          )}
+                                        />
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">
+                                            {forn.nome_fantasia || forn.nome_razao}
+                                          </span>
+                                          {forn.nome_fantasia && forn.nome_fantasia !== forn.nome_razao && (
+                                            <span className="text-xs text-muted-foreground">
+                                              {forn.nome_razao}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </CommandItem>
+                                    ));
+                                  })()}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
                   </div>
@@ -1179,6 +1436,35 @@ const Produtos = () => {
                             setNewProduto({
                               ...newProduto,
                               estoque_minimo: e.target.value ? Number(e.target.value) : 0,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Estoque Máximo</Label>
+                        <Input 
+                          type="number"
+                          placeholder="Opcional"
+                          value={newProduto.estoque_maximo || ""}
+                          onChange={(e) =>
+                            setNewProduto({
+                              ...newProduto,
+                              estoque_maximo: e.target.value ? Number(e.target.value) : undefined,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Localização</Label>
+                        <Input 
+                          placeholder="Ex: Prateleira A-3"
+                          value={newProduto.localizacao || ""}
+                          onChange={(e) =>
+                            setNewProduto({
+                              ...newProduto,
+                              localizacao: e.target.value || undefined,
                             })
                           }
                         />
@@ -2797,6 +3083,61 @@ const Produtos = () => {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* AlertDialog de Confirmação para Deletar Categoria */}
+        <AlertDialog open={deleteCategoriaDialogOpen} onOpenChange={setDeleteCategoriaDialogOpen}>
+          <AlertDialogPortal>
+            <AlertDialogOverlay className="bg-transparent" />
+            <AlertDialogPrimitive.Content className={cn(
+              "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out",
+              "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+              "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
+              "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+              "sm:rounded-lg"
+            )}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar Exclusão de Categoria</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir esta categoria? Esta ação não pode ser desfeita.
+                  {categoriaToDelete && (
+                    <span className="block mt-2 font-medium text-foreground">
+                      Categoria: {categoriaToDelete.nome}
+                    </span>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel 
+                  onClick={() => {
+                    setDeleteCategoriaDialogOpen(false);
+                    setCategoriaToDelete(null);
+                  }}
+                >
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmDeleteCategoria}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center gap-2"
+                  disabled={deleteCategoriaMutation.isPending}
+                >
+                  {deleteCategoriaMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Excluir
+                    </>
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogPrimitive.Content>
+          </AlertDialogPortal>
+        </AlertDialog>
+
         {/* Sheet de Histórico de Movimentações */}
         <Sheet open={historicoSheetOpen} onOpenChange={setHistoricoSheetOpen}>
           <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
@@ -2934,6 +3275,7 @@ const Produtos = () => {
 };
 
 export default Produtos;
+
 
 
 

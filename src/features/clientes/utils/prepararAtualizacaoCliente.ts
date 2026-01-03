@@ -62,11 +62,6 @@ export function prepararAtualizacaoCliente(
     camposAlterados.push('tipoPessoa');
   }
 
-  if (dadosEditados.statusCliente !== undefined && dadosEditados.statusCliente !== clienteOriginal.statusCliente) {
-    formState.statusCliente = dadosEditados.statusCliente;
-    camposAlterados.push('statusCliente');
-  }
-
   if (dadosEditados.cpf_cnpj !== undefined && dadosEditados.cpf_cnpj !== clienteOriginal.cpf_cnpj) {
     formState.cpf_cnpj = dadosEditados.cpf_cnpj;
     camposAlterados.push('cpf_cnpj');

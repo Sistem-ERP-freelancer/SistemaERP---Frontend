@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { tenantsService, Tenant, CreateTenantDto, UpdateTenantInfoDto } from "@/services/tenants.service";
+import { tenantsService, Tenant, CreateTenantDto } from "@/services/tenants.service";
 import { formatDate } from "@/lib/utils";
 import { formatDocument, cleanDocument, formatCNPJ, formatCPF, formatTelefone, cleanTelefone } from "@/lib/validators";
 
@@ -42,7 +42,6 @@ const AdminPanel = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [cnpjError, setCnpjError] = useState<string>("");
   const [formData, setFormData] = useState<CreateTenantDto & { telefone?: string }>({
@@ -141,20 +140,6 @@ const AdminPanel = () => {
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateTenantInfoDto }) =>
-      tenantsService.atualizar(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success("Empresa atualizada com sucesso!");
-      setDialogOpen(false);
-      resetForm();
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Erro ao atualizar empresa");
-    },
-  });
 
   const bloquearMutation = useMutation({
     mutationFn: (id: string) => tenantsService.bloquear(id),
@@ -206,7 +191,6 @@ const AdminPanel = () => {
 
   const resetForm = () => {
     setFormData({ nome: "", cnpj: "", email: "", senha: "", telefone: "" });
-    setEditingTenant(null);
     setShowPassword(false);
     setCnpjError(""); // Limpa erro ao resetar formulário
   };
@@ -214,43 +198,6 @@ const AdminPanel = () => {
   const handleView = (tenant: Tenant) => {
     setSelectedTenantId(tenant.id);
     setViewDialogOpen(true);
-  };
-
-  const handleEdit = (tenant: Tenant) => {
-    // Remove formatação do CNPJ ao editar (armazena apenas números)
-    const cleanedCnpj = cleanDocument(tenant.cnpj);
-    
-    // Formata o CNPJ/CPF para exibição no campo
-    let formattedCnpj = cleanedCnpj;
-    if (cleanedCnpj.length === 11) {
-      formattedCnpj = formatCPF(cleanedCnpj);
-    } else if (cleanedCnpj.length === 14) {
-      formattedCnpj = formatCNPJ(cleanedCnpj);
-    }
-    
-    // Formata o telefone se existir
-    let formattedTelefone = "";
-    if (tenant.telefone) {
-      formattedTelefone = formatTelefone(tenant.telefone);
-    }
-    
-    // Configura os dados do formulário primeiro
-    setFormData({
-      nome: tenant.nome,
-      cnpj: formattedCnpj,
-      email: tenant.email,
-      senha: "",
-      telefone: formattedTelefone,
-    });
-    
-    // Define o tenant sendo editado
-    setEditingTenant(tenant);
-    
-    // Limpa erros
-    setCnpjError("");
-    
-    // Abre o dialog
-    setDialogOpen(true);
   };
 
   const handleCnpjChange = (value: string) => {
@@ -339,59 +286,27 @@ const AdminPanel = () => {
       dataToSend.telefone = cleanTelefone(formData.telefone);
     }
     
-    if (editingTenant) {
-      // Na edição, prepara dados com telefone (se preenchido)
-      const updateData: UpdateTenantInfoDto = {
+    // Na criação, senha é obrigatória
+    if (!formData.senha || formData.senha.trim() === '') {
+      toast.error("A senha é obrigatória para criar uma empresa");
+      return;
+    }
+    dataToSend.senha = formData.senha;
+    
+    // Log para debug (apenas em desenvolvimento)
+    if (import.meta.env.DEV) {
+      console.log('📤 Dados sendo enviados (criação):', { 
         nome: dataToSend.nome,
         cnpj: dataToSend.cnpj,
+        cnpj_length: dataToSend.cnpj.length,
+        cnpj_is_only_numbers: /^\d+$/.test(dataToSend.cnpj),
         email: dataToSend.email,
-      };
-      
-      // Adiciona telefone se foi preenchido
-      if (dataToSend.telefone) {
-        updateData.telefone = dataToSend.telefone;
-      }
-      
-      // Na edição, só envia senha se foi preenchida (usando Partial<CreateTenantDto> para senha)
-      if (formData.senha && formData.senha.trim() !== '') {
-        (updateData as any).senha = formData.senha;
-      }
-      
-      // Log para debug (apenas em desenvolvimento)
-      if (import.meta.env.DEV) {
-        console.log('📤 Dados sendo enviados (edição):', { 
-          ...updateData, 
-          senha: (updateData as any).senha ? '***' : 'não enviada',
-          telefone: updateData.telefone || 'não enviado',
-          cnpj_length: updateData.cnpj.length,
-          cnpj_is_only_numbers: /^\d+$/.test(updateData.cnpj)
-        });
-      }
-      
-      updateMutation.mutate({ id: editingTenant.id, data: updateData });
-    } else {
-      // Na criação, senha é obrigatória
-      if (!formData.senha || formData.senha.trim() === '') {
-        toast.error("A senha é obrigatória para criar uma empresa");
-        return;
-      }
-      dataToSend.senha = formData.senha;
-      
-      // Log para debug (apenas em desenvolvimento)
-      if (import.meta.env.DEV) {
-        console.log('📤 Dados sendo enviados (criação):', { 
-          nome: dataToSend.nome,
-          cnpj: dataToSend.cnpj,
-          cnpj_length: dataToSend.cnpj.length,
-          cnpj_is_only_numbers: /^\d+$/.test(dataToSend.cnpj),
-          email: dataToSend.email,
-          telefone: dataToSend.telefone || 'não enviado',
-          senha: '***',
-        });
-      }
-      
-      createMutation.mutate(dataToSend);
+        telefone: dataToSend.telefone || 'não enviado',
+        senha: '***',
+      });
     }
+    
+    createMutation.mutate(dataToSend);
   };
 
   const getStatusBadge = (status: string) => {
@@ -516,7 +431,7 @@ const AdminPanel = () => {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>
-                  {editingTenant ? "Editar Empresa" : "Nova Empresa"}
+                  Nova Empresa
                 </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -601,7 +516,7 @@ const AdminPanel = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="senha">
-                    Senha {editingTenant ? "(opcional)" : "(obrigatória)"}
+                    Senha (obrigatória)
                   </Label>
                   <div className="relative">
                     <Input
@@ -609,8 +524,8 @@ const AdminPanel = () => {
                       type={showPassword ? "text" : "password"}
                       value={formData.senha || ""}
                       onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                      placeholder={editingTenant ? "Deixe em branco para manter a senha atual" : "Digite a senha"}
-                      required={!editingTenant}
+                      placeholder="Digite a senha"
+                      required
                       className="pr-12"
                     />
                     <button
@@ -625,11 +540,6 @@ const AdminPanel = () => {
                       )}
                     </button>
                   </div>
-                  {editingTenant && (
-                    <p className="text-xs text-muted-foreground">
-                      Preencha apenas se desejar alterar a senha
-                    </p>
-                  )}
                 </div>
                 <div className="flex gap-2 pt-4">
                   <Button
@@ -644,12 +554,10 @@ const AdminPanel = () => {
                     type="submit"
                     variant="gradient"
                     className="flex-1"
-                    disabled={createMutation.isPending || updateMutation.isPending}
+                    disabled={createMutation.isPending}
                   >
-                    {createMutation.isPending || updateMutation.isPending ? (
+                    {createMutation.isPending ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : editingTenant ? (
-                      "Atualizar"
                     ) : (
                       "Criar"
                     )}
@@ -729,15 +637,6 @@ const AdminPanel = () => {
                             title="Visualizar"
                           >
                             <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(tenant)}
-                            className="h-8 w-8 p-0"
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
                           </Button>
                           {tenant.status === "SUSPENSO" ? (
                             <Button
