@@ -7,13 +7,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Eye, Edit, Trash2, ShoppingCart } from 'lucide-react';
-import { Pedido } from '@/types/pedido';
+import { Eye, Edit, Trash2, ShoppingCart, Loader2 } from 'lucide-react';
+import { Pedido, StatusPedido } from '@/types/pedido';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface OrderListProps {
   orders: Pedido[];
@@ -21,9 +27,19 @@ interface OrderListProps {
   onView: (order: Pedido) => void;
   onEdit: (order: Pedido) => void;
   onCancel: (order: Pedido) => void;
+  onStatusChange?: (id: number, status: StatusPedido) => void;
+  updatingStatusId?: number | null;
 }
 
-export function OrderList({ orders, isLoading, onView, onEdit, onCancel }: OrderListProps) {
+export function OrderList({ 
+  orders, 
+  isLoading, 
+  onView, 
+  onEdit, 
+  onCancel,
+  onStatusChange,
+  updatingStatusId = null,
+}: OrderListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -51,7 +67,14 @@ export function OrderList({ orders, isLoading, onView, onEdit, onCancel }: Order
   const formatDate = (dateString?: string) => {
     if (!dateString) return '--';
     try {
-      return format(new Date(dateString), 'dd/MM/yyyy', { locale: ptBR });
+      // Se a data vem no formato YYYY-MM-DD ou YYYY-MM-DD HH:MM:SS
+      // Extrair apenas a parte da data para evitar problemas de timezone
+      const dateOnly = dateString.split('T')[0].split(' ')[0];
+      const [year, month, day] = dateOnly.split('-').map(Number);
+      
+      // Criar data local (sem conversão de timezone)
+      const localDate = new Date(year, month - 1, day);
+      return format(localDate, 'dd/MM/yyyy', { locale: ptBR });
     } catch {
       return '--';
     }
@@ -83,12 +106,94 @@ export function OrderList({ orders, isLoading, onView, onEdit, onCancel }: Order
               <TableCell>
                 <span className="text-sm">
                   {order.tipo === 'VENDA'
-                    ? order.cliente?.nome || '--'
-                    : order.fornecedor?.nome_fantasia || order.fornecedor?.nome_razao || '--'}
+                    ? order.cliente?.nome || 
+                      (order.cliente_id ? `Cliente #${order.cliente_id}` : '--')
+                    : order.fornecedor?.nome_fantasia || 
+                      order.fornecedor?.nome_razao || 
+                      (order.fornecedor_id ? `Fornecedor #${order.fornecedor_id}` : '--')}
                 </span>
               </TableCell>
               <TableCell>
-                <StatusBadge status={order.status} />
+                {onStatusChange ? (
+                  <Select
+                    value={order.status}
+                    onValueChange={(value) => {
+                      if (value !== order.status) {
+                        onStatusChange(order.id, value as StatusPedido);
+                      }
+                    }}
+                    disabled={updatingStatusId === order.id}
+                  >
+                    <SelectTrigger
+                      className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
+                        order.status === 'PENDENTE'
+                          ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
+                          : order.status === 'APROVADO'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                          : order.status === 'EM_PROCESSAMENTO'
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800'
+                          : order.status === 'CONCLUIDO'
+                          ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                          : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+                      }`}
+                    >
+                      <SelectValue>
+                        {updatingStatusId === order.id ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Atualizando...</span>
+                          </div>
+                        ) : (
+                          <span>
+                            {order.status === 'PENDENTE'
+                              ? 'Pendente'
+                              : order.status === 'APROVADO'
+                              ? 'Aprovado'
+                              : order.status === 'EM_PROCESSAMENTO'
+                              ? 'Em Processamento'
+                              : order.status === 'CONCLUIDO'
+                              ? 'Concluído'
+                              : 'Cancelado'}
+                          </span>
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PENDENTE">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                          Pendente
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="APROVADO">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                          Aprovado
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="EM_PROCESSAMENTO">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                          Em Processamento
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="CONCLUIDO">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                          Concluído
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="CANCELADO">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                          Cancelado
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <StatusBadge status={order.status} />
+                )}
               </TableCell>
               <TableCell>
                 <span className="font-medium">{formatCurrency(order.valor_total)}</span>
@@ -107,7 +212,7 @@ export function OrderList({ orders, isLoading, onView, onEdit, onCancel }: Order
                   >
                     <Eye className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  {order.status !== 'CANCELADO' && order.status !== 'ENTREGUE' && (
+                  {order.status !== 'CANCELADO' && order.status !== 'CONCLUIDO' && (
                     <>
                       <Button
                         variant="ghost"

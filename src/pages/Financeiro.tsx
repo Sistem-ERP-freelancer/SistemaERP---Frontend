@@ -147,14 +147,24 @@ const Financeiro = () => {
 
   // Buscar pedidos
   const { data: pedidosData } = useQuery({
-    queryKey: ["pedidos"],
+    queryKey: ["pedidos", "financeiro"],
     queryFn: async () => {
       try {
         const response = await pedidosService.listar({
           page: 1,
-          limit: 100,
+          limit: 1000, // Buscar mais pedidos para cálculos precisos
         });
-        return response.data || [];
+        // Tratar diferentes formatos de resposta
+        if (Array.isArray(response)) {
+          return response;
+        }
+        if (response?.data && Array.isArray(response.data)) {
+          return response.data;
+        }
+        if ((response as any)?.pedidos && Array.isArray((response as any).pedidos)) {
+          return (response as any).pedidos;
+        }
+        return [];
       } catch (error) {
         console.warn("API de pedidos não disponível:", error);
         return [];
@@ -163,7 +173,7 @@ const Financeiro = () => {
     retry: false,
   });
 
-  const pedidos = pedidosData || [];
+  const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
   // Buscar dados do dashboard
   const { data: dashboardReceber, isLoading: isLoadingReceber } = useQuery({
@@ -277,11 +287,12 @@ const Financeiro = () => {
 
   // Calcular estatísticas
   const stats = useMemo(() => {
-    // Receita do mês (contas a receber pagas no mês atual)
     const mesAtual = new Date().getMonth();
     const anoAtual = new Date().getFullYear();
     
-    const receitaMes = contasDashboard
+    // Receita do mês: soma dos valores de pedidos de VENDA criados no mês atual
+    // OU contas a receber pagas no mês atual (o que for maior)
+    const receitaMesContas = contasDashboard
       .filter(c => {
         if (c.tipo !== "RECEBER" || !c.data_pagamento) return false;
         const dataPagamento = new Date(c.data_pagamento);
@@ -289,14 +300,39 @@ const Financeiro = () => {
       })
       .reduce((sum, c) => sum + (c.valor_pago || 0), 0);
 
-    // Despesas do mês (contas a pagar pagas no mês atual)
-    const despesaMes = contasDashboard
+    // Receita do mês baseada em pedidos de VENDA criados no mês atual
+    const receitaMesPedidos = pedidos
+      .filter(p => {
+        if (p.tipo !== "VENDA" || p.status === "CANCELADO") return false;
+        const dataPedido = new Date(p.data_pedido || p.created_at || new Date());
+        return dataPedido.getMonth() === mesAtual && dataPedido.getFullYear() === anoAtual;
+      })
+      .reduce((sum, p) => sum + (p.valor_total || 0), 0);
+
+    // Usar o maior valor entre contas pagas e pedidos criados
+    const receitaMes = Math.max(receitaMesContas, receitaMesPedidos);
+
+    // Despesas do mês: soma dos valores de pedidos de COMPRA criados no mês atual
+    // OU contas a pagar pagas no mês atual (o que for maior)
+    const despesaMesContas = contasDashboard
       .filter(c => {
         if (c.tipo !== "PAGAR" || !c.data_pagamento) return false;
         const dataPagamento = new Date(c.data_pagamento);
         return dataPagamento.getMonth() === mesAtual && dataPagamento.getFullYear() === anoAtual;
       })
       .reduce((sum, c) => sum + (c.valor_pago || 0), 0);
+
+    // Despesas do mês baseadas em pedidos de COMPRA criados no mês atual
+    const despesaMesPedidos = pedidos
+      .filter(p => {
+        if (p.tipo !== "COMPRA" || p.status === "CANCELADO") return false;
+        const dataPedido = new Date(p.data_pedido || p.created_at || new Date());
+        return dataPedido.getMonth() === mesAtual && dataPedido.getFullYear() === anoAtual;
+      })
+      .reduce((sum, p) => sum + (p.valor_total || 0), 0);
+
+    // Usar o maior valor entre contas pagas e pedidos criados
+    const despesaMes = Math.max(despesaMesContas, despesaMesPedidos);
 
     // Saldo atual (receita - despesa)
     const saldoAtual = receitaMes - despesaMes;
@@ -337,14 +373,14 @@ const Financeiro = () => {
       },
       { 
         label: "Contas a Receber", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalReceber), 
+        value: countPendentes.toString(), 
         icon: CreditCard, 
-        trend: countPendentes > 0 ? `${countPendentes} pendentes` : null, 
+        trend: null, 
         color: "text-royal", 
         bgColor: "bg-royal/10" 
       },
     ];
-  }, [contasDashboard, dashboardReceber]);
+  }, [contasDashboard, dashboardReceber, pedidos]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({

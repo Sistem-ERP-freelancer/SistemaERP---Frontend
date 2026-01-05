@@ -42,10 +42,19 @@ export function CarrierOrdersDialog({
 }: CarrierOrdersDialogProps) {
   const stats = {
     total: orders.length,
-    pendentes: orders.filter((o) => o.status === 'pendente').length,
-    emTransito: orders.filter((o) => o.status === 'em_transito').length,
-    entregues: orders.filter((o) => o.status === 'entregue').length,
-    valorTotal: orders.reduce((sum, o) => sum + (o.valor || 0), 0),
+    pendentes: orders.filter((o) => {
+      const status = o.status?.toLowerCase();
+      return status === 'pendente' || status === 'PENDENTE';
+    }).length,
+    emTransito: orders.filter((o) => {
+      const status = o.status?.toLowerCase();
+      return status === 'em_transito' || status === 'em_separacao' || status === 'EM_SEPARACAO' || status === 'enviado' || status === 'ENVIADO';
+    }).length,
+    entregues: orders.filter((o) => {
+      const status = o.status?.toLowerCase();
+      return status === 'entregue' || status === 'ENTREGUE';
+    }).length,
+    valorTotal: orders.reduce((sum, o) => sum + (o.valor_total || o.valor || 0), 0),
   };
 
   return (
@@ -108,7 +117,6 @@ export function CarrierOrdersDialog({
                 <TableRow>
                   <TableHead>Número</TableHead>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Destino</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Data Criação</TableHead>
@@ -116,48 +124,67 @@ export function CarrierOrdersDialog({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">
-                      {order.numero || `#${order.id}`}
-                    </TableCell>
-                    <TableCell>{order.cliente || '--'}</TableCell>
-                    <TableCell>{order.destino || '--'}</TableCell>
-                    <TableCell>
-                      {order.valor
-                        ? new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          }).format(order.valor)
-                        : '--'}
-                    </TableCell>
-                    <TableCell>
-                      {order.status ? (
-                        <OrderStatusBadge status={order.status} />
-                      ) : (
-                        '--'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {order.dataCriacao
-                        ? format(
-                            new Date(order.dataCriacao),
-                            'dd/MM/yyyy',
-                            { locale: ptBR }
-                          )
-                        : '--'}
-                    </TableCell>
-                    <TableCell>
-                      {order.dataEntrega
-                        ? format(
-                            new Date(order.dataEntrega),
-                            'dd/MM/yyyy',
-                            { locale: ptBR }
-                          )
-                        : '--'}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {orders.map((order) => {
+                  // Normalizar número do pedido
+                  const numeroPedido = order.numero_pedido || order.numero || `#${order.id}`;
+                  
+                  // Normalizar cliente (pode ser string ou objeto)
+                  const clienteNome = typeof order.cliente === 'string' 
+                    ? order.cliente 
+                    : order.cliente?.nome || '--';
+                  
+                  // Normalizar valor
+                  const valor = order.valor_total || order.valor || 0;
+                  
+                  // Normalizar status
+                  const status = order.status || '--';
+                  
+                  // Normalizar datas
+                  const dataCriacao = order.data_pedido || order.created_at || order.dataCriacao;
+                  const dataEntrega = order.data_entrega_realizada || order.dataEntrega;
+                  
+                  return (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium">
+                        {numeroPedido}
+                      </TableCell>
+                      <TableCell>{clienteNome}</TableCell>
+                      <TableCell>
+                        {valor > 0
+                          ? new Intl.NumberFormat('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                            }).format(valor)
+                          : '--'}
+                      </TableCell>
+                      <TableCell>
+                        {status && status !== '--' ? (
+                          <OrderStatusBadge status={status} />
+                        ) : (
+                          '--'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {dataCriacao
+                          ? format(
+                              new Date(dataCriacao),
+                              'dd/MM/yyyy',
+                              { locale: ptBR }
+                            )
+                          : '--'}
+                      </TableCell>
+                      <TableCell>
+                        {dataEntrega
+                          ? format(
+                              new Date(dataEntrega),
+                              'dd/MM/yyyy',
+                              { locale: ptBR }
+                            )
+                          : '--'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -166,5 +193,6 @@ export function CarrierOrdersDialog({
     </Dialog>
   );
 }
+
 
 

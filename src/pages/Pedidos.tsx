@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { Plus, Search, Calendar } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Calendar, XCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AppLayout from '@/components/layout/AppLayout';
 import { useOrders } from '@/hooks/useOrders';
 import { OrderStats } from '@/components/orders/OrderStats';
 import { OrderList } from '@/components/orders/OrderList';
+import { OrderForm } from '@/components/orders/OrderForm';
+import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
+import { CreatePedidoDto } from '@/types/pedido';
 import {
   Pagination,
   PaginationContent,
@@ -15,6 +18,13 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StatusPedido, TipoPedido } from '@/types/pedido';
 
 export default function Pedidos() {
@@ -30,6 +40,15 @@ export default function Pedidos() {
     isCancelDialogOpen,
     selectedOrder,
     orderToCancel,
+    clientes,
+    fornecedores,
+    produtos,
+    transportadoras,
+    isCreating,
+    isUpdating,
+    isCanceling,
+    updatingStatusId,
+    handleStatusChange,
     setCurrentPage,
     updateFilters,
     clearFilters,
@@ -37,6 +56,8 @@ export default function Pedidos() {
     openEditForm,
     openViewDialog,
     openCancelDialog,
+    createOrder,
+    updateOrder,
     cancelOrder,
     closeForm,
     closeViewDialog,
@@ -44,19 +65,104 @@ export default function Pedidos() {
   } = useOrders();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingFromFiltersRef = useRef(false);
+
+  // Sincronizar searchTerm com os filtros quando os filtros mudarem externamente
+  useEffect(() => {
+    // Evitar atualização se estamos atualizando os filtros a partir do searchTerm
+    if (isUpdatingFromFiltersRef.current) {
+      return;
+    }
+
+    const numeroPedido = filters.numero_pedido;
+    const clienteNome = filters.cliente_nome;
+    
+    // Só atualizar se o valor for diferente do atual para evitar loops
+    if (numeroPedido && searchTerm !== numeroPedido) {
+      setSearchTerm(numeroPedido);
+    } else if (clienteNome && searchTerm !== clienteNome) {
+      setSearchTerm(clienteNome);
+    } else if (!numeroPedido && !clienteNome && searchTerm) {
+      // Se os filtros foram limpos externamente, limpar o searchTerm também
+      setSearchTerm('');
+    }
+  }, [filters.numero_pedido, filters.cliente_nome]);
+
+  // Fechar o diálogo de exclusão quando o cancelamento for bem-sucedido
+  useEffect(() => {
+    if (!isCancelDialogOpen && !isCanceling) {
+      setIsDeleteDialogOpen(false);
+    }
+  }, [isCancelDialogOpen, isCanceling]);
+
+  // Limpar timeout quando o componente desmontar
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
-    if (value.trim()) {
-      updateFilters({ cliente_nome: value });
-    } else {
-      updateFilters({ cliente_nome: undefined });
+    
+    // Limpar timeout anterior
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
+
+    // Debounce: aguardar 300ms antes de atualizar os filtros
+    searchTimeoutRef.current = setTimeout(() => {
+      isUpdatingFromFiltersRef.current = true;
+      
+      if (value.trim()) {
+        // Tenta buscar por número de pedido primeiro, depois por nome do cliente
+        // Se o valor parece ser um número, busca por numero_pedido
+        const isNumber = /^\d+$/.test(value.trim());
+        if (isNumber) {
+          updateFilters({ numero_pedido: value.trim(), cliente_nome: undefined });
+        } else {
+          updateFilters({ cliente_nome: value.trim(), numero_pedido: undefined });
+        }
+      } else {
+        // Quando o campo é limpo, remover apenas os filtros de pesquisa
+        // Mantém outros filtros como tipo, status, datas, etc.
+        updateFilters({ numero_pedido: undefined, cliente_nome: undefined });
+      }
+      
+      // Resetar flag após um pequeno delay
+      setTimeout(() => {
+        isUpdatingFromFiltersRef.current = false;
+      }, 100);
+    }, 300);
   };
 
   const handleCancelConfirm = () => {
     if (orderToCancel) {
       cancelOrder(orderToCancel);
+    }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (orderToCancel) {
+      cancelOrder(orderToCancel);
+      // O diálogo será fechado automaticamente pelo hook quando a exclusão for bem-sucedida
+    }
+  };
+
+  const handleOpenDeleteDialog = (order: any) => {
+    openCancelDialog(order);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleOrderSubmit = (data: CreatePedidoDto) => {
+    if (selectedOrder) {
+      updateOrder(selectedOrder.id, data);
+    } else {
+      createOrder(data);
     }
   };
 
@@ -66,7 +172,7 @@ export default function Pedidos() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Módulo de Pedidos</h1>
+            <h1 className="text-2xl font-bold text-foreground">Pedidos</h1>
             <p className="text-muted-foreground">
               Gestão completa de vendas e compras
             </p>
@@ -78,7 +184,7 @@ export default function Pedidos() {
         </div>
 
         {/* Estatísticas */}
-        <OrderStats />
+        <OrderStats tipoFiltro={filters.tipo} />
 
         {/* Filtros */}
         <div className="bg-card border rounded-xl p-4 mb-6">
@@ -100,7 +206,10 @@ export default function Pedidos() {
                 placeholder="Data inicial"
                 className="pl-10"
                 value={filters.data_inicial || ''}
-                onChange={(e) => updateFilters({ data_inicial: e.target.value || undefined })}
+                onChange={(e) => {
+                  const value = e.target.value || undefined;
+                  updateFilters({ data_inicial: value });
+                }}
               />
             </div>
             <div className="relative">
@@ -110,7 +219,10 @@ export default function Pedidos() {
                 placeholder="Data final"
                 className="pl-10"
                 value={filters.data_final || ''}
-                onChange={(e) => updateFilters({ data_final: e.target.value || undefined })}
+                onChange={(e) => {
+                  const value = e.target.value || undefined;
+                  updateFilters({ data_final: value });
+                }}
               />
             </div>
             <Select
@@ -148,10 +260,9 @@ export default function Pedidos() {
               <SelectContent>
                 <SelectItem value="all">Todos os status</SelectItem>
                 <SelectItem value="PENDENTE">Pendente</SelectItem>
-                <SelectItem value="CONFIRMADO">Confirmado</SelectItem>
-                <SelectItem value="EM_SEPARACAO">Em Separação</SelectItem>
-                <SelectItem value="ENVIADO">Enviado</SelectItem>
-                <SelectItem value="ENTREGUE">Entregue</SelectItem>
+                <SelectItem value="APROVADO">Aprovado</SelectItem>
+                <SelectItem value="EM_PROCESSAMENTO">Em Processamento</SelectItem>
+                <SelectItem value="CONCLUIDO">Concluído</SelectItem>
                 <SelectItem value="CANCELADO">Cancelado</SelectItem>
               </SelectContent>
             </Select>
@@ -165,11 +276,14 @@ export default function Pedidos() {
             isLoading={isLoading}
             onView={openViewDialog}
             onEdit={openEditForm}
-            onCancel={openCancelDialog}
+            onCancel={handleOpenDeleteDialog}
+            onStatusChange={handleStatusChange}
+            updatingStatusId={updatingStatusId}
           />
 
           {/* Paginação */}
-          {totalPages > 1 && (
+          {/* Não mostrar paginação quando há busca por numero_pedido (busca busca todos os resultados) */}
+          {totalPages > 1 && !filters.numero_pedido && (
             <div className="border-t border-border p-4 mt-4">
               <Pagination>
                 <PaginationContent>
@@ -217,8 +331,102 @@ export default function Pedidos() {
           )}
         </div>
 
-        {/* TODO: Adicionar modais de criação/edição/visualização/cancelamento */}
-        {/* OrderForm, OrderDetails, CancelOrderDialog */}
+        {/* Modal de Formulário */}
+        <OrderForm
+          isOpen={isFormOpen}
+          onClose={closeForm}
+          onSubmit={handleOrderSubmit}
+          order={selectedOrder}
+          isPending={isCreating || isUpdating}
+          clientes={clientes}
+          fornecedores={fornecedores}
+          produtos={produtos}
+          transportadoras={transportadoras}
+        />
+
+        {/* Modal de Visualização */}
+        <OrderViewDialog
+          isOpen={isViewDialogOpen}
+          onClose={closeViewDialog}
+          order={selectedOrder}
+        />
+
+        {/* Modal de Confirmação de Cancelamento */}
+        <Dialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            setIsDeleteDialogOpen(open);
+            if (!open) {
+              closeCancelDialog();
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-destructive" />
+                Confirmar Cancelamento
+              </DialogTitle>
+              <DialogDescription>
+                Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-4">
+              <p className="text-sm text-muted-foreground">
+                Deseja realmente cancelar este pedido?
+              </p>
+              {orderToCancel && (
+                <div className="mt-2 space-y-1">
+                  <p className="font-medium">Pedido #{orderToCancel.numero_pedido}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {orderToCancel.tipo === 'VENDA'
+                      ? `Cliente: ${orderToCancel.cliente?.nome || 'N/A'}`
+                      : `Fornecedor: ${orderToCancel.fornecedor?.nome_fantasia || orderToCancel.fornecedor?.nome_razao || 'N/A'}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Valor: {new Intl.NumberFormat('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    }).format(orderToCancel.valor_total || 0)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteDialogOpen(false);
+                  closeCancelDialog();
+                }}
+                className="flex-1"
+                disabled={isCanceling}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+                disabled={isCanceling}
+                className="flex-1"
+              >
+                {isCanceling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cancelando...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Cancelar
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

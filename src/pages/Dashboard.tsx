@@ -27,6 +27,26 @@ const Dashboard = () => {
     refetchInterval: 30000,
   });
 
+  // Buscar todos os pedidos para calcular estatísticas
+  const { data: todosPedidosData } = useQuery({
+    queryKey: ['pedidos', 'todos'],
+    queryFn: async () => {
+      const response = await pedidosService.listar({ page: 1, limit: 1000 });
+      // Tratar diferentes formatos de resposta
+      if (Array.isArray(response)) {
+        return response;
+      }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      if ((response as any)?.pedidos && Array.isArray((response as any).pedidos)) {
+        return (response as any).pedidos;
+      }
+      return [];
+    },
+    refetchInterval: 30000,
+  });
+
   // Buscar pedidos recentes (vendas)
   const { data: pedidosData, isLoading: loadingPedidos } = useQuery({
     queryKey: ['pedidos', 'recentes'],
@@ -58,6 +78,29 @@ const Dashboard = () => {
   const produtosEstoqueBaixo = estoqueBaixoData?.produtos || [];
   const countEstoqueBaixo = estoqueBaixoData?.total || 0;
 
+  // Calcular total a receber baseado em pedidos de VENDA e contas financeiras
+  const todosPedidos = Array.isArray(todosPedidosData) ? todosPedidosData : [];
+  const totalReceberPedidos = todosPedidos
+    .filter(p => p.tipo === 'VENDA' && p.status !== 'CANCELADO')
+    .reduce((sum, p) => sum + (p.valor_total || 0), 0);
+  
+  // Usar o maior valor entre contas financeiras e pedidos
+  const totalReceber = Math.max(
+    dashboardReceber?.total || 0,
+    totalReceberPedidos
+  );
+
+  // Calcular total a pagar baseado em pedidos de COMPRA e contas financeiras
+  const totalPagarPedidos = todosPedidos
+    .filter(p => p.tipo === 'COMPRA' && p.status !== 'CANCELADO')
+    .reduce((sum, p) => sum + (p.valor_total || 0), 0);
+  
+  // Usar o maior valor entre contas financeiras e pedidos
+  const totalPagar = Math.max(
+    dashboardPagar?.total || 0,
+    totalPagarPedidos
+  );
+
   // Preparar estatísticas
   const stats = [
     { 
@@ -71,7 +114,7 @@ const Dashboard = () => {
     },
     { 
       label: "Total a Receber", 
-      value: dashboardReceber ? formatCurrency(dashboardReceber.total) : "R$ 0,00", 
+      value: formatCurrency(totalReceber), 
       icon: TrendingUp,
       trend: null,
       trendUp: true,
@@ -81,7 +124,7 @@ const Dashboard = () => {
     },
     { 
       label: "Total a Pagar", 
-      value: dashboardPagar ? formatCurrency(dashboardPagar.total) : "R$ 0,00", 
+      value: formatCurrency(totalPagar), 
       icon: TrendingDown,
       trend: null,
       trendUp: false,

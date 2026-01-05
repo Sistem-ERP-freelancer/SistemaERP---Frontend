@@ -2,10 +2,9 @@ export type TipoPedido = 'VENDA' | 'COMPRA';
 
 export type StatusPedido = 
   | 'PENDENTE'
-  | 'CONFIRMADO'
-  | 'EM_SEPARACAO'
-  | 'ENVIADO'
-  | 'ENTREGUE'
+  | 'APROVADO'
+  | 'EM_PROCESSAMENTO'
+  | 'CONCLUIDO'
   | 'CANCELADO';
 
 export type FormaPagamento = 
@@ -82,6 +81,7 @@ export interface Pedido {
 
 export interface CreatePedidoDto {
   tipo: TipoPedido;
+  status?: StatusPedido;
   cliente_id?: number;
   fornecedor_id?: number;
   transportadora_id?: number;
@@ -107,6 +107,7 @@ export interface CreatePedidoDto {
 
 export interface FiltrosPedidos {
   id?: number;
+  numero_pedido?: string;
   tipo?: TipoPedido;
   status?: StatusPedido;
   cliente_id?: number;
@@ -124,5 +125,43 @@ export interface PedidosResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface DashboardPedidos {
+  // 🔹 BLOCO 1 — Financeiro VENDA (valores)
+  faturamento_confirmado_venda: {
+    valor: number;        // R$ total faturado em vendas
+    quantidade: number;   // Quantidade de pedidos de venda concluídos
+  };
+  valor_em_aberto_venda: {
+    valor: number;        // R$ total em aberto de vendas
+    quantidade: number;   // Quantidade de pedidos de venda em aberto
+  };
+  
+  // 🔹 BLOCO 1 — Financeiro COMPRA (valores)
+  compras_confirmadas: {
+    valor: number;        // R$ total de compras confirmadas
+    quantidade: number;   // Quantidade de pedidos de compra concluídos
+  };
+  compras_em_aberto: {
+    valor: number;        // R$ total de compras em aberto
+    quantidade: number;   // Quantidade de pedidos de compra em aberto
+  };
+  
+  // 🔹 BLOCO 2 — Operacional (quantidade)
+  pedidos_em_andamento: {
+    quantidade: number;  // Total de pedidos em andamento (VENDA + COMPRA)
+    detalhes: {
+      pendente: number;           // Status: PENDENTE
+      aprovado: number;          // Status: APROVADO
+      em_processamento: number;  // Status: EM_PROCESSAMENTO
+    };
+  };
+  pedidos_concluidos: {
+    quantidade: number;  // Total de pedidos concluídos (VENDA + COMPRA)
+  };
+  pedidos_cancelados: {
+    quantidade: number;  // Total de pedidos cancelados (VENDA + COMPRA)
+  };
 }
 

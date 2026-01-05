@@ -64,6 +64,7 @@ class FinanceiroService {
     status?: string;
     cliente_id?: number;
     fornecedor_id?: number;
+    pedido_id?: number;
   }): Promise<ContasFinanceirasResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -72,9 +73,25 @@ class FinanceiroService {
     if (params?.status) queryParams.append('status', params.status);
     if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
     if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    if (params?.pedido_id) queryParams.append('pedido_id', params.pedido_id.toString());
 
     const query = queryParams.toString();
     return apiClient.get<ContasFinanceirasResponse>(`/contas-financeiras${query ? `?${query}` : ''}`);
+  }
+
+  async buscarPorPedido(pedidoId: number): Promise<ContaFinanceira[]> {
+    const response = await this.listar({ pedido_id: pedidoId, limit: 100 });
+    // A API pode retornar em diferentes formatos
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    if ((response as any).contas && Array.isArray((response as any).contas)) {
+      return (response as any).contas;
+    }
+    return [];
   }
 
   async buscarPorId(id: number): Promise<ContaFinanceira> {

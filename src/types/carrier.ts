@@ -70,27 +70,37 @@ export interface Pedido {
   
   /** Número do pedido */
   numero?: string;
+  numero_pedido?: string;
   
   /** ID da transportadora responsável */
   transportadoraId?: number;
+  transportadora_id?: number;
   
-  /** Nome do cliente */
-  cliente?: string;
+  /** Nome do cliente (pode ser string ou objeto) */
+  cliente?: string | {
+    id: number;
+    nome: string;
+    cpf_cnpj?: string;
+  };
   
   /** Destino da entrega */
   destino?: string;
   
   /** Valor do frete */
   valor?: number;
+  valor_total?: number;
   
   /** Status atual do pedido */
-  status?: 'pendente' | 'em_transito' | 'entregue' | 'cancelado' | string;
+  status?: 'pendente' | 'em_transito' | 'entregue' | 'cancelado' | 'PENDENTE' | 'CONFIRMADO' | 'EM_SEPARACAO' | 'ENVIADO' | 'ENTREGUE' | 'CANCELADO' | string;
   
   /** Data de criação do pedido */
   dataCriacao?: string;
+  data_pedido?: string;
+  created_at?: string;
   
   /** Data de entrega (quando aplicável) */
   dataEntrega?: string;
+  data_entrega_realizada?: string;
 }
 
 /**
@@ -189,5 +199,6 @@ export type TransportadoraFormData = Omit<
   Transportadora,
   'id' | 'created_at' | 'updated_at' | 'pedidos'
 >;
+
 
 

@@ -33,3 +33,4 @@ export function StatusBadge({ ativo, className }: StatusBadgeProps) {
 }
 
 
+

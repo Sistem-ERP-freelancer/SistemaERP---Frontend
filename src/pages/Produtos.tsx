@@ -185,6 +185,7 @@ const Produtos = () => {
   });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [produtoToDelete, setProdutoToDelete] = useState<number | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const [newProduto, setNewProduto] = useState<Partial<CreateProdutoDto>>({
     nome: "",
     descricao: "",
@@ -839,6 +840,31 @@ const Produtos = () => {
     }
   };
 
+  // Mutation para atualizar status do produto
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: 'ATIVO' | 'INATIVO' }) => {
+      return await produtosService.atualizar(id, { statusProduto: status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['produtos'] });
+      toast.success('Status do produto atualizado com sucesso!');
+      setUpdatingStatusId(null);
+    },
+    onError: (error: any) => {
+      setUpdatingStatusId(null);
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Erro ao atualizar status do produto';
+      toast.error(errorMessage);
+    },
+  });
+
+  // Handler para atualizar status
+  const handleStatusChange = (id: number, novoStatus: 'ATIVO' | 'INATIVO') => {
+    setUpdatingStatusId(id);
+    updateStatusMutation.mutate({ id, status: novoStatus });
+  };
 
   // Query para buscar histórico de movimentações
   const { data: historicoData, isLoading: isLoadingHistorico } = useQuery({
@@ -2102,15 +2128,48 @@ const Produtos = () => {
                           <span className="text-sm text-muted-foreground">{categoriaNome}</span>
                         </TableCell>
                         <TableCell>
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full font-medium ${
-                              produto.statusProduto === "ATIVO"
-                                ? "bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                                : "bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
-                            }`}
+                          <Select
+                            value={produto.statusProduto}
+                            onValueChange={(value) => {
+                              if (value !== produto.statusProduto) {
+                                handleStatusChange(produto.id, value as 'ATIVO' | 'INATIVO');
+                              }
+                            }}
+                            disabled={updatingStatusId === produto.id}
                           >
-                            {produto.statusProduto === "ATIVO" ? "Ativo" : "Inativo"}
-                          </span>
+                            <SelectTrigger
+                              className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
+                                produto.statusProduto === 'ATIVO'
+                                  ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                                  : 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+                              }`}
+                            >
+                              <SelectValue>
+                                {updatingStatusId === produto.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <span>Atualizando...</span>
+                                  </div>
+                                ) : (
+                                  produto.statusProduto === 'ATIVO' ? 'Ativo' : 'Inativo'
+                                )}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ATIVO">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                  Ativo
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="INATIVO">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                                  Inativo
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
