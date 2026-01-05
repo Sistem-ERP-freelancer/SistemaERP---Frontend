@@ -2,18 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { 
   DollarSign, 
-  Plus,
   TrendingUp,
-  TrendingDown,
   Wallet,
   CreditCard,
   Search,
   Eye,
   Edit,
-  Trash2,
   FileText,
   Calendar,
-  User,
   Building2,
   ShoppingCart,
   Loader2,
@@ -67,28 +63,18 @@ import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { financeiroService, CreateContaFinanceiraDto } from "@/services/financeiro.service";
 import { clientesService, Cliente } from "@/services/clientes.service";
-import { fornecedoresService, Fornecedor } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
 
-// Stats serão calculados dinamicamente com dados da API
-
-const initialTransacoes = [
-  { id: "TRX-001", descricao: "Venda - Tech Solutions", tipo: "Receita", categoria: "Vendas", valor: "R$ 8.500,00", data: "05/12/2024", status: "Concluído" },
-  { id: "TRX-002", descricao: "Compra de Estoque", tipo: "Despesa", categoria: "Estoque", valor: "R$ 3.200,00", data: "04/12/2024", status: "Pendente" },
-  { id: "TRX-003", descricao: "Pagamento Fornecedor", tipo: "Despesa", categoria: "Fornecedores", valor: "R$ 1.800,00", data: "03/12/2024", status: "Concluído" },
-  { id: "TRX-004", descricao: "Venda - Comércio ABC", tipo: "Receita", categoria: "Vendas", valor: "R$ 2.200,00", data: "03/12/2024", status: "Concluído" },
-];
-
-const Financeiro = () => {
+const ContasAReceber = () => {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(15); // Padrão do backend para contas financeiras
-  const [transacoes, setTransacoes] = useState(initialTransacoes);
+  const [pageSize] = useState(15);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
+  const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [newTransacao, setNewTransacao] = useState<CreateContaFinanceiraDto & { 
     data_emissao: string;
   }>({
@@ -123,38 +109,16 @@ const Financeiro = () => {
     ? clientesData 
     : clientesData?.data || [];
 
-  // Buscar fornecedores
-  const { data: fornecedoresData } = useQuery({
-    queryKey: ["fornecedores"],
-    queryFn: async () => {
-      try {
-        const response = await fornecedoresService.listar({
-          limit: 100,
-          statusFornecedor: "ATIVO",
-        });
-        return Array.isArray(response) ? response : response.data || [];
-      } catch (error) {
-        console.warn("API de fornecedores não disponível:", error);
-        return [];
-      }
-    },
-    retry: false,
-  });
-
-  const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData) 
-    ? fornecedoresData 
-    : fornecedoresData?.data || [];
-
-  // Buscar pedidos
+  // Buscar pedidos de venda
   const { data: pedidosData } = useQuery({
-    queryKey: ["pedidos", "financeiro"],
+    queryKey: ["pedidos", "contas-receber"],
     queryFn: async () => {
       try {
         const response = await pedidosService.listar({
+          tipo: "VENDA",
           page: 1,
-          limit: 1000, // Buscar mais pedidos para cálculos precisos
+          limit: 1000,
         });
-        // Tratar diferentes formatos de resposta
         if (Array.isArray(response)) {
           return response;
         }
@@ -175,7 +139,36 @@ const Financeiro = () => {
 
   const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
-  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
+  // Buscar dados do dashboard de contas a receber
+  const { data: dashboardReceber, isLoading: isLoadingReceber } = useQuery({
+    queryKey: ["dashboard-receber"],
+    queryFn: () => financeiroService.getDashboardReceber(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  // Buscar todas as contas a receber para calcular estatísticas
+  const { data: contasDashboardData } = useQuery({
+    queryKey: ["contas-financeiras", "receber", "dashboard"],
+    queryFn: async () => {
+      try {
+        const response = await financeiroService.listar({
+          tipo: "RECEBER",
+          page: 1,
+          limit: 1000,
+        });
+        return response.data || [];
+      } catch (error) {
+        console.warn("API de contas financeiras não disponível:", error);
+        return [];
+      }
+    },
+    retry: false,
+  });
+
+  const contasDashboard = contasDashboardData || [];
+
+  // Validar parâmetros de paginação
   const validarParametrosPaginação = (page: number, limit: number): boolean => {
     if (page < 1) {
       console.error('Page deve ser maior ou igual a 1');
@@ -188,40 +181,49 @@ const Financeiro = () => {
     return true;
   };
 
-  // Buscar contas financeiras filtradas para exibir na tabela com paginação
+  // Buscar contas a receber filtradas para exibir na tabela com paginação
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "tabela", activeTab, currentPage],
+    queryKey: ["contas-financeiras", "receber", "tabela", activeTab, currentPage],
     queryFn: async () => {
-      // Validar parâmetros antes de fazer a requisição
       if (!validarParametrosPaginação(currentPage, pageSize)) {
         throw new Error('Parâmetros de paginação inválidos');
       }
 
       try {
-        let tipo: string | undefined;
         let status: string | undefined;
 
-        // Determinar filtros baseados na tab ativa
         const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
-        
-        if (activeTab === "Receita") {
-          tipo = "RECEBER";
-        } else if (activeTab === "Despesa") {
-          tipo = "PAGAR";
-        } else if (statusTabs.includes(activeTab)) {
-          // Se for um status, filtrar apenas por status (sem tipo)
+        if (statusTabs.includes(activeTab)) {
           status = activeTab;
         }
 
         const response = await financeiroService.listar({
+          tipo: "RECEBER",
           page: currentPage,
           limit: pageSize,
-          tipo,
           status,
         });
+        
+        // Tratar diferentes formatos de resposta
+        let contasData = [];
+        let totalData = 0;
+        
+        if (Array.isArray(response)) {
+          contasData = response;
+          totalData = response.length;
+        } else if (response?.data && Array.isArray(response.data)) {
+          contasData = response.data;
+          totalData = response.total || response.data.length;
+        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
+          contasData = (response as any).contas;
+          totalData = (response as any).total || (response as any).contas.length;
+        }
+        
+        console.log('📊 [ContasAReceber] Resposta da API:', { response, contasData, totalData });
+        
         return {
-          data: response.data || [],
-          total: response.total || 0,
+          data: contasData,
+          total: totalData,
         };
       } catch (error) {
         console.warn("API de contas financeiras não disponível:", error);
@@ -229,14 +231,12 @@ const Financeiro = () => {
       }
     },
     retry: (failureCount, error: any) => {
-      // Não tentar novamente para erros 400, 401, 403, 404
       if (error?.response) {
         const status = error.response.status;
         if ([400, 401, 403, 404].includes(status)) {
           return false;
         }
       }
-      // Tentar até 2 vezes para outros erros
       return failureCount < 2;
     },
     retryDelay: 1000,
@@ -253,9 +253,6 @@ const Financeiro = () => {
 
   // Calcular estatísticas
   const stats = useMemo(() => {
-    const mesAtual = new Date().getMonth();
-    const anoAtual = new Date().getFullYear();
-    
     // Função auxiliar para converter valor para número seguro
     const parseValor = (valor: any): number => {
       if (valor === null || valor === undefined || valor === '') return 0;
@@ -263,77 +260,54 @@ const Financeiro = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    // Receita do mês: soma dos valores de pedidos de VENDA criados no mês atual
-    const receitaMes = pedidos
-      .filter(p => {
-        if (!p || p.tipo !== "VENDA" || p.status === "CANCELADO") return false;
-        try {
-          const dataPedido = p.data_pedido || p.created_at;
-          if (!dataPedido) return false;
-          const data = new Date(dataPedido);
-          if (isNaN(data.getTime())) return false;
-          return data.getMonth() === mesAtual && data.getFullYear() === anoAtual;
-        } catch {
-          return false;
-        }
-      })
-      .reduce((sum, p) => {
-        const valor = parseValor(p.valor_total);
-        return sum + valor;
-      }, 0);
-
-    // Despesas do mês: soma dos valores de pedidos de COMPRA criados no mês atual
-    const despesaMes = pedidos
-      .filter(p => {
-        if (!p || p.tipo !== "COMPRA" || p.status === "CANCELADO") return false;
-        try {
-          const dataPedido = p.data_pedido || p.created_at;
-          if (!dataPedido) return false;
-          const data = new Date(dataPedido);
-          if (isNaN(data.getTime())) return false;
-          return data.getMonth() === mesAtual && data.getFullYear() === anoAtual;
-        } catch {
-          return false;
-        }
-      })
-      .reduce((sum, p) => {
-        const valor = parseValor(p.valor_total);
-        return sum + valor;
-      }, 0);
-
-    // Saldo atual (receita - despesa) com 2 casas decimais
-    const saldoAtual = Number((receitaMes - despesaMes).toFixed(2));
-
+    // Total de contas a receber (valor restante)
+    const contasReceberPendentes = contasDashboard.filter(
+      c => c && c.tipo === "RECEBER" && (c.status === "PENDENTE" || c.status === "VENCIDO" || c.status === "PAGO_PARCIAL")
+    );
+    const totalReceberDashboard = parseValor(dashboardReceber?.total);
+    const totalReceberContas = contasReceberPendentes.reduce((sum, c) => {
+      const valor = parseValor(c.valor_restante);
+      return sum + valor;
+    }, 0);
+    const totalReceber = totalReceberDashboard > 0 ? totalReceberDashboard : totalReceberContas;
 
     return [
       { 
-        label: "Receita do Mês", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receitaMes), 
-        icon: TrendingUp, 
+        label: "Total a Receber", 
+        value: Math.round(totalReceber).toLocaleString('pt-BR'), 
+        icon: CreditCard, 
         trend: null, 
         trendUp: true, 
-        color: "text-cyan", 
-        bgColor: "bg-cyan/10" 
+        color: "text-royal", 
+        bgColor: "bg-royal/10" 
       },
       { 
-        label: "Despesas do Mês", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(despesaMes), 
-        icon: TrendingDown, 
+        label: "Vencidas", 
+        value: dashboardReceber?.vencidas?.toString() || contasDashboard.filter(c => c.tipo === "RECEBER" && c.status === "VENCIDO").length.toString(), 
+        icon: Calendar, 
         trend: null, 
         trendUp: false, 
-        color: "text-destructive", 
-        bgColor: "bg-destructive/10" 
+        color: "text-red-600", 
+        bgColor: "bg-red-100" 
       },
       { 
-        label: "Saldo Atual", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoAtual), 
-        icon: Wallet, 
+        label: "Vencendo Hoje", 
+        value: dashboardReceber?.vencendo_hoje?.toString() || "0", 
+        icon: Calendar, 
         trend: null, 
-        color: "text-azure", 
-        bgColor: "bg-azure/10" 
+        color: "text-amber-600", 
+        bgColor: "bg-amber-100" 
+      },
+      { 
+        label: "Vencendo Este Mês", 
+        value: dashboardReceber?.vencendo_este_mes?.toString() || "0", 
+        icon: Calendar, 
+        trend: null, 
+        color: "text-blue-600", 
+        bgColor: "bg-blue-100" 
       },
     ];
-  }, [pedidos]);
+  }, [contasDashboard, dashboardReceber]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -354,9 +328,7 @@ const Financeiro = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
-      toast.success("Transação registrada com sucesso!");
+      toast.success("Conta a receber registrada com sucesso!");
       setDialogOpen(false);
       setNewTransacao({
         tipo: "RECEBER",
@@ -367,7 +339,7 @@ const Financeiro = () => {
       });
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message || "Erro ao registrar transação");
+      toast.error(error?.response?.data?.message || "Erro ao registrar conta a receber");
     },
   });
 
@@ -380,19 +352,107 @@ const Financeiro = () => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
       queryClient.invalidateQueries({ queryKey: ["conta-financeira", selectedContaId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
       toast.success("Conta atualizada com sucesso!");
       setEditDialogOpen(false);
       setSelectedContaId(null);
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message || "Erro ao atualizar conta");
+      const errorMessage = 
+        error?.response?.data?.message ||
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.error ||
+        (Array.isArray(error?.response?.data?.message) 
+          ? error.response.data.message.join(', ') 
+          : null) ||
+        (error?.response?.status === 500 
+          ? "Erro interno do servidor. Verifique os dados e tente novamente." 
+          : "Erro ao atualizar conta");
+      
+      console.error('❌ [ContasAReceber] Erro ao atualizar conta:', {
+        error,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: errorMessage,
+      });
+      
+      toast.error(errorMessage);
     },
   });
 
+  // Mutation para atualizar apenas o status (edição inline)
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      return await financeiroService.atualizar(id, { status: status as any });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
+      toast.success("Status atualizado com sucesso!");
+      setEditingStatusId(null);
+    },
+    onError: (error: any) => {
+      const errorMessage = 
+        error?.response?.data?.message ||
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.error ||
+        (Array.isArray(error?.response?.data?.message) 
+          ? error.response.data.message.join(', ') 
+          : null) ||
+        (error?.response?.status === 500 
+          ? "Erro interno do servidor ao atualizar status. Tente novamente." 
+          : "Erro ao atualizar status");
+      
+      console.error('❌ [ContasAReceber] Erro ao atualizar status:', {
+        error,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: errorMessage,
+      });
+      
+      toast.error(errorMessage);
+      setEditingStatusId(null);
+    },
+  });
+
+  const handleStatusChange = (contaId: number, newStatus: string) => {
+    setEditingStatusId(contaId);
+    updateStatusMutation.mutate({ id: contaId, status: newStatus });
+  };
+
   // Estado para edição
   const [editConta, setEditConta] = useState<CreateContaFinanceiraDto & { data_emissao: string } | null>(null);
+
+  // Função auxiliar para converter data para formato ISO (YYYY-MM-DD)
+  const converterDataParaISO = (data: string | undefined): string => {
+    if (!data) return '';
+    
+    try {
+      // Se já está no formato ISO (YYYY-MM-DD), retornar como está
+      if (/^\d{4}-\d{2}-\d{2}/.test(data)) {
+        return data.split('T')[0].split(' ')[0];
+      }
+      
+      // Se está no formato brasileiro (DD/MM/YYYY), converter
+      if (/^\d{2}\/\d{2}\/\d{4}/.test(data)) {
+        const [dia, mes, ano] = data.split('/');
+        return `${ano}-${mes}-${dia}`;
+      }
+      
+      // Tentar parsear como Date e converter
+      const dateObj = new Date(data);
+      if (!isNaN(dateObj.getTime())) {
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      
+      return '';
+    } catch (error) {
+      console.error('Erro ao converter data:', error);
+      return '';
+    }
+  };
 
   // Quando a conta for carregada, preencher o formulário de edição
   useEffect(() => {
@@ -401,13 +461,13 @@ const Financeiro = () => {
         tipo: contaSelecionada.tipo,
         descricao: contaSelecionada.descricao,
         valor_original: contaSelecionada.valor_original,
-        data_emissao: contaSelecionada.data_emissao,
-        data_vencimento: contaSelecionada.data_vencimento,
+        data_emissao: converterDataParaISO(contaSelecionada.data_emissao),
+        data_vencimento: converterDataParaISO(contaSelecionada.data_vencimento),
         cliente_id: contaSelecionada.cliente_id,
         fornecedor_id: contaSelecionada.fornecedor_id,
         pedido_id: contaSelecionada.pedido_id,
         forma_pagamento: contaSelecionada.forma_pagamento,
-        data_pagamento: contaSelecionada.data_pagamento,
+        data_pagamento: contaSelecionada.data_pagamento ? converterDataParaISO(contaSelecionada.data_pagamento) : undefined,
         numero_parcela: contaSelecionada.numero_parcela,
         total_parcelas: contaSelecionada.total_parcelas,
         parcela_texto: contaSelecionada.parcela_texto,
@@ -417,16 +477,86 @@ const Financeiro = () => {
   }, [contaSelecionada, editDialogOpen]);
 
   const handleUpdate = () => {
-    if (!selectedContaId || !editConta) return;
+    if (!selectedContaId || !editConta) {
+      toast.error("Erro: Conta não selecionada");
+      return;
+    }
     
-    if (!editConta.descricao || !editConta.valor_original || !editConta.data_vencimento) {
-      toast.error("Preencha os campos obrigatórios");
+    // Validar campos obrigatórios
+    if (!editConta.descricao || !editConta.descricao.trim()) {
+      toast.error("Preencha a descrição");
+      return;
+    }
+    
+    if (!editConta.valor_original || editConta.valor_original <= 0) {
+      toast.error("Preencha um valor original válido");
+      return;
+    }
+    
+    if (!editConta.data_emissao || !editConta.data_emissao.trim()) {
+      toast.error("Preencha a data de emissão");
+      return;
+    }
+    
+    if (!editConta.data_vencimento || !editConta.data_vencimento.trim()) {
+      toast.error("Preencha a data de vencimento");
       return;
     }
 
+    // Validar formato das datas (deve estar em formato ISO YYYY-MM-DD)
+    const dataEmissaoRegex = /^\d{4}-\d{2}-\d{2}$/;
+    const dataVencimentoRegex = /^\d{4}-\d{2}-\d{2}$/;
+    
+    if (!dataEmissaoRegex.test(editConta.data_emissao)) {
+      toast.error("A data de emissão deve estar no formato ISO (YYYY-MM-DD), por exemplo: 2025-12-01");
+      return;
+    }
+    
+    if (!dataVencimentoRegex.test(editConta.data_vencimento)) {
+      toast.error("A data de vencimento deve estar no formato ISO (YYYY-MM-DD), por exemplo: 2025-12-01");
+      return;
+    }
+
+    // Preparar dados para envio - apenas campos definidos
+    const dadosAtualizacao: Partial<CreateContaFinanceiraDto> = {};
+    
+    // Campos obrigatórios sempre enviados
+    dadosAtualizacao.descricao = editConta.descricao.trim();
+    dadosAtualizacao.valor_original = editConta.valor_original;
+    dadosAtualizacao.data_emissao = editConta.data_emissao;
+    dadosAtualizacao.data_vencimento = editConta.data_vencimento;
+    
+    // Campos opcionais - apenas se definidos
+    if (editConta.cliente_id !== undefined && editConta.cliente_id !== null) {
+      dadosAtualizacao.cliente_id = editConta.cliente_id;
+    }
+    if (editConta.pedido_id !== undefined && editConta.pedido_id !== null) {
+      dadosAtualizacao.pedido_id = editConta.pedido_id;
+    }
+    if (editConta.forma_pagamento) {
+      dadosAtualizacao.forma_pagamento = editConta.forma_pagamento;
+    }
+    if (editConta.data_pagamento && editConta.data_pagamento.trim()) {
+      dadosAtualizacao.data_pagamento = editConta.data_pagamento;
+    }
+    if (editConta.numero_parcela !== undefined && editConta.numero_parcela !== null) {
+      dadosAtualizacao.numero_parcela = editConta.numero_parcela;
+    }
+    if (editConta.total_parcelas !== undefined && editConta.total_parcelas !== null) {
+      dadosAtualizacao.total_parcelas = editConta.total_parcelas;
+    }
+    if (editConta.parcela_texto && editConta.parcela_texto.trim()) {
+      dadosAtualizacao.parcela_texto = editConta.parcela_texto.trim();
+    }
+    if (editConta.observacoes && editConta.observacoes.trim()) {
+      dadosAtualizacao.observacoes = editConta.observacoes.trim();
+    }
+
+    console.log('📝 [ContasAReceber] Atualizando conta:', { id: selectedContaId, data: dadosAtualizacao });
+
     updateContaMutation.mutate({
       id: selectedContaId,
-      data: editConta,
+      data: dadosAtualizacao,
     });
   };
 
@@ -438,8 +568,6 @@ const Financeiro = () => {
       case "PAGO_TOTAL": return "bg-green-500 text-white";
       case "VENCIDO": return "bg-red-500 text-white";
       case "CANCELADO": return "bg-slate-600 text-white";
-      case "RECEITA": return "bg-primary text-primary-foreground";
-      case "DESPESA": return "bg-primary text-primary-foreground";
       default: return "bg-primary text-primary-foreground";
     }
   };
@@ -452,8 +580,6 @@ const Financeiro = () => {
       case "PAGO_TOTAL": return "bg-green-500/10 text-green-500 hover:bg-green-500/20";
       case "VENCIDO": return "bg-red-500/10 text-red-500 hover:bg-red-500/20";
       case "CANCELADO": return "bg-slate-600/10 text-slate-600 hover:bg-slate-600/20";
-      case "RECEITA": return "bg-card text-muted-foreground hover:bg-secondary";
-      case "DESPESA": return "bg-card text-muted-foreground hover:bg-secondary";
       default: return "bg-card text-muted-foreground hover:bg-secondary";
     }
   };
@@ -469,35 +595,76 @@ const Financeiro = () => {
     }
   };
 
+  // Função para calcular dias até vencimento
+  const calcularDiasAteVencimento = (dataVencimento: string): number | null => {
+    if (!dataVencimento) return null;
+    try {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const vencimento = new Date(dataVencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      const diffTime = vencimento.getTime() - hoje.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch {
+      return null;
+    }
+  };
+
+  // Função para obter status de vencimento
+  const getVencimentoStatus = (dias: number | null, status: string): { texto: string; cor: string; bgColor: string } => {
+    if (status === "PAGO_TOTAL" || status === "CANCELADO") {
+      return { texto: "", cor: "", bgColor: "" };
+    }
+    
+    if (dias === null) {
+      return { texto: "Data inválida", cor: "text-gray-500", bgColor: "bg-gray-100" };
+    }
+    
+    if (dias < 0) {
+      return { texto: "Vencida", cor: "text-red-600", bgColor: "bg-red-100" };
+    }
+    
+    if (dias === 0) {
+      return { texto: "Vence hoje", cor: "text-red-600", bgColor: "bg-red-100" };
+    }
+    
+    if (dias <= 3) {
+      return { texto: `Vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`, cor: "text-orange-600", bgColor: "bg-orange-100" };
+    }
+    
+    if (dias <= 7) {
+      return { texto: `Vence em ${dias} dias`, cor: "text-amber-600", bgColor: "bg-amber-100" };
+    }
+    
+    if (dias <= 30) {
+      return { texto: `Vence em ${dias} dias`, cor: "text-blue-600", bgColor: "bg-blue-100" };
+    }
+    
+    return { texto: `Vence em ${dias} dias`, cor: "text-gray-600", bgColor: "bg-gray-100" };
+  };
+
   // Mapear contas financeiras para o formato de exibição
   const transacoesDisplay = useMemo(() => {
     return contas.map((conta) => {
-      // Buscar nome do cliente ou fornecedor
-      let nomeClienteFornecedor = "N/A";
+      let nomeCliente = "N/A";
       let categoria = "N/A";
       
       if (conta.tipo === "RECEBER" && conta.cliente_id) {
         const cliente = clientes.find(c => c.id === conta.cliente_id);
-        nomeClienteFornecedor = cliente?.nome || "Cliente não encontrado";
+        nomeCliente = cliente?.nome || "Cliente não encontrado";
         categoria = "Vendas";
-      } else if (conta.tipo === "PAGAR" && conta.fornecedor_id) {
-        const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
-        nomeClienteFornecedor = fornecedor?.nome_fantasia || "Fornecedor não encontrado";
-        categoria = "Fornecedores";
       }
 
-      // Formatar valor
       const valorFormatado = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
       }).format(conta.valor_original || 0);
 
-      // Formatar data
       const dataFormatada = conta.data_vencimento
         ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
         : "N/A";
 
-      // Mapear status
       const statusMap: Record<string, string> = {
         "PENDENTE": "Pendente",
         "PAGO_PARCIAL": "Pago Parcial",
@@ -507,21 +674,64 @@ const Financeiro = () => {
       };
       const statusFormatado = statusMap[conta.status] || conta.status;
 
-      // Mapear tipo
-      const tipoFormatado = conta.tipo === "RECEBER" ? "Receita" : "Despesa";
+      // Usar campos calculados do backend se disponíveis, caso contrário calcular no frontend
+      const diasAteVencimento = conta.dias_ate_vencimento !== undefined 
+        ? conta.dias_ate_vencimento 
+        : calcularDiasAteVencimento(conta.data_vencimento);
+      
+      // Se o backend forneceu status_vencimento e proximidade_vencimento, usar eles
+      let vencimentoStatus: { texto: string; cor: string; bgColor: string };
+      
+      // Não exibir vencimento se a conta estiver paga ou cancelada
+      if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") {
+        vencimentoStatus = { texto: "", cor: "", bgColor: "" };
+      } else if (conta.status_vencimento && conta.proximidade_vencimento) {
+        // Mapear proximidade_vencimento do backend para cores
+        const proximidade = conta.proximidade_vencimento;
+        let cor = "text-gray-600";
+        let bgColor = "bg-gray-100";
+        
+        if (proximidade === 'VENCIDA' || proximidade === 'VENCE_HOJE') {
+          cor = "text-red-600";
+          bgColor = "bg-red-100";
+        } else if (proximidade === 'CRITICO') {
+          cor = "text-orange-600";
+          bgColor = "bg-orange-100";
+        } else if (proximidade === 'ATENCAO') {
+          cor = "text-amber-600";
+          bgColor = "bg-amber-100";
+        } else if (proximidade === 'NORMAL') {
+          cor = "text-blue-600";
+          bgColor = "bg-blue-100";
+        } else if (proximidade === 'LONGO_PRAZO') {
+          cor = "text-gray-600";
+          bgColor = "bg-gray-100";
+        }
+        
+        vencimentoStatus = {
+          texto: conta.status_vencimento,
+          cor,
+          bgColor,
+        };
+      } else {
+        // Fallback: calcular no frontend
+        vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
+      }
 
       return {
         id: conta.numero_conta || `CONTA-${conta.id}`,
         descricao: conta.descricao,
-        tipo: tipoFormatado,
         categoria: categoria,
         valor: valorFormatado,
         data: dataFormatada,
         status: statusFormatado,
-        contaId: conta.id, // ID real para usar nos botões
+        contaId: conta.id,
+        cliente: nomeCliente,
+        diasAteVencimento,
+        vencimentoStatus,
       };
     });
-  }, [contas, clientes, fornecedores]);
+  }, [contas, clientes]);
 
   // Query para buscar conta por ID quando o termo de busca for numérico
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
@@ -543,22 +753,17 @@ const Financeiro = () => {
 
   // Filtrar por busca
   const filteredTransacoes = useMemo(() => {
-    // Se houver busca numérica e conta encontrada, mostrar apenas essa conta
-    if (isNumericSearch && contaPorId) {
+    if (isNumericSearch && contaPorId && contaPorId.tipo === "RECEBER") {
       const contaEncontrada = contas.find(c => c.id === contaPorId.id);
       if (contaEncontrada) {
         const conta = contaEncontrada;
-        let nomeClienteFornecedor = "N/A";
+        let nomeCliente = "N/A";
         let categoria = "N/A";
         
-        if (conta.tipo === "RECEBER" && conta.cliente_id) {
+        if (conta.cliente_id) {
           const cliente = clientes.find(c => c.id === conta.cliente_id);
-          nomeClienteFornecedor = cliente?.nome || "Cliente não encontrado";
+          nomeCliente = cliente?.nome || "Cliente não encontrado";
           categoria = "Vendas";
-        } else if (conta.tipo === "PAGAR" && conta.fornecedor_id) {
-          const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
-          nomeClienteFornecedor = fornecedor?.nome_fantasia || "Fornecedor não encontrado";
-          categoria = "Fornecedores";
         }
 
         const valorFormatado = new Intl.NumberFormat('pt-BR', {
@@ -578,29 +783,41 @@ const Financeiro = () => {
           "CANCELADO": "Cancelado",
         };
         const statusFormatado = statusMap[conta.status] || conta.status;
-        const tipoFormatado = conta.tipo === "RECEBER" ? "Receita" : "Despesa";
 
         return [{
           id: conta.numero_conta || `CONTA-${conta.id}`,
           descricao: conta.descricao,
-          tipo: tipoFormatado,
           categoria: categoria,
           valor: valorFormatado,
           data: dataFormatada,
           status: statusFormatado,
           contaId: conta.id,
+          cliente: nomeCliente,
         }];
       }
     }
 
-    // Busca normal por texto
+    // Se não há termo de busca, retornar todas as transações
+    if (!searchTerm.trim()) {
+      return transacoesDisplay;
+    }
+
+    // Filtrar por termo de busca
     return transacoesDisplay.filter(t => {
       const matchesSearch = 
         t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        t.id.toLowerCase().includes(searchTerm.toLowerCase());
+        t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.cliente.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, clientes, fornecedores]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, clientes]);
+
+  // Debug: verificar se as contas estão sendo carregadas (após transacoesDisplay ser definido)
+  useEffect(() => {
+    console.log('🔍 [ContasAReceber] Contas carregadas:', contas.length, contas);
+    console.log('🔍 [ContasAReceber] Total:', totalContas);
+    console.log('🔍 [ContasAReceber] Transações display:', transacoesDisplay.length);
+  }, [contas, totalContas, transacoesDisplay]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -609,13 +826,12 @@ const Financeiro = () => {
     }
 
     const contaData: CreateContaFinanceiraDto = {
-      tipo: newTransacao.tipo,
+      tipo: "RECEBER",
       descricao: newTransacao.descricao,
       valor_original: Number(newTransacao.valor_original),
       data_emissao: newTransacao.data_emissao,
       data_vencimento: newTransacao.data_vencimento,
       cliente_id: newTransacao.cliente_id || undefined,
-      fornecedor_id: newTransacao.fornecedor_id || undefined,
       pedido_id: newTransacao.pedido_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
@@ -628,33 +844,20 @@ const Financeiro = () => {
     createContaMutation.mutate(contaData);
   };
 
-  const handleDelete = (id: string) => {
-    setTransacoes(transacoes.filter(t => t.id !== id));
-    toast.success("Transação excluída!");
-  };
-
   return (
     <AppLayout>
       <div className="p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Financeiro</h1>
-            <p className="text-muted-foreground">Controle suas receitas e despesas</p>
+            <h1 className="text-2xl font-bold text-foreground">Contas a Receber</h1>
+            <p className="text-muted-foreground">Gerencie suas contas a receber</p>
           </div>
-          <Button 
-            variant="gradient" 
-            className="gap-2"
-            onClick={() => setDialogOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            Nova Transação
-          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Nova Transação</DialogTitle>
+                <DialogTitle>Nova Conta a Receber</DialogTitle>
                 <DialogDescription>
-                  Preencha os campos abaixo para registrar uma nova transação financeira.
+                  Preencha os campos abaixo para registrar uma nova conta a receber.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-6 pt-4">
@@ -667,29 +870,12 @@ const Financeiro = () => {
                   <div className="space-y-2">
                     <Label>Descrição *</Label>
                     <Input 
-                      placeholder="Ex: Pagamento de venda"
+                      placeholder="Ex: Recebimento de venda"
                       value={newTransacao.descricao}
                       onChange={(e) => setNewTransacao({...newTransacao, descricao: e.target.value})}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tipo *</Label>
-                      <Select
-                        value={newTransacao.tipo}
-                        onValueChange={(value: "RECEBER" | "PAGAR") => 
-                          setNewTransacao({...newTransacao, tipo: value})
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="RECEBER">Receber</SelectItem>
-                          <SelectItem value="PAGAR">Pagar</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                     <div className="space-y-2">
                       <Label>Valor Original *</Label>
                       <Input 
@@ -709,7 +895,7 @@ const Financeiro = () => {
                     <ShoppingCart className="w-4 h-4 text-blue-500" />
                     Relacionamentos
                   </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Cliente</Label>
                       <Select
@@ -729,30 +915,6 @@ const Financeiro = () => {
                           {clientes.map((cliente) => (
                             <SelectItem key={cliente.id} value={cliente.id.toString()}>
                               {cliente.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Fornecedor</Label>
-                      <Select
-                        value={newTransacao.fornecedor_id?.toString() || undefined}
-                        onValueChange={(value) => 
-                          setNewTransacao({
-                            ...newTransacao, 
-                            fornecedor_id: value && value !== "none" ? Number(value) : undefined
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um fornecedor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {fornecedores.map((fornecedor) => (
-                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                              {fornecedor.nome_fantasia}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -897,7 +1059,7 @@ const Financeiro = () => {
                   <div className="space-y-2">
                     <Label>Observações</Label>
                     <Textarea
-                      placeholder="Observações adicionais sobre a transação"
+                      placeholder="Observações adicionais sobre a conta a receber"
                       value={newTransacao.observacoes || ""}
                       onChange={(e) => setNewTransacao({...newTransacao, observacoes: e.target.value || undefined})}
                       rows={4}
@@ -917,7 +1079,7 @@ const Financeiro = () => {
                       Registrando...
                     </>
                   ) : (
-                    "Registrar Transação"
+                    "Registrar Conta a Receber"
                   )}
                 </Button>
               </div>
@@ -926,8 +1088,24 @@ const Financeiro = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {stats.map((stat, index) => (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {isLoadingReceber ? (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-card rounded-xl p-5 border border-border"
+                >
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                </motion.div>
+              ))}
+            </>
+          ) : (
+            stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
@@ -948,12 +1126,13 @@ const Financeiro = () => {
                 <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
               </motion.div>
-            ))}
+            ))
+          )}
         </div>
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {["Todos", "Receita", "Despesa", "PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].map((tab) => (
+          {["Todos", "PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -963,7 +1142,7 @@ const Financeiro = () => {
                   : getInactiveTabColor(tab)
               }`}
             >
-              {tab === "Receita" ? "Receitas" : tab === "Despesa" ? "Despesas" : tab === "PENDENTE" ? "Pendente" : tab === "PAGO_PARCIAL" ? "Pago Parcial" : tab === "PAGO_TOTAL" ? "Pago Total" : tab === "VENCIDO" ? "Vencido" : tab === "CANCELADO" ? "Cancelado" : tab}
+              {tab === "PENDENTE" ? "Pendente" : tab === "PAGO_PARCIAL" ? "Pago Parcial" : tab === "PAGO_TOTAL" ? "Pago Total" : tab === "VENCIDO" ? "Vencido" : tab === "CANCELADO" ? "Cancelado" : tab}
             </button>
           ))}
         </div>
@@ -974,7 +1153,7 @@ const Financeiro = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar transação..." 
+                placeholder="Buscar conta a receber..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -994,10 +1173,11 @@ const Financeiro = () => {
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Descrição</TableHead>
-                <TableHead>Tipo</TableHead>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Valor</TableHead>
-                <TableHead>Data</TableHead>
+                <TableHead>Data Vencimento</TableHead>
+                <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -1005,7 +1185,7 @@ const Financeiro = () => {
             <TableBody>
               {isLoadingContas ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas...
@@ -1014,10 +1194,10 @@ const Financeiro = () => {
                 </TableRow>
               ) : filteredTransacoes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
-                      <p>Nenhuma transação encontrada</p>
+                      <p>Nenhuma conta a receber encontrada</p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1031,13 +1211,7 @@ const Financeiro = () => {
                       <span className="font-medium">{transacao.descricao}</span>
                     </TableCell>
                     <TableCell>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        transacao.tipo === "Receita" 
-                          ? "bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800" 
-                          : "bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
-                      }`}>
-                        {transacao.tipo}
-                      </span>
+                      <span className="text-sm text-muted-foreground">{transacao.cliente}</span>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">{transacao.categoria}</span>
@@ -1046,12 +1220,47 @@ const Financeiro = () => {
                       <span className="font-medium">{transacao.valor}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">{transacao.data}</span>
+                      {transacao.status === "Pago Total" || transacao.status === "Cancelado" ? (
+                        <span className="text-sm text-muted-foreground">--</span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">{transacao.data}</span>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
-                        {transacao.status}
-                      </span>
+                      {transacao.vencimentoStatus?.texto && (
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${transacao.vencimentoStatus.cor} ${transacao.vencimentoStatus.bgColor}`}>
+                          {transacao.vencimentoStatus.texto}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {editingStatusId === transacao.contaId && updateStatusMutation.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">Atualizando...</span>
+                        </div>
+                      ) : (
+                        <Select
+                          value={transacao.statusOriginal || transacao.status}
+                          onValueChange={(value) => handleStatusChange(transacao.contaId, value)}
+                          disabled={updateStatusMutation.isPending}
+                        >
+                          <SelectTrigger className="h-7 w-[140px] text-xs border-0 bg-transparent hover:bg-transparent">
+                            <SelectValue>
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
+                                {transacao.status}
+                              </span>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="PENDENTE">Pendente</SelectItem>
+                            <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
+                            <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
+                            <SelectItem value="VENCIDO">Vencido</SelectItem>
+                            <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -1075,13 +1284,6 @@ const Financeiro = () => {
                             <Edit className="w-4 h-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(transacao.id)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -1103,26 +1305,6 @@ const Financeiro = () => {
                     />
                   </PaginationItem>
                   
-                  {/* Primeira página */}
-                  {currentPage > 3 && (
-                    <>
-                      <PaginationItem>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(1)}
-                          className="cursor-pointer"
-                        >
-                          1
-                        </PaginationLink>
-                      </PaginationItem>
-                      {currentPage > 4 && (
-                        <PaginationItem>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Páginas ao redor da atual */}
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum: number;
                     if (totalPages <= 5) {
@@ -1148,25 +1330,6 @@ const Financeiro = () => {
                     );
                   })}
                   
-                  {/* Última página */}
-                  {currentPage < totalPages - 2 && (
-                    <>
-                      {currentPage < totalPages - 3 && (
-                        <PaginationItem>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )}
-                      <PaginationItem>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(totalPages)}
-                          className="cursor-pointer"
-                        >
-                          {totalPages}
-                        </PaginationLink>
-                      </PaginationItem>
-                    </>
-                  )}
-                  
                   <PaginationItem>
                     <PaginationNext
                       onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
@@ -1189,11 +1352,8 @@ const Financeiro = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Eye className="w-5 h-5 text-primary" />
-                Detalhes da Conta Financeira
+                Detalhes da Conta a Receber
               </DialogTitle>
-              <DialogDescription>
-                Visualize todos os dados da conta financeira
-              </DialogDescription>
             </DialogHeader>
 
             {isLoadingConta ? (
@@ -1202,172 +1362,40 @@ const Financeiro = () => {
               </div>
             ) : contaSelecionada ? (
               <div className="space-y-6 pt-4">
-                {/* Informações Básicas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-500" />
-                    Informações Básicas
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Número da Conta</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.numero_conta || `CONTA-${contaSelecionada.id}`}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Tipo</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.tipo === "RECEBER" ? "Receber" : "Pagar"}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">Descrição</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.descricao}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Valor Original</Label>
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_original)}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Valor Pago</Label>
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_pago || 0)}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Valor Restante</Label>
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_restante || 0)}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Status</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.status}</p>
-                    </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Número da Conta</Label>
+                    <p className="text-sm font-medium">{contaSelecionada.numero_conta || `CONTA-${contaSelecionada.id}`}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Descrição</Label>
+                    <p className="text-sm font-medium">{contaSelecionada.descricao}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Valor Original</Label>
+                    <p className="text-sm font-medium">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_original)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Valor Restante</Label>
+                    <p className="text-sm font-medium">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_restante || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Status</Label>
+                    <p className="text-sm font-medium">{contaSelecionada.status}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Cliente</Label>
+                    <p className="text-sm font-medium">
+                      {contaSelecionada.cliente_id 
+                        ? clientes.find(c => c.id === contaSelecionada.cliente_id)?.nome || `ID: ${contaSelecionada.cliente_id}`
+                        : "N/A"}
+                    </p>
                   </div>
                 </div>
-
-                {/* Relacionamentos */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4 text-blue-500" />
-                    Relacionamentos
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Cliente</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.cliente_id 
-                          ? clientes.find(c => c.id === contaSelecionada.cliente_id)?.nome || `ID: ${contaSelecionada.cliente_id}`
-                          : "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Fornecedor</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.fornecedor_id 
-                          ? fornecedores.find(f => f.id === contaSelecionada.fornecedor_id)?.nome_fantasia || `ID: ${contaSelecionada.fornecedor_id}`
-                          : "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Pedido</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.pedido_id 
-                          ? pedidos.find(p => p.id === contaSelecionada.pedido_id)?.numero_pedido || `ID: ${contaSelecionada.pedido_id}`
-                          : "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Datas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    Datas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Data de Emissão</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.data_emissao 
-                          ? new Date(contaSelecionada.data_emissao).toLocaleDateString('pt-BR')
-                          : "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Data de Vencimento</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.data_vencimento 
-                          ? new Date(contaSelecionada.data_vencimento).toLocaleDateString('pt-BR')
-                          : "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Data de Pagamento</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.data_pagamento 
-                          ? new Date(contaSelecionada.data_pagamento).toLocaleDateString('pt-BR')
-                          : "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pagamento */}
-                {contaSelecionada.forma_pagamento && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-blue-500" />
-                      Pagamento
-                    </h3>
-                    <div>
-                      <Label className="text-muted-foreground">Forma de Pagamento</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.forma_pagamento}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Parcelas */}
-                {(contaSelecionada.numero_parcela || contaSelecionada.total_parcelas) && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Receipt className="w-4 h-4 text-blue-500" />
-                      Parcelas
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      {contaSelecionada.numero_parcela && (
-                        <div>
-                          <Label className="text-muted-foreground">Número da Parcela</Label>
-                          <p className="text-sm font-medium">{contaSelecionada.numero_parcela}</p>
-                        </div>
-                      )}
-                      {contaSelecionada.total_parcelas && (
-                        <div>
-                          <Label className="text-muted-foreground">Total de Parcelas</Label>
-                          <p className="text-sm font-medium">{contaSelecionada.total_parcelas}</p>
-                        </div>
-                      )}
-                      {contaSelecionada.parcela_texto && (
-                        <div>
-                          <Label className="text-muted-foreground">Texto da Parcela</Label>
-                          <p className="text-sm font-medium">{contaSelecionada.parcela_texto}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Observações */}
-                {contaSelecionada.observacoes && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Info className="w-4 h-4 text-blue-500" />
-                      Observações
-                    </h3>
-                    <p className="text-sm text-foreground">{contaSelecionada.observacoes}</p>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="py-8 text-center text-muted-foreground">
@@ -1383,11 +1411,8 @@ const Financeiro = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Edit className="w-5 h-5 text-primary" />
-                Editar Conta Financeira
+                Editar Conta a Receber
               </DialogTitle>
-              <DialogDescription>
-                Edite os campos desejados da conta financeira
-              </DialogDescription>
             </DialogHeader>
 
             {isLoadingConta ? (
@@ -1396,38 +1421,16 @@ const Financeiro = () => {
               </div>
             ) : editConta ? (
               <div className="space-y-6 pt-4">
-                {/* Informações Básicas */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-500" />
-                    Informações Básicas
-                  </h3>
                   <div className="space-y-2">
                     <Label>Descrição *</Label>
                     <Input 
-                      placeholder="Ex: Pagamento de venda"
+                      placeholder="Ex: Recebimento de venda"
                       value={editConta.descricao}
                       onChange={(e) => setEditConta({...editConta, descricao: e.target.value})}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tipo *</Label>
-                      <Select
-                        value={editConta.tipo}
-                        onValueChange={(value: "RECEBER" | "PAGAR") => 
-                          setEditConta({...editConta, tipo: value})
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="RECEBER">Receber</SelectItem>
-                          <SelectItem value="PAGAR">Pagar</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                     <div className="space-y-2">
                       <Label>Valor Original *</Label>
                       <Input 
@@ -1441,204 +1444,29 @@ const Financeiro = () => {
                   </div>
                 </div>
 
-                {/* Relacionamentos */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4 text-blue-500" />
-                    Relacionamentos
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Cliente</Label>
-                      <Select
-                        value={editConta.cliente_id?.toString() || undefined}
-                        onValueChange={(value) => 
-                          setEditConta({
-                            ...editConta, 
-                            cliente_id: value && value !== "none" ? Number(value) : undefined
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um cliente" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {clientes.map((cliente) => (
-                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                              {cliente.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Fornecedor</Label>
-                      <Select
-                        value={editConta.fornecedor_id?.toString() || undefined}
-                        onValueChange={(value) => 
-                          setEditConta({
-                            ...editConta, 
-                            fornecedor_id: value && value !== "none" ? Number(value) : undefined
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um fornecedor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {fornecedores.map((fornecedor) => (
-                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                              {fornecedor.nome_fantasia}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Pedido</Label>
-                      <Select
-                        value={editConta.pedido_id?.toString() || undefined}
-                        onValueChange={(value) => 
-                          setEditConta({
-                            ...editConta, 
-                            pedido_id: value && value !== "none" ? Number(value) : undefined
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um pedido" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {pedidos.map((pedido) => (
-                            <SelectItem key={pedido.id} value={pedido.id.toString()}>
-                              {pedido.numero_pedido || `PED-${pedido.id}`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Datas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    Datas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Data de Emissão *</Label>
-                      <Input 
-                        type="date"
-                        value={editConta.data_emissao}
-                        onChange={(e) => setEditConta({...editConta, data_emissao: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Data de Vencimento *</Label>
-                      <Input 
-                        type="date"
-                        value={editConta.data_vencimento}
-                        onChange={(e) => setEditConta({...editConta, data_vencimento: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Data de Pagamento</Label>
-                      <Input 
-                        type="date"
-                        value={editConta.data_pagamento || ""}
-                        onChange={(e) => setEditConta({...editConta, data_pagamento: e.target.value || undefined})}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pagamento */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-blue-500" />
-                    Pagamento
-                  </h3>
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label>Forma de Pagamento</Label>
-                    <Select
-                      value={editConta.forma_pagamento || undefined}
-                      onValueChange={(value) => 
-                        setEditConta({
-                          ...editConta, 
-                          forma_pagamento: value ? (value as any) : undefined
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a forma de pagamento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
-                        <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Data de Emissão *</Label>
+                    <Input 
+                      type="date"
+                      value={editConta.data_emissao}
+                      onChange={(e) => setEditConta({...editConta, data_emissao: e.target.value})}
+                    />
                   </div>
-                </div>
-
-                {/* Parcelas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-blue-500" />
-                    Parcelas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Número da Parcela</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 1"
-                        value={editConta.numero_parcela || ""}
-                        onChange={(e) => setEditConta({...editConta, numero_parcela: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Total de Parcelas</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 3"
-                        value={editConta.total_parcelas || ""}
-                        onChange={(e) => setEditConta({...editConta, total_parcelas: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Texto da Parcela</Label>
-                      <Input 
-                        placeholder="Ex: 1/3"
-                        maxLength={20}
-                        value={editConta.parcela_texto || ""}
-                        onChange={(e) => setEditConta({...editConta, parcela_texto: e.target.value || undefined})}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Observações */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Info className="w-4 h-4 text-blue-500" />
-                    Observações
-                  </h3>
                   <div className="space-y-2">
-                    <Label>Observações</Label>
-                    <Textarea
-                      placeholder="Observações adicionais sobre a transação"
-                      value={editConta.observacoes || ""}
-                      onChange={(e) => setEditConta({...editConta, observacoes: e.target.value || undefined})}
-                      rows={4}
+                    <Label>Data de Vencimento *</Label>
+                    <Input 
+                      type="date"
+                      value={editConta.data_vencimento}
+                      onChange={(e) => setEditConta({...editConta, data_vencimento: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data de Pagamento</Label>
+                    <Input 
+                      type="date"
+                      value={editConta.data_pagamento || ""}
+                      onChange={(e) => setEditConta({...editConta, data_pagamento: e.target.value || undefined})}
                     />
                   </div>
                 </div>
@@ -1671,22 +1499,5 @@ const Financeiro = () => {
   );
 };
 
-export default Financeiro;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+export default ContasAReceber;
 

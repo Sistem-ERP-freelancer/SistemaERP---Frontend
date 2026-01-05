@@ -88,6 +88,7 @@ export interface CreatePedidoDto {
   data_pedido: string;
   data_entrega_prevista?: string;
   condicao_pagamento?: string;
+  data_vencimento?: string; // Data de vencimento para as contas financeiras do pedido
   forma_pagamento?: FormaPagamento;
   prazo_entrega_dias?: number;
   subtotal?: number;

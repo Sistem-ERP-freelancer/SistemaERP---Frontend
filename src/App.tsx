@@ -13,6 +13,8 @@ import Dashboard from "./pages/Dashboard";
 import AdminPanel from "./pages/AdminPanel";
 import Pedidos from "./pages/Pedidos";
 import Financeiro from "./pages/Financeiro";
+import ContasAPagar from "./pages/ContasAPagar";
+import ContasAReceber from "./pages/ContasAReceber";
 import Fornecedores from "./pages/Fornecedores";
 import Clientes from "./pages/Clientes";
 import Produtos from "./pages/Produtos";
@@ -108,6 +110,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Financeiro />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/contas-a-pagar" 
+              element={
+                <ProtectedRoute>
+                  <ContasAPagar />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/contas-a-receber" 
+              element={
+                <ProtectedRoute>
+                  <ContasAReceber />
                 </ProtectedRoute>
               } 
             />

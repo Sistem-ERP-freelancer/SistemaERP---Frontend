@@ -92,11 +92,31 @@ class ApiClient {
 
       if (!response.ok) {
         let errorData: any;
+        let errorText: string | null = null;
+        
         try {
-          errorData = await response.json();
-        } catch {
+          // Tentar ler como JSON primeiro
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            errorData = await response.json();
+          } else {
+            // Se não for JSON, tentar ler como texto
+            errorText = await response.text();
+            try {
+              // Tentar parsear como JSON mesmo que o content-type não seja JSON
+              errorData = JSON.parse(errorText);
+            } catch {
+              // Se não conseguir parsear, usar o texto como mensagem
+              errorData = {
+                message: errorText || response.statusText || 'Erro na requisição',
+              };
+            }
+          }
+        } catch (parseError) {
+          // Se falhar ao ler a resposta, usar informações básicas
           errorData = {
-            message: response.statusText || 'Erro na requisição',
+            message: errorText || response.statusText || 'Erro na requisição',
+            status: response.status,
           };
         }
 
@@ -107,6 +127,8 @@ class ApiClient {
             status: response.status,
             statusText: response.statusText,
             errorData,
+            errorText,
+            headers: Object.fromEntries(response.headers.entries()),
           });
         }
 

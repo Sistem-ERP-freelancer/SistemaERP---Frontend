@@ -15,7 +15,9 @@ import {
   Shield,
   Settings,
   User,
-  ChevronDown
+  ChevronDown,
+  FileText,
+  Wallet
 } from "lucide-react";
 import { Notifications } from "@/components/Notifications";
 import { toast } from "sonner";
@@ -33,8 +35,10 @@ import { TopERPLogo } from "@/components/TopERPLogo";
 const getMenuItems = (isSuperAdmin: boolean) => {
   const baseItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-    { icon: ShoppingCart, label: "Pedidos", href: "/pedidos" },
     { icon: DollarSign, label: "Financeiro", href: "/financeiro" },
+    { icon: FileText, label: "Contas a Pagar", href: "/contas-a-pagar" },
+    { icon: Wallet, label: "Contas a Receber", href: "/contas-a-receber" },
+    { icon: ShoppingCart, label: "Pedidos", href: "/pedidos" },
     { icon: Truck, label: "Fornecedores", href: "/fornecedores" },
     { icon: Users, label: "Clientes", href: "/clientes" },
     { icon: Package, label: "Produtos", href: "/produtos" },

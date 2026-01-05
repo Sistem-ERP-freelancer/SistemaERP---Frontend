@@ -24,7 +24,7 @@ import {
   FormaPagamento,
   PedidoItem,
 } from '@/types/pedido';
-import { Loader2, ShoppingCart, Package, Calendar, DollarSign, Truck, FileText, Plus, Trash2, Info } from 'lucide-react';
+import { Loader2, ShoppingCart, Package, Calendar, DollarSign, Truck, FileText, Plus, Trash2, Info, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Cliente } from '@/services/clientes.service';
 import { Fornecedor } from '@/services/fornecedores.service';
@@ -72,6 +72,9 @@ export function OrderForm({
   const [dataEntregaPrevista, setDataEntregaPrevista] = useState<string>('');
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | undefined>(undefined);
   const [condicaoPagamento, setCondicaoPagamento] = useState<string>('');
+  const [dataVencimento, setDataVencimento] = useState<string>('');
+  const [numeroParcelas, setNumeroParcelas] = useState<number>(1);
+  const [valorParcela, setValorParcela] = useState<number | ''>('');
   const [prazoEntregaDias, setPrazoEntregaDias] = useState<number | undefined>(undefined);
   const [frete, setFrete] = useState<number | ''>('');
   const [outrasTaxas, setOutrasTaxas] = useState<number | ''>('');
@@ -94,6 +97,14 @@ export function OrderForm({
       setDataEntregaPrevista(dataEntregaOnly);
       setFormaPagamento(order.forma_pagamento);
       setCondicaoPagamento(order.condicao_pagamento || '');
+      // Se o pedido tiver uma data de vencimento associada, usar ela
+      // Caso contrário, calcular 30 dias a partir da data do pedido
+      const dataVencimentoCalculada = order.data_pedido 
+        ? new Date(new Date(order.data_pedido).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        : '';
+      setDataVencimento(dataVencimentoCalculada);
+      setNumeroParcelas(1);
+      setValorParcela('');
       setPrazoEntregaDias(order.prazo_entrega_dias);
       setFrete(order.frete || '');
       setOutrasTaxas(order.outras_taxas || '');
@@ -118,6 +129,9 @@ export function OrderForm({
       setDataEntregaPrevista('');
       setFormaPagamento(undefined);
       setCondicaoPagamento('');
+      setDataVencimento('');
+      setNumeroParcelas(1);
+      setValorParcela('');
       setPrazoEntregaDias(undefined);
       setFrete('');
       setOutrasTaxas('');
@@ -195,6 +209,14 @@ export function OrderForm({
     };
   }, [itens, frete, outrasTaxas]);
 
+  // Recalcular valor da parcela automaticamente quando subtotal ou número de parcelas mudar
+  useEffect(() => {
+    if (formaPagamento === 'CARTAO_CREDITO' && calculos && calculos.subtotal > 0 && numeroParcelas > 0) {
+      const valorCalculado = calculos.subtotal / numeroParcelas;
+      setValorParcela(Number(valorCalculado.toFixed(2)));
+    }
+  }, [calculos, formaPagamento, numeroParcelas]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -235,7 +257,7 @@ export function OrderForm({
       transportadora_id: transportadoraId,
       data_entrega_prevista: dataEntregaPrevista || undefined,
       forma_pagamento: formaPagamento,
-      condicao_pagamento: condicaoPagamento || undefined,
+      data_vencimento: dataVencimento || undefined,
       prazo_entrega_dias: prazoEntregaDias,
       subtotal: calculos.subtotal,
       desconto_valor: calculos.descontoValor || undefined,
@@ -547,7 +569,7 @@ export function OrderForm({
 
                   <div className="col-span-1 space-y-2">
                     <Label>Subtotal</Label>
-                    <div className="h-10 flex items-center text-sm font-medium">
+                    <div className="h-10 flex items-center text-sm font-medium text-foreground">
                       {(() => {
                         // Garantir conversão correta para número
                         const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 
@@ -556,7 +578,7 @@ export function OrderForm({
                                              item.preco_unitario === '' ? 0 : Number(item.preco_unitario) || 0;
                         const desconto = typeof item.desconto === 'number' ? item.desconto : 
                                         item.desconto === '' ? 0 : Number(item.desconto) || 0;
-                        const subtotal = quantidade * precoUnitario - desconto;
+                        const subtotal = Math.max(0, quantidade * precoUnitario - desconto);
                         return formatCurrency(subtotal);
                       })()}
                     </div>
@@ -620,17 +642,90 @@ export function OrderForm({
 
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                    Condição de Pagamento
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    Data de Vencimento
                   </Label>
                   <Input
-                    value={condicaoPagamento}
-                    onChange={(e) => setCondicaoPagamento(e.target.value)}
-                    placeholder="Ex: À vista, 30 dias, etc."
-                    maxLength={100}
+                    type="date"
+                    value={dataVencimento}
+                    onChange={(e) => setDataVencimento(e.target.value)}
+                    min={dataPedido}
+                    placeholder="Selecione a data de vencimento"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Data de vencimento para as contas financeiras deste pedido
+                  </p>
                 </div>
               </div>
+
+              {/* Campos de Parcelamento - Apenas para Cartão de Crédito */}
+              {formaPagamento === 'CARTAO_CREDITO' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    Parcelamento no Cartão de Crédito
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Número de Parcelas</Label>
+                      <Select
+                        value={numeroParcelas.toString()}
+                        onValueChange={(value) => {
+                          const parcelas = Number(value);
+                          setNumeroParcelas(parcelas);
+                          // Calcular valor da parcela automaticamente usando o subtotal
+                          if (calculos.subtotal > 0) {
+                            const valorCalculado = calculos.subtotal / parcelas;
+                            setValorParcela(Number(valorCalculado.toFixed(2)));
+                          }
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o número de parcelas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
+                            <SelectItem key={num} value={num.toString()}>
+                              {num}x
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Valor da Parcela (R$)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={valorParcela}
+                        onChange={(e) => {
+                          const valor = e.target.value === '' ? '' : Number(e.target.value);
+                          setValorParcela(valor);
+                        }}
+                        placeholder="0,00"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {numeroParcelas > 1 && typeof valorParcela === 'number' && valorParcela > 0
+                          ? `Total: R$ ${(valorParcela * numeroParcelas).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : 'Digite o valor desejado para cada parcela'}
+                      </p>
+                    </div>
+                  </div>
+                  {numeroParcelas > 1 && (
+                    <div className="mt-2 p-3 bg-white rounded border border-blue-200">
+                      <p className="text-sm text-blue-900">
+                        <strong>Resumo do Parcelamento:</strong>
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {typeof valorParcela === 'number' && valorParcela > 0
+                          ? `${numeroParcelas} parcelas de R$ ${valorParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = R$ ${(valorParcela * numeroParcelas).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : `Parcelar em ${numeroParcelas}x parcelas`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
