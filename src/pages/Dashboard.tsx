@@ -1,13 +1,24 @@
 import { motion } from "framer-motion";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   TrendingUp,
   TrendingDown,
   AlertTriangle,
   ShoppingCart,
-  Loader2
+  Loader2,
+  Calendar,
+  DollarSign
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { estoqueService } from "@/services/estoque.service";
@@ -72,37 +83,98 @@ const Dashboard = () => {
     refetchInterval: 30000,
   });
 
-  const isLoading = loadingReceber || loadingPagar || loadingPedidos || loadingProdutos;
+  // Buscar contas vencidas
+  const { data: contasVencidasData, isLoading: loadingContasVencidas } = useQuery({
+    queryKey: ['contas-financeiras', 'vencidas'],
+    queryFn: async () => {
+      try {
+        // Buscar contas vencidas usando proximidade_vencimento
+        const response = await financeiroService.listar({
+          page: 1,
+          limit: 10,
+          proximidade_vencimento: 'VENCIDA'
+        });
+        
+        // Tratar diferentes formatos de resposta
+        if (Array.isArray(response)) {
+          return response;
+        }
+        if (response?.data && Array.isArray(response.data)) {
+          return response.data;
+        }
+        if ((response as any)?.contas && Array.isArray((response as any).contas)) {
+          return (response as any).contas;
+        }
+        return [];
+      } catch (error) {
+        console.warn("Erro ao buscar contas vencidas:", error);
+        return [];
+      }
+    },
+    refetchInterval: 30000,
+  });
+
+  const isLoading = loadingReceber || loadingPagar || loadingPedidos || loadingProdutos || loadingContasVencidas;
+
+  // Função auxiliar para converter valor para número seguro
+  const parseValor = (valor: any): number => {
+    if (valor === null || valor === undefined || valor === '') return 0;
+    const num = typeof valor === 'string' ? parseFloat(valor) : Number(valor);
+    return isNaN(num) ? 0 : num;
+  };
 
   // Produtos com estoque baixo do endpoint dedicado
   const produtosEstoqueBaixo = estoqueBaixoData?.produtos || [];
   const countEstoqueBaixo = estoqueBaixoData?.total || 0;
 
+  // Contas vencidas
+  const contasVencidas = contasVencidasData || [];
+  const totalVencidas = (parseValor(dashboardReceber?.vencidas) || 0) + (parseValor(dashboardPagar?.vencidas) || 0);
+  const valorTotalVencidas = (parseValor(dashboardReceber?.valor_total_vencidas) || 0) + (parseValor(dashboardPagar?.valor_total_vencidas) || 0);
+
   // Calcular total a receber baseado em pedidos de VENDA e contas financeiras
   const todosPedidos = Array.isArray(todosPedidosData) ? todosPedidosData : [];
   const totalReceberPedidos = todosPedidos
-    .filter(p => p.tipo === 'VENDA' && p.status !== 'CANCELADO')
-    .reduce((sum, p) => sum + (p.valor_total || 0), 0);
+    .filter(p => p && p.tipo === 'VENDA' && p.status !== 'CANCELADO')
+    .reduce((sum, p) => {
+      const valor = parseValor(p.valor_total);
+      return sum + valor;
+    }, 0);
   
   // Usar o maior valor entre contas financeiras e pedidos
+  const totalReceberDashboard = parseValor(dashboardReceber?.total);
   const totalReceber = Math.max(
-    dashboardReceber?.total || 0,
+    totalReceberDashboard,
     totalReceberPedidos
   );
 
   // Calcular total a pagar baseado em pedidos de COMPRA e contas financeiras
   const totalPagarPedidos = todosPedidos
-    .filter(p => p.tipo === 'COMPRA' && p.status !== 'CANCELADO')
-    .reduce((sum, p) => sum + (p.valor_total || 0), 0);
+    .filter(p => p && p.tipo === 'COMPRA' && p.status !== 'CANCELADO')
+    .reduce((sum, p) => {
+      const valor = parseValor(p.valor_total);
+      return sum + valor;
+    }, 0);
   
   // Usar o maior valor entre contas financeiras e pedidos
+  const totalPagarDashboard = parseValor(dashboardPagar?.total);
   const totalPagar = Math.max(
-    dashboardPagar?.total || 0,
+    totalPagarDashboard,
     totalPagarPedidos
   );
 
   // Preparar estatísticas
   const stats = [
+    { 
+      label: "Contas Vencidas", 
+      value: totalVencidas.toString(), 
+      icon: Calendar,
+      trend: valorTotalVencidas > 0 ? formatCurrency(valorTotalVencidas) : null,
+      trendUp: false,
+      color: "text-red-600",
+      bgColor: "bg-red-100",
+      isLoading: loadingContasVencidas
+    },
     { 
       label: "Produtos com Estoque Baixo", 
       value: countEstoqueBaixo.toString(), 
@@ -144,13 +216,25 @@ const Dashboard = () => {
     },
   ];
 
-  const recentSales = pedidosData?.data?.slice(0, 4).map(pedido => ({
-    cliente: `Cliente #${pedido.cliente_id || 'N/A'}`,
+  // Tratar diferentes formatos de resposta de pedidos
+  let pedidosRecentes: any[] = [];
+  if (pedidosData) {
+    if (Array.isArray(pedidosData)) {
+      pedidosRecentes = pedidosData;
+    } else if (pedidosData?.data && Array.isArray(pedidosData.data)) {
+      pedidosRecentes = pedidosData.data;
+    } else if ((pedidosData as any)?.pedidos && Array.isArray((pedidosData as any).pedidos)) {
+      pedidosRecentes = (pedidosData as any).pedidos;
+    }
+  }
+
+  const recentSales = pedidosRecentes.slice(0, 4).map(pedido => ({
+    cliente: pedido.cliente?.nome || `Cliente #${pedido.cliente_id || 'N/A'}`,
     produto: `${pedido.itens?.length || 0} item(ns)`,
-    valor: formatCurrency(pedido.valor_total || 0),
-    data: pedido.created_at ? formatDate(pedido.created_at) : 'N/A',
+    valor: formatCurrency(parseValor(pedido.valor_total)),
+    data: pedido.created_at ? formatDate(pedido.created_at) : pedido.data_pedido ? formatDate(pedido.data_pedido) : 'N/A',
     status: pedido.status || 'Pendente',
-  })) || [];
+  }));
 
   const lowStockProducts = produtosEstoqueBaixo.slice(0, 5).map(produto => ({
     produto: produto.nome,
@@ -158,6 +242,24 @@ const Dashboard = () => {
     estoque: produto.estoque_atual,
     minimo: produto.estoque_minimo,
   }));
+
+  // Debug: verificar dados carregados
+  useEffect(() => {
+    console.log('📊 [Dashboard] Dados carregados:', {
+      contasVencidas: contasVencidas.length,
+      pedidosRecentes: pedidosRecentes.length,
+      produtosEstoqueBaixo: produtosEstoqueBaixo.length,
+      recentSales: recentSales.length,
+      lowStockProducts: lowStockProducts.length,
+      totalReceber,
+      totalPagar,
+      dashboardReceber,
+      dashboardPagar,
+      pedidosData,
+      estoqueBaixoData,
+      contasVencidasData,
+    });
+  }, [contasVencidas, pedidosRecentes, produtosEstoqueBaixo, recentSales, lowStockProducts, totalReceber, totalPagar, dashboardReceber, dashboardPagar, pedidosData, estoqueBaixoData, contasVencidasData]);
 
   return (
     <AppLayout>
@@ -169,7 +271,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           {stats.map((stat, index) => (
             <motion.div
               key={stat.label}
@@ -200,50 +302,145 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Tables Grid */}
+        {/* Contas Vencidas - Full Width */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mb-6"
+        >
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-red-600" />
+              Contas Vencidas
+            </h2>
+          </div>
+          <div className="rounded-md border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Vencimento</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingContasVencidas ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Carregando contas vencidas...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : contasVencidas.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      Nenhuma conta vencida
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  contasVencidas.slice(0, 5).map((conta) => {
+                    const diasVencida = conta.dias_ate_vencimento || 0;
+                    const diasTexto = diasVencida < 0 
+                      ? `Vencida há ${Math.abs(diasVencida)} ${Math.abs(diasVencida) === 1 ? 'dia' : 'dias'}`
+                      : conta.status_vencimento || 'Vencida';
+                    
+                    return (
+                      <TableRow key={conta.id}>
+                        <TableCell>
+                          <span className="font-medium">{conta.numero_conta || `CONTA-${conta.id}`}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">{conta.descricao}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap inline-block ${
+                            conta.tipo === "RECEBER"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" 
+                              : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
+                          }`}>
+                            {conta.tipo === "RECEBER" ? "Receber" : "Pagar"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium whitespace-nowrap">
+                            {formatCurrency(parseValor(conta.valor_restante || conta.valor_original))}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 whitespace-nowrap inline-block">
+                            {diasTexto}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+            {contasVencidas.length > 5 && (
+              <div className="p-4 text-center text-sm text-muted-foreground border-t border-border">
+                Mostrando 5 de {contasVencidas.length} contas vencidas
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Tables Grid - Vendas Recentes e Produtos com Estoque Baixo */}
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Recent Sales */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-card rounded-xl border border-border overflow-hidden"
           >
-            <div className="p-5 border-b border-border">
+            <div className="mb-4">
               <h2 className="text-lg font-semibold text-foreground">Vendas Recentes</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-sidebar text-sidebar-foreground">
-                    <th className="text-left py-3 px-4 text-sm font-medium">Cliente</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium">Produto</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium">Valor</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading && recentSales.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingPedidos ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         Carregando vendas...
-                      </td>
-                    </tr>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ) : recentSales.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                         Nenhuma venda recente
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     recentSales.map((sale, index) => (
-                      <tr key={index} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
-                        <td className="py-3 px-4 text-sm text-foreground">{sale.cliente}</td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">{sale.produto}</td>
-                        <td className="py-3 px-4 text-sm font-medium text-foreground">{sale.valor}</td>
-                        <td className="py-3 px-4">
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      <TableRow key={index}>
+                        <TableCell>
+                          <span className="font-medium">{sale.cliente}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">{sale.produto}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium whitespace-nowrap">{sale.valor}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap inline-block ${
                             sale.status === "CONCLUIDO" || sale.status === "Concluído"
                               ? "bg-cyan/10 text-cyan" 
                               : sale.status === "PENDENTE" || sale.status === "Pendente"
@@ -252,12 +449,12 @@ const Dashboard = () => {
                           }`}>
                             {sale.status}
                           </span>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </motion.div>
 
@@ -266,49 +463,56 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-card rounded-xl border border-border overflow-hidden"
           >
-            <div className="p-5 border-b border-border">
+            <div className="mb-4">
               <h2 className="text-lg font-semibold text-foreground">Produtos com Estoque Baixo</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-sidebar text-sidebar-foreground">
-                    <th className="text-left py-3 px-4 text-sm font-medium">Produto</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium">Categoria</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium">Em Estoque</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium">Mínimo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading && lowStockProducts.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Em Estoque</TableHead>
+                    <TableHead>Mínimo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingProdutos ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         Carregando produtos...
-                      </td>
-                    </tr>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ) : lowStockProducts.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                         Nenhum produto com estoque baixo
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     lowStockProducts.map((product, index) => (
-                      <tr key={index} className="border-b border-border last:border-0 hover:bg-secondary/50 transition-colors">
-                        <td className="py-3 px-4 text-sm text-foreground">{product.produto}</td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">{product.categoria}</td>
-                        <td className="py-3 px-4">
-                          <span className="text-sm font-medium text-destructive">{product.estoque}</span>
-                        </td>
-                        <td className="py-3 px-4 text-sm text-muted-foreground">{product.minimo}</td>
-                      </tr>
+                      <TableRow key={index}>
+                        <TableCell>
+                          <span className="font-medium">{product.produto}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">{product.categoria}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-destructive whitespace-nowrap">{product.estoque}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">{product.minimo}</span>
+                        </TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </motion.div>
         </div>

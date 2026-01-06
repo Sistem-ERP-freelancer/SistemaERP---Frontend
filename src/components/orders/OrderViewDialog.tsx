@@ -25,17 +25,12 @@ import {
   User,
   Building2,
   Info,
-  CreditCard,
-  Loader2,
 } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrency } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
-import { financeiroService, ContaFinanceira } from '@/services/financeiro.service';
-import { Badge } from '@/components/ui/badge';
 
 interface OrderViewDialogProps {
   isOpen: boolean;
@@ -48,17 +43,6 @@ export function OrderViewDialog({
   onClose,
   order,
 }: OrderViewDialogProps) {
-  // Buscar contas financeiras relacionadas ao pedido
-  const { data: contasFinanceiras, isLoading: isLoadingContas } = useQuery({
-    queryKey: ['contas-financeiras', 'pedido', order?.id],
-    queryFn: () => {
-      if (!order?.id) return [];
-      return financeiroService.buscarPorPedido(order.id);
-    },
-    enabled: isOpen && !!order?.id,
-    staleTime: 30000, // Cache por 30 segundos
-  });
-
   if (!order) return null;
 
   const formatDate = (dateString?: string) => {
@@ -108,28 +92,6 @@ export function OrderViewDialog({
       TRANSFERENCIA: 'Transferência',
     };
     return forma ? formas[forma] || forma : '--';
-  };
-
-  const getStatusContaLabel = (status: ContaFinanceira['status']) => {
-    const statusLabels: Record<ContaFinanceira['status'], string> = {
-      PENDENTE: 'Pendente',
-      PAGO_PARCIAL: 'Pago Parcial',
-      PAGO_TOTAL: 'Pago Total',
-      VENCIDO: 'Vencido',
-      CANCELADO: 'Cancelado',
-    };
-    return statusLabels[status] || status;
-  };
-
-  const getStatusContaVariant = (status: ContaFinanceira['status']) => {
-    const variants: Record<ContaFinanceira['status'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      PENDENTE: 'default',
-      PAGO_PARCIAL: 'secondary',
-      PAGO_TOTAL: 'outline',
-      VENCIDO: 'destructive',
-      CANCELADO: 'secondary',
-    };
-    return variants[status] || 'default';
   };
 
   return (
@@ -471,127 +433,6 @@ export function OrderViewDialog({
                 <div className="text-lg font-bold">{formatCurrency(order.valor_total || 0)}</div>
               </div>
             </div>
-          </div>
-
-          {/* Contas Financeiras */}
-          <div className="bg-card border rounded-lg p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg">
-                <CreditCard className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground">Contas Financeiras</h3>
-                <p className="text-sm text-muted-foreground">
-                  {order.tipo === 'VENDA' ? 'Contas a Receber' : 'Contas a Pagar'} relacionadas ao pedido
-                </p>
-              </div>
-            </div>
-
-            {isLoadingContas ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Carregando contas...</span>
-              </div>
-            ) : contasFinanceiras && contasFinanceiras.length > 0 ? (
-              <div className="space-y-4">
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Número da Conta</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead className="text-right">Valor Original</TableHead>
-                        <TableHead className="text-right">Valor Pago</TableHead>
-                        <TableHead className="text-right">Valor Restante</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Status</TableHead>
-                        {contasFinanceiras.some(c => c.numero_parcela) && (
-                          <TableHead className="text-center">Parcela</TableHead>
-                        )}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {contasFinanceiras.map((conta) => (
-                        <TableRow key={conta.id}>
-                          <TableCell className="font-medium">
-                            {conta.numero_conta}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              {conta.descricao}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(conta.valor_original)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {conta.valor_pago > 0 ? (
-                              <span className="text-green-600 dark:text-green-400">
-                                {formatCurrency(conta.valor_pago)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">--</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {conta.valor_restante > 0 ? (
-                              <span className="font-medium">
-                                {formatCurrency(conta.valor_restante)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">--</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              {formatDate(conta.data_vencimento)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusContaVariant(conta.status)}>
-                              {getStatusContaLabel(conta.status)}
-                            </Badge>
-                          </TableCell>
-                          {contasFinanceiras.some(c => c.numero_parcela) && (
-                            <TableCell className="text-center">
-                              {conta.numero_parcela && conta.total_parcelas ? (
-                                <span className="text-sm text-muted-foreground">
-                                  {conta.numero_parcela}/{conta.total_parcelas}
-                                </span>
-                              ) : conta.parcela_texto ? (
-                                <span className="text-sm text-muted-foreground">
-                                  {conta.parcela_texto}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">--</span>
-                              )}
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Total de {contasFinanceiras.length} conta{contasFinanceiras.length !== 1 ? 's' : ''}
-                  </div>
-                  <div className="text-sm font-semibold">
-                    Total: {formatCurrency(
-                      contasFinanceiras.reduce((sum, conta) => sum + conta.valor_original, 0)
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                {order.status === 'CANCELADO' ? (
-                  <p>Nenhuma conta financeira (pedido cancelado)</p>
-                ) : (
-                  <p>Nenhuma conta financeira encontrada. As contas são criadas automaticamente pelo sistema.</p>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Observações */}

@@ -32,11 +32,25 @@ export function useCarriers() {
   } = useQuery({
     queryKey: ['transportadoras', currentPage, searchTerm],
     queryFn: async () => {
-      return await transportadorasService.listar({
-        page: currentPage,
-        limit: ITEMS_PER_PAGE,
-        termo: searchTerm || undefined,
-      });
+      try {
+        const response = await transportadorasService.listar({
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          termo: searchTerm.trim() || undefined,
+        });
+        return response;
+      } catch (error: any) {
+        // Se houver erro na busca, retornar resposta vazia em vez de lançar erro
+        if (searchTerm.trim()) {
+          return {
+            transportadoras: [],
+            total: 0,
+            page: currentPage,
+            limit: ITEMS_PER_PAGE,
+          };
+        }
+        throw error;
+      }
     },
   });
 

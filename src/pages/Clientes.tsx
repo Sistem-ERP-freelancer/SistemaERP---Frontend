@@ -16,6 +16,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogOverlay,
+  AlertDialogPortal,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -2010,18 +2012,17 @@ const Clientes = () => {
                     </Label>
                     <p className="font-medium text-base">
                       {selectedCliente.tipoPessoa === "PESSOA_JURIDICA"
-                        ? selectedCliente.nome_razao || selectedCliente.nome
-                        : selectedCliente.nome}
+                        ? selectedCliente.nome_razao || selectedCliente.nome || "-"
+                        : selectedCliente.nome || "-"}
                     </p>
                   </div>
-                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" &&
-                    selectedCliente.nome_fantasia && (
+                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" && (
                       <div className="space-y-3">
                         <Label className="text-sm text-muted-foreground">
                           Nome Fantasia
                         </Label>
                         <p className="font-medium text-base">
-                          {selectedCliente.nome_fantasia}
+                        {selectedCliente.nome_fantasia || "-"}
                         </p>
                       </div>
                     )}
@@ -2030,17 +2031,16 @@ const Clientes = () => {
                       CPF/CNPJ
                     </Label>
                     <p className="font-medium text-base">
-                      {selectedCliente.cpf_cnpj}
+                      {selectedCliente.cpf_cnpj || "-"}
                     </p>
                   </div>
-                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" &&
-                    selectedCliente.inscricao_estadual && (
+                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" && (
                       <div className="space-y-3">
                         <Label className="text-sm text-muted-foreground">
                           Inscrição Estadual
                         </Label>
                         <p className="font-medium text-base">
-                          {selectedCliente.inscricao_estadual}
+                        {selectedCliente.inscricao_estadual || "-"}
                         </p>
                       </div>
                     )}
@@ -2149,14 +2149,12 @@ const Clientes = () => {
                               </Label>
                               <p>{endereco.estado || "-"}</p>
                             </div>
-                            {endereco.referencia && (
                               <div className="col-span-2">
                                 <Label className="text-xs text-muted-foreground">
                                   Referência
                                 </Label>
-                                <p>{endereco.referencia}</p>
+                              <p>{endereco.referencia || "-"}</p>
                               </div>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -2206,42 +2204,33 @@ const Clientes = () => {
                               </Label>
                               <p>{contato.email || "-"}</p>
                             </div>
-                            {(contato.nomeContato ||
-                              (contato as any).nome_contato) && (
                               <div>
                                 <Label className="text-xs text-muted-foreground">
                                   Nome do Contato
                                 </Label>
                                 <p>
                                   {contato.nomeContato ||
-                                    (contato as any).nome_contato}
+                                  (contato as any).nome_contato || "-"}
                                 </p>
                               </div>
-                            )}
-                            {contato.outroTelefone && (
                               <div>
                                 <Label className="text-xs text-muted-foreground">
                                   Outro Telefone
                                 </Label>
-                                <p>{contato.outroTelefone}</p>
+                              <p>{contato.outroTelefone || "-"}</p>
                               </div>
-                            )}
-                            {contato.nomeOutroTelefone && (
                               <div>
                                 <Label className="text-xs text-muted-foreground">
                                   Nome do Outro Telefone
                                 </Label>
-                                <p>{contato.nomeOutroTelefone}</p>
+                              <p>{contato.nomeOutroTelefone || "-"}</p>
                               </div>
-                            )}
-                            {contato.observacao && (
                               <div className="col-span-2">
                                 <Label className="text-xs text-muted-foreground">
                                   Observação
                                 </Label>
-                                <p>{contato.observacao}</p>
+                              <p>{contato.observacao || "-"}</p>
                               </div>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -2548,9 +2537,9 @@ const Clientes = () => {
                       <Input
                         placeholder="Nome Fantasia da Empresa"
                         value={
-                          editCliente.nome_fantasia ||
-                          selectedCliente.nome_fantasia ||
-                          ""
+                          editCliente.nome_fantasia !== undefined
+                            ? editCliente.nome_fantasia
+                            : selectedCliente.nome_fantasia || ""
                         }
                         onChange={(e) =>
                           setEditCliente({
@@ -2582,11 +2571,15 @@ const Clientes = () => {
                       value={
                         (editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
-                          ? editCliente.nome_razao ||
-                            selectedCliente.nome_razao ||
+                          ? editCliente.nome_razao !== undefined
+                            ? editCliente.nome_razao
+                            : selectedCliente.nome_razao || 
                             editCliente.nome ||
-                            selectedCliente.nome
-                          : editCliente.nome || selectedCliente.nome
+                              selectedCliente.nome || 
+                              ""
+                          : editCliente.nome !== undefined
+                            ? editCliente.nome
+                            : selectedCliente.nome || ""
                       }
                       onChange={(e) => {
                         const tipo =
@@ -3742,6 +3735,8 @@ const Clientes = () => {
           setEnderecoParaDeletar(null);
         }
       }}>
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="bg-transparent" />
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
@@ -3854,6 +3849,7 @@ const Clientes = () => {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
+        </AlertDialogPortal>
       </AlertDialog>
 
       {/* Diálogo de confirmação para deletar contato */}
@@ -3862,6 +3858,8 @@ const Clientes = () => {
           setContatoParaDeletar(null);
         }
       }}>
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="bg-transparent" />
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
@@ -3967,6 +3965,7 @@ const Clientes = () => {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
+        </AlertDialogPortal>
       </AlertDialog>
 
       {/* Overlay de Loading Global - aparece durante qualquer operação */}

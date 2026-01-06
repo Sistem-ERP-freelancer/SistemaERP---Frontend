@@ -41,15 +41,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
   Table,
   TableBody,
   TableCell,
@@ -82,8 +73,6 @@ const initialTransacoes = [
 const Financeiro = () => {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(15); // Padrão do backend para contas financeiras
   const [transacoes, setTransacoes] = useState(initialTransacoes);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -175,28 +164,10 @@ const Financeiro = () => {
 
   const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
-  // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
-  const validarParametrosPaginação = (page: number, limit: number): boolean => {
-    if (page < 1) {
-      console.error('Page deve ser maior ou igual a 1');
-      return false;
-    }
-    if (limit < 1 || limit > 100) {
-      console.error('Limit deve estar entre 1 e 100');
-      return false;
-    }
-    return true;
-  };
-
-  // Buscar contas financeiras filtradas para exibir na tabela com paginação
+  // Buscar todas as contas financeiras filtradas para exibir na tabela
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "tabela", activeTab, currentPage],
+    queryKey: ["contas-financeiras", "tabela", activeTab],
     queryFn: async () => {
-      // Validar parâmetros antes de fazer a requisição
-      if (!validarParametrosPaginação(currentPage, pageSize)) {
-        throw new Error('Parâmetros de paginação inválidos');
-      }
-
       try {
         let tipo: string | undefined;
         let status: string | undefined;
@@ -213,15 +184,27 @@ const Financeiro = () => {
           status = activeTab;
         }
 
+        // Buscar todas as contas (limite alto para pegar todas)
         const response = await financeiroService.listar({
-          page: currentPage,
-          limit: pageSize,
+          page: 1,
+          limit: 1000,
           tipo,
           status,
         });
+        
+        // Tratar diferentes formatos de resposta
+        let contasData = [];
+        if (Array.isArray(response)) {
+          contasData = response;
+        } else if (response?.data && Array.isArray(response.data)) {
+          contasData = response.data;
+        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
+          contasData = (response as any).contas;
+        }
+        
         return {
-          data: response.data || [],
-          total: response.total || 0,
+          data: contasData,
+          total: contasData.length,
         };
       } catch (error) {
         console.warn("API de contas financeiras não disponível:", error);
@@ -244,12 +227,6 @@ const Financeiro = () => {
 
   const contas = contasResponse?.data || [];
   const totalContas = contasResponse?.total || 0;
-  const totalPages = Math.ceil(totalContas / pageSize);
-
-  // Resetar página quando tab ou busca mudar
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchTerm]);
 
   // Calcular estatísticas
   const stats = useMemo(() => {
@@ -948,29 +925,29 @@ const Financeiro = () => {
                 <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
               </motion.div>
-            ))}
-        </div>
-
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {["Todos", "Receita", "Despesa", "PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === tab 
-                  ? getActiveTabColor(tab)
-                  : getInactiveTabColor(tab)
-              }`}
-            >
-              {tab === "Receita" ? "Receitas" : tab === "Despesa" ? "Despesas" : tab === "PENDENTE" ? "Pendente" : tab === "PAGO_PARCIAL" ? "Pago Parcial" : tab === "PAGO_TOTAL" ? "Pago Total" : tab === "VENCIDO" ? "Vencido" : tab === "CANCELADO" ? "Cancelado" : tab}
-            </button>
           ))}
         </div>
 
         {/* Filters */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
+            <div className="sm:w-[200px]">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todos">Todos os status</SelectItem>
+                  <SelectItem value="Receita">Receitas</SelectItem>
+                  <SelectItem value="Despesa">Despesas</SelectItem>
+                  <SelectItem value="PENDENTE">Pendente</SelectItem>
+                  <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
+                  <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
+                  <SelectItem value="VENCIDO">Vencido</SelectItem>
+                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
@@ -1091,93 +1068,11 @@ const Financeiro = () => {
             </TableBody>
           </Table>
           
-          {/* Paginação */}
-          {totalPages > 1 && (
+          {/* Informação de total de contas */}
+          {totalContas > 0 && (
             <div className="border-t border-border p-4">
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                      className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                    />
-                  </PaginationItem>
-                  
-                  {/* Primeira página */}
-                  {currentPage > 3 && (
-                    <>
-                      <PaginationItem>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(1)}
-                          className="cursor-pointer"
-                        >
-                          1
-                        </PaginationLink>
-                      </PaginationItem>
-                      {currentPage > 4 && (
-                        <PaginationItem>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Páginas ao redor da atual */}
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum: number;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    
-                    return (
-                      <PaginationItem key={pageNum}>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(pageNum)}
-                          isActive={currentPage === pageNum}
-                          className="cursor-pointer"
-                        >
-                          {pageNum}
-                        </PaginationLink>
-                      </PaginationItem>
-                    );
-                  })}
-                  
-                  {/* Última página */}
-                  {currentPage < totalPages - 2 && (
-                    <>
-                      {currentPage < totalPages - 3 && (
-                        <PaginationItem>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )}
-                      <PaginationItem>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(totalPages)}
-                          className="cursor-pointer"
-                        >
-                          {totalPages}
-                        </PaginationLink>
-                      </PaginationItem>
-                    </>
-                  )}
-                  
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-              
-              <div className="text-center text-sm text-muted-foreground mt-2">
-                Mostrando {contas.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalContas)} de {totalContas} contas
+              <div className="text-center text-sm text-muted-foreground">
+                Exibindo todas as {totalContas} {totalContas === 1 ? 'conta' : 'contas'}
               </div>
             </div>
           )}

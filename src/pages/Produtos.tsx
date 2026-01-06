@@ -343,18 +343,19 @@ const Produtos = () => {
         }
 
         // Extrair produtos e total da resposta
+        // Priorizar o novo formato: { data: Produto[], total, page, limit }
         let produtos: Produto[] = [];
         let total = 0;
         
-        if (Array.isArray(response)) {
+        if (response?.data && Array.isArray(response.data)) {
+          produtos = response.data;
+          total = response.total || response.data.length;
+        } else if (Array.isArray(response)) {
           produtos = response;
           total = response.length;
         } else if (response?.produtos && Array.isArray(response.produtos)) {
           produtos = response.produtos;
           total = response.total || response.produtos.length;
-        } else if (response?.data && Array.isArray(response.data)) {
-          produtos = response.data;
-          total = response.total || response.data.length;
         }
 
         // Se houver termo de busca e não houver filtros, filtrar localmente

@@ -192,10 +192,22 @@ const ContasAPagar = () => {
 
       try {
         let status: string | undefined;
+        let proximidadeVencimento: string | undefined;
 
         const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
+        const proximidadeTabs = ["VENCE_HOJE"];
+        
         if (statusTabs.includes(activeTab)) {
+          // Se for filtro de vencidas, usar proximidade_vencimento ao invés de status
+          // pois contas vencidas podem ter status PENDENTE ou PAGO_PARCIAL
+          if (activeTab === "VENCIDO") {
+            proximidadeVencimento = "VENCIDA";
+          } else {
           status = activeTab;
+          }
+        } else if (proximidadeTabs.includes(activeTab)) {
+          // Filtro por proximidade de vencimento
+          proximidadeVencimento = activeTab;
         }
 
         const response = await financeiroService.listar({
@@ -203,6 +215,7 @@ const ContasAPagar = () => {
           page: currentPage,
           limit: pageSize,
           status,
+          proximidade_vencimento: proximidadeVencimento,
         });
         
         // Tratar diferentes formatos de resposta
@@ -252,6 +265,93 @@ const ContasAPagar = () => {
     setCurrentPage(1);
   }, [activeTab, searchTerm]);
 
+  // Função auxiliar para verificar se uma conta está vencida
+  const isContaVencida = (conta: any): boolean => {
+    if (!conta || conta.tipo !== "PAGAR") return false;
+    
+    // Se já está paga ou cancelada, não está vencida
+    if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") return false;
+    
+    // Se tem status VENCIDO, está vencida
+    if (conta.status === "VENCIDO") return true;
+    
+    // Verificar pela data de vencimento
+    if (!conta.data_vencimento) return false;
+    
+    try {
+      // Usar dias_ate_vencimento do backend se disponível
+      if (conta.dias_ate_vencimento !== undefined && conta.dias_ate_vencimento !== null) {
+        return conta.dias_ate_vencimento < 0;
+      }
+      
+      // Calcular manualmente se não tiver o campo do backend
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const vencimento = new Date(conta.data_vencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      return vencimento < hoje;
+    } catch {
+      return false;
+    }
+  };
+
+  // Função auxiliar para verificar se uma conta vence hoje
+  const isContaVencendoHoje = (conta: any): boolean => {
+    if (!conta || conta.tipo !== "PAGAR") return false;
+    if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") return false;
+    if (!conta.data_vencimento) return false;
+    
+    try {
+      // Usar dias_ate_vencimento do backend se disponível
+      if (conta.dias_ate_vencimento !== undefined && conta.dias_ate_vencimento !== null) {
+        return conta.dias_ate_vencimento === 0;
+      }
+      
+      // Calcular manualmente
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const vencimento = new Date(conta.data_vencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      return vencimento.getTime() === hoje.getTime();
+    } catch {
+      return false;
+    }
+  };
+
+  // Função auxiliar para verificar se uma conta vence este mês
+  const isContaVencendoEsteMes = (conta: any): boolean => {
+    if (!conta || conta.tipo !== "PAGAR") return false;
+    if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") return false;
+    if (!conta.data_vencimento) return false;
+    
+    try {
+      const hoje = new Date();
+      const mesAtual = hoje.getMonth();
+      const anoAtual = hoje.getFullYear();
+      
+      const vencimento = new Date(conta.data_vencimento);
+      const mesVencimento = vencimento.getMonth();
+      const anoVencimento = vencimento.getFullYear();
+      
+      // Verificar se vence neste mês e ainda não venceu
+      if (mesVencimento === mesAtual && anoVencimento === anoAtual) {
+        // Usar dias_ate_vencimento do backend se disponível
+        if (conta.dias_ate_vencimento !== undefined && conta.dias_ate_vencimento !== null) {
+          return conta.dias_ate_vencimento >= 0;
+        }
+        
+        // Calcular manualmente
+        hoje.setHours(0, 0, 0, 0);
+        vencimento.setHours(0, 0, 0, 0);
+        return vencimento >= hoje;
+      }
+      
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   // Calcular estatísticas
   const stats = useMemo(() => {
     // Função auxiliar para converter valor para número seguro
@@ -272,6 +372,24 @@ const ContasAPagar = () => {
     }, 0);
     const totalPagar = totalPagarDashboard > 0 ? totalPagarDashboard : totalPagarContas;
 
+    // Contar contas vencidas (por status ou por data)
+    const contasVencidas = contasDashboard.filter(c => isContaVencida(c));
+    const totalVencidas = dashboardPagar?.vencidas !== undefined 
+      ? dashboardPagar.vencidas 
+      : contasVencidas.length;
+
+    // Contar contas vencendo hoje
+    const contasVencendoHoje = contasDashboard.filter(c => isContaVencendoHoje(c));
+    const totalVencendoHoje = dashboardPagar?.vencendo_hoje !== undefined
+      ? dashboardPagar.vencendo_hoje
+      : contasVencendoHoje.length;
+
+    // Contar contas vencendo este mês
+    const contasVencendoEsteMes = contasDashboard.filter(c => isContaVencendoEsteMes(c));
+    const totalVencendoEsteMes = dashboardPagar?.vencendo_este_mes !== undefined
+      ? dashboardPagar.vencendo_este_mes
+      : contasVencendoEsteMes.length;
+
     return [
       { 
         label: "Total a Pagar", 
@@ -284,7 +402,7 @@ const ContasAPagar = () => {
       },
       { 
         label: "Vencidas", 
-        value: dashboardPagar?.vencidas?.toString() || contasDashboard.filter(c => c.tipo === "PAGAR" && c.status === "VENCIDO").length.toString(), 
+        value: totalVencidas.toString(), 
         icon: Calendar, 
         trend: null, 
         trendUp: false, 
@@ -293,7 +411,7 @@ const ContasAPagar = () => {
       },
       { 
         label: "Vencendo Hoje", 
-        value: dashboardPagar?.vencendo_hoje?.toString() || "0", 
+        value: totalVencendoHoje.toString(), 
         icon: Calendar, 
         trend: null, 
         color: "text-amber-600", 
@@ -301,7 +419,7 @@ const ContasAPagar = () => {
       },
       { 
         label: "Vencendo Este Mês", 
-        value: dashboardPagar?.vencendo_este_mes?.toString() || "0", 
+        value: totalVencendoEsteMes.toString(), 
         icon: Calendar, 
         trend: null, 
         color: "text-blue-600", 
@@ -568,6 +686,7 @@ const ContasAPagar = () => {
       case "PAGO_PARCIAL": return "bg-blue-500 text-white";
       case "PAGO_TOTAL": return "bg-green-500 text-white";
       case "VENCIDO": return "bg-red-500 text-white";
+      case "VENCE_HOJE": return "bg-orange-500 text-white";
       case "CANCELADO": return "bg-slate-600 text-white";
       default: return "bg-primary text-primary-foreground";
     }
@@ -580,6 +699,7 @@ const ContasAPagar = () => {
       case "PAGO_PARCIAL": return "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20";
       case "PAGO_TOTAL": return "bg-green-500/10 text-green-500 hover:bg-green-500/20";
       case "VENCIDO": return "bg-red-500/10 text-red-500 hover:bg-red-500/20";
+      case "VENCE_HOJE": return "bg-orange-500/10 text-orange-500 hover:bg-orange-500/20";
       case "CANCELADO": return "bg-slate-600/10 text-slate-600 hover:bg-slate-600/20";
       default: return "bg-card text-muted-foreground hover:bg-secondary";
     }
@@ -753,8 +873,28 @@ const ContasAPagar = () => {
     retry: false,
   });
 
-  // Filtrar por busca
+  // Filtrar por busca e por tab ativa
   const filteredTransacoes = useMemo(() => {
+    let filtered = transacoesDisplay;
+
+    // Filtrar por tab ativa (especialmente para Vencidas e Vencendo Hoje)
+    if (activeTab === "VENCIDO") {
+      // Filtrar apenas contas vencidas (por status ou por data)
+      filtered = filtered.filter(t => {
+        const conta = contas.find(c => c.id === t.contaId);
+        if (!conta) return false;
+        return isContaVencida(conta);
+      });
+    } else if (activeTab === "VENCE_HOJE") {
+      // Filtrar apenas contas vencendo hoje
+      filtered = filtered.filter(t => {
+        const conta = contas.find(c => c.id === t.contaId);
+        if (!conta) return false;
+        return isContaVencendoHoje(conta);
+      });
+    }
+
+    // Busca numérica por ID
     if (isNumericSearch && contaPorId && contaPorId.tipo === "PAGAR") {
       const contaEncontrada = contas.find(c => c.id === contaPorId.id);
       if (contaEncontrada) {
@@ -786,6 +926,12 @@ const ContasAPagar = () => {
         };
         const statusFormatado = statusMap[conta.status] || conta.status;
 
+        const diasAteVencimento = conta.dias_ate_vencimento !== undefined 
+          ? conta.dias_ate_vencimento 
+          : calcularDiasAteVencimento(conta.data_vencimento);
+        
+        const vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
+
         return [{
           id: conta.numero_conta || `CONTA-${conta.id}`,
           descricao: conta.descricao,
@@ -793,26 +939,28 @@ const ContasAPagar = () => {
           valor: valorFormatado,
           data: dataFormatada,
           status: statusFormatado,
+          statusOriginal: conta.status,
           contaId: conta.id,
           fornecedor: nomeFornecedor,
+          diasAteVencimento,
+          vencimentoStatus,
         }];
       }
     }
 
-    // Se não há termo de busca, retornar todas as transações
-    if (!searchTerm.trim()) {
-      return transacoesDisplay;
-    }
-
     // Filtrar por termo de busca
-    return transacoesDisplay.filter(t => {
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(t => {
       const matchesSearch = 
         t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
         t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.fornecedor.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, fornecedores]);
+    }
+
+    return filtered;
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, fornecedores, activeTab]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -1125,26 +1273,25 @@ const ContasAPagar = () => {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {["Todos", "PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === tab 
-                  ? getActiveTabColor(tab)
-                  : getInactiveTabColor(tab)
-              }`}
-            >
-              {tab === "PENDENTE" ? "Pendente" : tab === "PAGO_PARCIAL" ? "Pago Parcial" : tab === "PAGO_TOTAL" ? "Pago Total" : tab === "VENCIDO" ? "Vencido" : tab === "CANCELADO" ? "Cancelado" : tab}
-            </button>
-          ))}
-        </div>
-
         {/* Filters */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
+            <div className="sm:w-[200px]">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todos">Todos os status</SelectItem>
+                  <SelectItem value="PENDENTE">Pendente</SelectItem>
+                  <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
+                  <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
+                  <SelectItem value="VENCE_HOJE">Vencendo Hoje</SelectItem>
+                  <SelectItem value="VENCIDO">Vencido</SelectItem>
+                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 

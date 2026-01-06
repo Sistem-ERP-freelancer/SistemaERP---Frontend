@@ -16,6 +16,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogOverlay,
+  AlertDialogPortal,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -168,6 +170,7 @@ const Fornecedores = () => {
     statusFornecedor: "",
     cidade: "",
     estado: "",
+    logradouro: "",
   });
 
   // Estados para edição
@@ -265,24 +268,29 @@ const Fornecedores = () => {
   // Usar estatísticas calculadas (sempre atualizadas) ao invés da API
   const estatisticas = estatisticasCalculadas;
 
-  // Buscar cidades disponíveis
-  const [cidadeSearchTerm, setCidadeSearchTerm] = useState("");
-  const { data: cidades = [], isLoading: isLoadingCidades } = useQuery({
-    queryKey: ["fornecedores-cidades", cidadeSearchTerm],
-    queryFn: () => fornecedoresService.buscarCidades(cidadeSearchTerm || undefined),
-    enabled: filtrosDialogOpen, // Só busca quando o dialog de filtros está aberto
-    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
-  });
 
   // Verificar se há filtros ativos
   // Verificar tipos de filtros conforme guia de endpoints
   // Filtros básicos: tipoFornecedor, statusFornecedor (aceitos em /fornecedor)
-  // Filtros avançados: cidade, estado (aceitos apenas em /fornecedor/buscar-avancado)
+  // Filtros avançados: estado, logradouro (aceitos apenas em /fornecedor/buscar-avancado)
+  // Nota: O campo "Cidade" no formulário agora usa logradouro internamente
   const temFiltrosBasicos = !!(filtrosAvancados.tipoFornecedor?.trim() || filtrosAvancados.statusFornecedor?.trim());
-  const temFiltrosAvancados = !!(filtrosAvancados.cidade?.trim() || filtrosAvancados.estado?.trim());
+  const temFiltrosAvancados = !!(filtrosAvancados.estado?.trim() || filtrosAvancados.logradouro?.trim());
   const temTermo = !!searchTerm.trim();
   // Variável para UI (verifica se há qualquer filtro ativo)
   const temFiltrosAtivos = temFiltrosBasicos || temFiltrosAvancados;
+  
+  // Debug: verificar estado dos filtros
+  if (import.meta.env.DEV) {
+    console.log('[Fornecedores] Estado dos filtros:', {
+      filtrosAvancados,
+      temFiltrosBasicos,
+      temFiltrosAvancados,
+      temTermo,
+      estado: filtrosAvancados.estado,
+      logradouro: filtrosAvancados.logradouro,
+    });
+  }
 
   // Buscar fornecedores conforme GUIA_ENDPOINTS_BUSCA_FILTRO.md
   const { 
@@ -296,7 +304,66 @@ const Fornecedores = () => {
         // - /fornecedor/buscar: busca em nome fantasia, razão social ou CNPJ (busca simples)
         // - /fornecedor/buscar-avancado: busca em nome, razão social, CNPJ + aceita filtros adicionais
         
-        if (temTermo && !temFiltrosAvancados && !temFiltrosBasicos) {
+        // Quando há filtros avançados (estado ou logradouro), SEMPRE usar buscarAvancado
+        // IMPORTANTE: Verificar explicitamente se estado ou logradouro têm valor
+        // Nota: O campo "Cidade" no formulário agora usa logradouro internamente
+        const temEstado = !!(filtrosAvancados.estado && filtrosAvancados.estado.trim());
+        const temLogradouro = !!(filtrosAvancados.logradouro && filtrosAvancados.logradouro.trim());
+        
+        if (temEstado || temLogradouro) {
+          // Quando há filtros avançados (estado/logradouro), usa busca avançada
+          const params: any = {
+            page: currentPage,
+            limit: pageSize,
+          };
+
+          // Adicionar termo se houver (busca em nome, razão social, CNPJ)
+          if (temTermo) {
+            params.termo = searchTerm.trim();
+          }
+
+          // Adicionar todos os filtros (básicos e avançados)
+          if (filtrosAvancados.tipoFornecedor && filtrosAvancados.tipoFornecedor.trim()) {
+            params.tipoFornecedor = filtrosAvancados.tipoFornecedor.trim();
+          }
+          if (filtrosAvancados.statusFornecedor && filtrosAvancados.statusFornecedor.trim()) {
+            params.statusFornecedor = filtrosAvancados.statusFornecedor.trim();
+          }
+          if (temEstado) {
+            params.estado = filtrosAvancados.estado.trim().toUpperCase();
+          }
+          if (temLogradouro) {
+            params.logradouro = filtrosAvancados.logradouro.trim();
+          }
+
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Usando buscarAvancado com filtros avançados');
+            console.log('[Buscar Fornecedores] Parâmetros completos:', JSON.stringify(params, null, 2));
+            console.log('[Buscar Fornecedores] temEstado:', temEstado, 'temLogradouro:', temLogradouro);
+            console.log('[Buscar Fornecedores] filtrosAvancados.logradouro:', filtrosAvancados.logradouro);
+            console.log('[Buscar Fornecedores] params.logradouro:', params.logradouro);
+          }
+
+          const response = await fornecedoresService.buscarAvancado(params);
+          
+          if (import.meta.env.DEV) {
+            console.log('[Buscar Fornecedores] Resposta buscarAvancado:', {
+              total: response.total,
+              page: response.page,
+              totalPages: response.totalPages,
+              fornecedoresCount: response.data?.length || response.fornecedores?.length || 0
+            });
+            if (response.data && response.data.length > 0) {
+              console.log('[Buscar Fornecedores] Primeiro fornecedor:', {
+                id: response.data[0].id,
+                nome_fantasia: response.data[0].nome_fantasia,
+                enderecos: response.data[0].enderecos
+              });
+            }
+          }
+
+          return response;
+        } else if (temTermo && !temFiltrosBasicos) {
           // Quando há apenas termo (sem filtros), usa busca simples
           // Busca em: nome fantasia, razão social ou CNPJ/CPF
           if (import.meta.env.DEV) {
@@ -317,8 +384,8 @@ const Fornecedores = () => {
           }
 
           return response;
-        } else if (temTermo || temFiltrosAvancados || temFiltrosBasicos) {
-          // Quando há termo + filtros OU apenas filtros, usa busca avançada
+        } else if (temTermo || temFiltrosBasicos) {
+          // Quando há termo + filtros básicos OU apenas filtros básicos, usa busca avançada
           const params: any = {
             page: currentPage,
             limit: pageSize,
@@ -329,23 +396,16 @@ const Fornecedores = () => {
             params.termo = searchTerm.trim();
           }
 
-          // Adicionar todos os filtros (básicos e avançados)
+          // Adicionar filtros básicos
           if (filtrosAvancados.tipoFornecedor) {
             params.tipoFornecedor = filtrosAvancados.tipoFornecedor;
           }
           if (filtrosAvancados.statusFornecedor) {
             params.statusFornecedor = filtrosAvancados.statusFornecedor;
           }
-          if (filtrosAvancados.cidade && filtrosAvancados.cidade.trim()) {
-            params.cidade = filtrosAvancados.cidade.trim();
-          }
-          if (filtrosAvancados.estado && filtrosAvancados.estado.trim()) {
-            params.estado = filtrosAvancados.estado.trim().toUpperCase();
-          }
 
           if (import.meta.env.DEV) {
             console.log('[Buscar Fornecedores] Usando buscarAvancado com parâmetros:', params);
-            console.log('[Buscar Fornecedores] O termo busca em: nome_fantasia, nome_razao, cpf_cnpj (CNPJ/CPF)');
           }
 
           const response = await fornecedoresService.buscarAvancado(params);
@@ -437,6 +497,57 @@ const Fornecedores = () => {
     else if (Array.isArray(fornecedoresResponse.fornecedor)) {
       fornecedores = fornecedoresResponse.fornecedor;
       totalFornecedores = fornecedoresResponse.total || fornecedoresResponse.fornecedor.length;
+    }
+  }
+  
+  // Validação adicional: Filtrar fornecedores por endereço quando há filtros de endereço ativos
+  // Isso garante que apenas fornecedores com endereços que correspondem aos filtros sejam exibidos
+  // Nota: O campo "Cidade" no formulário agora usa logradouro internamente
+  if (temFiltrosAvancados && fornecedores.length > 0) {
+    const temEstado = !!(filtrosAvancados.estado && filtrosAvancados.estado.trim());
+    const temLogradouro = !!(filtrosAvancados.logradouro && filtrosAvancados.logradouro.trim());
+    
+    const estadoFiltro = temEstado ? filtrosAvancados.estado.trim().toUpperCase() : null;
+    const logradouroFiltro = temLogradouro ? filtrosAvancados.logradouro.trim().toLowerCase() : null;
+    
+    const fornecedoresAntesFiltro = fornecedores.length;
+    
+    fornecedores = fornecedores.filter((fornecedor) => {
+      // Se o fornecedor não tem endereços, não corresponde aos filtros
+      if (!fornecedor.enderecos || fornecedor.enderecos.length === 0) {
+        return false;
+      }
+      
+      // Verificar se pelo menos um endereço corresponde aos filtros
+      return fornecedor.enderecos.some((endereco: any) => {
+        let correspondeEstado = true;
+        let correspondeLogradouro = true;
+        
+        if (estadoFiltro) {
+          const estadoEndereco = endereco.estado?.trim().toUpperCase() || '';
+          correspondeEstado = estadoEndereco === estadoFiltro;
+        }
+        
+        if (logradouroFiltro) {
+          const logradouroEndereco = endereco.logradouro?.trim().toLowerCase() || '';
+          correspondeLogradouro = logradouroEndereco.includes(logradouroFiltro);
+        }
+        
+        return correspondeEstado && correspondeLogradouro;
+      });
+    });
+    
+    totalFornecedores = fornecedores.length;
+    
+    if (import.meta.env.DEV && fornecedoresAntesFiltro !== fornecedores.length) {
+      console.log('[Fornecedores] Filtro adicional aplicado:', {
+        fornecedoresAntesFiltro,
+        fornecedoresDepoisFiltro: fornecedores.length,
+        filtros: {
+          estado: estadoFiltro,
+          logradouro: logradouroFiltro,
+        },
+      });
     }
   }
   
@@ -1641,6 +1752,7 @@ const Fornecedores = () => {
       statusFornecedor: "",
       cidade: "",
       estado: "",
+      logradouro: "",
       telefone: "",
       email: "",
       nomeContato: "",
@@ -2595,70 +2707,21 @@ const Fornecedores = () => {
                           <MapPin className="w-4 h-4 text-muted-foreground" />
                           Cidade
                         </Label>
-                        <div className="relative">
-                          <Input
-                            id="cidade"
-                            placeholder="Buscar cidade..."
-                            value={cidadeSearchTerm}
-                            onChange={(e) => setCidadeSearchTerm(e.target.value)}
-                            onFocus={() => {
-                              // Buscar cidades quando o campo recebe foco
-                              if (cidadeSearchTerm === "" && filtrosAvancados.cidade) {
-                                setCidadeSearchTerm(filtrosAvancados.cidade);
-                              }
-                            }}
-                            className="pr-8"
-                          />
-                          {isLoadingCidades && (
-                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-                          )}
-                        </div>
-                        {cidadeSearchTerm && cidades.length > 0 && (
-                          <div className="max-h-40 overflow-y-auto border rounded-md bg-card">
-                            {cidades.map((cidade) => (
-                              <button
-                                key={cidade}
-                                type="button"
-                                onClick={() => {
-                                  setFiltrosAvancados({
-                                    ...filtrosAvancados,
-                                    cidade: cidade,
-                                  });
-                                  setCidadeSearchTerm(cidade);
-                                }}
-                                className={`w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors ${
-                                  filtrosAvancados.cidade === cidade
-                                    ? "bg-primary/10 text-primary font-medium"
-                                    : ""
-                                }`}
-                              >
-                                {cidade}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {filtrosAvancados.cidade && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">
-                              Selecionado: {filtrosAvancados.cidade}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-xs"
-                              onClick={() => {
-                                setFiltrosAvancados({
-                                  ...filtrosAvancados,
-                                  cidade: "",
-                                });
-                                setCidadeSearchTerm("");
-                              }}
-                            >
-                              <XCircle className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        )}
+                        <Input
+                          id="cidade"
+                          placeholder="Digite o logradouro (Ex: Rua, Avenida, etc.)"
+                          value={filtrosAvancados.logradouro}
+                          onChange={(e) =>
+                            setFiltrosAvancados({
+                              ...filtrosAvancados,
+                              logradouro: e.target.value,
+                            })
+                          }
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Digite o nome completo ou parcial do logradouro
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="estado">Estado (UF)</Label>
@@ -2857,7 +2920,18 @@ const Fornecedores = () => {
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <Building2 className="w-12 h-12 text-muted-foreground/50" />
-                      <p>Nenhum fornecedor encontrado</p>
+                      {temFiltrosAvancados ? (
+                        <>
+                          <p className="font-semibold text-destructive">Nenhum fornecedor encontrado</p>
+                          <p className="text-sm text-muted-foreground">
+                            Não foram encontrados fornecedores com os filtros de endereço aplicados.
+                            {filtrosAvancados.logradouro?.trim() && <span> Cidade: {filtrosAvancados.logradouro}</span>}
+                            {filtrosAvancados.estado?.trim() && <span> Estado: {filtrosAvancados.estado}</span>}
+                          </p>
+                        </>
+                      ) : (
+                        <p>Nenhum fornecedor encontrado</p>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -3170,7 +3244,7 @@ const Fornecedores = () => {
                         : "Nome"}
                     </Label>
                     <p className="font-medium text-base">
-                      {selectedFornecedor.nome_razao}
+                      {selectedFornecedor.nome_razao || "-"}
                     </p>
                   </div>
                   <div className="space-y-3">
@@ -3181,16 +3255,14 @@ const Fornecedores = () => {
                       {selectedFornecedor.cpf_cnpj || "-"}
                     </p>
                   </div>
-                  {selectedFornecedor.inscricao_estadual && (
-                    <div className="space-y-3">
-                      <Label className="text-sm text-muted-foreground">
-                        Inscrição Estadual
-                      </Label>
-                      <p className="font-medium text-base">
-                        {selectedFornecedor.inscricao_estadual}
-                      </p>
-                    </div>
-                  )}
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground">
+                      Inscrição Estadual
+                    </Label>
+                    <p className="font-medium text-base">
+                      {selectedFornecedor.inscricao_estadual || "-"}
+                    </p>
+                  </div>
                   <div className="space-y-3">
                     <Label className="text-sm text-muted-foreground">
                       Tipo
@@ -3241,49 +3313,49 @@ const Fornecedores = () => {
                               <Label className="text-xs text-muted-foreground">
                                 CEP
                               </Label>
-                              <p>{endereco.cep || ""}</p>
+                              <p>{endereco.cep || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Logradouro
                               </Label>
-                              <p>{endereco.logradouro || ""}</p>
+                              <p>{endereco.logradouro || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Número
                               </Label>
-                              <p>{endereco.numero || ""}</p>
+                              <p>{endereco.numero || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Complemento
                               </Label>
-                              <p>{endereco.complemento || ""}</p>
+                              <p>{endereco.complemento || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Bairro
                               </Label>
-                              <p>{endereco.bairro || ""}</p>
+                              <p>{endereco.bairro || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Cidade
                               </Label>
-                              <p>{endereco.cidade || ""}</p>
+                              <p>{endereco.cidade || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 Estado
                               </Label>
-                              <p>{endereco.estado || ""}</p>
+                              <p>{endereco.estado || "-"}</p>
                             </div>
                             <div className="col-span-2">
                               <Label className="text-xs text-muted-foreground">
                                 Referência
                               </Label>
-                              <p>{endereco.referencia || ""}</p>
+                              <p>{endereco.referencia || "-"}</p>
                             </div>
                           </div>
                         </div>
@@ -3311,13 +3383,13 @@ const Fornecedores = () => {
                               <Label className="text-xs text-muted-foreground">
                                 Telefone
                               </Label>
-                              <p>{contato.telefone || ""}</p>
+                              <p>{contato.telefone || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
                                 E-mail
                               </Label>
-                              <p>{contato.email || ""}</p>
+                              <p>{contato.email || "-"}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
@@ -3325,14 +3397,14 @@ const Fornecedores = () => {
                               </Label>
                               <p>
                                 {contato.nomeContato ||
-                                  (contato as any).nome_contato || ""}
+                                  (contato as any).nome_contato || "-"}
                               </p>
                             </div>
                             <div className="col-span-2">
                               <Label className="text-xs text-muted-foreground">
                                 Observação
                               </Label>
-                              <p>{contato.observacao || ""}</p>
+                              <p>{contato.observacao || "-"}</p>
                             </div>
                           </div>
                         </div>
@@ -4254,7 +4326,9 @@ const Fornecedores = () => {
           setEnderecoParaDeletar(null);
         }
       }}>
-        <AlertDialogContent>
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="bg-black/20 backdrop-blur-sm" />
+          <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
             <AlertDialogDescription>
@@ -4335,6 +4409,7 @@ const Fornecedores = () => {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
+        </AlertDialogPortal>
       </AlertDialog>
 
       {/* Diálogo de confirmação para deletar contato */}
@@ -4343,7 +4418,9 @@ const Fornecedores = () => {
           setContatoParaDeletar(null);
         }
       }}>
-        <AlertDialogContent>
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="bg-black/20 backdrop-blur-sm" />
+          <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Remoção</AlertDialogTitle>
             <AlertDialogDescription>
@@ -4428,6 +4505,7 @@ const Fornecedores = () => {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
+        </AlertDialogPortal>
       </AlertDialog>
     </AppLayout>
   );

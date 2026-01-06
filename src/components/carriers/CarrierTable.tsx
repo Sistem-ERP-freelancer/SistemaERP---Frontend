@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StatusBadge } from './StatusBadge';
-import { Package, Edit, Power, Trash2, MoreVertical, Mail, MapPin, Loader2 } from 'lucide-react';
+import { Package, Edit, Power, Trash2, MoreVertical, Mail, MapPin, Loader2, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,9 @@ import { cn } from '@/lib/utils';
 interface CarrierTableProps {
   /** Lista de transportadoras a exibir */
   carriers: Transportadora[];
+  
+  /** Termo de busca atual */
+  searchTerm?: string;
   
   /** Callback ao clicar em editar */
   onEdit: (carrier: Transportadora) => void;
@@ -43,6 +46,9 @@ interface CarrierTableProps {
   /** Callback ao visualizar pedidos */
   onViewOrders: (carrier: Transportadora) => void;
   
+  /** Callback ao visualizar dados completos */
+  onView?: (carrier: Transportadora) => void;
+  
   /** ID da transportadora que está atualizando status */
   updatingStatusId?: number | null;
   
@@ -52,18 +58,31 @@ interface CarrierTableProps {
 
 export function CarrierTable({
   carriers,
+  searchTerm = '',
   onEdit,
   onDelete,
   onStatusChange,
   onViewOrders,
+  onView,
   updatingStatusId,
   className,
 }: CarrierTableProps) {
+  const hasSearchTerm = searchTerm.trim().length > 0;
+  
   if (carriers.length === 0) {
     return (
       <div className={cn('text-center py-12', className)}>
         <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-        <p className="text-muted-foreground">Nenhuma transportadora encontrada</p>
+        {hasSearchTerm ? (
+          <>
+            <p className="font-semibold text-destructive mb-2">Nenhuma transportadora encontrada</p>
+            <p className="text-sm text-muted-foreground">
+              Não foram encontradas transportadoras com o termo de busca: <strong>"{searchTerm}"</strong>
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground">Nenhuma transportadora encontrada</p>
+        )}
       </div>
     );
   }
@@ -181,6 +200,12 @@ export function CarrierTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {onView && (
+                      <DropdownMenuItem onClick={() => onView(carrier)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Visualizar
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => onViewOrders(carrier)}>
                       <Package className="w-4 h-4 mr-2" />
                       Ver Pedidos

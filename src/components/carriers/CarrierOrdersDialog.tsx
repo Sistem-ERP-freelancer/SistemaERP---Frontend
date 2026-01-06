@@ -40,6 +40,13 @@ export function CarrierOrdersDialog({
   carrier,
   orders,
 }: CarrierOrdersDialogProps) {
+  // Função auxiliar para converter valor para número seguro
+  const parseValor = (valor: any): number => {
+    if (valor === null || valor === undefined || valor === '') return 0;
+    const num = typeof valor === 'string' ? parseFloat(valor.replace(/[^\d.,-]/g, '').replace(',', '.')) : Number(valor);
+    return isNaN(num) ? 0 : num;
+  };
+
   const stats = {
     total: orders.length,
     pendentes: orders.filter((o) => {
@@ -54,7 +61,10 @@ export function CarrierOrdersDialog({
       const status = o.status?.toLowerCase();
       return status === 'entregue' || status === 'ENTREGUE';
     }).length,
-    valorTotal: orders.reduce((sum, o) => sum + (o.valor_total || o.valor || 0), 0),
+    valorTotal: orders.reduce((sum, o) => {
+      const valor = parseValor(o.valor_total || o.valor);
+      return sum + valor;
+    }, 0),
   };
 
   return (
@@ -133,8 +143,8 @@ export function CarrierOrdersDialog({
                     ? order.cliente 
                     : order.cliente?.nome || '--';
                   
-                  // Normalizar valor
-                  const valor = order.valor_total || order.valor || 0;
+                  // Normalizar valor usando a função auxiliar
+                  const valor = parseValor(order.valor_total || order.valor);
                   
                   // Normalizar status
                   const status = order.status || '--';

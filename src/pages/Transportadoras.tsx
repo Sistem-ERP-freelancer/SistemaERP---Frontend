@@ -1,11 +1,13 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Truck, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { useCarriers } from '@/hooks/useCarriers';
 import { CarrierTable } from '@/components/carriers/CarrierTable';
 import { CarrierForm } from '@/components/carriers/CarrierForm';
 import { DeleteCarrierDialog } from '@/components/carriers/DeleteCarrierDialog';
 import { CarrierOrdersDialog } from '@/components/carriers/CarrierOrdersDialog';
+import { CarrierViewDialog } from '@/components/carriers/CarrierViewDialog';
 import { SearchInput } from '@/components/carriers/SearchInput';
 import { Pagination } from '@/components/carriers/Pagination';
 import { CarrierStats } from '@/components/carriers/CarrierStats';
@@ -43,6 +45,19 @@ export default function Transportadoras() {
     closeDeleteDialog,
     closeOrdersDialog,
   } = useCarriers();
+
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [carrierToView, setCarrierToView] = useState<any>(null);
+
+  const handleView = (carrier: any) => {
+    setCarrierToView(carrier);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleCloseView = () => {
+    setIsViewDialogOpen(false);
+    setCarrierToView(null);
+  };
 
   const handleSubmit = (data: any) => {
     if (selectedCarrier) {
@@ -102,19 +117,23 @@ export default function Transportadoras() {
               <>
                 <CarrierTable
                   carriers={carriers}
+                  searchTerm={searchTerm}
                   onEdit={openEditForm}
                   onDelete={openDeleteDialog}
                   onStatusChange={handleStatusChange}
                   updatingStatusId={updatingStatusId}
                   onViewOrders={openOrdersDialog}
+                  onView={handleView}
                 />
 
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  totalItems={totalCarriers}
-                  onPageChange={setCurrentPage}
-                />
+                {carriers.length > 0 && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalCarriers}
+                    onPageChange={setCurrentPage}
+                  />
+                )}
               </>
             )}
           </div>
@@ -141,6 +160,12 @@ export default function Transportadoras() {
           onClose={closeOrdersDialog}
           carrier={selectedCarrier}
           orders={selectedCarrier ? getOrdersByCarrier(selectedCarrier.id) : []}
+        />
+
+        <CarrierViewDialog
+          isOpen={isViewDialogOpen}
+          onClose={handleCloseView}
+          carrier={carrierToView}
         />
       </div>
     </AppLayout>

@@ -62,6 +62,16 @@ export function OrderForm({
   produtos,
   transportadoras,
 }: OrderFormProps) {
+  // Log quando produtos são recebidos
+  useEffect(() => {
+    if (import.meta.env.DEV && produtos.length > 0) {
+      console.log('[OrderForm] Produtos recebidos no componente:', {
+        total: produtos.length,
+        produtos: produtos.map(p => ({ id: p.id, nome: p.nome, preco_venda: p.preco_venda, statusProduto: p.statusProduto }))
+      });
+    }
+  }, [produtos]);
+
   const [tipo, setTipo] = useState<TipoPedido>('VENDA');
   const [clienteId, setClienteId] = useState<number | undefined>(undefined);
   const [fornecedorId, setFornecedorId] = useState<number | undefined>(undefined);
@@ -155,18 +165,86 @@ export function OrderForm({
     const newItens = [...itens];
     const currentItem = { ...newItens[index] };
     
-    // Atualizar o campo específico
-    currentItem[field] = value;
-
-    // Se mudou o produto, atualizar preço unitário
-    if (field === 'produto_id' && value) {
-      const produto = produtos.find((p) => p.id === value);
-      if (produto && produto.preco_venda) {
-        currentItem.preco_unitario = produto.preco_venda;
-        currentItem.produto_nome = produto.nome;
-      } else {
-        currentItem.preco_unitario = '';
+    // Se mudou o produto, atualizar preço unitário e quantidade automaticamente ANTES de atualizar o campo
+    if (field === 'produto_id' && value && value !== 0) {
+      const produtoId = typeof value === 'string' ? Number(value) : value;
+      
+      // Tentar encontrar o produto com diferentes comparações (pode haver problema de tipo)
+      const produto = produtos.find((p) => {
+        const pId = typeof p.id === 'string' ? Number(p.id) : p.id;
+        const vId = typeof produtoId === 'string' ? Number(produtoId) : produtoId;
+        return pId === vId || String(pId) === String(vId) || Number(pId) === Number(vId);
+      });
+      
+      if (import.meta.env.DEV) {
+        console.log('[OrderForm] Produto selecionado:', {
+          produtoId,
+          produto,
+          preco_venda: produto?.preco_venda,
+          produtosDisponiveis: produtos.length,
+          idsDisponiveis: produtos.map(p => ({ id: p.id, nome: p.nome, preco_venda: p.preco_venda })),
+          produtoEncontrado: !!produto,
+          tipoProdutoId: typeof produtoId,
+          tipoIdsDisponiveis: produtos.map(p => typeof p.id)
+        });
       }
+      
+      if (produto) {
+        // Preencher preço unitário com o preço de venda do produto
+        // Verificar diferentes possíveis nomes de campos do backend
+        const precoVenda = produto.preco_venda || (produto as any).precoVenda || (produto as any).precoVenda || 0;
+        
+        if (import.meta.env.DEV) {
+          console.log('[OrderForm] Dados do produto:', {
+            produtoCompleto: produto,
+            preco_venda: produto.preco_venda,
+            precoVenda: (produto as any).precoVenda,
+            todosCampos: Object.keys(produto),
+            valorPrecoVenda: precoVenda
+          });
+        }
+        
+        if (precoVenda && precoVenda > 0) {
+          currentItem.preco_unitario = Number(precoVenda);
+        } else {
+          // Se não tem preço, deixar vazio mas mostrar aviso
+          currentItem.preco_unitario = '';
+          if (import.meta.env.DEV) {
+            console.warn('[OrderForm] Produto sem preço de venda:', produto);
+          }
+        }
+        
+        // Preencher quantidade com 1 se estiver vazia ou zero
+        if (currentItem.quantidade === '' || currentItem.quantidade === 0 || !currentItem.quantidade) {
+          currentItem.quantidade = 1;
+        }
+        
+        // Atualizar nome do produto
+        currentItem.produto_nome = produto.nome;
+        
+        // Atualizar o produto_id
+        currentItem.produto_id = produtoId;
+      } else {
+        // Se não encontrou o produto, limpar os campos e mostrar aviso
+        if (import.meta.env.DEV) {
+          console.error('[OrderForm] Produto não encontrado:', {
+            produtoId,
+            produtosDisponiveis: produtos.map(p => ({ id: p.id, nome: p.nome })),
+            problema: 'O produto selecionado não está disponível na lista carregada. Verifique se o backend está retornando todos os produtos ativos.'
+          });
+        }
+        
+        // Mostrar toast informativo para o usuário
+        toast.warning(`Produto não encontrado. Verifique se o produto está ativo e disponível.`, {
+          description: `ID do produto: ${produtoId}. Total de produtos carregados: ${produtos.length}`
+        });
+        
+        currentItem.preco_unitario = '';
+        currentItem.produto_id = value;
+      }
+    } else {
+      // Atualizar o campo específico normalmente
+      currentItem[field] = value;
     }
 
     newItens[index] = currentItem;
@@ -489,20 +567,40 @@ export function OrderForm({
                   <div className="col-span-4 space-y-2">
                     <Label>Produto</Label>
                     <Select
-                      value={item.produto_id.toString()}
-                      onValueChange={(value) =>
-                        handleItemChange(index, 'produto_id', Number(value))
-                      }
+                      value={item.produto_id && item.produto_id !== 0 ? item.produto_id.toString() : undefined}
+                      onValueChange={(value) => {
+                        if (value) {
+                          const produtoId = Number(value);
+                          
+                          if (import.meta.env.DEV) {
+                            console.log('[OrderForm] Selecionando produto:', {
+                              value,
+                              produtoId,
+                              produtosDisponiveis: produtos.length,
+                              idsDisponiveis: produtos.map(p => p.id),
+                              produtoExiste: produtos.some(p => p.id === produtoId)
+                            });
+                          }
+                          
+                          handleItemChange(index, 'produto_id', produtoId);
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um produto" />
                       </SelectTrigger>
                       <SelectContent>
-                        {produtos.map((produto) => (
-                          <SelectItem key={produto.id} value={produto.id.toString()}>
-                            {produto.nome} - {produto.sku}
+                        {produtos.length === 0 ? (
+                          <SelectItem value="" disabled>
+                            Nenhum produto disponível
                           </SelectItem>
-                        ))}
+                        ) : (
+                          produtos.map((produto) => (
+                            <SelectItem key={produto.id} value={produto.id.toString()}>
+                              {produto.nome} - {produto.sku} {produto.preco_venda ? `(R$ ${produto.preco_venda.toFixed(2)})` : ''}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>

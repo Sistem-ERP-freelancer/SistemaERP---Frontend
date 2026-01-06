@@ -85,12 +85,12 @@ const Estoque = () => {
     queryFn: async () => {
       try {
         const response = await produtosService.listar({ page: 1, limit: 100 });
-        // A API pode retornar em diferentes formatos
-        if (Array.isArray(response)) {
-          return response;
-        }
+        // Priorizar o novo formato: { data: Produto[], total, page, limit }
         if (response?.data && Array.isArray(response.data)) {
           return response.data;
+        }
+        if (Array.isArray(response)) {
+          return response;
         }
         if (response?.produtos && Array.isArray(response.produtos)) {
           return response.produtos;
@@ -489,7 +489,7 @@ const Estoque = () => {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Saídas</p>
                 <p className="text-2xl font-bold text-red-600">
-                  -{totalSaidas} un
+                  -{Math.abs(totalSaidas)} un
                 </p>
               </div>
               <div className="p-3 bg-red-500/20 rounded-lg">
@@ -706,7 +706,11 @@ const Estoque = () => {
                                 : "#21618C"
                             }}
                           >
-                            {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") ? "+" : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") ? "-" : ""}{mov.quantidade}
+                            {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") 
+                              ? `+${Math.abs(mov.quantidade)}` 
+                              : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") 
+                                ? mov.quantidade < 0 ? mov.quantidade : `-${mov.quantidade}`
+                                : mov.quantidade}
                           </span>
                         </TableCell>
                         <TableCell>

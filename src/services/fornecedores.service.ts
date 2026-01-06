@@ -282,6 +282,7 @@ class FornecedoresService {
     statusFornecedor?: string;
     cidade?: string;
     estado?: string;
+    logradouro?: string;
     telefone?: string;
     email?: string;
     nomeContato?: string;
@@ -296,6 +297,7 @@ class FornecedoresService {
       queryParams.append("statusFornecedor", params.statusFornecedor);
     if (params?.cidade) queryParams.append("cidade", params.cidade);
     if (params?.estado) queryParams.append("estado", params.estado);
+    if (params?.logradouro) queryParams.append("logradouro", params.logradouro);
     if (params?.telefone) queryParams.append("telefone", params.telefone);
     if (params?.email) queryParams.append("email", params.email);
     if (params?.nomeContato)
@@ -304,9 +306,17 @@ class FornecedoresService {
     if (params?.limit) queryParams.append("limit", params.limit.toString());
 
     const query = queryParams.toString();
-    return apiClient.get<FornecedoresResponse>(
-      `/fornecedor/buscar-avancado?${query}`
-    );
+    const url = `/fornecedor/buscar-avancado?${query}`;
+    
+    if (import.meta.env.DEV && params?.logradouro) {
+      console.log('[FornecedoresService] buscarAvancado com logradouro:', {
+        logradouro: params.logradouro,
+        url: url,
+        queryParams: queryParams.toString()
+      });
+    }
+    
+    return apiClient.get<FornecedoresResponse>(url);
   }
 
   // Métodos para gerenciar endereços do fornecedor

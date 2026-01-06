@@ -208,9 +208,58 @@ export function useOrders() {
     queryKey: ['produtos', 'ativos'],
     queryFn: async () => {
       try {
-        const response = await produtosService.listar({ limit: 100, statusProduto: 'ATIVO' });
-        return Array.isArray(response) ? response : response.data || [];
-      } catch {
+        // Solicitar limite alto para obter todos os produtos ativos
+        // O backend retorna todos os produtos quando limit >= 100 e statusProduto=ATIVO
+        const response = await produtosService.listar({ limit: 1000, statusProduto: 'ATIVO' });
+        
+        // Priorizar o novo formato: { data: Produto[], total, page, limit }
+        // O backend já filtra produtos sem preco_venda válido, mas validamos novamente por segurança
+        const produtos = Array.isArray(response) 
+          ? response 
+          : (response.data && Array.isArray(response.data)) 
+            ? response.data 
+            : (response.produtos && Array.isArray(response.produtos))
+              ? response.produtos
+              : [];
+        
+        // Validação adicional: garantir que produtos têm preco_venda válido
+        // (O backend já faz isso, mas é uma camada extra de segurança)
+        // IMPORTANTE: Se o backend já filtrou, não devemos filtrar novamente aqui
+        // Mas vamos validar apenas para garantir que não há produtos inválidos
+        const produtosValidos = produtos.filter((p: any) => {
+          const temId = p && p.id !== undefined && p.id !== null;
+          const temPreco = p.preco_venda !== undefined && p.preco_venda !== null && Number(p.preco_venda) > 0;
+          
+          if (!temId || !temPreco) {
+            if (import.meta.env.DEV) {
+              console.warn('[useOrders] Produto filtrado (sem ID ou preço válido):', {
+                produto: p,
+                temId,
+                temPreco,
+                preco_venda: p.preco_venda
+              });
+            }
+            return false;
+          }
+          return true;
+        });
+        
+        if (import.meta.env.DEV) {
+          console.log('[useOrders] Produtos carregados:', {
+            formatoResposta: Array.isArray(response) ? 'array' : 'objeto',
+            respostaCompleta: response,
+            totalBackend: (response as any)?.total || produtos.length,
+            produtosRecebidos: produtos.length,
+            produtosValidos: produtosValidos.length,
+            produtosSemPreco: produtos.length - produtosValidos.length,
+            idsProdutosRecebidos: produtos.map((p: any) => ({ id: p.id, nome: p.nome, preco_venda: p.preco_venda })),
+            idsProdutosValidos: produtosValidos.map((p: any) => ({ id: p.id, nome: p.nome, preco_venda: p.preco_venda }))
+          });
+        }
+        
+        return produtosValidos;
+      } catch (error) {
+        console.error('[useOrders] Erro ao carregar produtos:', error);
         return [];
       }
     },
