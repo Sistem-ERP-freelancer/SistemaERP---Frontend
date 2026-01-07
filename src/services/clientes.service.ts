@@ -20,6 +20,7 @@ export interface Cliente {
   statusCliente: StatusCliente;
   cpf_cnpj: string;
   inscricao_estadual?: string;
+  limite_credito?: number;
   criadoEm?: string;
   atualizadoEm?: string;
   enderecos?: Array<{
@@ -56,6 +57,7 @@ export interface CreateClienteDto {
   statusCliente?: StatusCliente;
   cpf_cnpj: string;
   inscricao_estadual?: string;
+  limite_credito?: number;
   contatos?: Array<{
     id?: number;
     telefone: string;

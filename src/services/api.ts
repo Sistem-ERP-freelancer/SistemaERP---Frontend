@@ -217,6 +217,17 @@ class ApiClient {
   }
 
   post<T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> {
+    // Log detalhado em desenvolvimento para pedidos
+    if (import.meta.env.DEV && endpoint.includes('/pedidos') && data) {
+      console.log('📤 [API Client] POST /pedidos - Dados sendo enviados:', {
+        endpoint,
+        tipo: data.tipo,
+        totalItens: data.itens?.length || 0,
+        itens: data.itens,
+        dadosCompletos: data,
+        bodyString: data ? JSON.stringify(data) : undefined,
+      });
+    }
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',

@@ -33,6 +33,7 @@ export interface ClienteFormData {
   statusCliente: "ATIVO" | "INATIVO" | "BLOQUEADO" | "INADIMPLENTE";
   cpf_cnpj: string;
   inscricao_estadual: string;
+  limite_credito?: number;
 }
 
 export interface ClienteFormStepProps {

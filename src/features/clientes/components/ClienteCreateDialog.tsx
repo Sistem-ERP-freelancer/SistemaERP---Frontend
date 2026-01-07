@@ -49,6 +49,7 @@ export const ClienteCreateDialog = ({
     statusCliente: "ATIVO",
     cpf_cnpj: "",
     inscricao_estadual: "",
+    limite_credito: undefined,
   });
   const [enderecos, setEnderecos] = useState<EnderecoFormData[]>([
     {
@@ -108,6 +109,7 @@ export const ClienteCreateDialog = ({
       statusCliente: "ATIVO",
       cpf_cnpj: "",
       inscricao_estadual: "",
+      limite_credito: undefined,
     });
     setEnderecos([
       {

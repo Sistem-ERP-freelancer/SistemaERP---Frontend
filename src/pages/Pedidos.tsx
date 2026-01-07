@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Calendar, XCircle, Loader2 } from 'lucide-react';
+import { Plus, Search, Calendar, XCircle, Loader2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import AppLayout from '@/components/layout/AppLayout';
 import { useOrders } from '@/hooks/useOrders';
+import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { OrderStats } from '@/components/orders/OrderStats';
 import { OrderList } from '@/components/orders/OrderList';
 import { OrderForm } from '@/components/orders/OrderForm';
@@ -63,6 +64,8 @@ export default function Pedidos() {
     closeViewDialog,
     closeCancelDialog,
   } = useOrders();
+
+  const { downloadRelatorio, loading: loadingRelatorio } = useRelatorioPedidos();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -177,10 +180,29 @@ export default function Pedidos() {
               Gestão completa de vendas e compras
             </p>
           </div>
-          <Button onClick={openCreateForm} variant="gradient">
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Pedido
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={downloadRelatorio} 
+              variant="outline"
+              disabled={loadingRelatorio}
+            >
+              {loadingRelatorio ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Gerando PDF...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Baixar Relatório PDF
+                </>
+              )}
+            </Button>
+            <Button onClick={openCreateForm} variant="gradient">
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Pedido
+            </Button>
+          </div>
         </div>
 
         {/* Estatísticas */}

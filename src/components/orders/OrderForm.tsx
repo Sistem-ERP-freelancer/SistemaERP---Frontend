@@ -24,12 +24,13 @@ import {
   FormaPagamento,
   PedidoItem,
 } from '@/types/pedido';
-import { Loader2, ShoppingCart, Package, Calendar, DollarSign, Truck, FileText, Plus, Trash2, Info, CreditCard } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Loader2, ShoppingCart, Package, Calendar, DollarSign, Truck, FileText, Plus, Trash2, Info, CreditCard, AlertCircle } from 'lucide-react';
+import { cn, formatCurrency } from '@/lib/utils';
 import { Cliente } from '@/services/clientes.service';
 import { Fornecedor } from '@/services/fornecedores.service';
 import { Produto } from '@/services/produtos.service';
 import { toast } from 'sonner';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface OrderFormProps {
   isOpen: boolean;
@@ -74,6 +75,7 @@ export function OrderForm({
 
   const [tipo, setTipo] = useState<TipoPedido>('VENDA');
   const [clienteId, setClienteId] = useState<number | undefined>(undefined);
+  const [limiteCreditoCliente, setLimiteCreditoCliente] = useState<number | undefined>(undefined);
   const [fornecedorId, setFornecedorId] = useState<number | undefined>(undefined);
   const [transportadoraId, setTransportadoraId] = useState<number | undefined>(undefined);
   const [dataPedido, setDataPedido] = useState<string>(
@@ -98,6 +100,11 @@ export function OrderForm({
     if (order) {
       setTipo(order.tipo);
       setClienteId(order.cliente_id);
+      // Buscar limite de crédito quando carregar pedido existente
+      if (order.cliente_id) {
+        const cliente = clientes.find(c => c.id === order.cliente_id);
+        setLimiteCreditoCliente(cliente?.limite_credito);
+      }
       setFornecedorId(order.fornecedor_id);
       setTransportadoraId(order.transportadora_id);
       // Extrair apenas a data (YYYY-MM-DD) para evitar problemas de timezone
@@ -308,21 +315,105 @@ export function OrderForm({
       return;
     }
 
+    // Validar limite de crédito do cliente (apenas para pedidos de venda)
+    if (tipo === 'VENDA' && clienteId && limiteCreditoCliente !== undefined && limiteCreditoCliente > 0) {
+      const valorTotalPedido = calculos.valorTotal;
+      
+      if (valorTotalPedido > limiteCreditoCliente) {
+        toast.error(
+          `Limite de crédito excedido! O valor do pedido (${formatCurrency(valorTotalPedido)}) ultrapassa o limite de crédito do cliente (${formatCurrency(limiteCreditoCliente)}).`,
+          {
+            duration: 5000,
+          }
+        );
+        return;
+      }
+    }
+
     // Validar que todos os itens têm valores válidos
     const itensValidos = itens.filter((item) => {
-      if (item.produto_id === 0) return false;
-      const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 0;
-      const precoUnitario = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
-      return quantidade > 0 && precoUnitario > 0;
+      // Verificar se o produto foi selecionado
+      if (!item.produto_id || item.produto_id === 0) {
+        if (import.meta.env.DEV) {
+          console.warn('[OrderForm] Item removido - produto_id inválido:', item);
+        }
+        return false;
+      }
+      
+      // Converter quantidade para número
+      const quantidade = typeof item.quantidade === 'number' 
+        ? item.quantidade 
+        : (item.quantidade === '' ? 0 : Number(item.quantidade) || 0);
+      
+      // Converter preço unitário para número
+      const precoUnitario = typeof item.preco_unitario === 'number' 
+        ? item.preco_unitario 
+        : (item.preco_unitario === '' ? 0 : Number(item.preco_unitario) || 0);
+      
+      // Validar valores
+      const isValid = quantidade > 0 && precoUnitario > 0;
+      
+      if (!isValid && import.meta.env.DEV) {
+        console.warn('[OrderForm] Item removido - valores inválidos:', {
+          item,
+          quantidade,
+          precoUnitario,
+          produto_id: item.produto_id,
+        });
+      }
+      
+      return isValid;
     });
 
     if (itensValidos.length === 0) {
       // Verificar se há itens mas nenhum está preenchido corretamente
-      const temItensNaoPreenchidos = itens.some((item) => item.produto_id === 0);
+      const temItensNaoPreenchidos = itens.some((item) => !item.produto_id || item.produto_id === 0);
       if (temItensNaoPreenchidos) {
         toast.error('Por favor, selecione um produto e preencha a quantidade e o preço unitário.');
       } else {
         toast.error('Por favor, preencha corretamente os produtos (quantidade e preço devem ser maiores que zero).');
+      }
+      
+      if (import.meta.env.DEV) {
+        console.error('[OrderForm] Nenhum item válido encontrado:', {
+          totalItens: itens.length,
+          itens,
+          itensValidos,
+        });
+      }
+      return;
+    }
+
+    // Formatar itens garantindo que todos os campos sejam números válidos
+    const itensFormatados = itensValidos.map((item) => {
+      const quantidade = typeof item.quantidade === 'number' 
+        ? item.quantidade 
+        : (item.quantidade === '' ? 0 : Number(item.quantidade) || 0);
+      
+      const precoUnitario = typeof item.preco_unitario === 'number' 
+        ? item.preco_unitario 
+        : (item.preco_unitario === '' ? 0 : Number(item.preco_unitario) || 0);
+      
+      const desconto = typeof item.desconto === 'number' 
+        ? item.desconto 
+        : (item.desconto === '' ? undefined : Number(item.desconto) || undefined);
+      
+      return {
+        produto_id: Number(item.produto_id),
+        quantidade: quantidade,
+        preco_unitario: precoUnitario,
+        ...(desconto !== undefined && desconto > 0 ? { desconto } : {}),
+      };
+    });
+
+    // Garantir que os itens não estejam vazios
+    if (itensFormatados.length === 0) {
+      toast.error('Erro: Nenhum item válido foi encontrado. Por favor, adicione pelo menos um produto ao pedido.');
+      if (import.meta.env.DEV) {
+        console.error('[OrderForm] Erro crítico: itensFormatados está vazio após formatação:', {
+          itensValidos,
+          itens,
+        });
       }
       return;
     }
@@ -344,15 +435,32 @@ export function OrderForm({
       outras_taxas: typeof outrasTaxas === 'number' ? outrasTaxas : undefined,
       observacoes_internas: observacoesInternas || undefined,
       observacoes_cliente: observacoesCliente || undefined,
-      itens: itensValidos.map((item) => ({
-        produto_id: item.produto_id,
-        quantidade: typeof item.quantidade === 'number' ? item.quantidade : 0,
-        preco_unitario: typeof item.preco_unitario === 'number' ? item.preco_unitario : 0,
-        desconto: typeof item.desconto === 'number' ? item.desconto : undefined,
-      })),
+      itens: itensFormatados, // Garantir que os itens sempre sejam incluídos
     };
 
-    console.log('📦 [OrderForm] Submetendo pedido:', pedidoData);
+    // Verificação final antes de enviar
+    if (!pedidoData.itens || pedidoData.itens.length === 0) {
+      toast.error('Erro crítico: Os itens do pedido não foram incluídos. Por favor, tente novamente.');
+      if (import.meta.env.DEV) {
+        console.error('[OrderForm] Erro crítico: pedidoData.itens está vazio ou undefined:', {
+          pedidoData,
+          itensFormatados,
+          itensValidos,
+        });
+      }
+      return;
+    }
+
+    console.log('📦 [OrderForm] Submetendo pedido:', {
+      tipo,
+      totalItens: itensFormatados.length,
+      itens: itensFormatados,
+      itensValidos: itensValidos,
+      todosItens: itens,
+      pedidoData,
+      pedidoDataItens: pedidoData.itens,
+      pedidoDataString: JSON.stringify(pedidoData),
+    });
     onSubmit(pedidoData);
   };
 
@@ -406,6 +514,7 @@ export function OrderForm({
                       onClick={() => {
                         setTipo(tipoOption);
                         setClienteId(undefined);
+                        setLimiteCreditoCliente(undefined);
                         setFornecedorId(undefined);
                       }}
                       className={cn(
@@ -434,7 +543,13 @@ export function OrderForm({
                   </Label>
                   <Select
                     value={clienteId?.toString() || ''}
-                    onValueChange={(value) => setClienteId(Number(value))}
+                    onValueChange={(value) => {
+                      const selectedClienteId = Number(value);
+                      setClienteId(selectedClienteId);
+                      // Buscar o limite de crédito do cliente selecionado
+                      const clienteSelecionado = clientes.find(c => c.id === selectedClienteId);
+                      setLimiteCreditoCliente(clienteSelecionado?.limite_credito);
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um cliente" />
@@ -469,6 +584,37 @@ export function OrderForm({
                       })}
                     </SelectContent>
                   </Select>
+                  
+                  {/* Alerta de Limite de Crédito */}
+                  {limiteCreditoCliente !== undefined && limiteCreditoCliente > 0 && (
+                    <Alert 
+                      variant={calculos.valorTotal > limiteCreditoCliente ? "destructive" : "default"}
+                      className={cn(
+                        calculos.valorTotal > limiteCreditoCliente && "border-destructive",
+                        calculos.valorTotal > limiteCreditoCliente * 0.9 && calculos.valorTotal <= limiteCreditoCliente && "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
+                      )}
+                    >
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle className="text-sm font-semibold">
+                        Limite de Crédito
+                      </AlertTitle>
+                      <AlertDescription className="text-sm mt-1">
+                        {calculos.valorTotal > limiteCreditoCliente ? (
+                          <span className="text-destructive font-medium">
+                            Limite excedido! O valor do pedido ({formatCurrency(calculos.valorTotal)}) ultrapassa o limite de crédito ({formatCurrency(limiteCreditoCliente)}).
+                          </span>
+                        ) : calculos.valorTotal > limiteCreditoCliente * 0.9 ? (
+                          <span className="text-yellow-700 dark:text-yellow-400">
+                            Atenção! Você está próximo do limite. Valor atual: {formatCurrency(calculos.valorTotal)} de {formatCurrency(limiteCreditoCliente)}.
+                          </span>
+                        ) : (
+                          <span>
+                            Valor atual: <strong>{formatCurrency(calculos.valorTotal)}</strong> de <strong>{formatCurrency(limiteCreditoCliente)}</strong> disponível.
+                          </span>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">

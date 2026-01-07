@@ -10,4 +10,5 @@ export { EnderecoForm } from "./EnderecoForm";
 export { ContatoForm } from "./ContatoForm";
 export { ClienteTable } from "./ClienteTable";
 export { ClienteStats } from "./ClienteStats";
+export { RelatorioClienteDialog } from "@/components/clientes/RelatorioClienteDialog";
 

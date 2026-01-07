@@ -56,6 +56,17 @@ class PedidosService {
   }
 
   async criar(data: CreatePedidoDto): Promise<Pedido> {
+    // Log detalhado dos dados sendo enviados
+    if (import.meta.env.DEV) {
+      console.log('📤 [PedidosService] Criando pedido:', {
+        tipo: data.tipo,
+        cliente_id: data.cliente_id,
+        fornecedor_id: data.fornecedor_id,
+        totalItens: data.itens?.length || 0,
+        itens: data.itens,
+        dadosCompletos: data,
+      });
+    }
     return apiClient.post<Pedido>('/pedidos', data);
   }
 
@@ -69,6 +80,81 @@ class PedidosService {
 
   async obterDashboard(): Promise<DashboardPedidos> {
     return apiClient.get<DashboardPedidos>('/pedidos/dashboard/resumo');
+  }
+
+  /**
+   * Baixa o relatório de pedidos em PDF
+   * @returns Promise que resolve quando o download é concluído
+   */
+  async downloadRelatorioPDF(): Promise<void> {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      throw new Error('Token de autenticação não encontrado');
+    }
+
+    // Obter a URL base da API
+    const getApiBaseUrl = () => {
+      if (import.meta.env.VITE_API_URL) {
+        return import.meta.env.VITE_API_URL;
+      }
+      return 'https://sistemaerp-3.onrender.com/api/v1';
+    };
+
+    const apiBaseUrl = getApiBaseUrl();
+    const url = `${apiBaseUrl}/pedidos/relatorio/pdf`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    // Verificar se a resposta é um PDF
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/pdf')) {
+      // Tentar parsear como JSON (erro da API)
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao gerar relatório');
+      } catch {
+        throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
+    }
+
+    const blob = await response.blob();
+
+    // Verificar se o blob não está vazio
+    if (blob.size === 0) {
+      throw new Error('O PDF gerado está vazio');
+    }
+
+    // Extrair nome do arquivo do header Content-Disposition
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = `relatorio-pedidos-${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
+
+    // Criar URL temporária e fazer download
+    const urlBlob = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = urlBlob;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+
+    // Limpar
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(urlBlob);
   }
 }
 

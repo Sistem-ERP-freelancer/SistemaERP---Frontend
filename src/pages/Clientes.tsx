@@ -44,6 +44,7 @@ import {
   ClienteCreateDialog,
   ClienteStats,
   ClienteTable,
+  RelatorioClienteDialog,
 } from "@/features/clientes/components";
 import { cleanDocument, formatCNPJ, formatCPF, formatCEP, formatTelefone } from "@/lib/validators";
 import {
@@ -97,6 +98,7 @@ const Clientes = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
   const [selectedClienteId, setSelectedClienteId] = useState<number | null>(
     null
   );
@@ -750,6 +752,11 @@ const Clientes = () => {
   const handleEdit = (id: number) => {
     setSelectedClienteId(id);
     setEditDialogOpen(true);
+  };
+
+  const handleRelatorios = (id: number) => {
+    setSelectedClienteId(id);
+    setRelatorioDialogOpen(true);
   };
 
   // Mutation para atualizar endereço
@@ -1555,6 +1562,9 @@ const Clientes = () => {
                       // Para Pessoa Física: apenas nome
                       nome: cliente.nome || "",
                     }),
+                ...(cliente.limite_credito !== undefined && cliente.limite_credito > 0 
+                  ? { limite_credito: cliente.limite_credito } 
+                  : {}),
                 enderecos: enderecosData.filter(
                   (end) => end.cep || end.logradouro || end.cidade
                 ),
@@ -1882,6 +1892,7 @@ const Clientes = () => {
           onView={handleView}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onRelatorios={handleRelatorios}
           onStatusChange={handleStatusChange}
           updatingStatusId={updatingStatusId}
         />
@@ -2277,6 +2288,30 @@ const Clientes = () => {
           ) : (
             <div className="py-8 text-center text-muted-foreground">
               Cliente não encontrado
+            </div>
+          )}
+          {selectedCliente && (
+            <div className="flex justify-end gap-2 mt-6 pt-6 border-t">
+              <Button
+                onClick={() => {
+                  setViewDialogOpen(false);
+                  handleRelatorios(selectedCliente.id);
+                }}
+                variant="outline"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Relatórios
+              </Button>
+              <Button
+                onClick={() => {
+                  setViewDialogOpen(false);
+                  handleEdit(selectedCliente.id);
+                }}
+                variant="default"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
             </div>
           )}
         </DialogContent>
@@ -3992,6 +4027,19 @@ const Clientes = () => {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Dialog de Relatórios */}
+      {selectedClienteId && (
+        <RelatorioClienteDialog
+          isOpen={relatorioDialogOpen}
+          onClose={() => {
+            setRelatorioDialogOpen(false);
+            setSelectedClienteId(null);
+          }}
+          clienteId={selectedClienteId}
+          clienteNome={selectedCliente?.nome || selectedCliente?.nome_fantasia || selectedCliente?.nome_razao}
+        />
       )}
     </AppLayout>
   );

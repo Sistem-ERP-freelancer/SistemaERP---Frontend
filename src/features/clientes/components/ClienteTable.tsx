@@ -36,6 +36,7 @@ import {
   Users,
   XCircle,
   MoreVertical,
+  FileText,
 } from "lucide-react";
 
 interface Cliente {
@@ -61,6 +62,7 @@ interface ClienteTableProps {
   onView: (id: number) => void;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
+  onRelatorios?: (id: number) => void;
   onStatusChange?: (id: number, novoStatus: StatusCliente) => void;
   updatingStatusId?: number | null;
 }
@@ -74,6 +76,7 @@ export const ClienteTable = ({
   onView,
   onEdit,
   onDelete,
+  onRelatorios,
   onStatusChange,
   updatingStatusId,
 }: ClienteTableProps) => {
@@ -302,6 +305,12 @@ export const ClienteTable = ({
                         <Eye className="w-4 h-4 mr-2" />
                         Visualizar
                       </DropdownMenuItem>
+                      {onRelatorios && (
+                        <DropdownMenuItem onClick={() => onRelatorios(cliente.id)}>
+                          <FileText className="w-4 h-4 mr-2" />
+                          Relatórios
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={() => onEdit(cliente.id)}>
                         <Edit className="w-4 h-4 mr-2" />
                         Editar
