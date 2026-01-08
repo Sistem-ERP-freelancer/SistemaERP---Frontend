@@ -682,3 +682,13 @@ function gerarRelatorioPedidosPDF(pedidos, empresa, cliente, dataInicial, dataFi
 
 
 
+
+
+
+
+
+
+
+
+
+

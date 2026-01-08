@@ -67,6 +67,7 @@ import {
     Calendar,
     Check,
     Circle,
+    CreditCard,
     Edit,
     Eye,
     FileText,
@@ -451,6 +452,13 @@ const Clientes = () => {
     queryKey: ["cliente", selectedClienteId],
     queryFn: () => clientesService.buscarPorId(selectedClienteId!),
     enabled: !!selectedClienteId && (viewDialogOpen || editDialogOpen),
+  });
+
+  // Buscar condições de pagamento do cliente
+  const { data: condicoesPagamento, isLoading: isLoadingCondicoes } = useQuery({
+    queryKey: ["cliente", selectedClienteId, "condicoes-pagamento"],
+    queryFn: () => clientesService.buscarCondicoesPagamento(selectedClienteId!),
+    enabled: !!selectedClienteId && viewDialogOpen,
   });
 
   // Funções helper conforme GUIA_ADAPTACAO_FRONTEND_CAMPOS_VAZIOS.md
@@ -1506,6 +1514,7 @@ const Clientes = () => {
               cliente,
               enderecos: enderecosData,
               contatos: contatosData,
+              condicoesPagamento,
             }) => {
               // Validação final antes de criar
               if (cliente.tipoPessoa === "PESSOA_JURIDICA") {
@@ -1571,7 +1580,73 @@ const Clientes = () => {
                 contatos: contatosData.filter(
                   (cont) => cont.telefone || cont.email || cont.nomeContato
                 ),
+                ...(condicoesPagamento && condicoesPagamento.length > 0
+                  ? {
+                      condicoes_pagamento: condicoesPagamento.map((cp) => {
+                        // Validação prévia
+                        if (cp.parcelado) {
+                          if (!cp.numero_parcelas || cp.numero_parcelas < 1) {
+                            toast.error(`Condição "${cp.descricao}": Número de parcelas inválido. Por favor, informe um número válido de parcelas.`);
+                            throw new Error(`Número de parcelas inválido para condição: ${cp.descricao}`);
+                          }
+                          
+                          if (!cp.parcelas || cp.parcelas.length === 0) {
+                            toast.error(`Condição "${cp.descricao}": Parcelas não foram criadas. Por favor, verifique o número de parcelas.`);
+                            throw new Error(`Parcelas não criadas para condição: ${cp.descricao}`);
+                          }
+
+                          if (cp.parcelas.length !== cp.numero_parcelas) {
+                            toast.error(`Condição "${cp.descricao}": O número de parcelas (${cp.parcelas.length}) não corresponde ao informado (${cp.numero_parcelas}).`);
+                            throw new Error(`Número de parcelas inconsistente para condição: ${cp.descricao}`);
+                          }
+                        } else {
+                          if (!cp.prazo_dias && cp.prazo_dias !== 0) {
+                            toast.error(`Condição "${cp.descricao}": Prazo em dias é obrigatório para pagamento à vista.`);
+                            throw new Error(`Prazo em dias obrigatório para condição: ${cp.descricao}`);
+                          }
+                        }
+
+                        // Construir objeto sem campos undefined
+                        const condicaoPagamento: any = {
+                          descricao: cp.descricao,
+                          forma_pagamento: cp.forma_pagamento,
+                          parcelado: cp.parcelado,
+                          padrao: cp.padrao,
+                        };
+
+                        // Se não parcelado, enviar apenas prazo_dias
+                        if (!cp.parcelado) {
+                          condicaoPagamento.prazo_dias = cp.prazo_dias;
+                        } else {
+                          // Se parcelado, enviar numero_parcelas e parcelas (garantir que são números válidos)
+                          condicaoPagamento.numero_parcelas = Number(cp.numero_parcelas);
+                          condicaoPagamento.parcelas = cp.parcelas.map(p => ({
+                            numero_parcela: Number(p.numero_parcela),
+                            dias_vencimento: Number(p.dias_vencimento),
+                            percentual: Number(p.percentual),
+                          }));
+                        }
+
+                        if (import.meta.env.DEV) {
+                          console.log('[Clientes] Condição de pagamento preparada:', {
+                            descricao: condicaoPagamento.descricao,
+                            parcelado: condicaoPagamento.parcelado,
+                            numero_parcelas: condicaoPagamento.numero_parcelas,
+                            quantidade_parcelas: condicaoPagamento.parcelas?.length,
+                            primeira_parcela: condicaoPagamento.parcelas?.[0],
+                            ultima_parcela: condicaoPagamento.parcelas?.[condicaoPagamento.parcelas?.length - 1],
+                          });
+                        }
+
+                        return condicaoPagamento;
+                      }),
+                    }
+                  : {}),
               };
+
+              if (import.meta.env.DEV) {
+                console.log('[Clientes] Payload completo antes de enviar:', JSON.stringify(clienteToCreate, null, 2));
+              }
 
               createClienteMutation.mutate(clienteToCreate);
             }}
@@ -2248,6 +2323,124 @@ const Clientes = () => {
                     </div>
                   </div>
                 )}
+
+              {/* Condições de Pagamento */}
+              {isLoadingCondicoes ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : condicoesPagamento && condicoesPagamento.length > 0 ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-primary" />
+                    Condições de Pagamento ({condicoesPagamento.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {condicoesPagamento.map((condicao: any, index: number) => (
+                      <div
+                        key={index}
+                        className="p-4 border rounded-lg space-y-3 relative"
+                      >
+                        {condicao.padrao && (
+                          <div className="absolute top-2 right-2">
+                            <span className="inline-block px-2 py-1 text-xs font-medium bg-primary/10 text-primary rounded">
+                              Padrão
+                            </span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">
+                              Prazo de Pagamento
+                            </Label>
+                            <p className="font-medium">{condicao.descricao || "-"}</p>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">
+                              Forma de Pagamento
+                            </Label>
+                            <p>
+                              {condicao.forma_pagamento === "DINHEIRO"
+                                ? "Dinheiro"
+                                : condicao.forma_pagamento === "PIX"
+                                ? "PIX"
+                                : condicao.forma_pagamento === "CARTAO_CREDITO"
+                                ? "Cartão de Crédito"
+                                : condicao.forma_pagamento === "CARTAO_DEBITO"
+                                ? "Cartão de Débito"
+                                : condicao.forma_pagamento === "BOLETO"
+                                ? "Boleto"
+                                : condicao.forma_pagamento === "TRANSFERENCIA"
+                                ? "Transferência"
+                                : condicao.forma_pagamento || "-"}
+                            </p>
+                          </div>
+                          {condicao.parcelado ? (
+                            <>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">
+                                  Tipo
+                                </Label>
+                                <p>Parcelado</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">
+                                  Número de Parcelas
+                                </Label>
+                                <p>{condicao.numero_parcelas || "-"}x</p>
+                              </div>
+                              {condicao.parcelas && condicao.parcelas.length > 0 && (
+                                <div className="col-span-2">
+                                  <Label className="text-xs text-muted-foreground mb-2 block">
+                                    Detalhamento das Parcelas
+                                  </Label>
+                                  <div className="border rounded-md overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b">
+                                          <th className="text-left p-2">Parcela</th>
+                                          <th className="text-left p-2">Dias Vencimento</th>
+                                          <th className="text-left p-2">Percentual</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {condicao.parcelas.map((parcela: any, pIndex: number) => (
+                                          <tr key={pIndex} className="border-b">
+                                            <td className="p-2">{parcela.numero_parcela}ª</td>
+                                            <td className="p-2">{parcela.dias_vencimento} dias</td>
+                                            <td className="p-2">{parcela.percentual}%</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">
+                                Prazo
+                              </Label>
+                              <p>{condicao.prazo_dias || "-"} dias</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : condicoesPagamento && condicoesPagamento.length === 0 ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-primary" />
+                    Condições de Pagamento
+                  </h3>
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    Nenhuma condição de pagamento cadastrada
+                  </div>
+                </div>
+              ) : null}
 
               {/* Datas */}
               {(selectedCliente.criadoEm || selectedCliente.atualizadoEm) && (

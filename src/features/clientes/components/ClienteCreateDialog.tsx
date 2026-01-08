@@ -22,6 +22,8 @@ import {
 import { ClienteFormStep1 } from "./ClienteFormStep1";
 import { ClienteFormStep2 } from "./ClienteFormStep2";
 import { ClienteFormStep3 } from "./ClienteFormStep3";
+import { ClienteFormStep4 } from "./ClienteFormStep4";
+import { CondicaoPagamento } from "@/shared/types/condicao-pagamento.types";
 
 interface ClienteCreateDialogProps {
   open: boolean;
@@ -30,6 +32,7 @@ interface ClienteCreateDialogProps {
     cliente: ClienteFormData;
     enderecos: EnderecoFormData[];
     contatos: ContatoFormData[];
+    condicoesPagamento?: CondicaoPagamento[];
   }) => void;
   isPending?: boolean;
 }
@@ -74,13 +77,14 @@ export const ClienteCreateDialog = ({
       ativo: true,
     },
   ]);
+  const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
 
   const handleFormDataChange = (data: Partial<ClienteFormData>) => {
     setFormData((prev) => ({ ...prev, ...data }));
   };
 
   const handleNextStep = () => {
-    if (currentStep < 3) {
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -96,6 +100,7 @@ export const ClienteCreateDialog = ({
       cliente: formData,
       enderecos,
       contatos,
+      condicoesPagamento: condicoesPagamento.length > 0 ? condicoesPagamento : undefined,
     });
   };
 
@@ -134,6 +139,7 @@ export const ClienteCreateDialog = ({
         ativo: true,
       },
     ]);
+    setCondicoesPagamento([]);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -161,13 +167,13 @@ export const ClienteCreateDialog = ({
               <div>
                 <DialogTitle className="text-xl">Novo Cliente</DialogTitle>
                 <DialogDescription className="mt-1">
-                  Passo {currentStep} de 3
+                  Passo {currentStep} de 4
                 </DialogDescription>
               </div>
             </div>
           </div>
           <div className="mt-4">
-            <Progress value={(currentStep / 3) * 100} className="h-2" />
+            <Progress value={(currentStep / 4) * 100} className="h-2" />
           </div>
         </DialogHeader>
 
@@ -180,16 +186,24 @@ export const ClienteCreateDialog = ({
             />
           )}
 
-          {/* Passo 2: Endereços */}
+          {/* Passo 2: Condições de Pagamento */}
           {currentStep === 2 && (
+            <ClienteFormStep4
+              condicoesPagamento={condicoesPagamento}
+              onCondicoesPagamentoChange={setCondicoesPagamento}
+            />
+          )}
+
+          {/* Passo 3: Endereços */}
+          {currentStep === 3 && (
             <ClienteFormStep2
               enderecos={enderecos}
               onEnderecosChange={setEnderecos}
             />
           )}
 
-          {/* Passo 3: Contatos */}
-          {currentStep === 3 && (
+          {/* Passo 4: Contatos */}
+          {currentStep === 4 && (
             <ClienteFormStep3
               contatos={contatos}
               onContatosChange={setContatos}
@@ -209,7 +223,7 @@ export const ClienteCreateDialog = ({
                 Voltar
               </Button>
             )}
-            {currentStep < 3 ? (
+            {currentStep < 4 ? (
               <Button
                 type="button"
                 variant="gradient"

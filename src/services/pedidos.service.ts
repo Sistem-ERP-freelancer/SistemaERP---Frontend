@@ -83,6 +83,16 @@ class PedidosService {
   }
 
   /**
+   * Busca dados do cliente para preenchimento de pedido
+   * Endpoint alternativo: GET /api/v1/pedidos/cliente/:clienteId/dados
+   * @param clienteId - ID do cliente
+   * @returns Dados do cliente para pedido
+   */
+  async buscarDadosClienteParaPedido(clienteId: number): Promise<any> {
+    return apiClient.get<any>(`/pedidos/cliente/${clienteId}/dados`);
+  }
+
+  /**
    * Baixa o relatório de pedidos em PDF
    * @returns Promise que resolve quando o download é concluído
    */

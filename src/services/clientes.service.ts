@@ -2,6 +2,7 @@ import { apiClient } from "./api";
 import { UpdateClientePayload } from "@/shared/types/update.types";
 import { prepararPayloadAtualizacaoCliente, tratarErroAtualizacao } from "@/lib/update-payload";
 import { ClienteFormState } from "@/shared/types/update.types";
+import { CondicaoPagamento } from "@/shared/types/condicao-pagamento.types";
 
 // Enum de Status do Cliente (conforme GUIA-FRONTEND-ATUALIZACAO-STATUS-CLIENTE.md)
 export enum StatusCliente {
@@ -79,6 +80,7 @@ export interface CreateClienteDto {
     estado: string;
     referencia?: string;
   }>;
+  condicoes_pagamento?: CondicaoPagamento[];
 }
 
 export interface UpdateStatusClientePayload {
@@ -104,6 +106,13 @@ export interface ClientesEstatisticas {
   bloqueados: number;
   inadimplentes: number;
   novosNoMes: number;
+}
+
+export interface LimiteCredito {
+  limiteCredito: number;
+  valorUtilizado: number;
+  valorDisponivel: number;
+  ultrapassouLimite: boolean;
 }
 
 export interface FiltrosClientes {
@@ -305,6 +314,35 @@ class ClientesService {
    */
   async getEstatisticas(): Promise<ClientesEstatisticas> {
     return apiClient.get<ClientesEstatisticas>("/clientes/estatisticas");
+  }
+
+  /**
+   * Busca condições de pagamento de um cliente
+   * @param id - ID do cliente
+   * @returns Array de condições de pagamento
+   */
+  async buscarCondicoesPagamento(id: number): Promise<any[]> {
+    return apiClient.get<any[]>(`/clientes/${id}/condicoes-pagamento`);
+  }
+
+  /**
+   * Busca dados do cliente para preenchimento de pedido
+   * Retorna dados do cliente + condição padrão + todas as condições disponíveis
+   * @param id - ID do cliente
+   * @returns Dados do cliente para pedido
+   */
+  async buscarDadosParaPedido(id: number): Promise<any> {
+    return apiClient.get<any>(`/clientes/${id}/dados-pedido`);
+  }
+
+  /**
+   * Busca limite de crédito do cliente
+   * Retorna limite total, valor utilizado, valor disponível e se ultrapassou o limite
+   * @param id - ID do cliente
+   * @returns Limite de crédito do cliente
+   */
+  async buscarLimiteCredito(id: number): Promise<LimiteCredito> {
+    return apiClient.get<LimiteCredito>(`/clientes/${id}/limite-credito`);
   }
 }
 

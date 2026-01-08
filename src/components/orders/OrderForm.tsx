@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -26,11 +27,12 @@ import {
 } from '@/types/pedido';
 import { Loader2, ShoppingCart, Package, Calendar, DollarSign, Truck, FileText, Plus, Trash2, Info, CreditCard, AlertCircle } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
-import { Cliente } from '@/services/clientes.service';
+import { Cliente, clientesService, LimiteCredito } from '@/services/clientes.service';
 import { Fornecedor } from '@/services/fornecedores.service';
 import { Produto } from '@/services/produtos.service';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { CondicaoPagamento, DadosClienteParaPedido } from '@/shared/types/condicao-pagamento.types';
 
 interface OrderFormProps {
   isOpen: boolean;
@@ -76,6 +78,7 @@ export function OrderForm({
   const [tipo, setTipo] = useState<TipoPedido>('VENDA');
   const [clienteId, setClienteId] = useState<number | undefined>(undefined);
   const [limiteCreditoCliente, setLimiteCreditoCliente] = useState<number | undefined>(undefined);
+  const [limiteCreditoInfo, setLimiteCreditoInfo] = useState<LimiteCredito | null>(null);
   const [fornecedorId, setFornecedorId] = useState<number | undefined>(undefined);
   const [transportadoraId, setTransportadoraId] = useState<number | undefined>(undefined);
   const [dataPedido, setDataPedido] = useState<string>(
@@ -95,6 +98,9 @@ export function OrderForm({
   const [itens, setItens] = useState<OrderItemForm[]>([
     { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' },
   ]);
+  const [condicoesPagamentoDisponiveis, setCondicoesPagamentoDisponiveis] = useState<CondicaoPagamento[]>([]);
+  const [condicaoPagamentoSelecionada, setCondicaoPagamentoSelecionada] = useState<CondicaoPagamento | null>(null);
+  const [carregandoCondicoes, setCarregandoCondicoes] = useState(false);
 
   useEffect(() => {
     if (order) {
@@ -294,6 +300,106 @@ export function OrderForm({
     };
   }, [itens, frete, outrasTaxas]);
 
+  // Buscar condições de pagamento quando cliente é selecionado
+  useEffect(() => {
+    const buscarCondicoesPagamento = async () => {
+      if (tipo === 'VENDA' && clienteId) {
+        setCarregandoCondicoes(true);
+        try {
+          const dados = await clientesService.buscarDadosParaPedido(clienteId);
+          
+          // Atualizar limite de crédito (será atualizado pela query de limite de crédito)
+          if (dados.cliente?.limite_credito !== undefined) {
+            setLimiteCreditoCliente(dados.cliente.limite_credito);
+          } else {
+            setLimiteCreditoCliente(undefined);
+          }
+          
+          // Atualizar condições de pagamento disponíveis
+          if (dados.condicoes_pagamento && Array.isArray(dados.condicoes_pagamento)) {
+            setCondicoesPagamentoDisponiveis(dados.condicoes_pagamento);
+            
+            // Preencher automaticamente com a condição padrão
+            if (dados.condicao_pagamento_padrao) {
+              const condicaoPadrao = dados.condicao_pagamento_padrao;
+              setCondicaoPagamentoSelecionada(condicaoPadrao);
+              
+              // Preencher forma de pagamento
+              setFormaPagamento(condicaoPadrao.forma_pagamento as FormaPagamento);
+              
+              // Preencher condição de pagamento (texto)
+              if (condicaoPadrao.parcelado) {
+                setCondicaoPagamento(`${condicaoPadrao.numero_parcelas}x ${condicaoPadrao.descricao}`);
+              } else {
+                setCondicaoPagamento(`${condicaoPadrao.prazo_dias} dias - ${condicaoPadrao.descricao}`);
+              }
+              
+              // Calcular data de vencimento
+              if (condicaoPadrao.parcelado && condicaoPadrao.parcelas && condicaoPadrao.parcelas.length > 0) {
+                // Usar a primeira parcela para calcular a data de vencimento
+                const dataBase = new Date(dataPedido || new Date());
+                const primeiraParcela = condicaoPadrao.parcelas[0];
+                const dataVencimento = new Date(dataBase);
+                dataVencimento.setDate(dataVencimento.getDate() + primeiraParcela.dias_vencimento);
+                setDataVencimento(dataVencimento.toISOString().split('T')[0]);
+              } else if (condicaoPadrao.prazo_dias) {
+                const dataBase = new Date(dataPedido || new Date());
+                const dataVencimento = new Date(dataBase);
+                dataVencimento.setDate(dataVencimento.getDate() + condicaoPadrao.prazo_dias);
+                setDataVencimento(dataVencimento.toISOString().split('T')[0]);
+              }
+            }
+          } else {
+            setCondicoesPagamentoDisponiveis([]);
+            setCondicaoPagamentoSelecionada(null);
+          }
+        } catch (error) {
+          console.error('Erro ao buscar condições de pagamento:', error);
+          toast.error('Erro ao buscar condições de pagamento do cliente');
+          setCondicoesPagamentoDisponiveis([]);
+          setCondicaoPagamentoSelecionada(null);
+        } finally {
+          setCarregandoCondicoes(false);
+        }
+      } else {
+        // Limpar condições quando não há cliente selecionado ou não é venda
+        setCondicoesPagamentoDisponiveis([]);
+        setCondicaoPagamentoSelecionada(null);
+        setLimiteCreditoCliente(undefined);
+        setLimiteCreditoInfo(null);
+      }
+    };
+
+    buscarCondicoesPagamento();
+  }, [clienteId, tipo, dataPedido]);
+
+  // Buscar limite de crédito do cliente usando endpoint dedicado
+  const { data: limiteCreditoData, isLoading: isLoadingCreditoUtilizado } = useQuery({
+    queryKey: ['limite-credito-cliente', clienteId],
+    queryFn: async () => {
+      if (!clienteId || tipo !== 'VENDA') {
+        setLimiteCreditoInfo(null);
+        return null;
+      }
+      try {
+        const limite = await clientesService.buscarLimiteCredito(clienteId);
+        setLimiteCreditoInfo(limite);
+        return limite;
+      } catch (error: any) {
+        console.error('Erro ao buscar limite de crédito:', error);
+        // Se o erro for 404, o cliente não tem limite configurado
+        if (error?.response?.status === 404) {
+          setLimiteCreditoInfo(null);
+          return null;
+        }
+        setLimiteCreditoInfo(null);
+        return null;
+      }
+    },
+    enabled: !!clienteId && tipo === 'VENDA',
+    staleTime: 30000, // Cache por 30 segundos
+  });
+
   // Recalcular valor da parcela automaticamente quando subtotal ou número de parcelas mudar
   useEffect(() => {
     if (formaPagamento === 'CARTAO_CREDITO' && calculos && calculos.subtotal > 0 && numeroParcelas > 0) {
@@ -316,14 +422,15 @@ export function OrderForm({
     }
 
     // Validar limite de crédito do cliente (apenas para pedidos de venda)
-    if (tipo === 'VENDA' && clienteId && limiteCreditoCliente !== undefined && limiteCreditoCliente > 0) {
+    if (tipo === 'VENDA' && clienteId && limiteCreditoInfo) {
       const valorTotalPedido = calculos.valorTotal;
+      const valorTotalComPedido = limiteCreditoInfo.valorUtilizado + valorTotalPedido;
       
-      if (valorTotalPedido > limiteCreditoCliente) {
+      if (valorTotalComPedido > limiteCreditoInfo.limiteCredito) {
         toast.error(
-          `Limite de crédito excedido! O valor do pedido (${formatCurrency(valorTotalPedido)}) ultrapassa o limite de crédito do cliente (${formatCurrency(limiteCreditoCliente)}).`,
+          `Limite excedido! Utilizado: ${formatCurrency(limiteCreditoInfo.valorUtilizado)} | Disponível: ${formatCurrency(limiteCreditoInfo.valorDisponivel)} | Pedido: ${formatCurrency(valorTotalPedido)}`,
           {
-            duration: 5000,
+            duration: 4000,
           }
         );
         return;
@@ -586,35 +693,47 @@ export function OrderForm({
                   </Select>
                   
                   {/* Alerta de Limite de Crédito */}
-                  {limiteCreditoCliente !== undefined && limiteCreditoCliente > 0 && (
-                    <Alert 
-                      variant={calculos.valorTotal > limiteCreditoCliente ? "destructive" : "default"}
-                      className={cn(
-                        calculos.valorTotal > limiteCreditoCliente && "border-destructive",
-                        calculos.valorTotal > limiteCreditoCliente * 0.9 && calculos.valorTotal <= limiteCreditoCliente && "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
-                      )}
-                    >
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle className="text-sm font-semibold">
-                        Limite de Crédito
-                      </AlertTitle>
-                      <AlertDescription className="text-sm mt-1">
-                        {calculos.valorTotal > limiteCreditoCliente ? (
-                          <span className="text-destructive font-medium">
-                            Limite excedido! O valor do pedido ({formatCurrency(calculos.valorTotal)}) ultrapassa o limite de crédito ({formatCurrency(limiteCreditoCliente)}).
-                          </span>
-                        ) : calculos.valorTotal > limiteCreditoCliente * 0.9 ? (
-                          <span className="text-yellow-700 dark:text-yellow-400">
-                            Atenção! Você está próximo do limite. Valor atual: {formatCurrency(calculos.valorTotal)} de {formatCurrency(limiteCreditoCliente)}.
-                          </span>
-                        ) : (
-                          <span>
-                            Valor atual: <strong>{formatCurrency(calculos.valorTotal)}</strong> de <strong>{formatCurrency(limiteCreditoCliente)}</strong> disponível.
-                          </span>
+                  {limiteCreditoInfo && limiteCreditoInfo.limiteCredito > 0 && (() => {
+                    const valorTotalComPedido = limiteCreditoInfo.valorUtilizado + calculos.valorTotal;
+                    const novoCreditoDisponivel = Math.max(0, limiteCreditoInfo.valorDisponivel - calculos.valorTotal);
+                    const percentualComPedido = limiteCreditoInfo.limiteCredito > 0 ? (valorTotalComPedido / limiteCreditoInfo.limiteCredito) * 100 : 0;
+                    const ultrapassaraLimite = valorTotalComPedido > limiteCreditoInfo.limiteCredito;
+                    
+                    return (
+                      <Alert 
+                        variant={ultrapassaraLimite ? "destructive" : "default"}
+                        className={cn(
+                          ultrapassaraLimite && "border-destructive",
+                          percentualComPedido > 90 && !ultrapassaraLimite && "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
                         )}
-                      </AlertDescription>
-                    </Alert>
-                  )}
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle className="text-sm font-semibold">
+                          Limite de Crédito
+                        </AlertTitle>
+                        <AlertDescription className="text-xs mt-1">
+                          {isLoadingCreditoUtilizado ? (
+                            <span className="flex items-center gap-2">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Carregando limite de crédito...
+                            </span>
+                          ) : ultrapassaraLimite ? (
+                            <span className="text-destructive font-medium">
+                              Limite excedido! Utilizado: {formatCurrency(limiteCreditoInfo.valorUtilizado)} | Disponível: {formatCurrency(limiteCreditoInfo.valorDisponivel)} | Pedido: {formatCurrency(calculos.valorTotal)}
+                            </span>
+                          ) : percentualComPedido > 90 ? (
+                            <span className="text-yellow-700 dark:text-yellow-400">
+                              Atenção! Disponível após pedido: {formatCurrency(novoCreditoDisponivel)} de {formatCurrency(limiteCreditoInfo.limiteCredito)} | Utilizado: {formatCurrency(limiteCreditoInfo.valorUtilizado)}
+                            </span>
+                          ) : (
+                            <span>
+                              Disponível após pedido: {formatCurrency(novoCreditoDisponivel)} de {formatCurrency(limiteCreditoInfo.limiteCredito)} | Utilizado: {formatCurrency(limiteCreditoInfo.valorUtilizado)}
+                            </span>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -866,9 +985,18 @@ export function OrderForm({
                   </Label>
                   <Select
                     value={formaPagamento || ''}
-                    onValueChange={(value) =>
-                      setFormaPagamento(value as FormaPagamento)
-                    }
+                    onValueChange={(value) => {
+                      const novaForma = value as FormaPagamento;
+                      setFormaPagamento(novaForma);
+                      
+                      // Se a forma de pagamento mudou manualmente e é diferente da condição selecionada,
+                      // limpar a condição de pagamento selecionada
+                      if (condicaoPagamentoSelecionada && condicaoPagamentoSelecionada.forma_pagamento !== novaForma) {
+                        setCondicaoPagamentoSelecionada(null);
+                        setCondicaoPagamento('');
+                        setDataVencimento('');
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a forma de pagamento" />
@@ -900,6 +1028,123 @@ export function OrderForm({
                     Data de vencimento para as contas financeiras deste pedido
                   </p>
                 </div>
+              </div>
+
+              {/* Seleção de Condição de Pagamento - Apenas para pedidos de venda */}
+              {tipo === 'VENDA' && clienteId && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-muted-foreground" />
+                    Condição de Pagamento
+                    {carregandoCondicoes && (
+                      <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                    )}
+                  </Label>
+                  {condicoesPagamentoDisponiveis.length > 0 ? (
+                    <Select
+                      value={condicaoPagamentoSelecionada?.id?.toString() || ''}
+                      onValueChange={(value) => {
+                        const condicao = condicoesPagamentoDisponiveis.find(
+                          (c) => c.id?.toString() === value
+                        );
+                        if (condicao) {
+                          setCondicaoPagamentoSelecionada(condicao);
+                          setFormaPagamento(condicao.forma_pagamento as FormaPagamento);
+                          
+                          // Preencher condição de pagamento (texto)
+                          if (condicao.parcelado) {
+                            setCondicaoPagamento(`${condicao.numero_parcelas}x ${condicao.descricao}`);
+                          } else {
+                            setCondicaoPagamento(`${condicao.prazo_dias} dias - ${condicao.descricao}`);
+                          }
+                          
+                          // Calcular data de vencimento
+                          if (condicao.parcelado && condicao.parcelas && condicao.parcelas.length > 0) {
+                            const dataBase = new Date(dataPedido || new Date());
+                            const primeiraParcela = condicao.parcelas[0];
+                            const dataVencimento = new Date(dataBase);
+                            dataVencimento.setDate(dataVencimento.getDate() + primeiraParcela.dias_vencimento);
+                            setDataVencimento(dataVencimento.toISOString().split('T')[0]);
+                          } else if (condicao.prazo_dias) {
+                            const dataBase = new Date(dataPedido || new Date());
+                            const dataVencimento = new Date(dataBase);
+                            dataVencimento.setDate(dataVencimento.getDate() + condicao.prazo_dias);
+                            setDataVencimento(dataVencimento.toISOString().split('T')[0]);
+                          }
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma condição de pagamento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {condicoesPagamentoDisponiveis.map((condicao) => (
+                          <SelectItem
+                            key={condicao.id}
+                            value={condicao.id?.toString() || ''}
+                          >
+                            {condicao.descricao}
+                            {condicao.padrao && ' (Padrão)'}
+                            {condicao.parcelado
+                              ? ` - ${condicao.numero_parcelas}x`
+                              : ` - ${condicao.prazo_dias} dias`}
+                            {` - ${condicao.forma_pagamento}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="text-sm text-muted-foreground p-2 border rounded">
+                      Nenhuma condição de pagamento cadastrada para este cliente.
+                    </div>
+                  )}
+                  
+                  {/* Exibir detalhes da condição selecionada */}
+                  {condicaoPagamentoSelecionada && (
+                    <div className="mt-2 p-3 bg-muted/50 rounded-md border">
+                      <p className="text-sm font-medium mb-2">Detalhes da Condição:</p>
+                      <div className="text-sm space-y-1">
+                        <p><strong>Prazo de Pagamento:</strong> {condicaoPagamentoSelecionada.descricao}</p>
+                        <p><strong>Forma:</strong> {condicaoPagamentoSelecionada.forma_pagamento}</p>
+                        {condicaoPagamentoSelecionada.parcelado ? (
+                          <>
+                            <p><strong>Parcelas:</strong> {condicaoPagamentoSelecionada.numero_parcelas}x</p>
+                            {condicaoPagamentoSelecionada.parcelas && condicaoPagamentoSelecionada.parcelas.length > 0 && (
+                              <div className="mt-2">
+                                <p className="font-medium text-xs mb-1">Detalhamento:</p>
+                                <div className="text-xs space-y-1">
+                                  {condicaoPagamentoSelecionada.parcelas.map((p) => (
+                                    <p key={p.numero_parcela}>
+                                      {p.numero_parcela}ª parcela: {p.dias_vencimento} dias ({p.percentual}%)
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p><strong>Prazo:</strong> {condicaoPagamentoSelecionada.prazo_dias} dias</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Descrição da Condição de Pagamento
+                </Label>
+                <Input
+                  type="text"
+                  value={condicaoPagamento}
+                  onChange={(e) => setCondicaoPagamento(e.target.value)}
+                  placeholder="Ex: 30 dias, 3x sem juros, etc."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Este campo é preenchido automaticamente ao selecionar uma condição acima. Você pode editar manualmente se necessário.
+                </p>
               </div>
 
               {/* Campos de Parcelamento - Apenas para Cartão de Crédito */}
