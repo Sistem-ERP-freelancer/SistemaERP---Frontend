@@ -100,12 +100,12 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
       {/* Sidebar */}
       <aside 
-        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-sidebar transition-all duration-300 ${
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-sidebar transition-all duration-300 ${
           sidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full lg:w-20 lg:translate-x-0"
         }`}
       >
-        {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
+        {/* Logo - Fixo no topo */}
+        <div className="h-16 flex-shrink-0 flex items-center justify-between px-4 border-b border-sidebar-border">
           {sidebarOpen && (
             <TopERPLogo 
               variant="sidebar"
@@ -128,8 +128,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        {/* Navigation - Área rolável */}
+        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto overflow-x-hidden min-h-0">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.href;
             return (
@@ -149,11 +149,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-3 border-t border-sidebar-border">
+        {/* Logout - Fixo no final */}
+        <div className="flex-shrink-0 px-3 pt-2 pb-3 border-t border-sidebar-border">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <LogOut className="w-5 h-5 shrink-0" />
             {sidebarOpen && <span className="font-medium">Sair</span>}
@@ -162,7 +162,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0">
+      <main className={`flex-1 min-w-0 transition-all duration-300 ${
+        sidebarOpen ? "lg:ml-64" : "lg:ml-20"
+      }`}>
         {/* Header */}
         <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
           <div className="flex items-center gap-4">
