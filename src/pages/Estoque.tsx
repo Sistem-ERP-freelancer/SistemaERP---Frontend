@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Truck,
   Settings,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,7 @@ import {
   MovimentacaoEstoqueDto,
   MovimentacaoEstoque,
 } from "@/services/estoque.service";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Estoque = () => {
   const queryClient = useQueryClient();
@@ -551,14 +553,14 @@ const Estoque = () => {
                 <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              onClick={() => setDialogMovimentacaoOpen(true)}
-              variant="gradient"
-              className="gap-2 w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4" />
-              Nova Movimentação
-            </Button>
+          </div>
+          <div className="mt-4">
+            <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertDescription className="text-sm text-blue-800 dark:text-blue-300">
+                As movimentações são geradas automaticamente ao criar pedidos de compra ou venda.
+              </AlertDescription>
+            </Alert>
           </div>
         </div>
 

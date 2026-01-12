@@ -2841,8 +2841,8 @@ const Fornecedores = () => {
                 className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-muted/10">
-                    <XCircle className="w-5 h-5 text-muted-foreground" />
+                  <div className="p-2 rounded-lg bg-gray-500/10">
+                    <XCircle className="w-5 h-5 text-gray-500" />
                   </div>
                 </div>
                 <p className="text-2xl font-bold text-muted-foreground mb-1">
@@ -2992,7 +2992,7 @@ const Fornecedores = () => {
                             fornecedor.statusFornecedor === "ATIVO"
                               ? "bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
                               : fornecedor.statusFornecedor === "INATIVO"
-                              ? "bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
+                              ? "bg-muted/50 text-muted-foreground border border-border"
                               : "bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
                           }`}
                         >

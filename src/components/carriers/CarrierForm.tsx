@@ -106,7 +106,21 @@ export function CarrierForm({
       return;
     }
 
-    onSubmit(formData);
+    // Validação de CNPJ conforme GUIA_FRONTEND_CORRECOES_BACKEND.md
+    if (formData.cnpj) {
+      const cnpjLimpo = formData.cnpj.replace(/\D/g, '');
+      if (cnpjLimpo.length !== 14) {
+        return;
+      }
+      // Enviar apenas números para o backend
+      const dataToSend = {
+        ...formData,
+        cnpj: cnpjLimpo,
+      };
+      onSubmit(dataToSend);
+    } else {
+      onSubmit(formData);
+    }
   };
 
   return (
@@ -184,12 +198,20 @@ export function CarrierForm({
                     id="cnpj"
                     value={formData.cnpj || ''}
                     onChange={(e) => {
-                      const formatted = formatCNPJ(e.target.value);
+                      // Remove tudo que não é número
+                      const apenasNumeros = e.target.value.replace(/\D/g, '');
+                      // Limita a 14 dígitos
+                      const limitado = apenasNumeros.slice(0, 14);
+                      // Formata apenas para exibição
+                      const formatted = formatCNPJ(limitado);
                       setFormData({ ...formData, cnpj: formatted });
                     }}
-                    placeholder="00.000.000/0000-00"
+                    placeholder="12345678000190"
                     maxLength={18}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Digite apenas números (14 dígitos)
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -260,8 +282,12 @@ export function CarrierForm({
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
                     }
-                    placeholder="email@exemplo.com"
+                    placeholder="exemplo@email.com"
+                    pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Digite um e-mail válido (ex: exemplo@email.com)
+                  </p>
                 </div>
               </div>
             </div>

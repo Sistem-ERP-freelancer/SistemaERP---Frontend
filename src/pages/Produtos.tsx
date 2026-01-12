@@ -501,11 +501,19 @@ const Produtos = () => {
       return;
     }
 
+    // Validação de preço promocional conforme GUIA_FRONTEND_CORRECOES_BACKEND.md
+    const precoVenda = Number(newProduto.preco_venda);
+    const precoPromocional = newProduto.preco_promocional ? Number(newProduto.preco_promocional) : null;
+    if (precoPromocional !== null && precoPromocional > precoVenda) {
+      toast.error("O preço promocional não pode ser maior que o preço de venda");
+      return;
+    }
+
     const produtoData: CreateProdutoDto = {
       nome: newProduto.nome!,
       sku: newProduto.sku!,
       preco_custo: Number(newProduto.preco_custo),
-      preco_venda: Number(newProduto.preco_venda),
+      preco_venda: precoVenda,
       estoque_atual: Number(newProduto.estoque_atual) || 0,
       estoque_minimo: Number(newProduto.estoque_minimo) || 0,
       unidade_medida: newProduto.unidade_medida || "UN",
@@ -514,7 +522,7 @@ const Produtos = () => {
 
     // Adicionar campos opcionais apenas se tiverem valor
     if (newProduto.descricao) produtoData.descricao = newProduto.descricao;
-    if (newProduto.preco_promocional) produtoData.preco_promocional = Number(newProduto.preco_promocional);
+    if (precoPromocional !== null) produtoData.preco_promocional = precoPromocional;
     if (newProduto.categoriaId) produtoData.categoriaId = newProduto.categoriaId;
     if (newProduto.fornecedorId) produtoData.fornecedorId = newProduto.fornecedorId;
     if (newProduto.data_validade) produtoData.data_validade = newProduto.data_validade;
@@ -778,6 +786,14 @@ const Produtos = () => {
       produtoData.data_validade = null as any;
     } else if (wasFieldModified(originalDataValidade, currentDataValidade) && currentDataValidade) {
       produtoData.data_validade = currentDataValidade;
+    }
+
+    // Validação de preço promocional conforme GUIA_FRONTEND_CORRECOES_BACKEND.md
+    const precoVenda = editingProduto.preco_venda || selectedProduto.preco_venda;
+    const precoPromocional = editingProduto.preco_promocional;
+    if (precoPromocional !== undefined && precoPromocional !== null && precoVenda && precoPromocional > precoVenda) {
+      toast.error("O preço promocional não pode ser maior que o preço de venda");
+      return;
     }
 
     // Campos numéricos opcionais
@@ -1430,7 +1446,10 @@ const Produtos = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                        <Label>Preço Promocional</Label>
+                        <Label className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-muted-foreground" />
+                          Preço Promocional
+                        </Label>
                     <Input 
                           type="number"
                           step="0.01"
@@ -1442,7 +1461,16 @@ const Produtos = () => {
                               preco_promocional: e.target.value ? Number(e.target.value) : undefined,
                             })
                           }
+                          className={newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional > newProduto.preco_venda ? "border-destructive" : ""}
                     />
+                    {newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional > newProduto.preco_venda && (
+                      <p className="text-sm text-destructive">O preço promocional não pode ser maior que o preço de venda</p>
+                    )}
+                    {newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional <= newProduto.preco_venda && (
+                      <p className="text-sm text-muted-foreground">
+                        Desconto: {((1 - newProduto.preco_promocional / newProduto.preco_venda) * 100).toFixed(1)}%
+                      </p>
+                    )}
                   </div>
                 </div>
                   </div>
@@ -2755,7 +2783,16 @@ const Produtos = () => {
                             preco_promocional: e.target.value ? Number(e.target.value) : undefined,
                           })
                         }
+                        className={editingProduto.preco_promocional && editingProduto.preco_venda && editingProduto.preco_promocional > editingProduto.preco_venda ? "border-destructive" : ""}
                       />
+                      {editingProduto.preco_promocional && editingProduto.preco_venda && editingProduto.preco_promocional > editingProduto.preco_venda && (
+                        <p className="text-sm text-destructive">O preço promocional não pode ser maior que o preço de venda</p>
+                      )}
+                      {editingProduto.preco_promocional && editingProduto.preco_venda && editingProduto.preco_promocional <= editingProduto.preco_venda && (
+                        <p className="text-sm text-muted-foreground">
+                          Desconto: {((1 - editingProduto.preco_promocional / editingProduto.preco_venda) * 100).toFixed(1)}%
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

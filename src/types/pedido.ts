@@ -63,6 +63,7 @@ export interface Pedido {
   data_pedido: string;
   data_entrega_prevista?: string;
   data_entrega_realizada?: string;
+  data_vencimento_base?: string | null; // Data de vencimento base para cálculo de parcelas
   condicao_pagamento?: string;
   forma_pagamento?: FormaPagamento;
   prazo_entrega_dias?: number;

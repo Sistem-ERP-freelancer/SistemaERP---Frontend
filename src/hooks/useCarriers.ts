@@ -87,10 +87,19 @@ export function useCarriers() {
       setSelectedCarrier(null);
     },
     onError: (error: any) => {
-      const message =
+      let message =
         error?.response?.data?.message ||
         error?.message ||
         'Erro ao criar transportadora';
+      
+      // Melhorar mensagem de erro de email inválido
+      if (message.toLowerCase().includes('email') && 
+          (message.toLowerCase().includes('inválido') || 
+           message.toLowerCase().includes('invalido') ||
+           message.toLowerCase().includes('invalid'))) {
+        message = 'E-mail inválido. Verifique se o formato está correto (ex: exemplo@email.com)';
+      }
+      
       toast.error(message);
     },
   });
@@ -113,10 +122,19 @@ export function useCarriers() {
       setSelectedCarrier(null);
     },
     onError: (error: any) => {
-      const message =
+      let message =
         error?.response?.data?.message ||
         error?.message ||
         'Erro ao atualizar transportadora';
+      
+      // Melhorar mensagem de erro de email inválido
+      if (message.toLowerCase().includes('email') && 
+          (message.toLowerCase().includes('inválido') || 
+           message.toLowerCase().includes('invalido') ||
+           message.toLowerCase().includes('invalid'))) {
+        message = 'E-mail inválido. Verifique se o formato está correto (ex: exemplo@email.com)';
+      }
+      
       toast.error(message);
     },
   });

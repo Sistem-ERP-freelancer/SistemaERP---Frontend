@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Calendar, XCircle, Loader2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/components/layout/AppLayout';
 import { useOrders } from '@/hooks/useOrders';
 import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
@@ -27,6 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatusPedido, TipoPedido } from '@/types/pedido';
+import { normalizeCurrency, formatCurrency } from '@/lib/utils';
 
 export default function Pedidos() {
   const {
@@ -40,6 +42,7 @@ export default function Pedidos() {
     isViewDialogOpen,
     isCancelDialogOpen,
     selectedOrder,
+    selectedOrderForEdit,
     orderToCancel,
     clientes,
     fornecedores,
@@ -211,83 +214,98 @@ export default function Pedidos() {
         {/* Filtros */}
         <div className="bg-card border rounded-xl p-4 mb-6">
           <h3 className="text-sm font-semibold text-foreground mb-4">Filtros</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por número ou cliente..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Buscar</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por número ou cliente..."
+                  className="pl-10"
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="date"
-                placeholder="Data inicial"
-                className="pl-10"
-                value={filters.data_inicial || ''}
-                onChange={(e) => {
-                  const value = e.target.value || undefined;
-                  updateFilters({ data_inicial: value });
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  placeholder="Data Inicial"
+                  className="pl-10"
+                  value={filters.data_inicial || ''}
+                  onChange={(e) => {
+                    const value = e.target.value || undefined;
+                    updateFilters({ data_inicial: value });
+                  }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Data Final</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  placeholder="Data Final"
+                  className="pl-10"
+                  value={filters.data_final || ''}
+                  onChange={(e) => {
+                    const value = e.target.value || undefined;
+                    updateFilters({ data_final: value });
+                  }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Select
+                value={filters.tipo || 'all'}
+                onValueChange={(value) => {
+                  if (value === 'all') {
+                    updateFilters({ tipo: undefined });
+                  } else {
+                    updateFilters({ tipo: value as TipoPedido });
+                  }
                 }}
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os tipos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="VENDA">Venda</SelectItem>
+                  <SelectItem value="COMPRA">Compra</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="date"
-                placeholder="Data final"
-                className="pl-10"
-                value={filters.data_final || ''}
-                onChange={(e) => {
-                  const value = e.target.value || undefined;
-                  updateFilters({ data_final: value });
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Status</Label>
+              <Select
+                value={filters.status || 'all'}
+                onValueChange={(value) => {
+                  if (value === 'all') {
+                    updateFilters({ status: undefined });
+                  } else {
+                    updateFilters({ status: value as StatusPedido });
+                  }
                 }}
-              />
+              >
+                <SelectTrigger className="border-2 border-primary">
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="PENDENTE">Pendente</SelectItem>
+                  <SelectItem value="APROVADO">Aprovado</SelectItem>
+                  <SelectItem value="EM_PROCESSAMENTO">Em Processamento</SelectItem>
+                  <SelectItem value="CONCLUIDO">Concluído</SelectItem>
+                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select
-              value={filters.tipo || 'all'}
-              onValueChange={(value) => {
-                if (value === 'all') {
-                  updateFilters({ tipo: undefined });
-                } else {
-                  updateFilters({ tipo: value as TipoPedido });
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos os tipos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os tipos</SelectItem>
-                <SelectItem value="VENDA">Venda</SelectItem>
-                <SelectItem value="COMPRA">Compra</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={filters.status || 'all'}
-              onValueChange={(value) => {
-                if (value === 'all') {
-                  updateFilters({ status: undefined });
-                } else {
-                  updateFilters({ status: value as StatusPedido });
-                }
-              }}
-            >
-              <SelectTrigger className="border-2 border-primary">
-                <SelectValue placeholder="Todos os status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
-                <SelectItem value="PENDENTE">Pendente</SelectItem>
-                <SelectItem value="APROVADO">Aprovado</SelectItem>
-                <SelectItem value="EM_PROCESSAMENTO">Em Processamento</SelectItem>
-                <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-                <SelectItem value="CANCELADO">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
@@ -358,7 +376,7 @@ export default function Pedidos() {
           isOpen={isFormOpen}
           onClose={closeForm}
           onSubmit={handleOrderSubmit}
-          order={selectedOrder}
+          order={selectedOrderForEdit}
           isPending={isCreating || isUpdating}
           clientes={clientes}
           fornecedores={fornecedores}
@@ -407,10 +425,7 @@ export default function Pedidos() {
                       : `Fornecedor: ${orderToCancel.fornecedor?.nome_fantasia || orderToCancel.fornecedor?.nome_razao || 'N/A'}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Valor: {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    }).format(orderToCancel.valor_total || 0)}
+                    Valor: {formatCurrency(normalizeCurrency(orderToCancel.valor_total, true))}
                   </p>
                 </div>
               )}

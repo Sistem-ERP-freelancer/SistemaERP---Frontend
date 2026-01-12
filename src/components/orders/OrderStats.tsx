@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { DollarSign, FileText, ShoppingCart, Package, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { pedidosService } from '@/services/pedidos.service';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { TipoPedido } from '@/types/pedido';
 
 interface OrderStatsProps {
@@ -18,7 +18,7 @@ export function OrderStats({ tipoFiltro }: OrderStatsProps = {}) {
   });
 
   const formatCurrencyValue = (value: number | undefined) => {
-    return formatCurrency(value || 0);
+    return formatCurrency(normalizeCurrency(value, true));
   };
 
   // BLOCO 1 — Financeiro VENDA (valores)

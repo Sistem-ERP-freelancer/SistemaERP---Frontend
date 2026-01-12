@@ -81,11 +81,28 @@ export function useOrders() {
     staleTime: 30000, // Cache por 30 segundos
   });
 
+  // Query para buscar dados completos do pedido quando o formulário de edição está aberto
+  const { data: fullOrderDataForEdit } = useQuery({
+    queryKey: ['pedidos', selectedOrder?.id, 'edit'],
+    queryFn: async () => {
+      if (!selectedOrder?.id) return null;
+      return await pedidosService.buscarPorId(selectedOrder.id);
+    },
+    enabled: !!selectedOrder?.id && isFormOpen,
+    staleTime: 0, // Sem cache para garantir dados sempre atualizados na edição
+  });
+
   // Usar dados completos se disponíveis, senão usar os dados básicos
   const orderForView = useMemo(() => {
     if (fullOrderData) return fullOrderData;
     return selectedOrder;
   }, [fullOrderData, selectedOrder]);
+
+  // Dados do pedido para edição - sempre buscar dados atualizados
+  const orderForEdit = useMemo(() => {
+    if (fullOrderDataForEdit) return fullOrderDataForEdit;
+    return selectedOrder;
+  }, [fullOrderDataForEdit, selectedOrder]);
 
   const orders = useMemo(() => {
     if (!ordersResponse) return [];
@@ -329,10 +346,19 @@ export function useOrders() {
       setSelectedOrder(null);
     },
     onError: (error: any) => {
-      const message =
+      let message =
         error?.response?.data?.message ||
         error?.message ||
         'Erro ao criar pedido';
+      
+      // Interceptar erros de estoque e mostrar mensagem simplificada
+      if (message.toLowerCase().includes('problemas de estoque') || 
+          message.toLowerCase().includes('estoque') && 
+          (message.toLowerCase().includes('quantidade solicitada') || 
+           message.toLowerCase().includes('maior que estoque'))) {
+        message = 'Estoque de produto insuficiente';
+      }
+      
       toast.error(message);
     },
   });
@@ -397,10 +423,19 @@ export function useOrders() {
       setSelectedOrder(null);
     },
     onError: (error: any) => {
-      const message =
+      let message =
         error?.response?.data?.message ||
         error?.message ||
         'Erro ao atualizar pedido';
+      
+      // Interceptar erros de estoque e mostrar mensagem simplificada
+      if (message.toLowerCase().includes('problemas de estoque') || 
+          message.toLowerCase().includes('estoque') && 
+          (message.toLowerCase().includes('quantidade solicitada') || 
+           message.toLowerCase().includes('maior que estoque'))) {
+        message = 'Estoque de produto insuficiente';
+      }
+      
       toast.error(message);
     },
   });
@@ -536,6 +571,7 @@ export function useOrders() {
   };
 
   const openEditForm = (order: Pedido) => {
+    // Abrir modal imediatamente com os dados disponíveis
     setSelectedOrder(order);
     setIsFormOpen(true);
   };
@@ -576,6 +612,7 @@ export function useOrders() {
     filters,
     stats,
     selectedOrder: orderForView,
+    selectedOrderForEdit: orderForEdit,
     orderToCancel,
     clientes,
     fornecedores,

@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { normalizeCurrency } from '@/lib/utils';
 
 interface OrderListProps {
   orders: Pedido[];
@@ -196,7 +197,7 @@ export function OrderList({
                 )}
               </TableCell>
               <TableCell>
-                <span className="font-medium">{formatCurrency(order.valor_total)}</span>
+                <span className="font-medium">{formatCurrency(normalizeCurrency(order.valor_total, true))}</span>
               </TableCell>
               <TableCell>
                 <span className="text-sm text-muted-foreground">{formatDate(order.data_pedido)}</span>

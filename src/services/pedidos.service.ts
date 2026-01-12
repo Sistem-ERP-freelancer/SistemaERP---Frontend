@@ -78,6 +78,22 @@ class PedidosService {
     return apiClient.patch<Pedido>(`/pedidos/${id}/cancelar`, {});
   }
 
+  /**
+   * Atualiza apenas a data de vencimento base do pedido
+   * O backend recalcula automaticamente todas as parcelas pendentes
+   */
+  async atualizarDataVencimento(
+    pedidoId: number,
+    dataVencimento: string
+  ): Promise<Pedido> {
+    return apiClient.patch<Pedido>(
+      `/pedidos/${pedidoId}/data-vencimento`,
+      {
+        data_vencimento_base: dataVencimento,
+      }
+    );
+  }
+
   async obterDashboard(): Promise<DashboardPedidos> {
     return apiClient.get<DashboardPedidos>('/pedidos/dashboard/resumo');
   }

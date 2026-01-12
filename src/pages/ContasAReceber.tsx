@@ -438,6 +438,57 @@ const ContasAReceber = () => {
     retry: false,
   });
 
+  // Query para buscar todas as parcelas do pedido (para contar parcelas pagas)
+  const { data: parcelasDoPedido } = useQuery({
+    queryKey: ["parcelas-pedido", contaSelecionada?.pedido_id],
+    queryFn: async () => {
+      if (!contaSelecionada?.pedido_id) return [];
+      try {
+        const parcelas = await financeiroService.buscarPorPedido(contaSelecionada.pedido_id);
+        return Array.isArray(parcelas) ? parcelas : [];
+      } catch (error) {
+        console.error('Erro ao buscar parcelas do pedido:', error);
+        return [];
+      }
+    },
+    enabled: !!contaSelecionada?.pedido_id && viewDialogOpen,
+    retry: false,
+  });
+
+  // Calcular quantas parcelas foram pagas
+  const parcelasPagas = useMemo(() => {
+    if (!parcelasDoPedido || parcelasDoPedido.length === 0) return 0;
+    return parcelasDoPedido.filter(
+      (parcela: any) => parcela.status === 'PAGO_TOTAL' || parcela.status === 'PAGO_PARCIAL'
+    ).length;
+  }, [parcelasDoPedido]);
+
+  // Função para formatar método de pagamento
+  const formatarMetodoPagamento = (metodo?: string): string => {
+    if (!metodo) return 'N/A';
+    
+    const metodos: Record<string, string> = {
+      'DINHEIRO': 'Dinheiro',
+      'PIX': 'PIX',
+      'CARTAO_CREDITO': 'Cartão de Crédito',
+      'CARTAO_DEBITO': 'Cartão de Débito',
+      'BOLETO': 'Boleto',
+      'TRANSFERENCIA': 'Transferência',
+    };
+    
+    return metodos[metodo] || metodo;
+  };
+
+  // Função para formatar data
+  const formatarData = (data?: string): string => {
+    if (!data) return 'N/A';
+    try {
+      return new Date(data).toLocaleDateString('pt-BR');
+    } catch {
+      return data;
+    }
+  };
+
   // Mutation para criar conta financeira
   const createContaMutation = useMutation({
     mutationFn: async (data: CreateContaFinanceiraDto) => {
@@ -570,6 +621,31 @@ const ContasAReceber = () => {
       console.error('Erro ao converter data:', error);
       return '';
     }
+  };
+
+  // Função auxiliar para formatar descrição com informações de parcela
+  const formatarDescricaoComParcela = (conta: any): string => {
+    let descricao = conta.descricao || '';
+    
+    // Sempre usar total_parcelas e numero_parcela quando disponíveis
+    if (conta.total_parcelas !== undefined && conta.total_parcelas !== null) {
+      const parcelaInfo = conta.parcela_texto 
+        ? conta.parcela_texto 
+        : conta.numero_parcela !== undefined && conta.numero_parcela !== null
+          ? `Parcela ${conta.numero_parcela}/${conta.total_parcelas}`
+          : `Parcela 1/${conta.total_parcelas}`;
+      
+      // Substituir qualquer informação de parcela existente
+      const regexParcela = /Parcela\s+\d+\/\d+/gi;
+      if (regexParcela.test(descricao)) {
+        descricao = descricao.replace(regexParcela, parcelaInfo);
+      } else {
+        // Se não tiver informação de parcela, adicionar
+        descricao = `${descricao} - ${parcelaInfo}`;
+      }
+    }
+    
+    return descricao;
   };
 
   // Quando a conta for carregada, preencher o formulário de edição
@@ -840,7 +916,7 @@ const ContasAReceber = () => {
 
       return {
         id: conta.numero_conta || `CONTA-${conta.id}`,
-        descricao: conta.descricao,
+        descricao: formatarDescricaoComParcela(conta),
         categoria: categoria,
         valor: valorFormatado,
         data: dataFormatada,
@@ -932,7 +1008,7 @@ const ContasAReceber = () => {
 
         return [{
           id: conta.numero_conta || `CONTA-${conta.id}`,
-          descricao: conta.descricao,
+          descricao: formatarDescricaoComParcela(conta),
           categoria: categoria,
           valor: valorFormatado,
           data: dataFormatada,
@@ -1516,7 +1592,7 @@ const ContasAReceber = () => {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Descrição</Label>
-                    <p className="text-sm font-medium">{contaSelecionada.descricao}</p>
+                    <p className="text-sm font-medium">{formatarDescricaoComParcela(contaSelecionada)}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Valor Original</Label>
@@ -1542,6 +1618,36 @@ const ContasAReceber = () => {
                         : "N/A"}
                     </p>
                   </div>
+                  <div>
+                    <Label className="text-muted-foreground">Data de Pagamento</Label>
+                    <p className="text-sm font-medium">{formatarData(contaSelecionada.data_pagamento)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Método de Pagamento</Label>
+                    <p className="text-sm font-medium">{formatarMetodoPagamento(contaSelecionada.forma_pagamento)}</p>
+                  </div>
+                  {contaSelecionada.total_parcelas && contaSelecionada.total_parcelas > 1 && (
+                    <>
+                      <div>
+                        <Label className="text-muted-foreground">Parcelado</Label>
+                        <p className="text-sm font-medium">Sim</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Quantidade de Parcelas</Label>
+                        <p className="text-sm font-medium">{contaSelecionada.total_parcelas}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Parcelas Pagas</Label>
+                        <p className="text-sm font-medium">{parcelasPagas} de {contaSelecionada.total_parcelas}</p>
+                      </div>
+                    </>
+                  )}
+                  {(!contaSelecionada.total_parcelas || contaSelecionada.total_parcelas <= 1) && (
+                    <div>
+                      <Label className="text-muted-foreground">Parcelado</Label>
+                      <p className="text-sm font-medium">Não</p>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

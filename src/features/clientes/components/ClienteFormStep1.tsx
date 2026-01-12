@@ -90,62 +90,43 @@ export const ClienteFormStep1 = ({
   };
 
   const handleLimiteCreditoChange = (value: string) => {
-    // Permite digitação livre - apenas remove caracteres não numéricos exceto vírgula e ponto
-    const cleaned = value.replace(/[^\d,.]/g, '');
-    
-    // Atualiza o estado local para permitir digitação livre (sem formatação durante digitação)
-    setLimiteCreditoInput(cleaned);
+    // Remove tudo exceto números
+    const apenasNumeros = value.replace(/\D/g, '');
     
     // Se estiver vazio, limpa o valor
-    if (cleaned === '' || cleaned === ',' || cleaned === '.') {
+    if (apenasNumeros === '') {
+      setLimiteCreditoInput('');
       onFormDataChange({ limite_credito: undefined });
       return;
     }
     
-    // Processa o valor digitado
-    // Se tiver vírgula, trata como separador decimal brasileiro
-    // Se tiver ponto, pode ser separador decimal ou milhar
-    let normalized = cleaned;
+    // Converte para número (em centavos para depois dividir)
+    const valorEmCentavos = parseInt(apenasNumeros, 10);
+    const valorDecimal = valorEmCentavos / 100;
     
-    // Se tiver vírgula, substitui por ponto para parseFloat
-    if (cleaned.includes(',')) {
-      // Remove pontos (milhares) e substitui vírgula por ponto
-      normalized = cleaned.replace(/\./g, '').replace(',', '.');
-    } else if (cleaned.includes('.')) {
-      // Se tiver ponto, verifica se é decimal ou milhar
-      // Se tiver mais de um ponto ou ponto seguido de menos de 3 dígitos, é decimal
-      const parts = cleaned.split('.');
-      if (parts.length === 2 && parts[1].length <= 2) {
-        // É decimal (ex: 4.50)
-        normalized = cleaned;
-      } else {
-        // É milhar, remove pontos
-        normalized = cleaned.replace(/\./g, '');
-      }
-    }
+    // Atualiza o valor numérico
+    onFormDataChange({ limite_credito: valorDecimal });
     
-    // Converte para número
-    const numericValue = parseFloat(normalized);
+    // Formata visualmente enquanto digita (formato brasileiro)
+    const formatted = new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(valorDecimal);
     
-    // Permite qualquer valor positivo (incluindo valores muito pequenos e muito grandes)
-    if (!isNaN(numericValue) && numericValue >= 0) {
-      // Atualiza o valor numérico
-      onFormDataChange({ limite_credito: numericValue });
-    }
+    // Atualiza o input com a formatação visual
+    setLimiteCreditoInput(formatted);
   };
 
   const handleLimiteCreditoBlur = () => {
     setIsFocused(false);
-    // Quando sair do campo, formata o valor
+    // Mantém a formatação visual quando sair do campo
     const value = formData.limite_credito;
     if (value !== undefined && !isNaN(value) && value >= 0) {
       const formatted = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }).format(value);
-      setLimiteCreditoInput(formatted.replace('R$', '').trim());
+      setLimiteCreditoInput(formatted);
     } else {
       setLimiteCreditoInput('');
     }
@@ -153,11 +134,13 @@ export const ClienteFormStep1 = ({
 
   const handleLimiteCreditoFocus = () => {
     setIsFocused(true);
-    // Quando focar no campo, mostra o valor numérico sem formatação para facilitar edição
+    // Mantém a formatação visual mesmo quando focado
     if (formData.limite_credito !== undefined && !isNaN(formData.limite_credito)) {
-      // Converte para string sem formatação de moeda (usa vírgula como separador decimal)
-      const valueStr = formData.limite_credito.toString().replace('.', ',');
-      setLimiteCreditoInput(valueStr);
+      const formatted = new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(formData.limite_credito);
+      setLimiteCreditoInput(formatted);
     } else {
       setLimiteCreditoInput('');
     }
@@ -330,26 +313,28 @@ export const ClienteFormStep1 = ({
       )}
 
       {/* Limite de Crédito */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-muted-foreground" />
+      <div className="space-y-3">
+        <Label className="flex items-center gap-2 text-sm font-semibold">
+          <DollarSign className="w-5 h-5 text-primary" />
           Limite de Crédito
         </Label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">R$</span>
-          <Input
-            type="text"
-            placeholder="0,00"
-            value={limiteCreditoInput}
-            onChange={(e) => handleLimiteCreditoChange(e.target.value)}
-            onBlur={handleLimiteCreditoBlur}
-            onFocus={handleLimiteCreditoFocus}
-            className="pl-8"
-          />
+        <div className="bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/20 rounded-lg p-4 space-y-2">
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-primary font-bold text-lg">R$</span>
+            <Input
+              type="text"
+              placeholder="0,00"
+              value={limiteCreditoInput}
+              onChange={(e) => handleLimiteCreditoChange(e.target.value)}
+              onBlur={handleLimiteCreditoBlur}
+              onFocus={handleLimiteCreditoFocus}
+              className="pl-10 h-12 text-lg font-semibold border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/20 bg-background"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground ml-1">
+            Valor máximo de crédito disponível para este cliente
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Valor máximo de crédito disponível para este cliente
-        </p>
       </div>
 
       {/* Status Inicial */}

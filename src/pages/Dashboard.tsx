@@ -349,13 +349,38 @@ const Dashboard = () => {
                       ? `Vencida há ${Math.abs(diasVencida)} ${Math.abs(diasVencida) === 1 ? 'dia' : 'dias'}`
                       : conta.status_vencimento || 'Vencida';
                     
+                    // Formatar descrição com informação de parcela
+                    const formatarDescricao = () => {
+                      let descricao = conta.descricao || '';
+                      
+                      // Sempre usar total_parcelas e numero_parcela quando disponíveis
+                      if (conta.total_parcelas !== undefined && conta.total_parcelas !== null) {
+                        const parcelaInfo = conta.parcela_texto 
+                          ? conta.parcela_texto 
+                          : conta.numero_parcela !== undefined && conta.numero_parcela !== null
+                            ? `Parcela ${conta.numero_parcela}/${conta.total_parcelas}`
+                            : `Parcela 1/${conta.total_parcelas}`;
+                        
+                        // Substituir qualquer informação de parcela existente
+                        const regexParcela = /Parcela\s+\d+\/\d+/gi;
+                        if (regexParcela.test(descricao)) {
+                          descricao = descricao.replace(regexParcela, parcelaInfo);
+                        } else {
+                          // Se não tiver informação de parcela, adicionar
+                          descricao = `${descricao} - ${parcelaInfo}`;
+                        }
+                      }
+                      
+                      return descricao;
+                    };
+                    
                     return (
                       <TableRow key={conta.id}>
                         <TableCell>
                           <span className="font-medium">{conta.numero_conta || `CONTA-${conta.id}`}</span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">{conta.descricao}</span>
+                          <span className="text-sm text-muted-foreground">{formatarDescricao()}</span>
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap inline-block ${

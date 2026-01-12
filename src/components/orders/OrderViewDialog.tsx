@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -25,12 +26,17 @@ import {
   User,
   Building2,
   Info,
+  Edit,
 } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, normalizeCurrency, normalizeQuantity } from '@/lib/utils';
+import { formatCPF, formatCNPJ, cleanDocument } from '@/lib/validators';
+import { ParcelasPedido } from './ParcelasPedido';
+import { AtualizarDataVencimento } from './AtualizarDataVencimento';
+import { useState } from 'react';
 
 interface OrderViewDialogProps {
   isOpen: boolean;
@@ -43,6 +49,8 @@ export function OrderViewDialog({
   onClose,
   order,
 }: OrderViewDialogProps) {
+  const [dialogDataVencimentoAberto, setDialogDataVencimentoAberto] = useState(false);
+
   if (!order) return null;
 
   const formatDate = (dateString?: string) => {
@@ -184,7 +192,12 @@ export function OrderViewDialog({
                   {order.cliente.cpf_cnpj && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">CPF/CNPJ</Label>
-                      <div className="text-sm">{order.cliente.cpf_cnpj}</div>
+                      <div className="text-sm">
+                        {(() => {
+                          const cleaned = cleanDocument(order.cliente.cpf_cnpj);
+                          return cleaned.length === 11 ? formatCPF(cleaned) : formatCNPJ(cleaned);
+                        })()}
+                      </div>
                     </div>
                   )}
                   {order.cliente.email && (
@@ -217,7 +230,12 @@ export function OrderViewDialog({
                   {order.fornecedor.cpf_cnpj && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">CPF/CNPJ</Label>
-                      <div className="text-sm">{order.fornecedor.cpf_cnpj}</div>
+                      <div className="text-sm">
+                        {(() => {
+                          const cleaned = cleanDocument(order.fornecedor.cpf_cnpj);
+                          return cleaned.length === 11 ? formatCPF(cleaned) : formatCNPJ(cleaned);
+                        })()}
+                      </div>
                     </div>
                   )}
                   {order.fornecedor.email && (
@@ -262,7 +280,9 @@ export function OrderViewDialog({
                 {order.transportadora.cnpj && (
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">CNPJ</Label>
-                    <div className="text-sm">{order.transportadora.cnpj}</div>
+                    <div className="text-sm">
+                      {formatCNPJ(cleanDocument(order.transportadora.cnpj))}
+                    </div>
                   </div>
                 )}
                 {order.prazo_entrega_dias && (
@@ -314,6 +334,27 @@ export function OrderViewDialog({
                   <div className="text-sm">{order.condicao_pagamento}</div>
                 </div>
               )}
+              {(order.data_vencimento_base || (order as any).data_vencimento) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-muted-foreground">Data de Vencimento Base</Label>
+                    {order.status !== 'CANCELADO' && order.status !== 'CONCLUIDO' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDialogDataVencimentoAberto(true)}
+                        className="h-7 text-xs"
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        Atualizar
+                      </Button>
+                    )}
+                  </div>
+                  <div className="text-sm">
+                    {formatDate(order.data_vencimento_base || (order as any).data_vencimento)}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -345,7 +386,11 @@ export function OrderViewDialog({
                 <TableBody>
                   {order.itens && order.itens.length > 0 ? (
                     order.itens.map((item, index) => {
-                      const subtotal = (item.quantidade || 0) * (item.preco_unitario || 0) - (item.desconto || 0);
+                      // Normalizar valores monetários recebidos do backend
+                      const quantidade = normalizeQuantity(item.quantidade);
+                      const precoUnitario = normalizeCurrency(item.preco_unitario, true);
+                      const desconto = item.desconto ? normalizeCurrency(item.desconto, true) : 0;
+                      const subtotal = Math.max(0, quantidade * precoUnitario - desconto);
                       return (
                         <TableRow key={index}>
                           <TableCell>
@@ -361,13 +406,13 @@ export function OrderViewDialog({
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            {item.quantidade || 0}
+                            {quantidade}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(item.preco_unitario || 0)}
+                            {formatCurrency(precoUnitario)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {item.desconto ? formatCurrency(item.desconto) : '--'}
+                            {desconto > 0 ? formatCurrency(desconto) : '--'}
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             {formatCurrency(subtotal)}
@@ -404,7 +449,7 @@ export function OrderViewDialog({
             <div className="space-y-3">
               <div className="flex justify-between">
                 <Label className="text-muted-foreground">Subtotal</Label>
-                <div className="font-medium">{formatCurrency(order.subtotal || 0)}</div>
+                <div className="font-medium">{formatCurrency(normalizeCurrency(order.subtotal, true))}</div>
               </div>
               {order.desconto_valor > 0 && (
                 <div className="flex justify-between">
@@ -412,28 +457,31 @@ export function OrderViewDialog({
                     Desconto {order.desconto_percentual > 0 && `(${order.desconto_percentual.toFixed(2)}%)`}
                   </Label>
                   <div className="font-medium text-red-600 dark:text-red-400">
-                    -{formatCurrency(order.desconto_valor)}
+                    -{formatCurrency(normalizeCurrency(order.desconto_valor, true))}
                   </div>
                 </div>
               )}
               {order.frete > 0 && (
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Frete</Label>
-                  <div className="font-medium">{formatCurrency(order.frete)}</div>
+                  <div className="font-medium">{formatCurrency(normalizeCurrency(order.frete, true))}</div>
                 </div>
               )}
               {order.outras_taxas > 0 && (
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Outras Taxas</Label>
-                  <div className="font-medium">{formatCurrency(order.outras_taxas)}</div>
+                  <div className="font-medium">{formatCurrency(normalizeCurrency(order.outras_taxas, true))}</div>
                 </div>
               )}
               <div className="border-t pt-3 flex justify-between">
                 <Label className="text-lg font-semibold">Total</Label>
-                <div className="text-lg font-bold">{formatCurrency(order.valor_total || 0)}</div>
+                <div className="text-lg font-bold">{formatCurrency(normalizeCurrency(order.valor_total, true))}</div>
               </div>
             </div>
           </div>
+
+          {/* Parcelas do Pedido */}
+          <ParcelasPedido pedidoId={order.id} />
 
           {/* Observações */}
           {(order.observacoes_internas || order.observacoes_cliente) && (
@@ -487,6 +535,20 @@ export function OrderViewDialog({
             </div>
           )}
         </div>
+
+        {/* Dialog de Atualização de Data de Vencimento */}
+        {order && (
+          <AtualizarDataVencimento
+            pedidoId={order.id}
+            dataVencimentoAtual={order.data_vencimento_base || (order as any).data_vencimento}
+            open={dialogDataVencimentoAberto}
+            onClose={() => setDialogDataVencimentoAberto(false)}
+            onSuccess={() => {
+              // O React Query já atualiza automaticamente via invalidateQueries
+              setDialogDataVencimentoAberto(false);
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
