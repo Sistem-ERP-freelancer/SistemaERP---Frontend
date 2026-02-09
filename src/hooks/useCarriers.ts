@@ -1,13 +1,13 @@
-import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import {
-  Transportadora,
-  CreateTransportadoraDto,
-  UpdateTransportadoraDto,
-  Pedido,
-} from '@/types/carrier';
 import { transportadorasService } from '@/services/transportadoras.service';
+import {
+    CreateTransportadoraDto,
+    Pedido,
+    Transportadora,
+    UpdateTransportadoraDto,
+} from '@/types/carrier';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 const ITEMS_PER_PAGE = 15;
 

@@ -1,9 +1,9 @@
-import { motion } from 'framer-motion';
-import { DollarSign, FileText, ShoppingCart, Package, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { pedidosService } from '@/services/pedidos.service';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
+import { pedidosService } from '@/services/pedidos.service';
 import { TipoPedido } from '@/types/pedido';
+import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { CheckCircle, DollarSign, FileText, Loader2, Package, ShoppingCart, XCircle } from 'lucide-react';
 
 interface OrderStatsProps {
   tipoFiltro?: TipoPedido | 'all' | undefined;
@@ -18,7 +18,7 @@ export function OrderStats({ tipoFiltro }: OrderStatsProps = {}) {
   });
 
   const formatCurrencyValue = (value: number | undefined) => {
-    return formatCurrency(normalizeCurrency(value, true));
+    return formatCurrency(normalizeCurrency(value, false));
   };
 
   // BLOCO 1 — Financeiro VENDA (valores)

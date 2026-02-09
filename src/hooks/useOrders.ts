@@ -1,18 +1,17 @@
-import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import {
-  Pedido,
-  CreatePedidoDto,
-  FiltrosPedidos,
-  TipoPedido,
-  StatusPedido,
-} from '@/types/pedido';
+import { Cliente, clientesService } from '@/services/clientes.service';
+import { Fornecedor, fornecedoresService } from '@/services/fornecedores.service';
 import { pedidosService } from '@/services/pedidos.service';
-import { clientesService, Cliente } from '@/services/clientes.service';
-import { fornecedoresService, Fornecedor } from '@/services/fornecedores.service';
-import { produtosService, Produto } from '@/services/produtos.service';
+import { Produto, produtosService } from '@/services/produtos.service';
 import { transportadorasService } from '@/services/transportadoras.service';
+import {
+    CreatePedidoDto,
+    FiltrosPedidos,
+    Pedido,
+    StatusPedido
+} from '@/types/pedido';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 const ITEMS_PER_PAGE = 15;
 
@@ -380,9 +379,10 @@ export function useOrders() {
       queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       
-      // Atualizar o cache do pedido específico com os dados retornados
+      // Atualizar o cache do pedido específico com os dados retornados (incl. 'edit' para o form não receber dado desatualizado)
       queryClient.setQueryData(['pedidos', variables.id], updatedOrder);
       queryClient.setQueryData(['pedidos', variables.id, 'full'], updatedOrder);
+      queryClient.setQueryData(['pedidos', variables.id, 'edit'], updatedOrder);
       
       // Atualizar o pedido na lista se estiver no cache
       queryClient.setQueriesData(
@@ -417,7 +417,30 @@ export function useOrders() {
         queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] }),
         queryClient.refetchQueries({ queryKey: ['contas-financeiras'] }),
       ]);
-      
+
+      // Garantir que o pedido atualizado (resposta do PATCH) permaneça no cache da lista após o refetch.
+      // O refetch pode devolver lista com item ainda "À vista"; reaplicar updatedOrder nesse item.
+      queryClient.setQueriesData(
+        { queryKey: ['pedidos'] },
+        (old: any) => {
+          if (!old) return old;
+          if (Array.isArray(old)) {
+            return old.map((order: Pedido) =>
+              order.id === variables.id ? updatedOrder : order
+            );
+          }
+          if (old.data && Array.isArray(old.data)) {
+            return {
+              ...old,
+              data: old.data.map((order: Pedido) =>
+                order.id === variables.id ? updatedOrder : order
+              ),
+            };
+          }
+          return old;
+        }
+      );
+
       toast.success('Pedido atualizado com sucesso!');
       setIsFormOpen(false);
       setSelectedOrder(null);
@@ -440,36 +463,55 @@ export function useOrders() {
     },
   });
 
-  // Mutation para cancelar pedido
+  // Mutation para cancelar pedido (PATCH /pedidos/:id/cancelar).
+  // Após sucesso: atualiza cache do pedido e invalida queries para o pedido sair das tabelas Contas a Receber / Contas a Pagar.
   const cancelMutation = useMutation({
     mutationFn: async (id: number) => {
       return await pedidosService.cancelar(id);
     },
-    onSuccess: async (_, id) => {
-      // Invalidar e refetch todas as queries relacionadas
+    onSuccess: async (updatedOrder, id) => {
+      // Atualizar cache para exibir status "Cancelado" na lista/detalhe na hora
+      queryClient.setQueryData(['pedidos', id], updatedOrder);
+      queryClient.setQueryData(['pedidos', id, 'full'], updatedOrder);
+      queryClient.setQueryData(['pedidos', id, 'edit'], updatedOrder);
+      queryClient.setQueriesData(
+        { queryKey: ['pedidos'] },
+        (old: any) => {
+          if (!old) return old;
+          if (Array.isArray(old)) {
+            return old.map((order: Pedido) => (order.id === id ? updatedOrder : order));
+          }
+          if (old?.data && Array.isArray(old.data)) {
+            return { ...old, data: old.data.map((order: Pedido) => (order.id === id ? updatedOrder : order)) };
+          }
+          return old;
+        }
+      );
+
+      // Invalidar listas e dashboards para o pedido sair das telas Contas a Receber / Contas a Pagar
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['pedidos'] }),
         queryClient.invalidateQueries({ queryKey: ['pedidos', 'all'] }),
         queryClient.invalidateQueries({ queryKey: ['pedidos', 'dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['contas-financeiras', 'pedido', id] }),
         queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] }),
+        queryClient.invalidateQueries({ queryKey: ['duplicatas'] }),
+        queryClient.invalidateQueries({ queryKey: ['contas-receber'] }),
       ]);
-      
-      // Forçar refetch imediato do dashboard
       await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });
-      
+
       toast.success('Pedido cancelado com sucesso!');
       setIsCancelDialogOpen(false);
       setOrderToCancel(null);
     },
     onError: (error: any) => {
+      const status = error?.response?.status;
       const message =
         error?.response?.data?.message ||
         error?.message ||
-        'Erro ao cancelar pedido';
+        (status === 400 ? 'Pedido já está cancelado.' : status === 404 ? 'Pedido não encontrado.' : 'Erro ao cancelar pedido.');
       toast.error(message);
     },
   });

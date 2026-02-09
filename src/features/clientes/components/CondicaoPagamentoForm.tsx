@@ -2,31 +2,30 @@
  * Componente para gerenciar condições de pagamento do cliente
  */
 
-import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  CondicaoPagamento,
-  ParcelaPagamento,
-  FormaPagamento,
+    CondicaoPagamento,
+    FormaPagamento,
+    ParcelaPagamento,
 } from "@/shared/types/condicao-pagamento.types";
-import { Plus, Trash2, CreditCard } from "lucide-react";
+import { CreditCard, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface CondicaoPagamentoFormProps {
   condicao: CondicaoPagamento;
@@ -150,7 +149,7 @@ export const CondicaoPagamentoForm: React.FC<CondicaoPagamentoFormProps> = ({
             <SelectTrigger id={`forma-${index}`}>
               <SelectValue placeholder="Selecione a forma de pagamento" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="item-aligned" className="max-h-[280px]">
               <SelectItem value={FormaPagamento.PIX}>PIX</SelectItem>
               <SelectItem value={FormaPagamento.DINHEIRO}>Dinheiro</SelectItem>
               <SelectItem value={FormaPagamento.CARTAO_CREDITO}>
@@ -161,8 +160,9 @@ export const CondicaoPagamentoForm: React.FC<CondicaoPagamentoFormProps> = ({
               </SelectItem>
               <SelectItem value={FormaPagamento.BOLETO}>Boleto</SelectItem>
               <SelectItem value={FormaPagamento.TRANSFERENCIA}>
-                Transferência
+                Transferência Bancária
               </SelectItem>
+              <SelectItem value={FormaPagamento.CHEQUE}>Cheque</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Transportadora, CreateTransportadoraDto } from '@/types/carrier';
-import { formatCNPJ, formatCEP, formatTelefone } from '@/lib/validators';
-import { Loader2, Building2, FileText, Hash, Mail, Phone, MapPin, Info, Circle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { formatCEP, formatCNPJ, formatTelefone } from '@/lib/validators';
+import { CreateTransportadoraDto, Transportadora } from '@/types/carrier';
+import { Building2, Circle, FileText, Hash, Info, Loader2, Mail, MapPin, Phone, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 interface CarrierFormProps {
   /** Controla visibilidade do modal */
@@ -39,8 +39,9 @@ export function CarrierForm({
   carrier,
   isPending = false,
 }: CarrierFormProps) {
-  const [formData, setFormData] = useState<CreateTransportadoraDto>({
+  const [formData, setFormData] = useState<CreateTransportadoraDto & { contato?: string }>({
     nome: '',
+    contato: '',
     nome_fantasia: '',
     cnpj: '',
     inscricao_estadual: '',
@@ -57,10 +58,15 @@ export function CarrierForm({
     observacoes: '',
   });
 
+  const [contatoError, setContatoError] = useState<string>('');
+  const [telefoneError, setTelefoneError] = useState<string>('');
+  const [emailError, setEmailError] = useState<string>('');
+
   useEffect(() => {
     if (carrier) {
       setFormData({
         nome: carrier.nome || '',
+        contato: carrier.contato || '',
         nome_fantasia: carrier.nome_fantasia || '',
         cnpj: carrier.cnpj || '',
         inscricao_estadual: carrier.inscricao_estadual || '',
@@ -80,6 +86,7 @@ export function CarrierForm({
       // Reset form
       setFormData({
         nome: '',
+        contato: '',
         nome_fantasia: '',
         cnpj: '',
         inscricao_estadual: '',
@@ -100,11 +107,63 @@ export function CarrierForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setContatoError('');
+    setTelefoneError('');
+    setEmailError('');
     
     // Validação básica
     if (!formData.nome || formData.nome.trim().length < 3) {
       return;
     }
+
+    // Validação de contato (obrigatório na criação, opcional na edição)
+    if (!carrier) {
+      const contatoVal = (formData.contato || '').trim();
+      if (!contatoVal) {
+        setContatoError('O contato é obrigatório.');
+        toast.error('O contato é obrigatório.');
+        return;
+      }
+      if (contatoVal.length > 255) {
+        setContatoError('O contato deve ter entre 1 e 255 caracteres.');
+        toast.error('O contato deve ter entre 1 e 255 caracteres.');
+        return;
+      }
+    } else {
+      const contatoVal = (formData.contato || '').trim();
+      if (contatoVal && contatoVal.length > 255) {
+        setContatoError('O contato deve ter entre 1 e 255 caracteres.');
+        toast.error('O contato deve ter entre 1 e 255 caracteres.');
+        return;
+      }
+    }
+
+    // Validação de telefone e e-mail (obrigatórios)
+    const telefoneVal = (formData.telefone || '').replace(/\D/g, '');
+    if (telefoneVal.length < 10) {
+      setTelefoneError('O telefone é obrigatório (mínimo 10 dígitos).');
+      toast.error('O telefone é obrigatório (mínimo 10 dígitos).');
+      return;
+    }
+
+    const emailVal = (formData.email || '').trim();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailVal) {
+      setEmailError('O e-mail é obrigatório.');
+      toast.error('O e-mail é obrigatório.');
+      return;
+    }
+    if (!emailRegex.test(emailVal)) {
+      setEmailError('Digite um e-mail válido.');
+      toast.error('Digite um e-mail válido.');
+      return;
+    }
+
+    const contatoTrimmed = (formData.contato ?? '').trim();
+    const payload: CreateTransportadoraDto = {
+      ...formData,
+      contato: contatoTrimmed, // Obrigatório na criação (já validado), opcional na edição (backend ignora se vazio)
+    };
 
     // Validação de CNPJ conforme GUIA_FRONTEND_CORRECOES_BACKEND.md
     if (formData.cnpj) {
@@ -112,15 +171,9 @@ export function CarrierForm({
       if (cnpjLimpo.length !== 14) {
         return;
       }
-      // Enviar apenas números para o backend
-      const dataToSend = {
-        ...formData,
-        cnpj: cnpjLimpo,
-      };
-      onSubmit(dataToSend);
-    } else {
-      onSubmit(formData);
+      payload.cnpj = cnpjLimpo;
     }
+    onSubmit(payload);
   };
 
   return (
@@ -252,11 +305,31 @@ export function CarrierForm({
               </div>
             </div>
             <div className="space-y-6">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  Nome do contato {!carrier && <span className="text-destructive">*</span>}
+                </Label>
+                <Input
+                  id="contato"
+                  value={formData.contato || ''}
+                  onChange={(e) => {
+                    setFormData({ ...formData, contato: e.target.value });
+                    setContatoError('');
+                  }}
+                  placeholder="Ex.: João Silva"
+                  maxLength={255}
+                  className={contatoError ? 'border-destructive' : ''}
+                />
+                {contatoError && (
+                  <p className="text-sm text-destructive">{contatoError}</p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-muted-foreground" />
-                    Telefone
+                    Telefone <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="telefone"
@@ -264,30 +337,42 @@ export function CarrierForm({
                     onChange={(e) => {
                       const formatted = formatTelefone(e.target.value);
                       setFormData({ ...formData, telefone: formatted });
+                      setTelefoneError('');
                     }}
                     placeholder="(00) 00000-0000"
                     maxLength={20}
+                    className={telefoneError ? 'border-destructive' : ''}
                   />
+                  {telefoneError && (
+                    <p className="text-sm text-destructive">{telefoneError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <Mail className="w-4 h-4 text-muted-foreground" />
-                    E-mail
+                    E-mail <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="email"
                     type="email"
                     value={formData.email || ''}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      setEmailError('');
+                    }}
                     placeholder="exemplo@email.com"
                     pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+                    className={emailError ? 'border-destructive' : ''}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Digite um e-mail válido (ex: exemplo@email.com)
-                  </p>
+                  {emailError && (
+                    <p className="text-sm text-destructive">{emailError}</p>
+                  )}
+                  {!emailError && (
+                    <p className="text-xs text-muted-foreground">
+                      Digite um e-mail válido (ex: exemplo@email.com)
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

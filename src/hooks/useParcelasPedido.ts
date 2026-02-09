@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
 import { apiClient } from '@/services/api';
+import { useEffect, useState } from 'react';
 
 export interface Parcela {
   id: number;
@@ -7,9 +7,11 @@ export interface Parcela {
   numero_parcela: number;
   total_parcelas: number;
   valor: number;
-  status: 'PENDENTE' | 'PAGA';
+  status: 'PENDENTE' | 'PAGA' | 'ABERTA' | 'PARCIALMENTE_PAGA' | 'EM_COMPENSACAO';
   data_vencimento: string;
   data_pagamento?: string | null;
+  valor_pago?: number;
+  valor_restante?: number;
   observacoes?: string | null;
   created_at?: string;
   updated_at?: string;

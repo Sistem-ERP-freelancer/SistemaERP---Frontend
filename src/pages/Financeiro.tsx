@@ -1,79 +1,68 @@
-import { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
-import { 
-  DollarSign, 
-  Plus,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  CreditCard,
-  Search,
-  Eye,
-  Edit,
-  Trash2,
-  FileText,
-  Calendar,
-  User,
-  Building2,
-  ShoppingCart,
-  Loader2,
-  Info,
-  Receipt,
-  MoreVertical,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import AppLayout from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { financeiroService, CreateContaFinanceiraDto } from "@/services/financeiro.service";
-import { clientesService, Cliente } from "@/services/clientes.service";
-import { fornecedoresService, Fornecedor } from "@/services/fornecedores.service";
+import { Textarea } from "@/components/ui/textarea";
+import { Cliente, clientesService } from "@/services/clientes.service";
+import { CreateContaFinanceiraDto, financeiroService, ResumoFinanceiro } from "@/services/financeiro.service";
+import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
-
-// Stats serão calculados dinamicamente com dados da API
-
-const initialTransacoes = [
-  { id: "TRX-001", descricao: "Venda - Tech Solutions", tipo: "Receita", categoria: "Vendas", valor: "R$ 8.500,00", data: "05/12/2024", status: "Concluído" },
-  { id: "TRX-002", descricao: "Compra de Estoque", tipo: "Despesa", categoria: "Estoque", valor: "R$ 3.200,00", data: "04/12/2024", status: "Pendente" },
-  { id: "TRX-003", descricao: "Pagamento Fornecedor", tipo: "Despesa", categoria: "Fornecedores", valor: "R$ 1.800,00", data: "03/12/2024", status: "Concluído" },
-  { id: "TRX-004", descricao: "Venda - Comércio ABC", tipo: "Receita", categoria: "Vendas", valor: "R$ 2.200,00", data: "03/12/2024", status: "Concluído" },
-];
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import {
+    Calendar,
+    CreditCard,
+    DollarSign,
+    Edit,
+    Eye,
+    FileText,
+    Info,
+    Loader2,
+    MoreVertical,
+    Plus,
+    Receipt,
+    RotateCcw,
+    Search,
+    ShoppingCart,
+    Trash2,
+    TrendingDown,
+    TrendingUp,
+    Wallet
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 const Financeiro = () => {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
-  const [transacoes, setTransacoes] = useState(initialTransacoes);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -134,14 +123,25 @@ const Financeiro = () => {
     ? fornecedoresData 
     : fornecedoresData?.data || [];
 
-  // Buscar pedidos
+  // Buscar resumo financeiro (já considera pagamentos parciais)
+  // NUNCA usar valor_total_receber nos cards; SEMPRE receita_mes, valor_pago_mes, valor_total_recebido, etc.
+  const { data: resumoFinanceiro, isLoading: isLoadingResumo } = useQuery<ResumoFinanceiro>({
+    queryKey: ["dashboard-resumo-financeiro"],
+    queryFn: () => financeiroService.getDashboardResumo(),
+    refetchInterval: 30000,
+    staleTime: 0,
+    retry: false,
+  });
+
+  // Buscar pedidos apenas para uso na UI (seleção de pedidos em formulários)
+  // NÃO usado para cálculos financeiros - os valores vêm do resumoFinanceiro
   const { data: pedidosData } = useQuery({
     queryKey: ["pedidos", "financeiro"],
     queryFn: async () => {
       try {
         const response = await pedidosService.listar({
           page: 1,
-          limit: 1000, // Buscar mais pedidos para cálculos precisos
+          limit: 1000,
         });
         // Tratar diferentes formatos de resposta
         if (Array.isArray(response)) {
@@ -164,51 +164,44 @@ const Financeiro = () => {
 
   const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
-  // Buscar todas as contas financeiras filtradas para exibir na tabela
-  const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "tabela", activeTab],
+  const [page, setPage] = useState(1);
+  const limit = 15;
+  const [clienteFilterId, setClienteFilterId] = useState<number | undefined>();
+  const [fornecedorFilterId, setFornecedorFilterId] = useState<number | undefined>();
+
+  // Buscar contas agrupadas (uma linha por cliente/pedido) - visão resumida
+  const { data: contasAgrupadasResponse, isLoading: isLoadingContas } = useQuery({
+    queryKey: ["contas-financeiras", "agrupado", activeTab, page, limit, clienteFilterId, fornecedorFilterId],
     queryFn: async () => {
       try {
         let tipo: string | undefined;
         let status: string | undefined;
 
-        // Determinar filtros baseados na tab ativa
         const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
-        
         if (activeTab === "Receita") {
           tipo = "RECEBER";
         } else if (activeTab === "Despesa") {
           tipo = "PAGAR";
         } else if (statusTabs.includes(activeTab)) {
-          // Se for um status, filtrar apenas por status (sem tipo)
           status = activeTab;
         }
 
-        // Buscar todas as contas (limite alto para pegar todas)
-        const response = await financeiroService.listar({
-          page: 1,
-          limit: 1000,
+        const response = await financeiroService.listarAgrupado({
+          page,
+          limit,
           tipo,
           status,
+          cliente_id: clienteFilterId,
+          fornecedor_id: fornecedorFilterId,
         });
         
-        // Tratar diferentes formatos de resposta
-        let contasData = [];
-        if (Array.isArray(response)) {
-          contasData = response;
-        } else if (response?.data && Array.isArray(response.data)) {
-          contasData = response.data;
-        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
-          contasData = (response as any).contas;
-        }
-        
         return {
-          data: contasData,
-          total: contasData.length,
+          itens: response?.itens ?? [],
+          total: response?.total ?? 0,
         };
       } catch (error) {
-        console.warn("API de contas financeiras não disponível:", error);
-        return { data: [], total: 0 };
+        console.warn("API de contas financeiras agrupadas não disponível:", error);
+        return { itens: [], total: 0 };
       }
     },
     retry: (failureCount, error: any) => {
@@ -225,14 +218,17 @@ const Financeiro = () => {
     retryDelay: 1000,
   });
 
-  const contas = contasResponse?.data || [];
-  const totalContas = contasResponse?.total || 0;
+  const itensAgrupados = contasAgrupadasResponse?.itens || [];
+  const totalAgrupado = contasAgrupadasResponse?.total || 0;
+  const totalPages = Math.ceil(totalAgrupado / limit) || 1;
 
-  // Calcular estatísticas
+  // Calcular estatísticas usando valores do backend (já consideram pagamentos parciais)
+  // Conforme GUIA_FRONTEND_DASHBOARD_FINANCEIRO_VALOR_PAGO.md:
+  // - Receita do Mês = receita_mes (valor total a receber do mês atual)
+  // - Valor Pago do Mês = valor_pago_mes (valor pago no mês atual via baixas de duplicatas)
+  // - Despesas do Mês = despesa_mes (valor total a pagar do mês atual)
+  // - Saldo Atual = Receita Total Recebida - Despesa Total Paga
   const stats = useMemo(() => {
-    const mesAtual = new Date().getMonth();
-    const anoAtual = new Date().getFullYear();
-    
     // Função auxiliar para converter valor para número seguro
     const parseValor = (valor: any): number => {
       if (valor === null || valor === undefined || valor === '') return 0;
@@ -240,47 +236,21 @@ const Financeiro = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    // Receita do mês: soma dos valores de pedidos de VENDA criados no mês atual
-    const receitaMes = pedidos
-      .filter(p => {
-        if (!p || p.tipo !== "VENDA" || p.status === "CANCELADO") return false;
-        try {
-          const dataPedido = p.data_pedido || p.created_at;
-          if (!dataPedido) return false;
-          const data = new Date(dataPedido);
-          if (isNaN(data.getTime())) return false;
-          return data.getMonth() === mesAtual && data.getFullYear() === anoAtual;
-        } catch {
-          return false;
-        }
-      })
-      .reduce((sum, p) => {
-        const valor = parseValor(p.valor_total);
-        return sum + valor;
-      }, 0);
-
-    // Despesas do mês: soma dos valores de pedidos de COMPRA criados no mês atual
-    const despesaMes = pedidos
-      .filter(p => {
-        if (!p || p.tipo !== "COMPRA" || p.status === "CANCELADO") return false;
-        try {
-          const dataPedido = p.data_pedido || p.created_at;
-          if (!dataPedido) return false;
-          const data = new Date(dataPedido);
-          if (isNaN(data.getTime())) return false;
-          return data.getMonth() === mesAtual && data.getFullYear() === anoAtual;
-        } catch {
-          return false;
-        }
-      })
-      .reduce((sum, p) => {
-        const valor = parseValor(p.valor_total);
-        return sum + valor;
-      }, 0);
-
-    // Saldo atual (receita - despesa) com 2 casas decimais
-    const saldoAtual = Number((receitaMes - despesaMes).toFixed(2));
-
+    // ✅ NOVO: Usar receita_mes (valor total a receber do mês atual)
+    // receita_mes = soma de valor_original das contas criadas no mês atual
+    const receitaMes = parseValor(resumoFinanceiro?.contas_receber?.receita_mes) || 0;
+    
+    // ✅ NOVO: Usar valor_pago_mes (valor pago no mês atual)
+    // valor_pago_mes = soma de baixas de duplicatas + pagamentos diretos realizados no mês atual
+    const valorPagoMes = parseValor(resumoFinanceiro?.contas_receber?.valor_pago_mes) || 0;
+    
+    // ✅ NOVO: Usar despesa_mes (valor total a pagar do mês atual)
+    const despesaMes = parseValor(resumoFinanceiro?.contas_pagar?.despesa_mes) || 0;
+    
+    // Guia: Saldo Atual = valores já recebidos − valores já pagos (caixa). NUNCA "valor a receber" ou "em aberto".
+    const valorTotalRecebido = parseValor(resumoFinanceiro?.contas_receber?.valor_total_recebido) ?? 0;
+    const valorTotalPago = parseValor(resumoFinanceiro?.contas_pagar?.valor_total_pago) ?? 0;
+    const saldoAtual = valorTotalRecebido - valorTotalPago;
 
     return [
       { 
@@ -290,7 +260,18 @@ const Financeiro = () => {
         trend: null, 
         trendUp: true, 
         color: "text-cyan", 
-        bgColor: "bg-cyan/10" 
+        bgColor: "bg-cyan/10",
+        description: "Valor total a receber do mês atual"
+      },
+      { 
+        label: "Valor Pago do Mês", 
+        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorPagoMes), 
+        icon: DollarSign, 
+        trend: null, 
+        trendUp: true, 
+        color: "text-green-600", 
+        bgColor: "bg-green-100",
+        description: "Valor pago no mês atual (via baixas de duplicatas)"
       },
       { 
         label: "Despesas do Mês", 
@@ -299,7 +280,8 @@ const Financeiro = () => {
         trend: null, 
         trendUp: false, 
         color: "text-destructive", 
-        bgColor: "bg-destructive/10" 
+        bgColor: "bg-destructive/10",
+        description: "Valor total a pagar do mês atual"
       },
       { 
         label: "Saldo Atual", 
@@ -307,19 +289,30 @@ const Financeiro = () => {
         icon: Wallet, 
         trend: null, 
         color: "text-azure", 
-        bgColor: "bg-azure/10" 
+        bgColor: "bg-azure/10",
       },
     ];
-  }, [pedidos]);
+  }, [resumoFinanceiro]);
 
-  // Query para buscar conta financeira por ID
+  // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
     queryKey: ["conta-financeira", selectedContaId],
     queryFn: async () => {
       if (!selectedContaId) return null;
       return await financeiroService.buscarPorId(selectedContaId);
     },
-    enabled: !!selectedContaId && (viewDialogOpen || editDialogOpen),
+    enabled: !!selectedContaId && editDialogOpen,
+    retry: false,
+  });
+
+  // Query para detalhe enriquecido (usado apenas no modal Visualizar - GET :id/detalhe)
+  const { data: contaDetalhe, isLoading: isLoadingDetalhe } = useQuery({
+    queryKey: ["conta-financeira-detalhe", selectedContaId],
+    queryFn: async () => {
+      if (!selectedContaId) return null;
+      return await financeiroService.buscarDetalhePorId(selectedContaId);
+    },
+    enabled: !!selectedContaId && viewDialogOpen,
     retry: false,
   });
 
@@ -446,138 +439,38 @@ const Financeiro = () => {
     }
   };
 
-  // Mapear contas financeiras para o formato de exibição
+  // Mapear itens agrupados para exibição (já vêm no formato correto da API)
   const transacoesDisplay = useMemo(() => {
-    return contas.map((conta) => {
-      // Buscar nome do cliente ou fornecedor
-      let nomeClienteFornecedor = "N/A";
-      let categoria = "N/A";
-      
-      if (conta.tipo === "RECEBER" && conta.cliente_id) {
-        const cliente = clientes.find(c => c.id === conta.cliente_id);
-        nomeClienteFornecedor = cliente?.nome || "Cliente não encontrado";
-        categoria = "Vendas";
-      } else if (conta.tipo === "PAGAR" && conta.fornecedor_id) {
-        const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
-        nomeClienteFornecedor = fornecedor?.nome_fantasia || "Fornecedor não encontrado";
-        categoria = "Fornecedores";
-      }
+    const statusMap: Record<string, string> = {
+      "PENDENTE": "Pendente",
+      "PAGO_PARCIAL": "Pago Parcial",
+      "PAGO_TOTAL": "Pago Total",
+      "VENCIDO": "Vencido",
+      "CANCELADO": "Cancelado",
+    };
+    return itensAgrupados.map((item) => ({
+      id: item.id,
+      cliente_nome: item.cliente_nome,
+      descricao: item.descricao,
+      tipo: item.tipo === "RECEBER" ? "Receita" : "Despesa",
+      categoria: item.categoria,
+      valor: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total ?? 0),
+      status: statusMap[item.status] || item.status,
+      contaId: item.id,
+      pedido_id: item.pedido_id,
+    }));
+  }, [itensAgrupados]);
 
-      // Formatar valor
-      const valorFormatado = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
-      }).format(conta.valor_original || 0);
-
-      // Formatar data
-      const dataFormatada = conta.data_vencimento
-        ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
-        : "N/A";
-
-      // Mapear status
-      const statusMap: Record<string, string> = {
-        "PENDENTE": "Pendente",
-        "PAGO_PARCIAL": "Pago Parcial",
-        "PAGO_TOTAL": "Pago Total",
-        "VENCIDO": "Vencido",
-        "CANCELADO": "Cancelado",
-      };
-      const statusFormatado = statusMap[conta.status] || conta.status;
-
-      // Mapear tipo
-      const tipoFormatado = conta.tipo === "RECEBER" ? "Receita" : "Despesa";
-
-      return {
-        id: conta.numero_conta || `CONTA-${conta.id}`,
-        descricao: conta.descricao,
-        tipo: tipoFormatado,
-        categoria: categoria,
-        valor: valorFormatado,
-        data: dataFormatada,
-        status: statusFormatado,
-        contaId: conta.id, // ID real para usar nos botões
-      };
-    });
-  }, [contas, clientes, fornecedores]);
-
-  // Query para buscar conta por ID quando o termo de busca for numérico
-  const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
-  const searchId = isNumericSearch ? Number(searchTerm) : null;
-
-  const { data: contaPorId } = useQuery({
-    queryKey: ["conta-financeira", "busca", searchId],
-    queryFn: async () => {
-      if (!searchId) return null;
-      try {
-        return await financeiroService.buscarPorId(searchId);
-      } catch (error) {
-        return null;
-      }
-    },
-    enabled: !!searchId && isNumericSearch,
-    retry: false,
-  });
-
-  // Filtrar por busca
+  // Filtrar por busca local (por nome, descrição)
   const filteredTransacoes = useMemo(() => {
-    // Se houver busca numérica e conta encontrada, mostrar apenas essa conta
-    if (isNumericSearch && contaPorId) {
-      const contaEncontrada = contas.find(c => c.id === contaPorId.id);
-      if (contaEncontrada) {
-        const conta = contaEncontrada;
-        let nomeClienteFornecedor = "N/A";
-        let categoria = "N/A";
-        
-        if (conta.tipo === "RECEBER" && conta.cliente_id) {
-          const cliente = clientes.find(c => c.id === conta.cliente_id);
-          nomeClienteFornecedor = cliente?.nome || "Cliente não encontrado";
-          categoria = "Vendas";
-        } else if (conta.tipo === "PAGAR" && conta.fornecedor_id) {
-          const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
-          nomeClienteFornecedor = fornecedor?.nome_fantasia || "Fornecedor não encontrado";
-          categoria = "Fornecedores";
-        }
-
-        const valorFormatado = new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: 'BRL'
-        }).format(conta.valor_original || 0);
-
-        const dataFormatada = conta.data_vencimento
-          ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
-          : "N/A";
-
-        const statusMap: Record<string, string> = {
-          "PENDENTE": "Pendente",
-          "PAGO_PARCIAL": "Pago Parcial",
-          "PAGO_TOTAL": "Pago Total",
-          "VENCIDO": "Vencido",
-          "CANCELADO": "Cancelado",
-        };
-        const statusFormatado = statusMap[conta.status] || conta.status;
-        const tipoFormatado = conta.tipo === "RECEBER" ? "Receita" : "Despesa";
-
-        return [{
-          id: conta.numero_conta || `CONTA-${conta.id}`,
-          descricao: conta.descricao,
-          tipo: tipoFormatado,
-          categoria: categoria,
-          valor: valorFormatado,
-          data: dataFormatada,
-          status: statusFormatado,
-          contaId: conta.id,
-        }];
-      }
-    }
-
-    // Busca normal por texto
-    return transacoesDisplay.filter(t => {
-      const matchesSearch = 
-        t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        t.id.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesSearch;
-    });
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, clientes, fornecedores]);
+    if (!searchTerm.trim()) return transacoesDisplay;
+    const term = searchTerm.toLowerCase();
+    return transacoesDisplay.filter(t => 
+      (t.cliente_nome?.toLowerCase() || "").includes(term) ||
+      (t.descricao?.toLowerCase() || "").includes(term) ||
+      String(t.contaId).includes(term)
+    );
+  }, [transacoesDisplay, searchTerm]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -605,9 +498,16 @@ const Financeiro = () => {
     createContaMutation.mutate(contaData);
   };
 
-  const handleDelete = (id: string) => {
-    setTransacoes(transacoes.filter(t => t.id !== id));
-    toast.success("Transação excluída!");
+  const handleDelete = async (id: string) => {
+    const contaId = Number(id);
+    if (isNaN(contaId)) return;
+    try {
+      await financeiroService.deletar(contaId);
+      queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+      toast.success("Transação excluída!");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Erro ao excluir transação");
+    }
   };
 
   return (
@@ -751,7 +651,7 @@ const Financeiro = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
-                          {pedidos.map((pedido) => (
+                          {(pedidos || []).map((pedido) => (
                             <SelectItem key={pedido.id} value={pedido.id.toString()}>
                               {pedido.numero_pedido || `PED-${pedido.id}`}
                             </SelectItem>
@@ -823,6 +723,7 @@ const Financeiro = () => {
                         <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
                         <SelectItem value="BOLETO">Boleto</SelectItem>
                         <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                        <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -903,7 +804,7 @@ const Financeiro = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
@@ -930,9 +831,9 @@ const Financeiro = () => {
 
         {/* Filters */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-4">
             <div className="sm:w-[200px]">
-              <Select value={activeTab} onValueChange={setActiveTab}>
+              <Select value={activeTab} onValueChange={(v) => { setActiveTab(v); setPage(1); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
@@ -948,10 +849,42 @@ const Financeiro = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="relative flex-1">
+            <div className="sm:w-[200px]">
+              <Select 
+                value={clienteFilterId?.toString() || "all"} 
+                onValueChange={(v) => { setClienteFilterId(v === "all" ? undefined : Number(v)); setPage(1); }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os clientes</SelectItem>
+                  {clientes.map((c) => (
+                    <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:w-[200px]">
+              <Select 
+                value={fornecedorFilterId?.toString() || "all"} 
+                onValueChange={(v) => { setFornecedorFilterId(v === "all" ? undefined : Number(v)); setPage(1); }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Fornecedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os fornecedores</SelectItem>
+                  {fornecedores.map((f) => (
+                    <SelectItem key={f.id} value={f.id.toString()}>{f.nome_fantasia}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="Buscar transação..." 
+                placeholder="Buscar por cliente ou descrição..." 
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -969,12 +902,11 @@ const Financeiro = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Categoria</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Data</TableHead>
+                <TableHead>Valor (total)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -982,7 +914,7 @@ const Financeiro = () => {
             <TableBody>
               {isLoadingContas ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas...
@@ -991,7 +923,7 @@ const Financeiro = () => {
                 </TableRow>
               ) : filteredTransacoes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p>Nenhuma transação encontrada</p>
@@ -1000,9 +932,9 @@ const Financeiro = () => {
                 </TableRow>
               ) : (
                 filteredTransacoes.map((transacao) => (
-                  <TableRow key={transacao.id}>
+                  <TableRow key={transacao.contaId}>
                     <TableCell>
-                      <span className="font-medium">{transacao.id}</span>
+                      <span className="font-medium">{transacao.cliente_nome || "—"}</span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{transacao.descricao}</span>
@@ -1021,9 +953,6 @@ const Financeiro = () => {
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{transacao.valor}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">{transacao.data}</span>
                     </TableCell>
                     <TableCell>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
@@ -1053,7 +982,7 @@ const Financeiro = () => {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDelete(transacao.id)}
+                            onClick={() => handleDelete(String(transacao.contaId))}
                             className="text-destructive focus:text-destructive"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -1068,199 +997,240 @@ const Financeiro = () => {
             </TableBody>
           </Table>
           
-          {/* Informação de total de contas */}
-          {totalContas > 0 && (
-            <div className="border-t border-border p-4">
-              <div className="text-center text-sm text-muted-foreground">
-                Exibindo todas as {totalContas} {totalContas === 1 ? 'conta' : 'contas'}
+          {/* Paginação e total */}
+          {totalAgrupado > 0 && (
+            <div className="border-t border-border p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {filteredTransacoes.length} de {totalAgrupado} {totalAgrupado === 1 ? 'grupo' : 'grupos'}
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </motion.div>
 
-        {/* Dialog de Visualização */}
+        {/* Dialog de Visualização - GET :id/detalhe; campos conforme GUIA_FRONTEND_DETALHE_CONTA_FINANCEIRA */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Eye className="w-5 h-5 text-primary" />
-                Detalhes da Conta Financeira
+                <DollarSign className="w-5 h-5" />
+                {contaDetalhe ? `Conta ${contaDetalhe.numero_conta || `#${contaDetalhe.id}`}` : 'Detalhes da Conta Financeira'}
               </DialogTitle>
               <DialogDescription>
-                Visualize todos os dados da conta financeira
+                Visualização detalhada da conta financeira
               </DialogDescription>
             </DialogHeader>
 
-            {isLoadingConta ? (
+            {isLoadingDetalhe ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
-            ) : contaSelecionada ? (
-              <div className="space-y-6 pt-4">
-                {/* Informações Básicas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-500" />
-                    Informações Básicas
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
+            ) : contaDetalhe ? (
+              <div className="space-y-6">
+                {/* Informações Básicas: valor_total_pedido, valor_pago, valor_em_aberto, status, descricao_parcelas_quitadas */}
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                      <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
                     <div>
+                      <h3 className="font-semibold text-foreground">Informações Básicas</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Dados principais da conta
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Número da Conta</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.numero_conta || `CONTA-${contaSelecionada.id}`}</p>
+                      <div className="text-sm font-medium">{contaDetalhe.numero_conta || `CONTA-${contaDetalhe.id}`}</div>
                     </div>
-                    <div>
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Tipo</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.tipo === "RECEBER" ? "Receber" : "Pagar"}</p>
+                      <div className="text-sm font-medium">{contaDetalhe.tipo}</div>
                     </div>
-                    <div className="col-span-2">
-                      <Label className="text-muted-foreground">Descrição</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.descricao}</p>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label className="text-muted-foreground">Descrição (parcelas quitadas)</Label>
+                      <div className="text-sm font-medium">{contaDetalhe.descricao_parcelas_quitadas || contaDetalhe.descricao}</div>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Valor Original</Label>
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_original)}
-                      </p>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Valor total do pedido</Label>
+                      <div className="text-sm font-medium">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaDetalhe.valor_total_pedido ?? 0)}
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Valor Pago</Label>
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_pago || 0)}
-                      </p>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Valor pago</Label>
+                      <div className="text-sm font-medium">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaDetalhe.valor_pago ?? 0)}
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Valor Restante</Label>
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_restante || 0)}
-                      </p>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Valor em aberto</Label>
+                      <div className="text-sm font-medium">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaDetalhe.valor_em_aberto ?? 0)}
+                      </div>
                     </div>
-                    <div>
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Status</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.status}</p>
+                      <div className="text-sm font-medium">{contaDetalhe.status}</div>
                     </div>
                   </div>
                 </div>
 
-                {/* Relacionamentos */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4 text-blue-500" />
-                    Relacionamentos
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                {/* Relacionamentos: cliente_nome, fornecedor_nome, pedido_numero, nome_produto */}
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`p-2 rounded-lg ${contaDetalhe.tipo === 'Receber' ? 'bg-green-100 dark:bg-green-900/20' : 'bg-blue-100 dark:bg-blue-900/20'}`}>
+                      <ShoppingCart className={`w-5 h-5 ${contaDetalhe.tipo === 'Receber' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`} />
+                    </div>
                     <div>
+                      <h3 className="font-semibold text-foreground">Relacionamentos</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Cliente, fornecedor e pedido vinculados
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Cliente</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.cliente_id 
-                          ? clientes.find(c => c.id === contaSelecionada.cliente_id)?.nome || `ID: ${contaSelecionada.cliente_id}`
-                          : "N/A"}
-                      </p>
+                      <div className="text-sm font-medium">{contaDetalhe.relacionamentos?.cliente_nome ?? 'N/A'}</div>
                     </div>
-                    <div>
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Fornecedor</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.fornecedor_id 
-                          ? fornecedores.find(f => f.id === contaSelecionada.fornecedor_id)?.nome_fantasia || `ID: ${contaSelecionada.fornecedor_id}`
-                          : "N/A"}
-                      </p>
+                      <div className="text-sm font-medium">{contaDetalhe.relacionamentos?.fornecedor_nome ?? 'N/A'}</div>
                     </div>
-                    <div>
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Pedido</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.pedido_id 
-                          ? pedidos.find(p => p.id === contaSelecionada.pedido_id)?.numero_pedido || `ID: ${contaSelecionada.pedido_id}`
-                          : "N/A"}
+                      <div className="text-sm font-medium">{contaDetalhe.relacionamentos?.pedido_numero ?? 'N/A'}</div>
+                    </div>
+                    {(contaDetalhe.relacionamentos?.nome_produto != null && contaDetalhe.relacionamentos.nome_produto !== '') && (
+                      <div className="space-y-2 md:col-span-2">
+                        <Label className="text-muted-foreground">Produtos</Label>
+                        <div className="text-sm font-medium">{contaDetalhe.relacionamentos.nome_produto}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Datas: data_criacao, data_vencimento, data_pagamento */}
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-amber-100 dark:bg-amber-900/20 rounded-lg">
+                      <Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">Datas</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Criação, vencimento e pagamento
                       </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Data de criação</Label>
+                      <div className="text-sm font-medium">
+                        {contaDetalhe.datas?.data_criacao ? new Date(contaDetalhe.datas.data_criacao).toLocaleDateString('pt-BR') : 'N/A'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Data de vencimento</Label>
+                      <div className="text-sm font-medium">
+                        {contaDetalhe.datas?.data_vencimento ? new Date(contaDetalhe.datas.data_vencimento).toLocaleDateString('pt-BR') : 'N/A'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Data de pagamento</Label>
+                      <div className="text-sm font-medium">
+                        {contaDetalhe.datas?.data_pagamento ? new Date(contaDetalhe.datas.data_pagamento).toLocaleDateString('pt-BR') : 'N/A'}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Datas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    Datas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Data de Emissão</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.data_emissao 
-                          ? new Date(contaSelecionada.data_emissao).toLocaleDateString('pt-BR')
-                          : "N/A"}
-                      </p>
+                {/* Pagamento: pagamento.forma_pagamento */}
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
+                      <CreditCard className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Data de Vencimento</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.data_vencimento 
-                          ? new Date(contaSelecionada.data_vencimento).toLocaleDateString('pt-BR')
-                          : "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Data de Pagamento</Label>
-                      <p className="text-sm font-medium">
-                        {contaSelecionada.data_pagamento 
-                          ? new Date(contaSelecionada.data_pagamento).toLocaleDateString('pt-BR')
-                          : "N/A"}
+                      <h3 className="font-semibold text-foreground">Pagamento</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Forma de pagamento
                       </p>
                     </div>
                   </div>
-                </div>
-
-                {/* Pagamento */}
-                {contaSelecionada.forma_pagamento && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-blue-500" />
-                      Pagamento
-                    </h3>
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
                       <Label className="text-muted-foreground">Forma de Pagamento</Label>
-                      <p className="text-sm font-medium">{contaSelecionada.forma_pagamento}</p>
+                      <div className="text-sm font-medium">
+                        {(() => {
+                          const fp = contaDetalhe.pagamento?.forma_pagamento;
+                          const map: Record<string, string> = { DINHEIRO: 'Dinheiro', PIX: 'PIX', CARTAO_CREDITO: 'Cartão de Crédito', CARTAO_DEBITO: 'Cartão de Débito', BOLETO: 'Boleto', TRANSFERENCIA: 'Transferência', CHEQUE: 'Cheque' };
+                          return fp ? (map[fp] ?? fp) : 'N/A';
+                        })()}
+                      </div>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {/* Parcelas */}
-                {(contaSelecionada.numero_parcela || contaSelecionada.total_parcelas) && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Receipt className="w-4 h-4 text-blue-500" />
-                      Parcelas
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      {contaSelecionada.numero_parcela && (
-                        <div>
-                          <Label className="text-muted-foreground">Número da Parcela</Label>
-                          <p className="text-sm font-medium">{contaSelecionada.numero_parcela}</p>
+                {/* Parcelas: numero_parcela_atual, total_parcelas, texto_parcelas_quitadas */}
+                {(contaDetalhe.parcelas?.numero_parcela_atual != null || contaDetalhe.parcelas?.total_parcelas != null || contaDetalhe.parcelas?.texto_parcelas_quitadas) && (
+                  <div className="bg-card border rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg">
+                        <Receipt className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">Parcelas</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Parcela em aberto e parcelas quitadas
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {contaDetalhe.parcelas?.numero_parcela_atual != null && (
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Número da parcela (em aberto)</Label>
+                          <div className="text-sm font-medium">{contaDetalhe.parcelas.numero_parcela_atual}</div>
                         </div>
                       )}
-                      {contaSelecionada.total_parcelas && (
-                        <div>
-                          <Label className="text-muted-foreground">Total de Parcelas</Label>
-                          <p className="text-sm font-medium">{contaSelecionada.total_parcelas}</p>
+                      {contaDetalhe.parcelas?.total_parcelas != null && (
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Total de parcelas</Label>
+                          <div className="text-sm font-medium">{contaDetalhe.parcelas.total_parcelas}</div>
                         </div>
                       )}
-                      {contaSelecionada.parcela_texto && (
-                        <div>
-                          <Label className="text-muted-foreground">Texto da Parcela</Label>
-                          <p className="text-sm font-medium">{contaSelecionada.parcela_texto}</p>
+                      {contaDetalhe.parcelas?.texto_parcelas_quitadas && (
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Parcelas quitadas</Label>
+                          <div className="text-sm font-medium">{contaDetalhe.parcelas.texto_parcelas_quitadas}</div>
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {/* Observações */}
-                {contaSelecionada.observacoes && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Info className="w-4 h-4 text-blue-500" />
-                      Observações
-                    </h3>
-                    <p className="text-sm text-foreground">{contaSelecionada.observacoes}</p>
                   </div>
                 )}
               </div>
@@ -1272,85 +1242,141 @@ const Financeiro = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de Edição */}
+        {/* Dialog de Edição - mesmo design do Editar Cliente */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit className="w-5 h-5 text-primary" />
-                Editar Conta Financeira
-              </DialogTitle>
-              <DialogDescription>
-                Edite os campos desejados da conta financeira
-              </DialogDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="text-2xl font-bold">
+                    Editar Conta Financeira
+                  </DialogTitle>
+                  <DialogDescription className="mt-1">
+                    Edite os campos desejados da conta financeira
+                  </DialogDescription>
+                </div>
+                {contaSelecionada && editConta && (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditConta({
+                          tipo: contaSelecionada.tipo,
+                          descricao: contaSelecionada.descricao,
+                          valor_original: contaSelecionada.valor_original,
+                          data_emissao: contaSelecionada.data_emissao,
+                          data_vencimento: contaSelecionada.data_vencimento,
+                          cliente_id: contaSelecionada.cliente_id,
+                          fornecedor_id: contaSelecionada.fornecedor_id,
+                          pedido_id: contaSelecionada.pedido_id,
+                          forma_pagamento: contaSelecionada.forma_pagamento,
+                          data_pagamento: contaSelecionada.data_pagamento,
+                          numero_parcela: contaSelecionada.numero_parcela,
+                          total_parcelas: contaSelecionada.total_parcelas,
+                          parcela_texto: contaSelecionada.parcela_texto,
+                          observacoes: contaSelecionada.observacoes,
+                        });
+                      }}
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Limpar
+                    </Button>
+                  </div>
+                )}
+              </div>
             </DialogHeader>
 
             {isLoadingConta ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : editConta ? (
-              <div className="space-y-6 pt-4">
-                {/* Informações Básicas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-500" />
-                    Informações Básicas
-                  </h3>
-                  <div className="space-y-2">
-                    <Label>Descrição *</Label>
-                    <Input 
-                      placeholder="Ex: Pagamento de venda"
-                      value={editConta.descricao}
-                      onChange={(e) => setEditConta({...editConta, descricao: e.target.value})}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tipo *</Label>
-                      <Select
-                        value={editConta.tipo}
-                        onValueChange={(value: "RECEBER" | "PAGAR") => 
-                          setEditConta({...editConta, tipo: value})
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="RECEBER">Receber</SelectItem>
-                          <SelectItem value="PAGAR">Pagar</SelectItem>
-                        </SelectContent>
-                      </Select>
+              <div className="space-y-8 pt-6">
+                {/* Seção: Informações Básicas */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <FileText className="w-5 h-5 text-blue-500" />
                     </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Informações Básicas
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Dados principais da conta
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
                     <div className="space-y-2">
-                      <Label>Valor Original *</Label>
-                      <Input 
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={editConta.valor_original || ""}
-                        onChange={(e) => setEditConta({...editConta, valor_original: e.target.value ? Number(e.target.value) : 0})}
+                      <Label className="text-sm font-semibold flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Descrição *
+                      </Label>
+                      <Input
+                        placeholder="Ex: Pedido VEND-2026-00001 - Parcela 1/4"
+                        value={editConta.descricao}
+                        onChange={(e) => setEditConta({ ...editConta, descricao: e.target.value })}
                       />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Tipo *</Label>
+                        <Select
+                          value={editConta.tipo}
+                          onValueChange={(value: "RECEBER" | "PAGAR") =>
+                            setEditConta({ ...editConta, tipo: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="RECEBER">Receber</SelectItem>
+                            <SelectItem value="PAGAR">Pagar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Valor Original *</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={editConta.valor_original || ""}
+                          onChange={(e) => setEditConta({ ...editConta, valor_original: e.target.value ? Number(e.target.value) : 0 })}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Relacionamentos */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <ShoppingCart className="w-4 h-4 text-blue-500" />
-                    Relacionamentos
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                {/* Seção: Relacionamentos */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-green-500/10">
+                      <ShoppingCart className="w-5 h-5 text-green-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Relacionamentos
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Cliente, fornecedor e pedido vinculados
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label>Cliente</Label>
+                      <Label className="text-sm font-semibold">Cliente</Label>
                       <Select
                         value={editConta.cliente_id?.toString() || undefined}
-                        onValueChange={(value) => 
+                        onValueChange={(value) =>
                           setEditConta({
-                            ...editConta, 
-                            cliente_id: value && value !== "none" ? Number(value) : undefined
+                            ...editConta,
+                            cliente_id: value && value !== "none" ? Number(value) : undefined,
                           })
                         }
                       >
@@ -1368,13 +1394,13 @@ const Financeiro = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Fornecedor</Label>
+                      <Label className="text-sm font-semibold">Fornecedor</Label>
                       <Select
                         value={editConta.fornecedor_id?.toString() || undefined}
-                        onValueChange={(value) => 
+                        onValueChange={(value) =>
                           setEditConta({
-                            ...editConta, 
-                            fornecedor_id: value && value !== "none" ? Number(value) : undefined
+                            ...editConta,
+                            fornecedor_id: value && value !== "none" ? Number(value) : undefined,
                           })
                         }
                       >
@@ -1392,13 +1418,13 @@ const Financeiro = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Pedido</Label>
+                      <Label className="text-sm font-semibold">Pedido</Label>
                       <Select
                         value={editConta.pedido_id?.toString() || undefined}
-                        onValueChange={(value) => 
+                        onValueChange={(value) =>
                           setEditConta({
-                            ...editConta, 
-                            pedido_id: value && value !== "none" ? Number(value) : undefined
+                            ...editConta,
+                            pedido_id: value && value !== "none" ? Number(value) : undefined,
                           })
                         }
                       >
@@ -1407,7 +1433,7 @@ const Financeiro = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
-                          {pedidos.map((pedido) => (
+                          {(pedidos || []).map((pedido) => (
                             <SelectItem key={pedido.id} value={pedido.id.toString()}>
                               {pedido.numero_pedido || `PED-${pedido.id}`}
                             </SelectItem>
@@ -1418,54 +1444,72 @@ const Financeiro = () => {
                   </div>
                 </div>
 
-                {/* Datas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    Datas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                {/* Seção: Datas */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-amber-500/10">
+                      <Calendar className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Datas
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Emissão, vencimento e pagamento
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label>Data de Emissão *</Label>
-                      <Input 
+                      <Label className="text-sm font-semibold">Data de Emissão *</Label>
+                      <Input
                         type="date"
                         value={editConta.data_emissao}
-                        onChange={(e) => setEditConta({...editConta, data_emissao: e.target.value})}
+                        onChange={(e) => setEditConta({ ...editConta, data_emissao: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Data de Vencimento *</Label>
-                      <Input 
+                      <Label className="text-sm font-semibold">Data de Vencimento *</Label>
+                      <Input
                         type="date"
                         value={editConta.data_vencimento}
-                        onChange={(e) => setEditConta({...editConta, data_vencimento: e.target.value})}
+                        onChange={(e) => setEditConta({ ...editConta, data_vencimento: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Data de Pagamento</Label>
-                      <Input 
+                      <Label className="text-sm font-semibold">Data de Pagamento</Label>
+                      <Input
                         type="date"
                         value={editConta.data_pagamento || ""}
-                        onChange={(e) => setEditConta({...editConta, data_pagamento: e.target.value || undefined})}
+                        onChange={(e) => setEditConta({ ...editConta, data_pagamento: e.target.value || undefined })}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Pagamento */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-blue-500" />
-                    Pagamento
-                  </h3>
+                {/* Seção: Pagamento */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-yellow-500/10">
+                      <CreditCard className="w-5 h-5 text-yellow-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Pagamento
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Forma de pagamento
+                      </p>
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label>Forma de Pagamento</Label>
+                    <Label className="text-sm font-semibold">Forma de Pagamento</Label>
                     <Select
                       value={editConta.forma_pagamento || undefined}
-                      onValueChange={(value) => 
+                      onValueChange={(value) =>
                         setEditConta({
-                          ...editConta, 
-                          forma_pagamento: value ? (value as any) : undefined
+                          ...editConta,
+                          forma_pagamento: value ? (value as any) : undefined,
                         })
                       }
                     >
@@ -1479,68 +1523,87 @@ const Financeiro = () => {
                         <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
                         <SelectItem value="BOLETO">Boleto</SelectItem>
                         <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                        <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
-                {/* Parcelas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-blue-500" />
-                    Parcelas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                {/* Seção: Parcelas */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-indigo-500/10">
+                      <Receipt className="w-5 h-5 text-indigo-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Parcelas
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Número e total de parcelas
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label>Número da Parcela</Label>
-                      <Input 
+                      <Label className="text-sm font-semibold">Número da Parcela</Label>
+                      <Input
                         type="number"
                         placeholder="Ex: 1"
                         value={editConta.numero_parcela || ""}
-                        onChange={(e) => setEditConta({...editConta, numero_parcela: e.target.value ? Number(e.target.value) : undefined})}
+                        onChange={(e) => setEditConta({ ...editConta, numero_parcela: e.target.value ? Number(e.target.value) : undefined })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Total de Parcelas</Label>
-                      <Input 
+                      <Label className="text-sm font-semibold">Total de Parcelas</Label>
+                      <Input
                         type="number"
                         placeholder="Ex: 3"
                         value={editConta.total_parcelas || ""}
-                        onChange={(e) => setEditConta({...editConta, total_parcelas: e.target.value ? Number(e.target.value) : undefined})}
+                        onChange={(e) => setEditConta({ ...editConta, total_parcelas: e.target.value ? Number(e.target.value) : undefined })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Texto da Parcela</Label>
-                      <Input 
+                      <Label className="text-sm font-semibold">Texto da Parcela</Label>
+                      <Input
                         placeholder="Ex: 1/3"
                         maxLength={20}
                         value={editConta.parcela_texto || ""}
-                        onChange={(e) => setEditConta({...editConta, parcela_texto: e.target.value || undefined})}
+                        onChange={(e) => setEditConta({ ...editConta, parcela_texto: e.target.value || undefined })}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Observações */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Info className="w-4 h-4 text-blue-500" />
-                    Observações
-                  </h3>
+                {/* Seção: Observações */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-gray-500/10">
+                      <Info className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Observações
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Informações adicionais sobre a transação
+                      </p>
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label>Observações</Label>
+                    <Label className="text-sm font-semibold">Observações</Label>
                     <Textarea
                       placeholder="Observações adicionais sobre a transação"
                       value={editConta.observacoes || ""}
-                      onChange={(e) => setEditConta({...editConta, observacoes: e.target.value || undefined})}
+                      onChange={(e) => setEditConta({ ...editConta, observacoes: e.target.value || undefined })}
                       rows={4}
                     />
                   </div>
                 </div>
 
-                <Button 
-                  onClick={handleUpdate} 
-                  className="w-full" 
+                <Button
+                  onClick={handleUpdate}
+                  className="w-full"
                   variant="gradient"
                   disabled={updateContaMutation.isPending}
                 >

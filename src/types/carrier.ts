@@ -12,6 +12,9 @@ export interface Transportadora {
   /** Nome fantasia (opcional) */
   nome_fantasia?: string | null;
   
+  /** Nome do contato na transportadora (obrigatório na criação, pode ser null em registros antigos) */
+  contato?: string | null;
+  
   /** CNPJ formatado ou apenas números (opcional, único) */
   cnpj?: string | null;
   
@@ -109,6 +112,9 @@ export interface Pedido {
 export interface CreateTransportadoraDto {
   /** Nome/Razão social (obrigatório, 3-255 caracteres) */
   nome: string;
+  
+  /** Nome do contato na transportadora (obrigatório na criação, 1-255 caracteres) */
+  contato: string;
   
   /** Nome fantasia (opcional, máx 255 caracteres) */
   nome_fantasia?: string;

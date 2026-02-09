@@ -1,8 +1,7 @@
-import { apiClient } from "./api";
-import { UpdateClientePayload } from "@/shared/types/update.types";
 import { prepararPayloadAtualizacaoCliente, tratarErroAtualizacao } from "@/lib/update-payload";
+import { CondicaoPagamento, DadosClienteParaPedido } from "@/shared/types/condicao-pagamento.types";
 import { ClienteFormState } from "@/shared/types/update.types";
-import { CondicaoPagamento } from "@/shared/types/condicao-pagamento.types";
+import { apiClient } from "./api";
 
 // Enum de Status do Cliente (conforme GUIA-FRONTEND-ATUALIZACAO-STATUS-CLIENTE.md)
 export enum StatusCliente {
@@ -327,12 +326,13 @@ class ClientesService {
 
   /**
    * Busca dados do cliente para preenchimento de pedido
+   * GET /api/v1/clientes/:id/dados-pedido
    * Retorna dados do cliente + condição padrão + todas as condições disponíveis
    * @param id - ID do cliente
-   * @returns Dados do cliente para pedido
+   * @returns Dados do cliente para pedido (cliente, condicao_pagamento_padrao, condicoes_pagamento)
    */
-  async buscarDadosParaPedido(id: number): Promise<any> {
-    return apiClient.get<any>(`/clientes/${id}/dados-pedido`);
+  async buscarDadosParaPedido(id: number): Promise<DadosClienteParaPedido> {
+    return apiClient.get<DadosClienteParaPedido>(`/clientes/${id}/dados-pedido`);
   }
 
   /**

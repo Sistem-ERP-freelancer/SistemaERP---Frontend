@@ -1,27 +1,30 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { SettingsRoute } from "@/components/SettingsRoute";
-import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AdminPanel from "./pages/AdminPanel";
-import Pedidos from "./pages/Pedidos";
-import Financeiro from "./pages/Financeiro";
+import Clientes from "./pages/Clientes";
+import ContasAReceberClienteDetalhes from "./pages/contas-a-receber/ContasAReceberClienteDetalhes";
+import ContasAReceberDuplicatasParcela from "./pages/contas-a-receber/ContasAReceberDuplicatasParcela";
+import ContasAReceberPagarParcela from "./pages/contas-a-receber/ContasAReceberPagarParcela";
 import ContasAPagar from "./pages/ContasAPagar";
 import ContasAReceber from "./pages/ContasAReceber";
-import Fornecedores from "./pages/Fornecedores";
-import Clientes from "./pages/Clientes";
-import Produtos from "./pages/Produtos";
+import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
-import Transportadoras from "./pages/Transportadoras";
-import Settings from "./pages/Settings";
+import Financeiro from "./pages/Financeiro";
+import Fornecedores from "./pages/Fornecedores";
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import Pedidos from "./pages/Pedidos";
+import Produtos from "./pages/Produtos";
+import Settings from "./pages/Settings";
+import Transportadoras from "./pages/Transportadoras";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -127,7 +130,31 @@ const App = () => (
                 <ProtectedRoute>
                   <ContasAReceber />
                 </ProtectedRoute>
-              } 
+              }
+            />
+            <Route 
+              path="/contas-a-receber/clientes/:clienteId" 
+              element={
+                <ProtectedRoute>
+                  <ContasAReceberClienteDetalhes />
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/contas-a-receber/clientes/:clienteId/pagar/:pedidoId/:parcelaId" 
+              element={
+                <ProtectedRoute>
+                  <ContasAReceberPagarParcela />
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/contas-a-receber/clientes/:clienteId/duplicatas/:pedidoId/:parcelaId" 
+              element={
+                <ProtectedRoute>
+                  <ContasAReceberDuplicatasParcela />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/fornecedores" 

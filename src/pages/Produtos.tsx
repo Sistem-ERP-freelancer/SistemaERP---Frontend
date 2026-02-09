@@ -1,135 +1,124 @@
 import AppLayout from "@/components/layout/AppLayout";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogOverlay,
+    AlertDialogPortal,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogOverlay,
-  AlertDialogPortal,
-} from "@/components/ui/alert-dialog";
-import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
 } from "@/components/ui/command";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import { FiltrosProdutos } from "@/services/produtos.service";
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import {
-  Categoria,
-  CreateCategoriaDto,
-  categoriasService,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import {
+    Categoria,
+    categoriasService,
+    CreateCategoriaDto,
 } from "@/services/categorias.service";
 import {
-  fornecedoresService,
-  Fornecedor,
-} from "@/services/fornecedores.service";
-import {
-  produtosService,
-  CreateProdutoDto,
-  Produto,
-} from "@/services/produtos.service";
-import {
-  estoqueService,
-  MovimentacaoEstoque,
+    estoqueService
 } from "@/services/estoque.service";
+import {
+    Fornecedor,
+    fornecedoresService,
+} from "@/services/fornecedores.service";
+import { CreateProdutoDto, FiltrosProdutos, Produto, produtosService } from "@/services/produtos.service";
+import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Box,
-  Building2,
-  Calendar,
-  Check,
-  ChevronsUpDown,
-  Circle,
-  DollarSign,
-  Edit,
-  Eye,
-  FileCheck,
-  FileText,
-  Filter,
-  Folder,
-  Hash,
-  Info,
-  LayoutGrid,
-  Loader2,
-  MapPin,
-  Package,
-  Plus,
-  Ruler,
-  Search,
-  Tag,
-  Truck,
-  Trash2,
-  X,
-  ArrowUpCircle,
-  ArrowDownCircle,
-  History,
-  RotateCcw,
-  AlertTriangle,
-  Settings,
-  MoreVertical,
+    AlertTriangle,
+    ArrowDownCircle,
+    ArrowUpCircle,
+    Calendar,
+    Check,
+    ChevronsUpDown,
+    Circle,
+    DollarSign,
+    Edit,
+    Eye,
+    FileCheck,
+    FileText,
+    Filter,
+    Hash,
+    History,
+    Info,
+    LayoutGrid,
+    Loader2,
+    MapPin,
+    MoreVertical,
+    Package,
+    Plus,
+    RotateCcw,
+    Ruler,
+    Search,
+    Settings,
+    Trash2,
+    Truck
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 
 const Produtos = () => {
@@ -420,9 +409,31 @@ const Produtos = () => {
     setCurrentPage(1);
   }, [searchTerm, filtrosAvancados]);
 
-  // Calcular contagem de produtos por categoria
+  // Buscar todos os produtos para contagem precisa no modal de categorias
+  // (a lista paginada 'produtos' só tem a página atual, então o count ficaria errado)
+  const { data: todosProdutosParaCount = [] } = useQuery({
+    queryKey: ["produtos", "todos-para-count", categoriasDialogOpen],
+    queryFn: async () => {
+      const response = await produtosService.listar({ page: 1, limit: 10000 });
+      if (response?.data && Array.isArray(response.data)) return response.data;
+      if (Array.isArray(response)) return response;
+      if (response?.produtos && Array.isArray(response.produtos)) return response.produtos;
+      return [];
+    },
+    enabled: categoriasDialogOpen,
+    staleTime: 30000,
+  });
+
+  // Helper: verifica se produto pertence à categoria (camelCase, snake_case ou objeto populado)
+  const produtoPertenceACategoria = (p: Produto | Record<string, unknown>, categoriaId: number) => {
+    const catId = (p as any).categoriaId ?? (p as any).categoria_id ?? (p as any).categoria?.id;
+    return catId != null && Number(catId) === Number(categoriaId);
+  };
+
+  // Calcular contagem de produtos por categoria (usa lista completa quando modal aberto)
   const getProdutosCountByCategoria = (categoriaId: number) => {
-    return produtos.filter((p) => p.categoriaId === categoriaId).length;
+    const listaParaContar = categoriasDialogOpen ? todosProdutosParaCount : produtos;
+    return listaParaContar.filter((p) => produtoPertenceACategoria(p, categoriaId)).length;
   };
 
   // Função para determinar a cor do estoque baseada nas regras
@@ -478,16 +489,22 @@ const Produtos = () => {
       setDialogOpen(false);
       setFornecedorPopoverOpen(false);
       setFornecedorSearchTerm("");
-      toast.success("Produto cadastrado com sucesso!");
+      const skuMsg = (data as Produto)?.sku ? ` SKU: ${(data as Produto).sku}` : "";
+      toast.success(`Produto cadastrado com sucesso!${skuMsg}`);
     },
     onError: (error: any) => {
-      toast.error(error?.message || "Erro ao criar produto");
+      const msg = error?.message || error?.response?.data?.message || "Erro ao criar produto";
+      if (typeof msg === "string" && msg.toLowerCase().includes("usuário autenticado") && msg.toLowerCase().includes("obrigatório")) {
+        toast.error("É necessário estar logado para cadastrar produto com estoque inicial. Faça login e tente novamente.");
+      } else {
+        toast.error(msg);
+      }
     },
   });
 
   const handleCreate = () => {
-    if (!newProduto.nome || !newProduto.sku || !newProduto.preco_custo || !newProduto.preco_venda) {
-      toast.error("Preencha os campos obrigatórios (Nome, SKU, Preço de Custo e Preço de Venda)");
+    if (!newProduto.nome || !newProduto.preco_custo || !newProduto.preco_venda) {
+      toast.error("Preencha os campos obrigatórios (Nome, Preço de Custo e Preço de Venda)");
       return;
     }
 
@@ -511,7 +528,6 @@ const Produtos = () => {
 
     const produtoData: CreateProdutoDto = {
       nome: newProduto.nome!,
-      sku: newProduto.sku!,
       preco_custo: Number(newProduto.preco_custo),
       preco_venda: precoVenda,
       estoque_atual: Number(newProduto.estoque_atual) || 0,
@@ -519,6 +535,13 @@ const Produtos = () => {
       unidade_medida: newProduto.unidade_medida || "UN",
       statusProduto: newProduto.statusProduto || "ATIVO",
     };
+
+    // SKU opcional: se preenchido, enviar; senão backend gera automaticamente (SKU-01, SKU-02, ...)
+    if (newProduto.sku && String(newProduto.sku).trim()) {
+      produtoData.sku = String(newProduto.sku).trim();
+    } else {
+      produtoData.sku = ""; // Backend gera automaticamente
+    }
 
     // Adicionar campos opcionais apenas se tiverem valor
     if (newProduto.descricao) produtoData.descricao = newProduto.descricao;
@@ -562,6 +585,8 @@ const Produtos = () => {
       produtosService.atualizar(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["produtos"] });
+      queryClient.invalidateQueries({ queryKey: ["historico-estoque"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["movimentacoes"], exact: false });
       setEditDialogOpen(false);
       setEditingProduto({
         nome: "",
@@ -591,7 +616,13 @@ const Produtos = () => {
       toast.success("Produto atualizado com sucesso!");
     },
     onError: (error: any) => {
-      toast.error(error?.message || "Erro ao atualizar produto");
+      const msg = error?.response?.data?.message ?? error?.message ?? "Erro ao atualizar produto";
+      const msgStr = typeof msg === "string" ? msg : "Erro ao atualizar produto";
+      if (msgStr.toLowerCase().includes("usuário autenticado") && msgStr.toLowerCase().includes("obrigatório")) {
+        toast.error("É necessário estar logado para editar estoque do produto. Faça login e tente novamente.");
+      } else {
+        toast.error(msgStr);
+      }
     },
   });
 
@@ -677,6 +708,8 @@ const Produtos = () => {
       return;
     }
 
+    // Conforme GUIA_FRONTEND_ESTOQUE_SECAO_PRODUTO: o backend cria a movimentação
+    // automaticamente ao processar o PATCH com estoque_atual diferente do atual
     const produtoData: Partial<CreateProdutoDto> = {
       nome: editingProduto.nome!,
       sku: editingProduto.sku!,
@@ -1197,8 +1230,8 @@ const Produtos = () => {
                                   <p className="text-sm font-medium text-foreground truncate">{cat.nome}</p>
                                   <p className="text-xs text-muted-foreground truncate">
                                     {cat.descricao 
-                                      ? `${cat.descricao} • ${produtos.filter(p => p.categoriaId === cat.id).length} produtos vinculados`
-                                      : `${produtos.filter(p => p.categoriaId === cat.id).length} produtos vinculados`}
+                                      ? `${cat.descricao} • ${getProdutosCountByCategoria(cat.id)} produtos vinculados`
+                                      : `${getProdutosCountByCategoria(cat.id)} produtos vinculados`}
                                   </p>
                                 </div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1251,21 +1284,36 @@ const Produtos = () => {
             >
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Novo Produto</DialogTitle>
-                  <DialogDescription>
-                    Preencha os campos abaixo para cadastrar um novo produto no sistema.
-                  </DialogDescription>
+                <DialogTitle className="text-2xl font-bold">
+                  Novo Produto
+                </DialogTitle>
+                <DialogDescription className="mt-1">
+                  Preencha os campos abaixo para cadastrar um novo produto no sistema.
+                </DialogDescription>
               </DialogHeader>
-                <div className="space-y-6 pt-4">
-                  {/* Informações Básicas */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-blue-500" />
-                      Informações Básicas
-                    </h3>
-                <div className="space-y-2">
-                  <Label>Nome do Produto *</Label>
-                  <Input 
+              <div className="space-y-8 pt-6">
+                {/* Seção: Informações Básicas */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-orange-500/10">
+                      <Package className="w-5 h-5 text-orange-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Informações Básicas
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Dados principais do produto
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Nome do Produto *
+                      </Label>
+                      <Input 
                         placeholder="Ex: Notebook Dell Inspiron"
                         value={newProduto.nome || ""}
                         onChange={(e) =>
@@ -1274,19 +1322,25 @@ const Produtos = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Descrição</Label>
+                      <Label className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Descrição
+                      </Label>
                       <Textarea
                         placeholder="Descrição detalhada do produto"
                         value={newProduto.descricao || ""}
                         onChange={(e) =>
                           setNewProduto({ ...newProduto, descricao: e.target.value })
                         }
-                  />
-                </div>
-                  <div className="space-y-2">
-                    <Label>SKU *</Label>
-                    <Input 
-                        placeholder="Ex: NB-DELL-001"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Hash className="w-4 h-4 text-muted-foreground" />
+                        SKU (opcional)
+                      </Label>
+                      <Input 
+                        placeholder="Deixe vazio para gerar automaticamente (SKU-01, SKU-02...)"
                         value={newProduto.sku || ""}
                         onChange={(e) =>
                           setNewProduto({ ...newProduto, sku: e.target.value })
@@ -1294,16 +1348,30 @@ const Produtos = () => {
                       />
                     </div>
                   </div>
+                </div>
 
-                  {/* Categorização */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <LayoutGrid className="w-4 h-4 text-blue-500" />
-                      Categorização
-                    </h3>
+                {/* Seção: Categorização */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <LayoutGrid className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Categorização
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Categoria e fornecedor do produto
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Categoria *</Label>
+                        <Label className="flex items-center gap-2">
+                          <LayoutGrid className="w-4 h-4 text-muted-foreground" />
+                          Categoria *
+                        </Label>
                         <Select
                           value={newProduto.categoriaId?.toString() || undefined}
                           onValueChange={(value) =>
@@ -1326,7 +1394,10 @@ const Produtos = () => {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Fornecedor *</Label>
+                        <Label className="flex items-center gap-2">
+                          <Truck className="w-4 h-4 text-muted-foreground" />
+                          Fornecedor *
+                        </Label>
                         <Popover open={fornecedorPopoverOpen} onOpenChange={setFornecedorPopoverOpen}>
                           <PopoverTrigger asChild>
                             <Button
@@ -1407,16 +1478,30 @@ const Produtos = () => {
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Preços */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-blue-500" />
-                      Preços
-                    </h3>
+                {/* Seção: Preços */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-green-500/10">
+                      <DollarSign className="w-5 h-5 text-green-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Preços
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Valores de custo e venda
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
                     <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <Label>Preço de Custo *</Label>
+                        <Label className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-muted-foreground" />
+                          Preço de Custo *
+                        </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -1431,7 +1516,10 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Preço de Venda *</Label>
+                        <Label className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-muted-foreground" />
+                          Preço de Venda *
+                        </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -1443,14 +1531,14 @@ const Produtos = () => {
                               preco_venda: e.target.value ? Number(e.target.value) : 0,
                             })
                           }
-                    />
-                  </div>
-                  <div className="space-y-2">
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <Label className="flex items-center gap-2">
                           <DollarSign className="w-4 h-4 text-muted-foreground" />
                           Preço Promocional
                         </Label>
-                    <Input 
+                        <Input 
                           type="number"
                           step="0.01"
                           placeholder="0.00"
@@ -1462,29 +1550,43 @@ const Produtos = () => {
                             })
                           }
                           className={newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional > newProduto.preco_venda ? "border-destructive" : ""}
-                    />
-                    {newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional > newProduto.preco_venda && (
-                      <p className="text-sm text-destructive">O preço promocional não pode ser maior que o preço de venda</p>
-                    )}
-                    {newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional <= newProduto.preco_venda && (
-                      <p className="text-sm text-muted-foreground">
-                        Desconto: {((1 - newProduto.preco_promocional / newProduto.preco_venda) * 100).toFixed(1)}%
-                      </p>
-                    )}
+                        />
+                        {newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional > newProduto.preco_venda && (
+                          <p className="text-sm text-destructive">O preço promocional não pode ser maior que o preço de venda</p>
+                        )}
+                        {newProduto.preco_promocional && newProduto.preco_venda && newProduto.preco_promocional <= newProduto.preco_venda && (
+                          <p className="text-sm text-muted-foreground">
+                            Desconto: {((1 - newProduto.preco_promocional / newProduto.preco_venda) * 100).toFixed(1)}%
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                  </div>
 
-                  {/* Estoque */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-blue-500" />
-                      Estoque
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                        <Label>Estoque Atual *</Label>
-                    <Input 
+                {/* Seção: Estoque */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-purple-500/10">
+                      <Package className="w-5 h-5 text-purple-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Estoque
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Controle de estoque e localização
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-muted-foreground" />
+                          Estoque Atual *
+                        </Label>
+                        <Input 
                           type="number"
                           placeholder="0"
                           value={newProduto.estoque_atual || ""}
@@ -1494,13 +1596,16 @@ const Produtos = () => {
                               estoque_atual: e.target.value ? Number(e.target.value) : 0,
                             })
                           }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                        <Label>Estoque Mínimo *</Label>
-                    <Input 
-                      type="number"
-                      placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-muted-foreground" />
+                          Estoque Mínimo *
+                        </Label>
+                        <Input 
+                          type="number"
+                          placeholder="0"
                           value={newProduto.estoque_minimo || ""}
                           onChange={(e) =>
                             setNewProduto({
@@ -1511,10 +1616,13 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Estoque Máximo</Label>
+                        <Label className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-muted-foreground" />
+                          Estoque Máximo
+                        </Label>
                         <Input 
                           type="number"
-                          placeholder="Opcional"
+                          placeholder="0"
                           value={newProduto.estoque_maximo || ""}
                           onChange={(e) =>
                             setNewProduto({
@@ -1524,23 +1632,11 @@ const Produtos = () => {
                           }
                         />
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Localização</Label>
-                        <Input 
-                          placeholder="Ex: Prateleira A-3"
-                          value={newProduto.localizacao || ""}
-                          onChange={(e) =>
-                            setNewProduto({
-                              ...newProduto,
-                              localizacao: e.target.value || undefined,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Unidade de Medida *</Label>
+                        <Label className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-muted-foreground" />
+                          Unidade de Medida *
+                        </Label>
                         <Select
                           value={newProduto.unidade_medida || "UN"}
                           onValueChange={(value: "UN" | "KG" | "LT" | "CX") =>
@@ -1562,17 +1658,47 @@ const Produtos = () => {
                         </Select>
                       </div>
                     </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
+                        Localização
+                      </Label>
+                      <Input
+                        placeholder="Ex: Prateleira A-01"
+                        value={newProduto.localizacao || ""}
+                        onChange={(e) =>
+                          setNewProduto({
+                            ...newProduto,
+                            localizacao: e.target.value || undefined,
+                          })
+                        }
+                      />
+                    </div>
                   </div>
+                </div>
 
-                  {/* Informações Fiscais */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <FileCheck className="w-4 h-4 text-blue-500" />
-                      Informações Fiscais
-                    </h3>
+                {/* Seção: Informações Fiscais */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-indigo-500/10">
+                      <FileCheck className="w-5 h-5 text-indigo-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Informações Fiscais
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Códigos fiscais e tributários
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
                     <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <Label>NCM</Label>
+                        <Label className="flex items-center gap-2">
+                          <Hash className="w-4 h-4 text-muted-foreground" />
+                          NCM
+                        </Label>
                         <Input
                           placeholder="Ex: 8517.12.00"
                           maxLength={20}
@@ -1583,7 +1709,10 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>CEST</Label>
+                        <Label className="flex items-center gap-2">
+                          <Hash className="w-4 h-4 text-muted-foreground" />
+                          CEST
+                        </Label>
                         <Input
                           placeholder="Ex: 0100100"
                           maxLength={20}
@@ -1594,7 +1723,10 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>CFOP</Label>
+                        <Label className="flex items-center gap-2">
+                          <Hash className="w-4 h-4 text-muted-foreground" />
+                          CFOP
+                        </Label>
                         <Input
                           placeholder="Ex: 5102"
                           maxLength={20}
@@ -1606,16 +1738,30 @@ const Produtos = () => {
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Dimensões e Peso */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Ruler className="w-4 h-4 text-blue-500" />
-                      Dimensões e Peso
-                    </h3>
+                {/* Seção: Dimensões e Peso */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-teal-500/10">
+                      <Ruler className="w-5 h-5 text-teal-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Dimensões e Peso
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Medidas físicas do produto
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
                     <div className="grid grid-cols-4 gap-4">
                       <div className="space-y-2">
-                        <Label>Peso (kg)</Label>
+                        <Label className="flex items-center gap-2">
+                          <Ruler className="w-4 h-4 text-muted-foreground" />
+                          Peso (kg)
+                        </Label>
                         <Input
                           type="number"
                           step="0.001"
@@ -1630,7 +1776,10 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Altura (cm)</Label>
+                        <Label className="flex items-center gap-2">
+                          <Ruler className="w-4 h-4 text-muted-foreground" />
+                          Altura (cm)
+                        </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -1645,7 +1794,10 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Largura (cm)</Label>
+                        <Label className="flex items-center gap-2">
+                          <Ruler className="w-4 h-4 text-muted-foreground" />
+                          Largura (cm)
+                        </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -1660,26 +1812,43 @@ const Produtos = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Data de Validade</Label>
+                        <Label className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          Data de Validade
+                        </Label>
                         <Input
                           type="date"
                           value={newProduto.data_validade || ""}
                           onChange={(e) =>
                             setNewProduto({ ...newProduto, data_validade: e.target.value || undefined })
                           }
-                    />
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-                  </div>
 
-                  {/* Outros */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                      <Info className="w-4 h-4 text-blue-500" />
-                      Outros
-                    </h3>
+                {/* Seção: Outros */}
+                <div className="bg-card border rounded-lg p-6 space-y-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-gray-500/10">
+                      <Info className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Outros
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Observações e status do produto
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-6">
                     <div className="space-y-2">
-                      <Label>Observações</Label>
+                      <Label className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Observações
+                      </Label>
                       <Textarea
                         placeholder="Observações adicionais sobre o produto"
                         value={newProduto.observacoes || ""}
@@ -1688,42 +1857,56 @@ const Produtos = () => {
                         }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Status</Label>
-                      <Select
-                        value={newProduto.statusProduto || "ATIVO"}
-                        onValueChange={(value: "ATIVO" | "INATIVO") =>
-                          setNewProduto({
-                            ...newProduto,
-                            statusProduto: value,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ATIVO">Ativo</SelectItem>
-                          <SelectItem value="INATIVO">Inativo</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-3">
+                      <Label className="text-sm font-semibold">Status</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        {(["ATIVO", "INATIVO"] as const).map((status) => (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() =>
+                              setNewProduto({
+                                ...newProduto,
+                                statusProduto: status,
+                              })
+                            }
+                            className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                              newProduto.statusProduto === status
+                                ? "border-primary bg-primary/5"
+                                : "border-border bg-card hover:border-primary/50"
+                            }`}
+                          >
+                            <Circle
+                              className={`w-4 h-4 ${
+                                newProduto.statusProduto === status
+                                  ? status === "ATIVO"
+                                    ? "text-green-500 fill-green-500"
+                                    : "text-muted-foreground fill-muted-foreground"
+                                  : "text-muted-foreground"
+                              }`}
+                            />
+                            <span className="font-medium">{status}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <Button
-                    onClick={handleCreate}
-                    className="w-full"
-                    variant="gradient"
-                    disabled={createProdutoMutation.isPending}
-                  >
-                    {createProdutoMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Cadastrando...
-                      </>
-                    ) : (
-                      "Cadastrar Produto"
-                    )}
+                <Button
+                  onClick={handleCreate}
+                  className="w-full"
+                  variant="gradient"
+                  disabled={createProdutoMutation.isPending}
+                >
+                  {createProdutoMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Cadastrando...
+                    </>
+                  ) : (
+                    "Cadastrar Produto"
+                  )}
                 </Button>
               </div>
             </DialogContent>
@@ -3260,35 +3443,35 @@ const Produtos = () => {
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
                             {mov.tipo === "ENTRADA" && (
-                              <ArrowDownCircle className="w-5 h-5" style={{ color: "#1E8449" }} />
+                              <ArrowDownCircle className="w-5 h-5" style={{ color: "#059669" }} />
                             )}
                             {mov.tipo === "DEVOLUCAO" && (
-                              <RotateCcw className="w-5 h-5" style={{ color: "#21618C" }} />
+                              <RotateCcw className="w-5 h-5" style={{ color: "#2563eb" }} />
                             )}
                             {mov.tipo === "SAIDA" && (
-                              <ArrowUpCircle className="w-5 h-5" style={{ color: "#922B21" }} />
+                              <ArrowUpCircle className="w-5 h-5" style={{ color: "#dc2626" }} />
                             )}
                             {mov.tipo === "PERDA" && (
-                              <AlertTriangle className="w-5 h-5" style={{ color: "#9C640C" }} />
+                              <AlertTriangle className="w-5 h-5" style={{ color: "#d97706" }} />
                             )}
                             {mov.tipo === "TRANSFERENCIA" && (
-                              <Truck className="w-5 h-5" style={{ color: "#5B2C6F" }} />
+                              <Truck className="w-5 h-5" style={{ color: "#7c3aed" }} />
                             )}
                             {mov.tipo === "AJUSTE" && (
-                              <Settings className="w-5 h-5" style={{ color: "#21618C" }} />
+                              <Settings className="w-5 h-5" style={{ color: "#2563eb" }} />
                             )}
                             <span 
                               className="font-semibold"
                               style={{
-                                color: mov.tipo === "ENTRADA" ? "#1E8449" :
-                                       mov.tipo === "DEVOLUCAO" ? "#21618C" :
-                                       mov.tipo === "SAIDA" ? "#922B21" :
-                                       mov.tipo === "PERDA" ? "#9C640C" :
-                                       mov.tipo === "TRANSFERENCIA" ? "#5B2C6F" :
-                                       "#21618C"
+                                color: mov.tipo === "ENTRADA" ? "#059669" :
+                                       mov.tipo === "DEVOLUCAO" ? "#2563eb" :
+                                       mov.tipo === "SAIDA" ? "#dc2626" :
+                                       mov.tipo === "PERDA" ? "#d97706" :
+                                       mov.tipo === "TRANSFERENCIA" ? "#7c3aed" :
+                                       "#2563eb"
                               }}
                             >
-                              {mov.tipo}
+                              {mov.tipo === "ENTRADA" ? "Entrada" : mov.tipo === "SAIDA" ? "Saída" : mov.tipo === "AJUSTE" ? "Ajuste" : mov.tipo === "DEVOLUCAO" ? "Devolução" : mov.tipo === "PERDA" ? "Perda" : mov.tipo === "TRANSFERENCIA" ? "Transferência" : mov.tipo}
                             </span>
                           </div>
                           <span className="text-sm text-muted-foreground">
@@ -3302,14 +3485,14 @@ const Produtos = () => {
                             <p 
                               className="font-medium"
                               style={{
-                                color: mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO" ? "#1E8449" :
-                                       mov.tipo === "PERDA" ? "#9C640C" :
-                                       mov.tipo === "TRANSFERENCIA" ? "#5B2C6F" :
-                                       mov.tipo === "SAIDA" ? "#922B21" :
-                                       "#21618C"
+                                color: mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO" ? "#059669" :
+                                       mov.tipo === "PERDA" ? "#d97706" :
+                                       mov.tipo === "TRANSFERENCIA" ? "#7c3aed" :
+                                       mov.tipo === "SAIDA" ? "#dc2626" :
+                                       "#2563eb"
                               }}
                             >
-                              {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") ? "+" : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") ? "-" : ""}{mov.quantidade}
+                              {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") ? "+" : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") ? "-" : mov.tipo === "AJUSTE" ? (mov.quantidade >= 0 ? "+" : "") : ""}{mov.quantidade}
                             </p>
                           </div>
                           <div>
@@ -3333,7 +3516,14 @@ const Produtos = () => {
                         {mov.motivo && (
                           <div className="mt-3">
                             <Label className="text-xs text-muted-foreground">Motivo</Label>
-                            <p className="text-sm">{mov.motivo}</p>
+                            <p className="text-sm">
+                              {(() => {
+                                const m = mov.motivo?.toUpperCase().replace(/\s+/g, "_") || "";
+                                if (m === "ESTOQUE_INICIAL") return "Estoque Inicial";
+                                if (m === "AJUSTE_ESTOQUE" || m === "AJUSTE_DE_ESTOQUE") return "Ajuste de Estoque";
+                                return mov.motivo || "-";
+                              })()}
+                            </p>
                           </div>
                         )}
 

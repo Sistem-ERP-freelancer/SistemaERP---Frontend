@@ -39,7 +39,7 @@ export interface Produto {
 export interface CreateProdutoDto {
   nome: string;
   descricao?: string;
-  sku: string;
+  sku?: string; // Opcional: se não enviado ou vazio, backend gera SKU-01, SKU-02, ...
   preco_custo: number;
   preco_venda: number;
   preco_promocional?: number;
@@ -103,6 +103,20 @@ class ProdutosService {
 
   async buscarPorId(id: number): Promise<Produto> {
     return apiClient.get<Produto>(`/produtos/${id}`);
+  }
+
+  /** Produtos vinculados ao fornecedor (GET /produtos/fornecedor/:fornecedorId) - usar em pedido de COMPRA */
+  async buscarPorFornecedor(
+    fornecedorId: number,
+    page = 1,
+    limit = 100
+  ): Promise<Produto[]> {
+    const query = new URLSearchParams({ page: String(page), limit: String(limit) }).toString();
+    const response = await apiClient.get<Produto[] | ProdutosResponse>(
+      `/produtos/fornecedor/${fornecedorId}${query ? `?${query}` : ''}`
+    );
+    if (Array.isArray(response)) return response;
+    return (response as ProdutosResponse).data ?? (response as ProdutosResponse).produtos ?? [];
   }
 
   async criar(data: CreateProdutoDto): Promise<Produto> {

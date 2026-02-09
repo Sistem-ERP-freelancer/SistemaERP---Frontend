@@ -1,15 +1,17 @@
-import { apiClient } from './api';
 import {
-  Pedido,
-  CreatePedidoDto,
-  PedidosResponse,
-  FiltrosPedidos,
-  DashboardPedidos,
+    AtualizarCondicaoPagamentoPayload,
+    CreatePedidoDto,
+    DashboardPedidos,
+    FiltrosPedidos,
+    Pedido,
+    PedidosResponse,
 } from '@/types/pedido';
+import { apiClient } from './api';
+import type { ConfirmarPagamentoPayload } from './contas-receber.service';
 
 // Re-exportar tipos para compatibilidade
-export type { Pedido, CreatePedidoDto, PedidosResponse, FiltrosPedidos, DashboardPedidos };
 export type { PedidoItem as ItemPedido } from '@/types/pedido';
+export type { CreatePedidoDto, DashboardPedidos, FiltrosPedidos, Pedido, PedidosResponse };
 
 class PedidosService {
   async listar(params?: FiltrosPedidos): Promise<PedidosResponse> {
@@ -55,6 +57,46 @@ class PedidosService {
     return apiClient.get<Pedido>(`/pedidos/${id}`);
   }
 
+  /**
+   * Confirma pagamento da parcela com múltiplas duplicatas
+   * POST /pedidos/:pedidoId/parcelas/:parcelaId/confirmar-pagamento
+   * @param parcelaId - ID da parcela (tb_parcela_pedido), nunca numero_parcela
+   */
+  async confirmarPagamentoParcela(
+    pedidoId: number,
+    parcelaId: number,
+    payload: ConfirmarPagamentoPayload
+  ): Promise<unknown> {
+    const url = `/pedidos/${pedidoId}/parcelas/${parcelaId}/confirmar-pagamento`;
+    if (import.meta.env.DEV) {
+      console.log('📤 [confirmarPagamentoParcela] Requisição:', {
+        url,
+        pedidoId,
+        parcelaId,
+        payload,
+        payloadJSON: JSON.stringify(payload),
+      });
+    }
+    return apiClient.post(url, payload);
+  }
+
+  /**
+   * Lista parcelas do pedido (GET /pedidos/:pedidoId/parcelas)
+   * Usado ao criar duplicata para vincular a uma parcela
+   */
+  async listarParcelas(pedidoId: number): Promise<{ parcelas: Array<{
+    id: number;
+    pedido_id: number;
+    numero_parcela: number;
+    total_parcelas: number;
+    valor: number;
+    valor_pago?: number;
+    status: string;
+    data_vencimento: string;
+  }>; resumo?: unknown }> {
+    return apiClient.get(`/pedidos/${pedidoId}/parcelas`);
+  }
+
   async criar(data: CreatePedidoDto): Promise<Pedido> {
     // Log detalhado dos dados sendo enviados
     if (import.meta.env.DEV) {
@@ -72,6 +114,17 @@ class PedidosService {
 
   async atualizar(id: number, data: Partial<CreatePedidoDto>): Promise<Pedido> {
     return apiClient.patch<Pedido>(`/pedidos/${id}`, data);
+  }
+
+  /**
+   * Altera condição de pagamento do pedido (ex.: à vista → parcelado).
+   * PATCH /pedidos/:id – backend remove parcelas em aberto e cria as novas.
+   */
+  async alterarCondicaoPagamento(
+    pedidoId: number,
+    payload: AtualizarCondicaoPagamentoPayload
+  ): Promise<Pedido> {
+    return apiClient.patch<Pedido>(`/pedidos/${pedidoId}`, payload);
   }
 
   async cancelar(id: number): Promise<Pedido> {

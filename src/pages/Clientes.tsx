@@ -1,4 +1,16 @@
 import AppLayout from "@/components/layout/AppLayout";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogOverlay,
+    AlertDialogPortal,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -7,20 +19,17 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogOverlay,
-  AlertDialogPortal,
-} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -32,21 +41,13 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
-  ClienteCreateDialog,
-  ClienteStats,
-  ClienteTable,
-  RelatorioClienteDialog,
+    ClienteCreateDialog,
+    ClienteStats,
+    ClienteTable,
+    RelatorioClienteDialog,
 } from "@/features/clientes/components";
-import { cleanDocument, formatCNPJ, formatCPF, formatCEP, formatTelefone } from "@/lib/validators";
+import { prepararAtualizacaoCliente } from "@/features/clientes/utils/prepararAtualizacaoCliente";
+import { cleanDocument, formatCEP, formatCNPJ, formatCPF, formatTelefone } from "@/lib/validators";
 import {
     ClientesEstatisticas,
     CreateClienteDto,
@@ -55,11 +56,10 @@ import {
     clientesService,
     extractClientesFromResponse,
 } from "@/services/clientes.service";
-import { prepararAtualizacaoCliente } from "@/features/clientes/utils/prepararAtualizacaoCliente";
 import { UpdateContatoDto, contatosService } from "@/services/contatos.service";
 import {
-  UpdateEnderecoDto,
-  enderecosService,
+    UpdateEnderecoDto,
+    enderecosService,
 } from "@/services/enderecos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -438,6 +438,16 @@ const Clientes = () => {
           errorMessage = errorResponse.error;
         } else {
           errorMessage = "Erro ao cadastrar cliente";
+        }
+
+        // Mensagem mais amigável quando condicoes_pagamento é rejeitado
+        // (ex.: backend pode não suportar CHEQUE ainda no enum de forma_pagamento)
+        if (
+          errorMessage?.toLowerCase().includes("condicoes_pagamento") &&
+          errorMessage?.toLowerCase().includes("inválido")
+        ) {
+          errorMessage =
+            "Condições de pagamento inválidas. Se estiver usando 'Cheque', verifique se o backend suporta essa forma. Caso contrário, use outra forma de pagamento ou revise os dados das parcelas.";
         }
 
         toast.error(errorMessage);
@@ -2372,6 +2382,8 @@ const Clientes = () => {
                                 ? "Boleto"
                                 : condicao.forma_pagamento === "TRANSFERENCIA"
                                 ? "Transferência"
+                                : condicao.forma_pagamento === "CHEQUE"
+                                ? "Cheque"
                                 : condicao.forma_pagamento || "-"}
                             </p>
                           </div>

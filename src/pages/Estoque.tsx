@@ -1,69 +1,65 @@
-import { useState, useMemo, useEffect } from "react";
-import { motion } from "framer-motion";
-import {
-  ArrowUpCircle,
-  ArrowDownCircle,
-  Calendar,
-  Plus,
-  Search,
-  Filter,
-  Package,
-  Loader2,
-  X,
-  ArrowDown,
-  ArrowUp,
-  RotateCcw,
-  AlertTriangle,
-  Truck,
-  Settings,
-  Info,
-} from "lucide-react";
+import AppLayout from "@/components/layout/AppLayout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import AppLayout from "@/components/layout/AppLayout";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-  PaginationEllipsis,
-} from "@/components/ui/pagination";
-import { toast } from "sonner";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { produtosService, Produto } from "@/services/produtos.service";
-import {
-  estoqueService,
-  TipoMovimentacao,
-  MovimentacaoEstoqueDto,
-  MovimentacaoEstoque,
+    estoqueService,
+    MovimentacaoEstoque,
+    MovimentacaoEstoqueDto,
+    TipoMovimentacao,
 } from "@/services/estoque.service";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Produto, produtosService } from "@/services/produtos.service";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import {
+    AlertTriangle,
+    ArrowDownCircle,
+    ArrowUpCircle,
+    Calendar,
+    Filter,
+    Info,
+    Loader2,
+    Package,
+    RotateCcw,
+    Search,
+    Settings,
+    Truck
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 const Estoque = () => {
   const queryClient = useQueryClient();
@@ -247,23 +243,42 @@ const Estoque = () => {
     setCurrentPage(1);
   }, [filtroTipo, searchTerm]);
 
-  // Calcular totais
-  const { totalEntradas, totalSaidas, balanco } = useMemo(() => {
+  // Calcular totais gerais e por tipo
+  const { totalEntradas, totalSaidas, balanco, totaisPorTipo } = useMemo(() => {
     let entradas = 0;
     let saidas = 0;
+    const porTipo: Record<string, number> = {
+      ENTRADA: 0,
+      SAIDA: 0,
+      AJUSTE: 0,
+      DEVOLUCAO: 0,
+      PERDA: 0,
+      TRANSFERENCIA: 0,
+    };
 
     movimentacoesFiltradas.forEach((mov) => {
-      if (mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") {
+      if (mov.tipo === "ENTRADA") {
         entradas += mov.quantidade;
-      } else if (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") {
+      } else if (mov.tipo === "SAIDA") {
         saidas += mov.quantidade;
+      }
+      if (porTipo[mov.tipo] !== undefined) {
+        porTipo[mov.tipo] += mov.quantidade;
       }
     });
 
+    const balanco =
+      (porTipo.ENTRADA ?? 0) +
+      (porTipo.DEVOLUCAO ?? 0) +
+      (porTipo.AJUSTE ?? 0) -
+      (porTipo.SAIDA ?? 0) -
+      (porTipo.PERDA ?? 0) -
+      (porTipo.TRANSFERENCIA ?? 0);
     return {
       totalEntradas: entradas,
       totalSaidas: saidas,
-      balanco: entradas - saidas,
+      balanco,
+      totaisPorTipo: porTipo,
     };
   }, [movimentacoesFiltradas]);
 
@@ -461,63 +476,84 @@ const Estoque = () => {
           </div>
         </div>
 
-        {/* Cards de Dashboard */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-green-500/10 border border-green-500/20 rounded-xl p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Entradas</p>
-                <p className="text-2xl font-bold text-green-600">
-                  +{totalEntradas} un
-                </p>
-              </div>
-              <div className="p-3 bg-green-500/20 rounded-lg">
-                <ArrowDownCircle className="w-6 h-6 text-green-600" />
-              </div>
+        {/* Cards de Dashboard - mesmo design do dashboard de pedidos */}
+        <div className="space-y-4 mb-6">
+          {/* Por tipo - clicáveis para filtrar */}
+          <div>
+            <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+              Movimentações por tipo
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3">
+              {/* Card Balanço - não clicável */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0, duration: 0.3 }}
+                className="bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className={`text-xl font-bold mb-1 ${balanco >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                      {balanco >= 0 ? "+" : ""}{balanco} un
+                    </p>
+                    <p className="text-sm font-medium text-foreground">
+                      Balanço
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Saldo líquido
+                    </p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20">
+                    <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                </div>
+              </motion.div>
+              {[
+                { tipo: "ENTRADA", label: "Entrada", Icon: ArrowDownCircle, color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-900/20" },
+                { tipo: "SAIDA", label: "Saída", Icon: ArrowUpCircle, color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-900/20" },
+                { tipo: "AJUSTE", label: "Ajuste", Icon: Settings, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/20" },
+                { tipo: "DEVOLUCAO", label: "Devolução", Icon: RotateCcw, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/20" },
+                { tipo: "PERDA", label: "Perda", Icon: AlertTriangle, color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-100 dark:bg-amber-900/20" },
+                { tipo: "TRANSFERENCIA", label: "Transferência", Icon: Truck, color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-100 dark:bg-purple-900/20" },
+              ].map(({ tipo, label, Icon, color, bgColor }, index) => {
+                const total = totaisPorTipo[tipo] ?? 0;
+                const isEntradaOuDevolucao = tipo === "ENTRADA" || tipo === "DEVOLUCAO";
+                const isSaidaPerdaTransf = tipo === "SAIDA" || tipo === "PERDA" || tipo === "TRANSFERENCIA";
+                const valorFormatado = isEntradaOuDevolucao
+                  ? `+${Math.abs(total)}`
+                  : isSaidaPerdaTransf
+                    ? `-${Math.abs(total)}`
+                    : total >= 0 ? `+${total}` : `${total}`;
+                const ativo = filtroTipo === tipo;
+                return (
+                  <motion.button
+                    key={tipo}
+                    type="button"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 + index * 0.03, duration: 0.3 }}
+                    onClick={() => {
+                      setFiltroTipo(ativo ? "Todos" : tipo);
+                      setCurrentPage(1);
+                    }}
+                    className={`flex items-start justify-between gap-2 rounded-xl border p-4 text-left transition-shadow cursor-pointer bg-card hover:shadow-md ${ativo ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xl font-bold mb-1 ${color}`}>
+                        {valorFormatado} un
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {label}
+                      </p>
+                    </div>
+                    <div className={`p-2 rounded-lg shrink-0 ${bgColor}`}>
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                  </motion.button>
+                );
+              })}
             </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-red-500/10 border border-red-500/20 rounded-xl p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Saídas</p>
-                <p className="text-2xl font-bold text-red-600">
-                  -{Math.abs(totalSaidas)} un
-                </p>
-              </div>
-              <div className="p-3 bg-red-500/20 rounded-lg">
-                <ArrowUpCircle className="w-6 h-6 text-red-600" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Balanço</p>
-                <p className={`text-2xl font-bold ${balanco >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {balanco >= 0 ? "+" : ""}{balanco} un
-                </p>
-              </div>
-              <div className="p-3 bg-blue-500/20 rounded-lg">
-                <Calendar className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </motion.div>
+          </div>
         </div>
 
         {/* Barra de Busca e Filtros */}
@@ -558,7 +594,7 @@ const Estoque = () => {
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
               <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <AlertDescription className="text-sm text-blue-800 dark:text-blue-300">
-                As movimentações são geradas automaticamente ao criar pedidos de compra ou venda.
+                As movimentações são geradas automaticamente ao criar pedidos de compra ou venda e ao cadastrar produto com estoque inicial.
               </AlertDescription>
             </Alert>
           </div>
@@ -613,9 +649,9 @@ const Estoque = () => {
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{
-                                  backgroundColor: "#EAF7F0",
-                                  color: "#1E8449",
-                                  borderColor: "#2ECC71",
+                                  backgroundColor: "#d1fae5",
+                                  color: "#059669",
+                                  borderColor: "#10b981",
                                 }}
                               >
                                 <ArrowDownCircle className="w-3 h-3" />
@@ -626,9 +662,9 @@ const Estoque = () => {
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{
-                                  backgroundColor: "#EBF3FB",
-                                  color: "#21618C",
-                                  borderColor: "#3498DB",
+                                  backgroundColor: "#dbeafe",
+                                  color: "#2563eb",
+                                  borderColor: "#3b82f6",
                                 }}
                               >
                                 <RotateCcw className="w-3 h-3" />
@@ -639,9 +675,9 @@ const Estoque = () => {
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{
-                                  backgroundColor: "#FDEDEC",
-                                  color: "#922B21",
-                                  borderColor: "#E74C3C",
+                                  backgroundColor: "#fee2e2",
+                                  color: "#dc2626",
+                                  borderColor: "#ef4444",
                                 }}
                               >
                                 <ArrowUpCircle className="w-3 h-3" />
@@ -652,9 +688,9 @@ const Estoque = () => {
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{
-                                  backgroundColor: "#FEF5E7",
-                                  color: "#9C640C",
-                                  borderColor: "#F39C12",
+                                  backgroundColor: "#fef3c7",
+                                  color: "#d97706",
+                                  borderColor: "#f59e0b",
                                 }}
                               >
                                 <AlertTriangle className="w-3 h-3" />
@@ -665,9 +701,9 @@ const Estoque = () => {
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{
-                                  backgroundColor: "#F4ECF7",
-                                  color: "#5B2C6F",
-                                  borderColor: "#9B59B6",
+                                  backgroundColor: "#ede9fe",
+                                  color: "#7c3aed",
+                                  borderColor: "#8b5cf6",
                                 }}
                               >
                                 <Truck className="w-3 h-3" />
@@ -678,9 +714,9 @@ const Estoque = () => {
                               <span 
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border"
                                 style={{
-                                  backgroundColor: "#EBF3FB",
-                                  color: "#21618C",
-                                  borderColor: "#3498DB",
+                                  backgroundColor: "#dbeafe",
+                                  color: "#2563eb",
+                                  borderColor: "#3b82f6",
                                 }}
                               >
                                 <Settings className="w-3 h-3" />
@@ -699,20 +735,22 @@ const Estoque = () => {
                         </TableCell>
                         <TableCell>
                           <span
-                            className="text-sm font-medium"
+                            className="text-sm font-semibold"
                             style={{
                               color: mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO" 
-                                ? "#1E8449" 
+                                ? "#059669" 
                                 : mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA"
-                                ? mov.tipo === "PERDA" ? "#9C640C" : mov.tipo === "TRANSFERENCIA" ? "#5B2C6F" : "#922B21"
-                                : "#21618C"
+                                ? mov.tipo === "PERDA" ? "#d97706" : mov.tipo === "TRANSFERENCIA" ? "#7c3aed" : "#dc2626"
+                                : "#2563eb"
                             }}
                           >
                             {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") 
                               ? `+${Math.abs(mov.quantidade)}` 
                               : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") 
                                 ? mov.quantidade < 0 ? mov.quantidade : `-${mov.quantidade}`
-                                : mov.quantidade}
+                                : mov.tipo === "AJUSTE"
+                                  ? (mov.quantidade >= 0 ? `+${mov.quantidade}` : String(mov.quantidade))
+                                  : mov.quantidade}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -722,7 +760,12 @@ const Estoque = () => {
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-muted-foreground">
-                            {mov.motivo || "-"}
+                            {(() => {
+                              const m = mov.motivo?.toUpperCase().replace(/\s+/g, "_") || "";
+                              if (m === "ESTOQUE_INICIAL") return "Estoque Inicial";
+                              if (m === "AJUSTE_ESTOQUE" || m === "AJUSTE_DE_ESTOQUE") return "Ajuste de Estoque";
+                              return mov.motivo || "-";
+                            })()}
                           </span>
                         </TableCell>
                       </TableRow>

@@ -1,28 +1,33 @@
-import { useState } from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { formatCurrency } from '@/lib/utils';
-import { CheckCircle2, Calendar, AlertCircle } from 'lucide-react';
 import { Parcela } from '@/hooks/useParcelasPedido';
+import { formatCurrency, normalizarStatusParcela } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { AlertCircle, Calendar, CheckCircle2, DollarSign } from 'lucide-react';
+import { useState } from 'react';
+import { DarBaixaParcelaDialog, ParcelaParaBaixa } from './DarBaixaParcelaDialog';
+import { HistoricoPagamentosParcela } from './HistoricoPagamentosParcela';
 
 interface ParcelasChecklistProps {
   parcelas: Parcela[];
   onMarcarPaga: (parcelaId: number, dataPagamento?: string, observacoes?: string) => Promise<void>;
   onDesmarcarPaga: (parcelaId: number) => Promise<void>;
+  onPagamentoRegistrado?: () => void;
+  /** Se true, usa o fluxo de POST /pagamentos com forma de pagamento e suporte a cheque */
+  usarFluxoPagamentos?: boolean;
   loading?: boolean;
 }
 
@@ -30,10 +35,14 @@ export function ParcelasChecklist({
   parcelas,
   onMarcarPaga,
   onDesmarcarPaga,
+  onPagamentoRegistrado,
+  usarFluxoPagamentos = true,
   loading = false,
 }: ParcelasChecklistProps) {
   const [dialogAberto, setDialogAberto] = useState(false);
+  const [dialogBaixaAberto, setDialogBaixaAberto] = useState(false);
   const [parcelaSelecionada, setParcelaSelecionada] = useState<Parcela | null>(null);
+  const [parcelaParaBaixa, setParcelaParaBaixa] = useState<ParcelaParaBaixa | null>(null);
   const [dataPagamento, setDataPagamento] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [processando, setProcessando] = useState(false);
@@ -47,15 +56,37 @@ export function ParcelasChecklist({
     }
   };
 
+  const isParcelaTotalmentePaga = (p: Parcela) =>
+    p.status === 'PAGA' || (p.valor_restante !== undefined && p.valor_restante <= 0);
+
+  const parcelaParaParcelaParaBaixa = (p: Parcela): ParcelaParaBaixa => {
+    const valorRestante =
+      p.valor_restante ?? (p.status === 'PAGA' ? 0 : p.valor - (p.valor_pago ?? 0));
+    const valorPago = p.valor_pago ?? (p.status === 'PAGA' ? p.valor : 0);
+    return {
+      id: p.id,
+      numero_parcela: p.numero_parcela,
+      total_parcelas: p.total_parcelas,
+      valor: p.valor,
+      valor_pago: valorPago,
+      valor_restante: valorRestante,
+      status: p.status,
+      data_vencimento: p.data_vencimento,
+    };
+  };
+
   const handleCheckboxChange = async (parcela: Parcela, checked: boolean) => {
     if (checked) {
-      // Abrir dialog para confirmar pagamento
-      setParcelaSelecionada(parcela);
-      setDataPagamento(new Date().toISOString().split('T')[0]);
-      setObservacoes('');
-      setDialogAberto(true);
+      if (usarFluxoPagamentos) {
+        setParcelaParaBaixa(parcelaParaParcelaParaBaixa(parcela));
+        setDialogBaixaAberto(true);
+      } else {
+        setParcelaSelecionada(parcela);
+        setDataPagamento(new Date().toISOString().split('T')[0]);
+        setObservacoes('');
+        setDialogAberto(true);
+      }
     } else {
-      // Desmarcar diretamente
       if (window.confirm('Deseja realmente desmarcar esta parcela como paga?')) {
         try {
           setProcessando(true);
@@ -86,12 +117,33 @@ export function ParcelasChecklist({
     }
   };
 
+  const handlePagamentoRegistrado = () => {
+    onPagamentoRegistrado?.();
+  };
+
   const getStatusBadge = (parcela: Parcela) => {
-    if (parcela.status === 'PAGA') {
+    // Normalizar status para garantir que seja válido (remover PENDENTE se existir)
+    const statusNormalizado = normalizarStatusParcela(parcela.status);
+    
+    if (isParcelaTotalmentePaga(parcela)) {
       return (
         <Badge variant="default" className="bg-green-600 hover:bg-green-700">
           <CheckCircle2 className="w-3 h-3 mr-1" />
           Paga
+        </Badge>
+      );
+    }
+    if (statusNormalizado === 'PARCIALMENTE_PAGA') {
+      return (
+        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">
+          Parcialmente paga
+        </Badge>
+      );
+    }
+    if (statusNormalizado === 'EM_COMPENSACAO') {
+      return (
+        <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">
+          Em compensação
         </Badge>
       );
     }
@@ -114,7 +166,7 @@ export function ParcelasChecklist({
     return (
       <Badge variant="secondary">
         <Calendar className="w-3 h-3 mr-1" />
-        Pendente
+        Aberta
       </Badge>
     );
   };
@@ -126,13 +178,13 @@ export function ParcelasChecklist({
           <div
             key={parcela.id}
             className={`flex items-start gap-3 p-4 border rounded-lg transition-colors ${
-              parcela.status === 'PAGA'
+              isParcelaTotalmentePaga(parcela)
                 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
                 : 'bg-card border-border'
             }`}
           >
             <Checkbox
-              checked={parcela.status === 'PAGA'}
+              checked={isParcelaTotalmentePaga(parcela)}
               onCheckedChange={(checked) =>
                 handleCheckboxChange(parcela, checked === true)
               }
@@ -146,6 +198,20 @@ export function ParcelasChecklist({
                   Parcela {parcela.numero_parcela}/{parcela.total_parcelas}
                 </span>
                 {getStatusBadge(parcela)}
+                {usarFluxoPagamentos && !isParcelaTotalmentePaga(parcela) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setParcelaParaBaixa(parcelaParaParcelaParaBaixa(parcela));
+                      setDialogBaixaAberto(true);
+                    }}
+                    disabled={loading || processando}
+                  >
+                    <DollarSign className="w-4 h-4 mr-1" />
+                    Dar baixa
+                  </Button>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -156,7 +222,7 @@ export function ParcelasChecklist({
                   <Calendar className="w-3 h-3" />
                   <strong>Vencimento:</strong> {formatarData(parcela.data_vencimento)}
                 </span>
-                {parcela.status === 'PAGA' && parcela.data_pagamento && (
+                {isParcelaTotalmentePaga(parcela) && parcela.data_pagamento && (
                   <span className="text-green-600 dark:text-green-400">
                     <strong>Paga em:</strong> {formatarData(parcela.data_pagamento)}
                   </span>
@@ -167,6 +233,16 @@ export function ParcelasChecklist({
                 <p className="text-xs text-muted-foreground mt-1">
                   {parcela.observacoes}
                 </p>
+              )}
+
+              {usarFluxoPagamentos && (
+                <div className="mt-2">
+                  <HistoricoPagamentosParcela
+                    parcelaId={parcela.id}
+                    parcelaLabel={`${parcela.numero_parcela}/${parcela.total_parcelas}`}
+                    onEstornoSucesso={onPagamentoRegistrado}
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -251,6 +327,13 @@ export function ParcelasChecklist({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DarBaixaParcelaDialog
+        open={dialogBaixaAberto}
+        onOpenChange={setDialogBaixaAberto}
+        parcela={parcelaParaBaixa}
+        onSuccess={handlePagamentoRegistrado}
+      />
     </>
   );
 }

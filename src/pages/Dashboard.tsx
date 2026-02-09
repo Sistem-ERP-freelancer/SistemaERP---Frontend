@@ -1,28 +1,27 @@
-import { motion } from "framer-motion";
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { 
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  ShoppingCart,
-  Loader2,
-  Calendar,
-  DollarSign
-} from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { estoqueService } from "@/services/estoque.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
-import { estoqueService } from "@/services/estoque.service";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import {
+    AlertTriangle,
+    Calendar,
+    DollarSign,
+    Loader2,
+    ShoppingCart,
+    TrendingDown
+} from "lucide-react";
+import { useEffect } from "react";
 
 const Dashboard = () => {
   // Buscar dados financeiros
@@ -38,25 +37,38 @@ const Dashboard = () => {
     refetchInterval: 30000,
   });
 
-  // Buscar todos os pedidos para calcular estatísticas
-  const { data: todosPedidosData } = useQuery({
-    queryKey: ['pedidos', 'todos'],
-    queryFn: async () => {
-      const response = await pedidosService.listar({ page: 1, limit: 1000 });
-      // Tratar diferentes formatos de resposta
-      if (Array.isArray(response)) {
-        return response;
-      }
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-      }
-      if ((response as any)?.pedidos && Array.isArray((response as any).pedidos)) {
-        return (response as any).pedidos;
-      }
-      return [];
-    },
+  // ✅ Buscar dashboard de pedidos para obter valor_em_aberto_venda (Total a Receber correto)
+  // Conforme CORRECAO_DASHBOARD_PRINCIPAL_TOTAL_RECEBER.md:
+  // - Usar valor_em_aberto_venda.valor do endpoint /pedidos/dashboard/resumo
+  // - Este campo considera todos os pedidos pendentes e calcula valor_total - valor_pago corretamente
+  const { data: dashboardPedidos, isLoading: loadingDashboardPedidos } = useQuery({
+    queryKey: ['dashboard', 'pedidos'],
+    queryFn: () => pedidosService.obterDashboard(),
     refetchInterval: 30000,
   });
+
+  // ✅ Buscar total recebido (valores efetivamente pagos/baixados)
+  // Conforme GUIA_FRONTEND_TOTAL_RECEBIDO.md:
+  // - Endpoint: /contas-financeiras/dashboard/total-recebido
+  // - Retorna apenas valores realmente pagos, considerando:
+  //   * Baixas de duplicatas confirmadas (não estornadas)
+  //   * Parcelas quitadas/parcialmente pagas SEM duplicatas vinculadas (pagamento direto)
+  //   * Duplicatas quitadas SEM baixas registradas (caso raro)
+  //   * Pagamentos diretos de contas financeiras sem pedido
+  // - Evita duplicação: se parcela foi paga via duplicatas, conta apenas nas baixas
+  // - Estornos são subtraídos automaticamente
+  const { data: totalRecebidoData, isLoading: loadingTotalRecebido, isError: isErrorTotalRecebido, refetch: refetchTotalRecebido } = useQuery({
+    queryKey: ['dashboard', 'total-recebido'],
+    queryFn: () => financeiroService.getTotalRecebido(),
+    refetchInterval: 30000,
+    retry: (failureCount, error: any) => {
+      if (error?.response?.status === 500) return false;
+      return failureCount < 2;
+    },
+  });
+
+  // Removido: não precisamos mais buscar todos os pedidos para calcular estatísticas
+  // O backend já retorna os valores corretos considerando pagamentos parciais
 
   // Buscar pedidos recentes (vendas)
   const { data: pedidosData, isLoading: loadingPedidos } = useQuery({
@@ -132,36 +144,19 @@ const Dashboard = () => {
   const totalVencidas = (parseValor(dashboardReceber?.vencidas) || 0) + (parseValor(dashboardPagar?.vencidas) || 0);
   const valorTotalVencidas = (parseValor(dashboardReceber?.valor_total_vencidas) || 0) + (parseValor(dashboardPagar?.valor_total_vencidas) || 0);
 
-  // Calcular total a receber baseado em pedidos de VENDA e contas financeiras
-  const todosPedidos = Array.isArray(todosPedidosData) ? todosPedidosData : [];
-  const totalReceberPedidos = todosPedidos
-    .filter(p => p && p.tipo === 'VENDA' && p.status !== 'CANCELADO')
-    .reduce((sum, p) => {
-      const valor = parseValor(p.valor_total);
-      return sum + valor;
-    }, 0);
+  // ✅ Total a Receber: usar valor_em_aberto_venda.valor do dashboard de pedidos
+  // Conforme CORRECAO_DASHBOARD_PRINCIPAL_TOTAL_RECEBER.md:
+  // - valor_em_aberto_venda.valor considera todos os pedidos pendentes
+  // - Calcula valor_total - valor_pago corretamente
+  // - Inclui pedidos mesmo sem contas financeiras criadas
+  // NÃO usar valor_total_pendente do dashboardReceber (retorna R$ 4,00 - incorreto)
+  const totalReceber = parseValor(dashboardPedidos?.valor_em_aberto_venda?.valor) || 0;
   
-  // Usar o maior valor entre contas financeiras e pedidos
-  const totalReceberDashboard = parseValor(dashboardReceber?.total);
-  const totalReceber = Math.max(
-    totalReceberDashboard,
-    totalReceberPedidos
-  );
+  // Total a Pagar: usar valor_total_pendente do dashboard de contas a pagar
+  const totalPagar = parseValor(dashboardPagar?.valor_total_pendente) || parseValor(dashboardPagar?.total) || 0;
 
-  // Calcular total a pagar baseado em pedidos de COMPRA e contas financeiras
-  const totalPagarPedidos = todosPedidos
-    .filter(p => p && p.tipo === 'COMPRA' && p.status !== 'CANCELADO')
-    .reduce((sum, p) => {
-      const valor = parseValor(p.valor_total);
-      return sum + valor;
-    }, 0);
-  
-  // Usar o maior valor entre contas financeiras e pedidos
-  const totalPagarDashboard = parseValor(dashboardPagar?.total);
-  const totalPagar = Math.max(
-    totalPagarDashboard,
-    totalPagarPedidos
-  );
+  // ✅ Total Recebido: somente GET /dashboard/total-recebido; em erro exibir 0 e mensagem amigável
+  const totalRecebido = isErrorTotalRecebido ? 0 : (parseValor(totalRecebidoData?.totalRecebido) ?? 0);
 
   // Preparar estatísticas
   const stats = [
@@ -184,16 +179,16 @@ const Dashboard = () => {
       bgColor: "bg-destructive/10",
       isLoading: loadingProdutos
     },
-    { 
-      label: "Total a Receber", 
-      value: formatCurrency(totalReceber), 
-      icon: TrendingUp,
-      trend: null,
-      trendUp: true,
-      color: "text-cyan",
-      bgColor: "bg-cyan/10",
-      isLoading: loadingReceber
-    },
+      {
+        label: "Total Recebido",
+        value: formatCurrency(totalRecebido),
+        icon: DollarSign,
+        trend: isErrorTotalRecebido ? "Não foi possível carregar. Tente novamente." : null,
+        trendUp: !isErrorTotalRecebido,
+        color: "text-green-600",
+        bgColor: "bg-green-100",
+        isLoading: loadingTotalRecebido
+      },
     { 
       label: "Total a Pagar", 
       value: formatCurrency(totalPagar), 
@@ -259,7 +254,7 @@ const Dashboard = () => {
       estoqueBaixoData,
       contasVencidasData,
     });
-  }, [contasVencidas, pedidosRecentes, produtosEstoqueBaixo, recentSales, lowStockProducts, totalReceber, totalPagar, dashboardReceber, dashboardPagar, pedidosData, estoqueBaixoData, contasVencidasData]);
+  }, [contasVencidas, pedidosRecentes, produtosEstoqueBaixo, recentSales, lowStockProducts, totalReceber, totalRecebido, totalPagar, dashboardReceber, dashboardPagar, dashboardPedidos, totalRecebidoData, pedidosData, estoqueBaixoData, contasVencidasData]);
 
   return (
     <AppLayout>

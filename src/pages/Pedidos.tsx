@@ -1,34 +1,33 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Calendar, XCircle, Loader2, Download } from 'lucide-react';
+import AppLayout from '@/components/layout/AppLayout';
+import OrderForm from '@/components/orders/OrderForm';
+import { OrderList } from '@/components/orders/OrderList';
+import { OrderStats } from '@/components/orders/OrderStats';
+import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AppLayout from '@/components/layout/AppLayout';
-import { useOrders } from '@/hooks/useOrders';
-import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
-import { OrderStats } from '@/components/orders/OrderStats';
-import { OrderList } from '@/components/orders/OrderList';
-import { OrderForm } from '@/components/orders/OrderForm';
-import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
-import { CreatePedidoDto } from '@/types/pedido';
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
 } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { StatusPedido, TipoPedido } from '@/types/pedido';
-import { normalizeCurrency, formatCurrency } from '@/lib/utils';
+import { useOrders } from '@/hooks/useOrders';
+import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
+import { formatCurrency, normalizeCurrency } from '@/lib/utils';
+import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
+import { Calendar, Download, Loader2, Plus, Search, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function Pedidos() {
   const {
@@ -389,6 +388,10 @@ export default function Pedidos() {
           isOpen={isViewDialogOpen}
           onClose={closeViewDialog}
           order={selectedOrder}
+          onRequestCancel={(order) => {
+            closeViewDialog();
+            openCancelDialog(order);
+          }}
         />
 
         {/* Modal de Confirmação de Cancelamento */}
@@ -414,7 +417,7 @@ export default function Pedidos() {
 
             <div className="py-4">
               <p className="text-sm text-muted-foreground">
-                Deseja realmente cancelar este pedido?
+                Deseja realmente cancelar este pedido? Ele sairá das Contas a Receber e Contas a Pagar.
               </p>
               {orderToCancel && (
                 <div className="mt-2 space-y-1">

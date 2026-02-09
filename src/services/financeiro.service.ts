@@ -15,7 +15,7 @@ export interface ContaFinanceira {
   data_vencimento: string;
   data_pagamento?: string;
   status: 'PENDENTE' | 'PAGO_PARCIAL' | 'PAGO_TOTAL' | 'VENCIDO' | 'CANCELADO';
-  forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA';
+  forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
   numero_parcela?: number;
   total_parcelas?: number;
   parcela_texto?: string;
@@ -38,7 +38,7 @@ export interface CreateContaFinanceiraDto {
   data_emissao: string;
   data_vencimento: string;
   data_pagamento?: string;
-  forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA';
+  forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
   numero_parcela?: number;
   total_parcelas?: number;
   parcela_texto?: string;
@@ -50,6 +50,58 @@ export interface ContasFinanceirasResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+/** Resposta do endpoint GET /contas-financeiras/:id/detalhe (modal Visualizar) */
+export interface ContaFinanceiraDetalhe {
+  id: number;
+  numero_conta: string;
+  tipo: string;
+  descricao: string;
+  descricao_parcelas_quitadas: string;
+  valor_total_pedido: number;
+  valor_pago: number;
+  valor_em_aberto: number;
+  status: string;
+  status_original: string;
+  relacionamentos: {
+    cliente_nome: string | null;
+    fornecedor_nome: string | null;
+    pedido_numero: string | null;
+    nome_produto: string | null;
+  };
+  datas: {
+    data_criacao: string | null;
+    data_vencimento: string | null;
+    data_pagamento: string | null;
+  };
+  pagamento: {
+    forma_pagamento: string | null;
+  };
+  parcelas: {
+    numero_parcela_atual: number | null;
+    total_parcelas: number | null;
+    texto_parcelas_quitadas: string | null;
+  };
+  dias_ate_vencimento?: number;
+  status_vencimento?: string;
+  proximidade_vencimento?: string;
+}
+
+export interface ContaFinanceiraAgrupada {
+  id: number;
+  pedido_id: number | null;
+  cliente_nome: string;
+  descricao: string;
+  tipo: 'RECEBER' | 'PAGAR';
+  categoria: string;
+  valor_total: number;
+  status: string;
+}
+
+export interface ContasAgrupadasResponse {
+  itens: ContaFinanceiraAgrupada[];
+  total: number;
 }
 
 export interface DashboardFinanceiro {
@@ -70,7 +122,52 @@ export interface DashboardFinanceiro {
   valor_total_pago?: number;
 }
 
+export interface ResumoFinanceiro {
+  contas_receber: {
+    total: number;
+    pendentes: number;
+    pagas: number;
+    vencidas: number;
+    valor_total_receber: number;   // Valor original total (todas as contas)
+    valor_total_recebido: number;   // ✅ Valor realmente recebido (via baixas) - total geral
+    valor_total_pendente: number;  // ✅ Valor realmente em aberto
+    receita_mes: number;           // ⭐ NOVO: Receita do mês atual (valor total a receber do mês)
+    valor_pago_mes: number;        // ⭐ NOVO: Valor pago no mês atual (via baixas de duplicatas e parcelas)
+  };
+  contas_pagar: {
+    total: number;
+    pendentes: number;
+    pagas: number;
+    vencidas: number;
+    valor_total_pagar: number;     // Valor original total
+    valor_total_pago: number;      // ✅ Valor realmente pago - total geral
+    valor_total_pendente: number;  // ✅ Valor realmente em aberto
+    despesa_mes: number;            // ⭐ NOVO: Despesa do mês atual (valor total a pagar do mês)
+    valor_pago_mes: number;        // ⭐ NOVO: Valor pago no mês atual
+  };
+}
+
 class FinanceiroService {
+  async listarAgrupado(params?: {
+    page?: number;
+    limit?: number;
+    tipo?: string;
+    status?: string;
+    cliente_id?: number;
+    fornecedor_id?: number;
+  }): Promise<ContasAgrupadasResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.tipo) queryParams.append('tipo', params.tipo);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+    if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+
+    const query = queryParams.toString();
+    return apiClient.get<ContasAgrupadasResponse>(`/contas-financeiras/agrupado${query ? `?${query}` : ''}`);
+  }
+
   async listar(params?: {
     page?: number;
     limit?: number;
@@ -114,6 +211,11 @@ class FinanceiroService {
 
   async buscarPorId(id: number): Promise<ContaFinanceira> {
     return apiClient.get<ContaFinanceira>(`/contas-financeiras/${id}`);
+  }
+
+  /** Detalhe enriquecido para o modal Visualizar (não usar para edição) */
+  async buscarDetalhePorId(id: number): Promise<ContaFinanceiraDetalhe> {
+    return apiClient.get<ContaFinanceiraDetalhe>(`/contas-financeiras/${id}/detalhe`);
   }
 
   async criar(data: CreateContaFinanceiraDto): Promise<ContaFinanceira> {
@@ -247,8 +349,28 @@ class FinanceiroService {
     return apiClient.get<DashboardFinanceiro>('/contas-financeiras/dashboard/pagar');
   }
 
-  async getDashboardResumo(): Promise<any> {
-    return apiClient.get<any>('/contas-financeiras/dashboard/resumo');
+  async getDashboardResumo(): Promise<ResumoFinanceiro> {
+    return apiClient.get<ResumoFinanceiro>('/contas-financeiras/dashboard/resumo');
+  }
+
+  async getTotalRecebido(): Promise<{ totalRecebido: number }> {
+    const response = await apiClient.get<{ totalRecebido: number }>('/contas-financeiras/dashboard/total-recebido');
+    
+    // Debug: log para verificar resposta do backend
+    if (import.meta.env.DEV) {
+      console.log('[FinanceiroService] getTotalRecebido resposta:', {
+        response,
+        totalRecebido: response?.totalRecebido,
+        tipo: typeof response?.totalRecebido,
+        aviso: response?.totalRecebido === 0 
+          ? '⚠️ Backend retornou 0. Verificar se há baixas de duplicatas registradas.' 
+          : response?.totalRecebido === undefined
+          ? '⚠️ Campo totalRecebido não encontrado na resposta'
+          : '✅ Valor recebido corretamente',
+      });
+    }
+    
+    return response;
   }
 }
 

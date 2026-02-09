@@ -1,26 +1,26 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Eye, Edit, Trash2, ShoppingCart, Loader2 } from 'lucide-react';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { normalizeCurrency } from '@/lib/utils';
 import { Pedido, StatusPedido } from '@/types/pedido';
-import { StatusBadge } from './StatusBadge';
-import { TypeBadge } from './TypeBadge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { normalizeCurrency } from '@/lib/utils';
+import { Edit, Eye, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
+import { StatusBadge } from './StatusBadge';
+import { TypeBadge } from './TypeBadge';
 
 interface OrderListProps {
   orders: Pedido[];
@@ -197,7 +197,7 @@ export function OrderList({
                 )}
               </TableCell>
               <TableCell>
-                <span className="font-medium">{formatCurrency(normalizeCurrency(order.valor_total, true))}</span>
+                <span className="font-medium">{formatCurrency(normalizeCurrency(order.valor_total, false))}</span>
               </TableCell>
               <TableCell>
                 <span className="text-sm text-muted-foreground">{formatDate(order.data_pedido)}</span>

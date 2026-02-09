@@ -1,70 +1,65 @@
-import { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
-import { 
-  DollarSign, 
-  TrendingDown,
-  Wallet,
-  CreditCard,
-  Search,
-  Eye,
-  Edit,
-  Trash2,
-  FileText,
-  Calendar,
-  Building2,
-  ShoppingCart,
-  Loader2,
-  Info,
-  Receipt,
-  MoreVertical,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import AppLayout from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious
 } from "@/components/ui/pagination";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { financeiroService, CreateContaFinanceiraDto } from "@/services/financeiro.service";
-import { fornecedoresService, Fornecedor } from "@/services/fornecedores.service";
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
+import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import {
+    Calendar,
+    CreditCard,
+    DollarSign,
+    Edit,
+    Eye,
+    FileText,
+    Info,
+    Loader2,
+    MoreVertical,
+    Receipt,
+    Search,
+    ShoppingCart
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 const ContasAPagar = () => {
   const [activeTab, setActiveTab] = useState("Todos");
@@ -147,27 +142,6 @@ const ContasAPagar = () => {
     refetchInterval: 30000,
     retry: false,
   });
-
-  // Buscar todas as contas a pagar para calcular estatísticas
-  const { data: contasDashboardData } = useQuery({
-    queryKey: ["contas-financeiras", "pagar", "dashboard"],
-    queryFn: async () => {
-      try {
-        const response = await financeiroService.listar({
-          tipo: "PAGAR",
-          page: 1,
-          limit: 1000,
-        });
-        return response.data || [];
-      } catch (error) {
-        console.warn("API de contas financeiras não disponível:", error);
-        return [];
-      }
-    },
-    retry: false,
-  });
-
-  const contasDashboard = contasDashboardData || [];
 
   // Validar parâmetros de paginação
   const validarParametrosPaginação = (page: number, limit: number): boolean => {
@@ -361,72 +335,50 @@ const ContasAPagar = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    // Total de contas a pagar (valor restante)
-    const contasPagarPendentes = contasDashboard.filter(
-      c => c && c.tipo === "PAGAR" && (c.status === "PENDENTE" || c.status === "VENCIDO" || c.status === "PAGO_PARCIAL")
-    );
-    const totalPagarDashboard = parseValor(dashboardPagar?.total);
-    const totalPagarContas = contasPagarPendentes.reduce((sum, c) => {
-      const valor = parseValor(c.valor_restante);
-      return sum + valor;
-    }, 0);
-    const totalPagar = totalPagarDashboard > 0 ? totalPagarDashboard : totalPagarContas;
-
-    // Contar contas vencidas (por status ou por data)
-    const contasVencidas = contasDashboard.filter(c => isContaVencida(c));
-    const totalVencidas = dashboardPagar?.vencidas !== undefined 
-      ? dashboardPagar.vencidas 
-      : contasVencidas.length;
-
-    // Contar contas vencendo hoje
-    const contasVencendoHoje = contasDashboard.filter(c => isContaVencendoHoje(c));
-    const totalVencendoHoje = dashboardPagar?.vencendo_hoje !== undefined
-      ? dashboardPagar.vencendo_hoje
-      : contasVencendoHoje.length;
-
-    // Contar contas vencendo este mês
-    const contasVencendoEsteMes = contasDashboard.filter(c => isContaVencendoEsteMes(c));
-    const totalVencendoEsteMes = dashboardPagar?.vencendo_este_mes !== undefined
-      ? dashboardPagar.vencendo_este_mes
-      : contasVencendoEsteMes.length;
+    // Conforme guia: usar somente GET /dashboard/pagar; quando total === 0, exibir 0 em todos os cards
+    const totalPagar = parseValor(dashboardPagar?.valor_total_pendente) ?? 0;
+    const totalVencidas = Number(dashboardPagar?.vencidas) ?? 0;
+    const totalVencendoHoje = Number(dashboardPagar?.vencendo_hoje) ?? 0;
+    const totalVencendoEsteMes = Number(dashboardPagar?.vencendo_este_mes) ?? 0;
+    const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
-      { 
-        label: "Total a Pagar", 
-        value: Math.round(totalPagar).toLocaleString('pt-BR'), 
-        icon: DollarSign, 
-        trend: null, 
-        trendUp: false, 
-        color: "text-orange-600", 
-        bgColor: "bg-orange-100" 
+      {
+        label: "Total a Pagar",
+        value: formatarMoedaCard(totalPagar),
+        icon: DollarSign,
+        trend: null,
+        trendUp: false,
+        color: "text-orange-600",
+        bgColor: "bg-orange-100"
       },
-      { 
-        label: "Vencidas", 
-        value: totalVencidas.toString(), 
-        icon: Calendar, 
-        trend: null, 
-        trendUp: false, 
-        color: "text-red-600", 
-        bgColor: "bg-red-100" 
+      {
+        label: "Vencidas",
+        value: totalVencidas.toString(),
+        icon: Calendar,
+        trend: null,
+        trendUp: false,
+        color: "text-red-600",
+        bgColor: "bg-red-100"
       },
-      { 
-        label: "Vencendo Hoje", 
-        value: totalVencendoHoje.toString(), 
-        icon: Calendar, 
-        trend: null, 
-        color: "text-amber-600", 
-        bgColor: "bg-amber-100" 
+      {
+        label: "Vencendo Hoje",
+        value: totalVencendoHoje.toString(),
+        icon: Calendar,
+        trend: null,
+        color: "text-amber-600",
+        bgColor: "bg-amber-100"
       },
-      { 
-        label: "Vencendo Este Mês", 
-        value: totalVencendoEsteMes.toString(), 
-        icon: Calendar, 
-        trend: null, 
-        color: "text-blue-600", 
-        bgColor: "bg-blue-100" 
+      {
+        label: "Vencendo Este Mês",
+        value: totalVencendoEsteMes.toString(),
+        icon: Calendar,
+        trend: null,
+        color: "text-blue-600",
+        bgColor: "bg-blue-100"
       },
     ];
-  }, [contasDashboard, dashboardPagar]);
+  }, [dashboardPagar]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -447,6 +399,7 @@ const ContasAPagar = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] });
       toast.success("Conta a pagar registrada com sucesso!");
       setDialogOpen(false);
       setNewTransacao({
@@ -471,6 +424,7 @@ const ContasAPagar = () => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
       queryClient.invalidateQueries({ queryKey: ["conta-financeira", selectedContaId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] });
       toast.success("Conta atualizada com sucesso!");
       setEditDialogOpen(false);
       setSelectedContaId(null);
@@ -506,6 +460,7 @@ const ContasAPagar = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] });
       toast.success("Status atualizado com sucesso!");
       setEditingStatusId(null);
     },
@@ -1151,6 +1106,7 @@ const ContasAPagar = () => {
                         <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
                         <SelectItem value="BOLETO">Boleto</SelectItem>
                         <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                        <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1339,7 +1295,7 @@ const ContasAPagar = () => {
                   <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
-                      <p>Nenhuma conta a pagar encontrada</p>
+                      <p>{dashboardPagar?.total === 0 ? "Nenhuma conta a pagar em aberto" : "Nenhuma conta a pagar encontrada"}</p>
                     </div>
                   </TableCell>
                 </TableRow>

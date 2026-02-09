@@ -1,11 +1,11 @@
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Transportadora } from '@/types/carrier';
-import { Eye, Building2, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
+import { Transportadora } from '@/types/carrier';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Building2, Calendar, CheckCircle, Eye, FileText, Mail, MapPin, Phone, User, XCircle } from 'lucide-react';
 
 interface CarrierViewDialogProps {
   isOpen: boolean;
@@ -91,7 +91,7 @@ export function CarrierViewDialog({ isOpen, onClose, carrier }: CarrierViewDialo
           <Separator />
 
           {/* Contato */}
-          {(carrier.email || carrier.telefone) && (
+          {(carrier.contato || carrier.email || carrier.telefone) && (
             <>
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
@@ -107,6 +107,15 @@ export function CarrierViewDialog({ isOpen, onClose, carrier }: CarrierViewDialo
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pl-12">
+                  {carrier.contato && (
+                    <div>
+                      <Label className="text-muted-foreground flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Nome do contato
+                      </Label>
+                      <p className="font-medium">{carrier.contato}</p>
+                    </div>
+                  )}
                   {carrier.email && (
                     <div>
                       <Label className="text-muted-foreground flex items-center gap-2">

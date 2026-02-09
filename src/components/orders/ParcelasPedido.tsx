@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, Receipt, ChevronDown, ChevronUp } from 'lucide-react';
 import { useParcelasPedido } from '@/hooks/useParcelasPedido';
-import { ParcelasResumo } from './ParcelasResumo';
+import { ChevronDown, ChevronUp, Loader2, Receipt } from 'lucide-react';
+import { useState } from 'react';
 import { ParcelasChecklist } from './ParcelasChecklist';
+import { ParcelasResumo } from './ParcelasResumo';
 
 interface ParcelasPedidoProps {
   pedidoId: number | null;
@@ -20,6 +20,7 @@ export function ParcelasPedido({ pedidoId }: ParcelasPedidoProps) {
     loading,
     error,
     eParcelado,
+    carregarParcelas,
     marcarParcelaPaga,
     desmarcarParcelaPaga,
   } = useParcelasPedido(pedidoId);
@@ -105,6 +106,8 @@ export function ParcelasPedido({ pedidoId }: ParcelasPedidoProps) {
                 parcelas={parcelas}
                 onMarcarPaga={marcarParcelaPaga}
                 onDesmarcarPaga={desmarcarParcelaPaga}
+                onPagamentoRegistrado={() => carregarParcelas(true)}
+                usarFluxoPagamentos={true}
                 loading={loading}
               />
             ) : (

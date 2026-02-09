@@ -9,6 +9,7 @@ export enum FormaPagamento {
   CARTAO_DEBITO = 'CARTAO_DEBITO',
   BOLETO = 'BOLETO',
   TRANSFERENCIA = 'TRANSFERENCIA',
+  CHEQUE = 'CHEQUE',
 }
 
 export interface ParcelaPagamento {

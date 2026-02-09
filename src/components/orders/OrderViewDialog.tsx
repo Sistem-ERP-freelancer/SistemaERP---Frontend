@@ -1,55 +1,61 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
+import { formatCurrency, normalizeCurrency, normalizeQuantity } from '@/lib/utils';
+import { cleanDocument, formatCNPJ, formatCPF } from '@/lib/validators';
 import { Pedido } from '@/types/pedido';
-import { 
-  ShoppingCart, 
-  Package, 
-  Calendar, 
-  DollarSign, 
-  Truck, 
-  FileText,
-  User,
-  Building2,
-  Info,
-  Edit,
-} from 'lucide-react';
-import { StatusBadge } from './StatusBadge';
-import { TypeBadge } from './TypeBadge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { formatCurrency, normalizeCurrency, normalizeQuantity } from '@/lib/utils';
-import { formatCPF, formatCNPJ, cleanDocument } from '@/lib/validators';
-import { ParcelasPedido } from './ParcelasPedido';
-import { AtualizarDataVencimento } from './AtualizarDataVencimento';
+import {
+    Building2,
+    Calendar,
+    DollarSign,
+    Edit,
+    FileText,
+    Info,
+    Package,
+    ShoppingCart,
+    Truck,
+    User,
+    XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
+import { AlterarCondicaoPagamento } from './AlterarCondicaoPagamento';
+import { AtualizarDataVencimento } from './AtualizarDataVencimento';
+import { ParcelasPedido } from './ParcelasPedido';
+import { StatusBadge } from './StatusBadge';
+import { TypeBadge } from './TypeBadge';
 
 interface OrderViewDialogProps {
   isOpen: boolean;
   onClose: () => void;
   order: Pedido | null;
+  /** Ao clicar em "Cancelar pedido", fecha o dialog e abre o fluxo de confirmação de cancelamento. */
+  onRequestCancel?: (order: Pedido) => void;
 }
 
 export function OrderViewDialog({
   isOpen,
   onClose,
   order,
+  onRequestCancel,
 }: OrderViewDialogProps) {
   const [dialogDataVencimentoAberto, setDialogDataVencimentoAberto] = useState(false);
+  const [dialogCondicaoAberto, setDialogCondicaoAberto] = useState(false);
 
   if (!order) return null;
 
@@ -98,6 +104,7 @@ export function OrderViewDialog({
       CARTAO_DEBITO: 'Cartão de Débito',
       BOLETO: 'Boleto',
       TRANSFERENCIA: 'Transferência',
+      CHEQUE: 'Cheque',
     };
     return forma ? formas[forma] || forma : '--';
   };
@@ -328,12 +335,25 @@ export function OrderViewDialog({
                   <div className="text-sm">{getFormaPagamentoLabel(order.forma_pagamento)}</div>
                 </div>
               )}
-              {order.condicao_pagamento && (
-                <div className="space-y-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
                   <Label className="text-muted-foreground">Condição de Pagamento</Label>
-                  <div className="text-sm">{order.condicao_pagamento}</div>
+                  {order.status !== 'CANCELADO' && order.status !== 'CONCLUIDO' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDialogCondicaoAberto(true)}
+                      className="h-7 text-xs"
+                    >
+                      <Edit className="w-3 h-3 mr-1" />
+                      {order.condicao_pagamento?.toLowerCase().includes('vista') || !order.condicao_pagamento
+                        ? 'Parcelar'
+                        : 'Alterar condição'}
+                    </Button>
+                  )}
                 </div>
-              )}
+                <div className="text-sm">{order.condicao_pagamento || '—'}</div>
+              </div>
               {(order.data_vencimento_base || (order as any).data_vencimento) && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -388,8 +408,8 @@ export function OrderViewDialog({
                     order.itens.map((item, index) => {
                       // Normalizar valores monetários recebidos do backend
                       const quantidade = normalizeQuantity(item.quantidade);
-                      const precoUnitario = normalizeCurrency(item.preco_unitario, true);
-                      const desconto = item.desconto ? normalizeCurrency(item.desconto, true) : 0;
+                      const precoUnitario = normalizeCurrency(item.preco_unitario, false);
+                      const desconto = item.desconto ? normalizeCurrency(item.desconto, false) : 0;
                       const subtotal = Math.max(0, quantidade * precoUnitario - desconto);
                       return (
                         <TableRow key={index}>
@@ -449,7 +469,7 @@ export function OrderViewDialog({
             <div className="space-y-3">
               <div className="flex justify-between">
                 <Label className="text-muted-foreground">Subtotal</Label>
-                <div className="font-medium">{formatCurrency(normalizeCurrency(order.subtotal, true))}</div>
+                <div className="font-medium">{formatCurrency(normalizeCurrency(order.subtotal, false))}</div>
               </div>
               {order.desconto_valor > 0 && (
                 <div className="flex justify-between">
@@ -457,31 +477,43 @@ export function OrderViewDialog({
                     Desconto {order.desconto_percentual > 0 && `(${order.desconto_percentual.toFixed(2)}%)`}
                   </Label>
                   <div className="font-medium text-red-600 dark:text-red-400">
-                    -{formatCurrency(normalizeCurrency(order.desconto_valor, true))}
+                    -{formatCurrency(normalizeCurrency(order.desconto_valor, false))}
                   </div>
                 </div>
               )}
               {order.frete > 0 && (
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Frete</Label>
-                  <div className="font-medium">{formatCurrency(normalizeCurrency(order.frete, true))}</div>
+                  <div className="font-medium">{formatCurrency(normalizeCurrency(order.frete, false))}</div>
                 </div>
               )}
               {order.outras_taxas > 0 && (
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Outras Taxas</Label>
-                  <div className="font-medium">{formatCurrency(normalizeCurrency(order.outras_taxas, true))}</div>
+                  <div className="font-medium">{formatCurrency(normalizeCurrency(order.outras_taxas, false))}</div>
                 </div>
               )}
               <div className="border-t pt-3 flex justify-between">
                 <Label className="text-lg font-semibold">Total</Label>
-                <div className="text-lg font-bold">{formatCurrency(normalizeCurrency(order.valor_total, true))}</div>
+                <div className="text-lg font-bold">{formatCurrency(normalizeCurrency(order.valor_total, false))}</div>
               </div>
             </div>
           </div>
 
-          {/* Parcelas do Pedido */}
-          <ParcelasPedido pedidoId={order.id} />
+          {/* Parcelas do Pedido – key para recarregar ao alterar condição */}
+          <ParcelasPedido
+            key={`parcelas-${order.id}-${order.condicao_pagamento ?? ''}-${(order as any).updated_at ?? ''}`}
+            pedidoId={order.id}
+          />
+
+          <AlterarCondicaoPagamento
+            pedidoId={order.id}
+            condicaoAtual={order.condicao_pagamento}
+            dataVencimentoBaseAtual={order.data_vencimento_base ?? (order as any).data_vencimento}
+            dataPedido={order.data_pedido}
+            open={dialogCondicaoAberto}
+            onClose={() => setDialogCondicaoAberto(false)}
+          />
 
           {/* Observações */}
           {(order.observacoes_internas || order.observacoes_cliente) && (
@@ -535,6 +567,23 @@ export function OrderViewDialog({
             </div>
           )}
         </div>
+
+        {/* Ação: Cancelar pedido (sai das Contas a Receber / Contas a Pagar) */}
+        {order.status !== 'CANCELADO' && onRequestCancel && (
+          <div className="flex justify-end border-t pt-4">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                onClose();
+                onRequestCancel(order);
+              }}
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Cancelar pedido
+            </Button>
+          </div>
+        )}
 
         {/* Dialog de Atualização de Data de Vencimento */}
         {order && (

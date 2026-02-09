@@ -1,33 +1,49 @@
-import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectSeparator,
+    SelectTrigger,
+    SelectValue,
 } from '@/components/ui/select';
-import {
-  Pedido,
-  CreatePedidoDto,
-  TipoPedido,
-  FormaPagamento,
-} from '@/types/pedido';
-import { Loader2, ShoppingCart, Package, Calendar, DollarSign, Truck, FileText, Plus, Trash2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency } from '@/lib/utils';
-import { Cliente } from '@/services/clientes.service';
+import { Cliente, clientesService } from '@/services/clientes.service';
 import { Fornecedor } from '@/services/fornecedores.service';
-import { Produto } from '@/services/produtos.service';
+import { Produto, produtosService } from '@/services/produtos.service';
+import { CondicaoPagamento } from '@/shared/types/condicao-pagamento.types';
+import {
+    CreatePedidoDto,
+    FormaPagamento,
+    Pedido,
+    TipoPedido,
+} from '@/types/pedido';
+import { useQuery } from '@tanstack/react-query';
+import { Download, Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+
+/** Evita reset do form quando order vira undefined ao fechar após salvar (edição). */
+function usePrevious<T>(value: T): T | undefined {
+  const ref = useRef<T>();
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return ref.current;
+}
 
 interface OrderFormProps {
   isOpen: boolean;
@@ -68,7 +84,11 @@ export function OrderForm({
   );
   const [dataEntregaPrevista, setDataEntregaPrevista] = useState<string>('');
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | undefined>(undefined);
+  const [quantidadeParcelas, setQuantidadeParcelas] = useState<number | ''>('');
+  const [queroParcelarDinheiroPix, setQueroParcelarDinheiroPix] = useState(false);
   const [condicaoPagamento, setCondicaoPagamento] = useState<string>('');
+  const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
+  const [condicaoPagamentoId, setCondicaoPagamentoId] = useState<number | string>('');
   const [dataVencimento, setDataVencimento] = useState<string>('');
   const [prazoEntregaDias, setPrazoEntregaDias] = useState<number | undefined>(undefined);
   const [frete, setFrete] = useState<number | ''>('');
@@ -79,50 +99,188 @@ export function OrderForm({
     { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' },
   ]);
 
-  // Preencher formulário quando order for carregado
+  // Buscar dados do cliente para pedido (GET /clientes/:id/dados-pedido) conforme guia
+  const { data: dadosClientePedido, refetch: refetchDadosPedido, isLoading: isLoadingDadosPedido } = useQuery({
+    queryKey: ['clientes', clienteId, 'dados-pedido'],
+    queryFn: () => clientesService.buscarDadosParaPedido(clienteId!),
+    enabled: !!clienteId && tipo === 'VENDA' && isOpen,
+  });
+
+  const { data: limiteCredito } = useQuery({
+    queryKey: ['clientes', clienteId, 'limite-credito'],
+    queryFn: () => clientesService.buscarLimiteCredito(clienteId!),
+    enabled: !!clienteId && tipo === 'VENDA' && isOpen,
+  });
+
+  // Produtos do fornecedor (pedido de COMPRA): exibir apenas produtos vinculados ao fornecedor selecionado
+  const {
+    data: produtosPorFornecedor = [],
+    isLoading: isLoadingProdutosFornecedor,
+  } = useQuery({
+    queryKey: ['produtos', 'fornecedor', fornecedorId],
+    queryFn: () => produtosService.buscarPorFornecedor(fornecedorId!),
+    enabled: tipo === 'COMPRA' && !!fornecedorId && isOpen,
+  });
+
+  const produtosParaExibir =
+    tipo === 'COMPRA' && fornecedorId
+      ? produtosPorFornecedor
+      : produtos;
+
+  const produtoSelectDesabilitado = tipo === 'COMPRA' && !fornecedorId;
+  const produtoSelectPlaceholder =
+    tipo === 'COMPRA' && !fornecedorId
+      ? 'Selecione o fornecedor primeiro'
+      : 'Selecione um produto';
+
+  // Ao trocar o fornecedor em pedido de COMPRA, limpar seleção de produto nos itens
+  const prevFornecedorIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
+    if (tipo !== 'COMPRA') return;
+    if (prevFornecedorIdRef.current !== undefined && prevFornecedorIdRef.current !== fornecedorId) {
+      setItens((prev) => prev.map((item) => ({ ...item, produto_id: 0 })));
+    }
+    prevFornecedorIdRef.current = fornecedorId;
+  }, [tipo, fornecedorId]);
+
+  // Preencher condicoesPagamento e, em edição, selecionar condição que corresponda ao pedido
+  useEffect(() => {
+    if (!dadosClientePedido || tipo !== 'VENDA' || !clienteId) return;
+    const { condicoes_pagamento } = dadosClientePedido;
+    setCondicoesPagamento(condicoes_pagamento || []);
+    if (order) {
+      const match = (condicoes_pagamento || []).find(
+        (c: CondicaoPagamento) => c.descricao === order.condicao_pagamento
+      );
+      if (match) setCondicaoPagamentoId(match.id?.toString() ?? match.descricao ?? '');
+    }
+  }, [dadosClientePedido, tipo, clienteId, order]);
+
+  // Dialog para escolher condição quando há múltiplas e nenhuma padrão
+  const [dialogEscolherCondicaoOpen, setDialogEscolherCondicaoOpen] = useState(false);
+  const [condicoesParaEscolha, setCondicoesParaEscolha] = useState<CondicaoPagamento[]>([]);
+
+  const aplicarCondicao = (cond: CondicaoPagamento) => {
+    setCondicaoPagamentoId(cond.id?.toString() ?? cond.descricao ?? '');
+    setFormaPagamento(cond.forma_pagamento as FormaPagamento);
+    setCondicaoPagamento(cond.descricao || '');
+    setPrazoEntregaDias(cond.prazo_dias ?? undefined);
+    if (cond.parcelado && cond.forma_pagamento === 'CARTAO_CREDITO' && cond.numero_parcelas) {
+      setQuantidadeParcelas(Math.min(12, Math.max(1, cond.numero_parcelas)));
+    } else if (cond.forma_pagamento === 'DINHEIRO' || cond.forma_pagamento === 'PIX') {
+      const numPar = cond.numero_parcelas ? Math.min(12, Math.max(1, cond.numero_parcelas)) : 0;
+      setQueroParcelarDinheiroPix(numPar > 1);
+      setQuantidadeParcelas(numPar > 1 ? numPar : '');
+    } else if (cond.forma_pagamento !== 'CARTAO_CREDITO') {
+      setQuantidadeParcelas('');
+    }
+  };
+
+  const handleImportarDoCliente = async () => {
+    if (!clienteId || tipo !== 'VENDA') return;
+    const { data } = await refetchDadosPedido();
+    const dados = data ?? dadosClientePedido;
+    if (!dados) {
+      toast.error('Erro ao carregar dados do cliente');
+      return;
+    }
+    const { condicoes_pagamento, condicao_pagamento_padrao } = dados;
+    setCondicoesPagamento(condicoes_pagamento || []);
+    if (!condicoes_pagamento || condicoes_pagamento.length === 0) {
+      toast.error('Este cliente não possui condições de pagamento cadastradas.');
+      return;
+    }
+    const condicao = condicao_pagamento_padrao ?? (condicoes_pagamento.length === 1 ? condicoes_pagamento[0] : null);
+    if (condicao) {
+      aplicarCondicao(condicao);
+      setDialogEscolherCondicaoOpen(false);
+      toast.success('Condição de pagamento importada do cliente.');
+    } else {
+      setCondicoesParaEscolha(condicoes_pagamento);
+      setDialogEscolherCondicaoOpen(true);
+    }
+  };
+
+  // Limpar condições quando cliente for desmarcado
+  useEffect(() => {
+    if (!clienteId && tipo === 'VENDA') {
+      setCondicoesPagamento([]);
+      setCondicaoPagamentoId('');
+    }
+  }, [clienteId, tipo]);
+
+  const prevIsOpen = usePrevious(isOpen);
+  // Só preencher o form a partir do `order` quando abrimos o dialog para este pedido (ou trocamos de pedido).
+  // Evita que, após erro ao salvar, um refetch do mesmo pedido sobrescreva as alterações (ex.: "Quero parcelar" desmarcando).
+  const lastSyncedOrderIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      lastSyncedOrderIdRef.current = null;
+      return;
+    }
     if (order && isOpen) {
-      setTipo(order.tipo);
-      setClienteId(order.cliente_id);
-      setFornecedorId(order.fornecedor_id);
-      setTransportadoraId(order.transportadora_id);
-      
-      // Extrair apenas a data (YYYY-MM-DD)
-      const dataPedidoOnly = order.data_pedido.split('T')[0].split(' ')[0];
-      const dataEntregaOnly = order.data_entrega_prevista?.split('T')[0].split(' ')[0] || '';
-      const dataVencimentoOnly = order.data_vencimento_base?.split('T')[0].split(' ')[0] || '';
-      
-      setDataPedido(dataPedidoOnly);
-      setDataEntregaPrevista(dataEntregaOnly);
-      setFormaPagamento(order.forma_pagamento);
-      setCondicaoPagamento(order.condicao_pagamento || '');
-      setDataVencimento(dataVencimentoOnly);
-      setPrazoEntregaDias(order.prazo_entrega_dias);
-      setFrete(order.frete || '');
-      setOutrasTaxas(order.outras_taxas || '');
-      setObservacoesInternas(order.observacoes_internas || '');
-      setObservacoesCliente(order.observacoes_cliente || '');
-      
-      // Preencher itens
-      if (order.itens && order.itens.length > 0) {
-        setItens(
-          order.itens.map((item) => ({
-            produto_id: item.produto_id,
-            quantidade: item.quantidade,
-            preco_unitario: item.preco_unitario,
-            desconto: item.desconto || '',
-          }))
-        );
+      const orderId = order.id;
+      const isNewOrderSession = lastSyncedOrderIdRef.current !== orderId;
+      if (isNewOrderSession) {
+        lastSyncedOrderIdRef.current = orderId;
+        setTipo(order.tipo);
+        setClienteId(order.cliente_id);
+        setFornecedorId(order.fornecedor_id);
+        setTransportadoraId(order.transportadora_id);
+
+        const dataPedidoOnly = order.data_pedido.split('T')[0].split(' ')[0];
+        const dataEntregaOnly = order.data_entrega_prevista?.split('T')[0].split(' ')[0] || '';
+        const dataVencimentoOnly = order.data_vencimento_base?.split('T')[0].split(' ')[0] || '';
+
+        setDataPedido(dataPedidoOnly);
+        setDataEntregaPrevista(dataEntregaOnly);
+        setFormaPagamento(order.forma_pagamento);
+        // Guia: derivar de condicao_pagamento quando quantidade_parcelas não vier no GET (nunca abrir sempre "à vista")
+        const condicao = (order.condicao_pagamento || '').trim();
+        const qtdParBackend = order.quantidade_parcelas ?? null;
+        let qtdPar: number | '' = qtdParBackend ?? '';
+        if (qtdPar === '' && condicao && !/vista/i.test(condicao)) {
+          const match = condicao.match(/^(\d{1,2})x$/i);
+          if (match) qtdPar = Math.min(12, Math.max(1, parseInt(match[1], 10) || 1));
+        }
+        setQuantidadeParcelas(qtdPar);
+        const forma = order.forma_pagamento;
+        const formasComCheckbox = ['DINHEIRO', 'PIX', 'BOLETO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TRANSFERENCIA', 'CHEQUE'];
+        const parcelado = typeof qtdPar === 'number' && qtdPar >= 2 && qtdPar <= 12;
+        setQueroParcelarDinheiroPix(!!forma && formasComCheckbox.includes(forma) && parcelado);
+        setCondicaoPagamento(order.condicao_pagamento || '');
+        setDataVencimento(dataVencimentoOnly);
+        setPrazoEntregaDias(order.prazo_entrega_dias);
+        setFrete(order.frete || '');
+        setOutrasTaxas(order.outras_taxas || '');
+        setObservacoesInternas(order.observacoes_internas || '');
+        setObservacoesCliente(order.observacoes_cliente || '');
+
+        if (order.itens && order.itens.length > 0) {
+          setItens(
+            order.itens.map((item) => ({
+              produto_id: item.produto_id,
+              quantidade: item.quantidade,
+              preco_unitario: item.preco_unitario,
+              desconto: item.desconto || '',
+            }))
+          );
+        }
       }
-    } else if (!order && isOpen) {
-      // Reset form para novo pedido
+    } else if (!order && prevIsOpen === false) {
+      lastSyncedOrderIdRef.current = null;
       setTipo('VENDA');
       setClienteId(undefined);
       setFornecedorId(undefined);
+      setCondicoesPagamento([]);
+      setCondicaoPagamentoId('');
       setTransportadoraId(undefined);
       setDataPedido(new Date().toISOString().split('T')[0]);
       setDataEntregaPrevista('');
       setFormaPagamento(undefined);
+      setQuantidadeParcelas('');
+      setQueroParcelarDinheiroPix(false);
       setCondicaoPagamento('');
       setDataVencimento('');
       setPrazoEntregaDias(undefined);
@@ -132,7 +290,7 @@ export function OrderForm({
       setObservacoesCliente('');
       setItens([{ produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' }]);
     }
-  }, [order, isOpen]);
+  }, [order, isOpen, prevIsOpen]);
 
   const handleAddItem = () => {
     setItens([...itens, { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' }]);
@@ -144,14 +302,55 @@ export function OrderForm({
     }
   };
 
-  const handleItemChange = (index: number, field: keyof OrderItemForm, value: any) => {
+  const handleItemChange = async (index: number, field: keyof OrderItemForm, value: any) => {
     const newItens = [...itens];
     newItens[index] = { ...newItens[index], [field]: value };
-    setItens(newItens);
+
+    // Ao selecionar produto, chamar GET /produtos/:id e preencher preço (conforme guia)
+    if (field === 'produto_id' && value && value !== 0) {
+      try {
+        const produto = await produtosService.buscarPorId(Number(value));
+        const preco =
+          produto.preco_promocional && produto.preco_promocional > 0
+            ? produto.preco_promocional
+            : produto.preco_venda ?? 0;
+        newItens[index] = {
+          ...newItens[index],
+          preco_unitario: preco,
+          quantidade: newItens[index].quantidade || 1,
+        };
+      } catch {
+        // Em caso de erro, manter seleção; usuário pode digitar preço manualmente
+      }
+    }
+
+    setItens([...newItens]);
   };
+
+  const valorTotalPedido =
+    itens.reduce((acc, item) => {
+      const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 0;
+      const precoUnitario = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
+      const desconto = typeof item.desconto === 'number' ? item.desconto : 0;
+      return acc + quantidade * precoUnitario - desconto;
+    }, 0) +
+    (typeof frete === 'number' ? frete : 0) +
+    (typeof outrasTaxas === 'number' ? outrasTaxas : 0);
+
+  const qtdParcelasNum = quantidadeParcelas === '' ? 1 : quantidadeParcelas;
+  const valorPorParcela =
+    formaPagamento && qtdParcelasNum >= 1
+      ? valorTotalPedido / qtdParcelasNum
+      : 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const parcelado = queroParcelarDinheiroPix && qtdParcelasNum >= 2;
+    if (parcelado && !dataVencimento?.trim()) {
+      toast.error('Informe a Data de Vencimento para parcelar o pedido.');
+      return;
+    }
 
     const itensFormatados = itens
       .filter(item => item.produto_id && item.produto_id !== 0)
@@ -162,6 +361,13 @@ export function OrderForm({
         ...(item.desconto ? { desconto: Number(item.desconto) } : {}),
       }));
     
+    // Guia: backend usa quantidade_parcelas no PATCH para definir condição (2–12 = parcelado, 1 = à vista).
+    // Sempre enviar quantidade_parcelas quando há forma_pagamento para criar/editar corretamente.
+    const quantidadeParcelasPayload: number =
+      formaPagamento && queroParcelarDinheiroPix && qtdParcelasNum >= 2 && qtdParcelasNum <= 12
+        ? qtdParcelasNum
+        : 1;
+
     const pedidoData: CreatePedidoDto = {
       tipo,
       data_pedido: dataPedido,
@@ -171,7 +377,12 @@ export function OrderForm({
       data_entrega_prevista: dataEntregaPrevista || undefined,
       forma_pagamento: formaPagamento,
       data_vencimento: dataVencimento || undefined,
-      condicao_pagamento: condicaoPagamento || undefined,
+      data_vencimento_base: dataVencimento || undefined,
+      condicao_pagamento:
+        formaPagamento && qtdParcelasNum >= 2
+          ? (condicaoPagamento || `${qtdParcelasNum}x`)
+          : (condicaoPagamento || 'À vista'),
+      quantidade_parcelas: formaPagamento ? quantidadeParcelasPayload : undefined,
       prazo_entrega_dias: prazoEntregaDias,
       frete: typeof frete === 'number' ? frete : (frete ? Number(frete) : undefined),
       outras_taxas: typeof outrasTaxas === 'number' ? outrasTaxas : (outrasTaxas ? Number(outrasTaxas) : undefined),
@@ -180,10 +391,21 @@ export function OrderForm({
       itens: itensFormatados,
     };
 
+    if (import.meta.env.DEV && order) {
+      console.log('📤 [OrderForm] PATCH payload (edição)', {
+        quantidade_parcelas: pedidoData.quantidade_parcelas,
+        condicao_pagamento: pedidoData.condicao_pagamento,
+        forma_pagamento: pedidoData.forma_pagamento,
+        queroParcelarDinheiroPix,
+        qtdParcelasNum,
+      });
+    }
+
     onSubmit(pedidoData);
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -257,6 +479,27 @@ export function OrderForm({
                       ))}
                     </SelectContent>
                   </Select>
+                  {clienteId && (limiteCredito || dadosClientePedido?.cliente?.limite_credito != null) && (
+                    <Alert className="mt-3">
+                      <Info className="h-4 w-4" />
+                      <AlertDescription>
+                        {limiteCredito ? (
+                          <>
+                            Limite de crédito: {formatCurrency(limiteCredito.limiteCredito)}.
+                            Valor já utilizado: {formatCurrency(limiteCredito.valorUtilizado)}.
+                            Disponível: {formatCurrency(limiteCredito.valorDisponivel)}
+                            {limiteCredito.ultrapassouLimite && (
+                              <span className="block mt-1 font-medium text-destructive">
+                                Limite excedido.
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>Limite de crédito do cliente: {formatCurrency(dadosClientePedido!.cliente.limite_credito ?? 0)}</>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -318,16 +561,29 @@ export function OrderForm({
                     <Select
                       value={item.produto_id && item.produto_id !== 0 ? item.produto_id.toString() : ''}
                       onValueChange={(value) => handleItemChange(index, 'produto_id', Number(value))}
+                      disabled={produtoSelectDesabilitado}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione um produto" />
+                        <SelectValue
+                          placeholder={
+                            isLoadingProdutosFornecedor && tipo === 'COMPRA' && fornecedorId
+                              ? 'Carregando...'
+                              : produtoSelectPlaceholder
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        {produtos.map((produto) => (
+                        {tipo === 'COMPRA' && fornecedorId && !isLoadingProdutosFornecedor && produtosParaExibir.length === 0 ? (
+                          <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                            Nenhum produto vinculado a este fornecedor
+                          </div>
+                        ) : (
+                          produtosParaExibir.map((produto) => (
                             <SelectItem key={produto.id} value={produto.id.toString()}>
-                            {produto.nome}
+                              {produto.nome}
                             </SelectItem>
-                        ))}
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -402,24 +658,63 @@ export function OrderForm({
                   <Label>Forma de Pagamento</Label>
                   <Select
                     value={formaPagamento || ''}
-                    onValueChange={(value) => setFormaPagamento(value as FormaPagamento)}
+                    onValueChange={(value) => {
+                      if (value === '__IMPORTAR_CLIENTE__') {
+                        handleImportarDoCliente();
+                        return;
+                      }
+                      const forma = value as FormaPagamento;
+                      setFormaPagamento(forma);
+                      setCondicaoPagamentoId('');
+                      setCondicaoPagamento('');
+                      setPrazoEntregaDias(undefined);
+                      const formasComCheckboxParcelar: FormaPagamento[] = [
+                        'DINHEIRO', 'PIX', 'BOLETO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TRANSFERENCIA', 'CHEQUE',
+                      ];
+                      if (formasComCheckboxParcelar.includes(forma)) {
+                        if (forma === 'CARTAO_CREDITO') {
+                          setQueroParcelarDinheiroPix(true);
+                          setQuantidadeParcelas(3);
+                        } else {
+                          setQueroParcelarDinheiroPix(false);
+                          setQuantidadeParcelas('');
+                        }
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a forma de pagamento" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectGroup>
+                        <SelectItem
+                          value="__IMPORTAR_CLIENTE__"
+                          disabled={!clienteId || tipo !== 'VENDA'}
+                          className="text-primary font-medium"
+                        >
+                          <Download className="w-4 h-4 mr-2 inline" />
+                          Importar do cliente
+                        </SelectItem>
+                      </SelectGroup>
+                      <SelectSeparator />
                       <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
                       <SelectItem value="PIX">PIX</SelectItem>
                       <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
                       <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
                       <SelectItem value="BOLETO">Boleto</SelectItem>
                       <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                      <SelectItem value="CHEQUE">Cheque</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Data de Vencimento</Label>
+                  <Label>
+                    Data de Vencimento
+                    {queroParcelarDinheiroPix && qtdParcelasNum >= 2 && (
+                      <span className="text-destructive text-xs font-normal ml-1">(obrigatório ao parcelar)</span>
+                    )}
+                  </Label>
                   <Input
                     type="date"
                     value={dataVencimento}
@@ -428,16 +723,86 @@ export function OrderForm({
                 </div>
               </div>
 
-                <div className="space-y-2">
-                <Label>Condição de Pagamento</Label>
-                <Input
-                  type="text"
-                  value={condicaoPagamento}
-                  onChange={(e) => setCondicaoPagamento(e.target.value)}
-                  placeholder="Ex: 30 dias, 3x sem juros, etc."
-                />
-              </div>
+              {formaPagamento && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    {/* Guia: Opção A – "Quero parcelar" + N parcelas (1 a 12). Backend prioriza quantidade_parcelas. */}
+                    {['DINHEIRO', 'PIX', 'BOLETO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TRANSFERENCIA', 'CHEQUE'].includes(formaPagamento) && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-muted-foreground">Condição de pagamento</Label>
+                          <div className="text-sm font-medium">
+                            {queroParcelarDinheiroPix && qtdParcelasNum >= 2 && qtdParcelasNum <= 12
+                              ? `${qtdParcelasNum}x`
+                              : 'À vista'}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="quero-parcelar"
+                            checked={queroParcelarDinheiroPix}
+                            onCheckedChange={(checked) => {
+                              setQueroParcelarDinheiroPix(!!checked);
+                              if (!checked) {
+                                setQuantidadeParcelas('');
+                              } else {
+                                setQuantidadeParcelas(formaPagamento === 'CARTAO_CREDITO' ? 3 : 2);
+                              }
+                            }}
+                          />
+                          <Label
+                            htmlFor="quero-parcelar"
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            Quero parcelar
+                          </Label>
+                        </div>
+                        {queroParcelarDinheiroPix && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={12}
+                              placeholder="1"
+                              value={quantidadeParcelas === '' ? '' : quantidadeParcelas}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                if (raw === '') {
+                                  setQuantidadeParcelas('');
+                                  return;
+                                }
+                                const v = Math.min(12, Math.max(1, parseInt(raw, 10) || 1));
+                                setQuantidadeParcelas(v);
+                                if (v > 1 && !condicaoPagamento) {
+                                  setCondicaoPagamento(`${v}x`);
+                                }
+                              }}
+                            />
+                            <span className="text-sm text-muted-foreground">parcelas (1 a 12)</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Valor por parcela</Label>
+                    <div className="h-10 flex items-center text-lg font-semibold">
+                      {qtdParcelasNum > 1
+                        ? `${qtdParcelasNum}x de ${formatCurrency(valorPorParcela)}`
+                        : formatCurrency(valorTotalPedido) + ' (à vista)'}
+                    </div>
+                  </div>
+                </div>
+              )}
 
+              {(() => {
+                const deveExibirCondicaoETransportadora =
+                  tipo === 'COMPRA' || !!formaPagamento;
+
+                if (!deveExibirCondicaoETransportadora) return null;
+
+                return (
+              <>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Transportadora</Label>
@@ -490,6 +855,9 @@ export function OrderForm({
                   onChange={(e) => setOutrasTaxas(e.target.value ? Number(e.target.value) : '')}
                 />
               </div>
+              </>
+                );
+              })()}
             </div>
           </div>
 
@@ -581,5 +949,39 @@ export function OrderForm({
         </form>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={dialogEscolherCondicaoOpen} onOpenChange={setDialogEscolherCondicaoOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Escolher condição de pagamento</DialogTitle>
+          <DialogDescription>
+            Este cliente possui mais de uma condição cadastrada. Selecione a que deseja usar no pedido.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 pt-2">
+          {condicoesParaEscolha.map((cond) => (
+            <Button
+              key={cond.id ?? cond.descricao}
+              type="button"
+              variant="outline"
+              className="w-full justify-start text-left h-auto py-3"
+              onClick={() => {
+                aplicarCondicao(cond);
+                setDialogEscolherCondicaoOpen(false);
+                toast.success('Condição de pagamento importada do cliente.');
+              }}
+            >
+              <span className="font-medium">{cond.descricao}</span>
+              {cond.forma_pagamento && (
+                <span className="text-muted-foreground ml-2">({cond.forma_pagamento})</span>
+              )}
+            </Button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
+
+export default OrderForm;

@@ -13,7 +13,8 @@ export type FormaPagamento =
   | 'CARTAO_CREDITO'
   | 'CARTAO_DEBITO'
   | 'BOLETO'
-  | 'TRANSFERENCIA';
+  | 'TRANSFERENCIA'
+  | 'CHEQUE';
 
 export interface PedidoItem {
   id?: number;
@@ -66,6 +67,7 @@ export interface Pedido {
   data_vencimento_base?: string | null; // Data de vencimento base para cálculo de parcelas
   condicao_pagamento?: string;
   forma_pagamento?: FormaPagamento;
+  quantidade_parcelas?: number;
   prazo_entrega_dias?: number;
   subtotal: number;
   desconto_valor: number;
@@ -90,7 +92,9 @@ export interface CreatePedidoDto {
   data_entrega_prevista?: string;
   condicao_pagamento?: string;
   data_vencimento?: string; // Data de vencimento para as contas financeiras do pedido
+  data_vencimento_base?: string; // Data base para primeiro vencimento (parcelas mensais)
   forma_pagamento?: FormaPagamento;
+  quantidade_parcelas?: number; // 1 a 12, usado quando forma = CARTAO_CREDITO
   prazo_entrega_dias?: number;
   subtotal?: number;
   desconto_valor?: number;
@@ -105,6 +109,13 @@ export interface CreatePedidoDto {
     preco_unitario: number;
     desconto?: number;
   }>;
+}
+
+/** Payload para PATCH alterar condição (à vista → parcelado). Backend recalcula e cria parcelas. */
+export interface AtualizarCondicaoPagamentoPayload {
+  condicao_pagamento: string; // "À vista" | "2x" … "12x" | "30/60/90"
+  data_vencimento_base?: string; // "YYYY-MM-DD" – opcional; se não enviar usa data_pedido
+  forma_pagamento?: FormaPagamento;
 }
 
 export interface FiltrosPedidos {

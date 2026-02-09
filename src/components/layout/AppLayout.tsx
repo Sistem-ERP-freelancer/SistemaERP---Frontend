@@ -1,36 +1,35 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  DollarSign, 
-  Truck, 
-  Users, 
-  Package, 
-  Boxes,
-  LogOut,
-  Menu,
-  X,
-  TruckIcon,
-  Shield,
-  Settings,
-  User,
-  ChevronDown,
-  FileText,
-  Wallet
-} from "lucide-react";
 import { Notifications } from "@/components/Notifications";
-import { toast } from "sonner";
+import { TopERPLogo } from "@/components/TopERPLogo";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { TopERPLogo } from "@/components/TopERPLogo";
+    Boxes,
+    ChevronDown,
+    DollarSign,
+    FileText,
+    LayoutDashboard,
+    LogOut,
+    Menu,
+    Package,
+    Settings,
+    Shield,
+    ShoppingCart,
+    Truck,
+    TruckIcon,
+    User,
+    Users,
+    Wallet,
+    X
+} from "lucide-react";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const getMenuItems = (isSuperAdmin: boolean) => {
   const baseItems = [

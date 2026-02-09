@@ -1,31 +1,31 @@
-import { Transportadora } from '@/types/carrier';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from '@/components/ui/select';
-import { StatusBadge } from './StatusBadge';
-import { Package, Edit, Power, Trash2, MoreVertical, Mail, MapPin, Loader2, Eye } from 'lucide-react';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+import { Transportadora } from '@/types/carrier';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { Edit, Eye, Loader2, Mail, MapPin, MoreVertical, Package, Power, Trash2 } from 'lucide-react';
+import { StatusBadge } from './StatusBadge';
 
 interface CarrierTableProps {
   /** Lista de transportadoras a exibir */
@@ -131,11 +131,7 @@ export function CarrierTable({
                 </div>
               </TableCell>
               <TableCell>
-                <div className="flex flex-col">
-                  {carrier.telefone && (
-                    <span className="text-sm">{carrier.telefone}</span>
-                  )}
-                </div>
+                <span className="text-sm">{carrier.contato || '--'}</span>
               </TableCell>
               <TableCell>
                 {onStatusChange ? (
