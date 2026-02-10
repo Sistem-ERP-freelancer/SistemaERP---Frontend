@@ -27,7 +27,7 @@ import { formatCurrency } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
 import type { ClienteComDuplicatas } from '@/services/contas-receber.service';
 import { contasReceberService } from '@/services/contas-receber.service';
-import { duplicatasService } from '@/services/duplicatas.service';
+import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
 import { DollarSign, FileText, Loader2, MoreVertical, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -54,16 +54,16 @@ const DuplicatasClientesList = () => {
     queryFn: () => contasReceberService.listarClientesComDuplicatas({ status: filtroStatus }),
   });
 
-  const { data: agrupadasData } = useQuery({
-    queryKey: ['duplicatas', 'agrupadas-por-pedido', filtroStatus],
+  // Usar novo endpoint /pedidos/contas-receber
+  const { data: pedidosContasReceber } = useQuery({
+    queryKey: ['pedidos', 'contas-receber', filtroStatus],
     queryFn: () =>
-      duplicatasService.listarAgrupadasPorPedido({
-        status: filtroStatus === 'todos' ? undefined : 'ABERTA',
+      pedidosService.listarContasReceber({
+        situacao: filtroStatus === 'todos' ? undefined : 'em_aberto',
       }),
   });
 
-  const grupos = agrupadasData?.grupos ?? [];
-  const avulsas = agrupadasData?.avulsas ?? [];
+  const pedidos = pedidosContasReceber ?? [];
 
   const clientesComDuplicatas = useMemo((): ClienteComDuplicatas[] => {
     if (clientesApi && clientesApi.length > 0) return clientesApi;
@@ -133,7 +133,7 @@ const DuplicatasClientesList = () => {
     });
 
     return Array.from(map.values()).filter((c) => c.total_aberto > 0);
-  }, [clientesApi, grupos, avulsas, clientes]);
+  }, [clientesApi, pedidos, clientes]);
 
   const filtrados = useMemo(() => {
     let list = clientesComDuplicatas;

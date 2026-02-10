@@ -26,8 +26,8 @@ import { formatCurrency } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
 import type { ClienteComDuplicatas } from '@/services/contas-receber.service';
 import { contasReceberService } from '@/services/contas-receber.service';
-import { duplicatasService } from '@/services/duplicatas.service';
 import { financeiroService } from '@/services/financeiro.service';
+import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
 import { DollarSign, FileText, Loader2, MoreVertical, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -68,12 +68,14 @@ const ContasAReceberListaClientes = ({
     queryFn: () => contasReceberService.listarClientesComDuplicatas(),
   });
 
-  const { data: agrupadasData } = useQuery({
-    queryKey: ['duplicatas', 'agrupadas-por-pedido', status],
+  // Usar novo endpoint /pedidos/contas-receber ao invés de /duplicatas/agrupadas-por-pedido
+  const { data: pedidosContasReceber } = useQuery({
+    queryKey: ['pedidos', 'contas-receber', status],
     queryFn: () =>
-      duplicatasService.listarAgrupadasPorPedido({
-        status: status === 'todos' ? undefined : 'ABERTA',
+      pedidosService.listarContasReceber({
+        situacao: status === 'todos' ? undefined : status === 'aberto' ? 'em_aberto' : undefined,
       }),
+    enabled: status === 'aberto' || status === 'todos',
   });
 
   // Fallback: quando duplicatas retornam vazio mas o dashboard mostra valores, usar contas financeiras (RECEBER)
@@ -95,11 +97,10 @@ const ContasAReceberListaClientes = ({
     retry: 1,
   });
 
-  const grupos = agrupadasData?.grupos ?? [];
-  const avulsas = agrupadasData?.avulsas ?? [];
+  const pedidos = pedidosContasReceber ?? [];
   const contasReceber = contasReceberData ?? [];
 
-  // Fallback extra: contas agrupadas (quando duplicatas e listar contas retornam vazio)
+  // Fallback extra: contas agrupadas (quando pedidos e listar contas retornam vazio)
   const { data: agrupadoData, isLoading: isLoadingAgrupado } = useQuery({
     queryKey: ['contas-financeiras', 'agrupado', 'receber', status],
     queryFn: () =>
@@ -110,8 +111,7 @@ const ContasAReceberListaClientes = ({
     enabled:
       (status === 'aberto' || status === 'todos') &&
       clientesApi?.length === 0 &&
-      grupos.length === 0 &&
-      avulsas.length === 0 &&
+      pedidos.length === 0 &&
       contasReceber.length === 0,
     retry: 1,
   });
@@ -125,69 +125,35 @@ const ContasAReceberListaClientes = ({
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
-    grupos.forEach((g) => {
-      const parcelasAberto = g.parcelas.filter(
-        (p) => p.status !== 'BAIXADA' && p.status !== 'CANCELADA'
-      ).length;
-      const valorAberto = g.valor_aberto ?? 0;
-      let maiorAtraso = 0;
-      g.parcelas.forEach((p) => {
-        if (p.status !== 'BAIXADA') {
-          try {
-            const venc = new Date(p.data_vencimento);
-            venc.setHours(0, 0, 0, 0);
-            const dias = Math.floor(
-              (hoje.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)
-            );
-            if (dias > 0 && dias > maiorAtraso) maiorAtraso = dias;
-          } catch {}
-        }
-      });
-
-      const existing = map.get(g.cliente_id);
-      if (existing) {
-        existing.total_aberto += valorAberto;
-        existing.parcelas_aberto += parcelasAberto;
-        if (maiorAtraso > existing.maior_atraso_dias)
-          existing.maior_atraso_dias = maiorAtraso;
-      } else {
-        map.set(g.cliente_id, {
-          cliente_id: g.cliente_id,
-          cliente_nome: g.cliente_nome || '—',
-          total_aberto: valorAberto,
-          parcelas_aberto: parcelasAberto,
-          maior_atraso_dias: maiorAtraso,
-        });
-      }
-    });
-
-    avulsas.forEach((a) => {
-      if (a.status === 'BAIXADA' || a.status === 'CANCELADA') return;
-      const cliente = clientes.find((c) => c.id === a.cliente_id);
-      const valorAberto = a.valor_aberto ?? 0;
+    // Agrupar pedidos por cliente (novo formato)
+    pedidos.forEach((pedido) => {
+      if (pedido.status === 'CONCLUIDO' || pedido.status === 'CANCELADO') return;
+      
+      const valorAberto = pedido.valor_em_aberto ?? 0;
+      if (valorAberto <= 0) return;
+      
+      // Calcular maior atraso baseado na data do pedido (aproximação)
+      // Nota: Para cálculo preciso de atraso, seria necessário buscar as parcelas do pedido
       let maiorAtraso = 0;
       try {
-        const venc = new Date(a.data_vencimento);
-        venc.setHours(0, 0, 0, 0);
+        const dataPedido = new Date(pedido.data_pedido);
+        dataPedido.setHours(0, 0, 0, 0);
         const dias = Math.floor(
-          (hoje.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)
+          (hoje.getTime() - dataPedido.getTime()) / (1000 * 60 * 60 * 24)
         );
         if (dias > 0) maiorAtraso = dias;
       } catch {}
-      const existing = map.get(a.cliente_id);
+
+      const existing = map.get(pedido.cliente_id);
       if (existing) {
         existing.total_aberto += valorAberto;
-        existing.parcelas_aberto += 1;
+        existing.parcelas_aberto += 1; // Cada pedido conta como 1 "parcela" para agrupamento
         if (maiorAtraso > existing.maior_atraso_dias)
           existing.maior_atraso_dias = maiorAtraso;
       } else {
-        map.set(a.cliente_id, {
-          cliente_id: a.cliente_id,
-          cliente_nome:
-            cliente?.nome_fantasia ||
-            cliente?.nome_razao ||
-            cliente?.nome ||
-            '—',
+        map.set(pedido.cliente_id, {
+          cliente_id: pedido.cliente_id,
+          cliente_nome: pedido.cliente_nome || '—',
           total_aberto: valorAberto,
           parcelas_aberto: 1,
           maior_atraso_dias: maiorAtraso,
@@ -285,7 +251,7 @@ const ContasAReceberListaClientes = ({
   }, [onTotalAReceber, totalAReceberLista, clientesComDuplicatas.length]);
 
   const emptyDuplicatas =
-    clientesApi?.length === 0 && grupos.length === 0 && avulsas.length === 0;
+    clientesApi?.length === 0 && pedidos.length === 0;
   const esperandoFallbackAgrupado =
     emptyDuplicatas && contasReceber.length === 0 && (status === 'aberto' || status === 'todos');
   const isLoadingList =

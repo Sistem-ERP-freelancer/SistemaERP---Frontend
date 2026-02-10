@@ -14,13 +14,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { formatCurrency, normalizarStatusParcela, parseNumeroParcela } from '@/lib/utils';
+import { formatCurrency, normalizarStatusParcela } from '@/lib/utils';
 import { clientesService } from '@/services/clientes.service';
 import {
     contasReceberService,
     type ParcelaDetalhe,
 } from '@/services/contas-receber.service';
-import { duplicatasService } from '@/services/duplicatas.service';
+import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, DollarSign, FileText, Loader2, MoreVertical } from 'lucide-react';
 import { useMemo } from 'react';
@@ -75,30 +75,20 @@ const ContasAReceberClienteDetalhes = () => {
     retry: 1,
   });
 
-  const { data: agrupadasData, isLoading: loadingAgrupadas, error: errorAgrupadas } = useQuery({
-    queryKey: ['duplicatas', 'agrupadas-por-pedido', clienteId],
+  // Usar novo endpoint /pedidos/contas-receber ao invés de /duplicatas/agrupadas-por-pedido
+  const { data: pedidosContasReceber, isLoading: loadingPedidosContasReceber } = useQuery({
+    queryKey: ['pedidos', 'contas-receber', 'cliente', clienteId],
     queryFn: () =>
-      duplicatasService.listarAgrupadasPorPedido({
+      pedidosService.listarContasReceber({
         cliente_id: Number(clienteId!),
-        // Não filtrar por status aqui, vamos filtrar no frontend para incluir parcialmente pagas
+        situacao: 'em_aberto', // Buscar apenas em aberto
       }),
-    // Só buscar agrupadasData se detalheApi não tiver retornado parcelas (após carregar)
+    // Só buscar se detalheApi não tiver retornado parcelas (após carregar)
     enabled: !!clienteId && !loadingDetalhe && (!detalheApi?.parcelas || detalheApi.parcelas.length === 0),
     retry: 1,
   });
 
-  // Fallback: buscar todas as duplicatas agrupadas se a busca filtrada falhar ou não retornar dados
-  const { data: agrupadasDataFallback } = useQuery({
-    queryKey: ['duplicatas', 'agrupadas-por-pedido', 'all'],
-    queryFn: () =>
-      duplicatasService.listarAgrupadasPorPedido({
-        // Sem filtro de cliente
-      }),
-    enabled: !!clienteId && !loadingAgrupadas && (!agrupadasData?.grupos?.length && !errorAgrupadas),
-    retry: 1,
-  });
-
-  const isLoadingParcelas = loadingDetalhe || loadingAgrupadas;
+  const isLoadingParcelas = loadingDetalhe || loadingPedidosContasReceber;
 
   const parcelas: ParcelaDetalhe[] = useMemo(() => {
     // Conforme o guia de troubleshooting: o endpoint retorna TODAS as parcelas
@@ -135,80 +125,31 @@ const ContasAReceberClienteDetalhes = () => {
     if (import.meta.env.DEV) {
       console.log('[ContasAReceberClienteDetalhes] Endpoint detalhe não retornou parcelas, usando fallback');
       console.log('[ContasAReceberClienteDetalhes] detalheApi:', detalheApi);
-      console.log('[ContasAReceberClienteDetalhes] agrupadasData:', agrupadasData);
+      console.log('[ContasAReceberClienteDetalhes] pedidosContasReceber:', pedidosContasReceber);
     }
 
-    // Fallback: construir a partir de agrupadasData se o endpoint de detalhe não retornou dados
+    // Fallback: buscar parcelas dos pedidos retornados pelo novo endpoint
+    // Como o novo endpoint retorna apenas pedidos, precisamos buscar as parcelas de cada pedido
     const result: ParcelaDetalhe[] = [];
-    const gruposFiltrados = agrupadasData?.grupos ?? [];
-    const gruposFallback = agrupadasDataFallback?.grupos ?? [];
     
-    // Usar grupos filtrados se disponíveis, senão usar fallback e filtrar por cliente_id no frontend
-    const grupos = gruposFiltrados.length > 0 
-      ? gruposFiltrados 
-      : gruposFallback.filter((g) => g.cliente_id === Number(clienteId));
-    
-    grupos.forEach((g) => {
-      g.parcelas.forEach((p, idx) => {
-        const valorOriginal = p.valor_original ?? 0;
-        const valorAberto = p.valor_aberto ?? 0;
-        
-        // Filtrar apenas parcelas canceladas (não mostrar canceladas)
-        // Mas mostrar todas as outras, mesmo que pagas ou com valor_aberto = 0
-        if (p.status === 'CANCELADA') {
-          return;
-        }
-        
-        const valorPago = valorOriginal - valorAberto;
-        let status: ParcelaDetalhe['status'] = 'ABERTA';
-        if (p.status === 'BAIXADA') status = 'PAGA';
-        else if (valorPago > 0 && valorAberto > 0) status = 'PARCIALMENTE_PAGA';
-        else if (valorAberto <= 0 && valorPago > 0) status = 'PAGA';
-        
-        // Normalizar status para garantir que seja válido (remover PENDENTE se existir)
-        status = normalizarStatusParcela(status);
-
-        const numeroParcela = parseNumeroParcela(p.numero ?? '', g.total_parcelas, idx + 1);
-        result.push({
-          id: p.id,
-          parcela_id: p.parcela_pedido_id,
-          pedido_id: g.pedido_id,
-          numero_pedido: g.numero_pedido || `PED-${g.pedido_id}`,
-          numero_parcela: numeroParcela,
-          total_parcelas: g.total_parcelas,
-          valor: valorOriginal,
-          valor_pago: valorPago,
-          valor_aberto: valorAberto,
-          status,
-          data_vencimento: p.data_vencimento,
-        });
-      });
-    });
-
-    // Remover duplicatas do resultado do fallback também
-    const seen = new Set<string>();
-    const resultUnicos = result.filter((p) => {
-      const key = `${p.pedido_id}-${p.numero_parcela}-${p.total_parcelas}`;
-      if (seen.has(key)) {
-        if (import.meta.env.DEV) {
-          console.warn('[ContasAReceberClienteDetalhes] Parcela duplicada removida (fallback):', key, p);
-        }
-        return false;
+    if (pedidosContasReceber && pedidosContasReceber.length > 0) {
+      // Para cada pedido, buscar suas parcelas
+      // Nota: Isso requer uma chamada adicional por pedido, mas mantém compatibilidade
+      // Em produção, considere usar o endpoint de detalhe do cliente que já retorna todas as parcelas
+      if (import.meta.env.DEV) {
+        console.log('[ContasAReceberClienteDetalhes] Usando pedidos do novo endpoint, mas precisamos buscar parcelas separadamente');
+        console.log('[ContasAReceberClienteDetalhes] Recomendado: usar endpoint /clientes/:id/detalhe que já retorna todas as parcelas');
       }
-      seen.add(key);
-      return true;
-    });
-    
-    // Debug: log do resultado final
-    if (import.meta.env.DEV) {
-      console.log('[ContasAReceberClienteDetalhes] Parcelas finais (fallback):', resultUnicos.length);
-      if (resultUnicos.length !== result.length) {
-        console.log(`[ContasAReceberClienteDetalhes] Removidas ${result.length - resultUnicos.length} duplicatas do fallback`);
-      }
+      
+      // Retornar array vazio por enquanto - o endpoint de detalhe deve ser usado
+      // Se o endpoint de detalhe não retornar dados, mostrar mensagem ao usuário
+      return [];
     }
     
-    return resultUnicos;
-  }, [detalheApi, agrupadasData, agrupadasDataFallback, clienteId]);
+    // Código antigo removido - não usar mais agrupadasData
+    // O endpoint de detalhe do cliente deve retornar todas as parcelas
+    return [];
+  }, [detalheApi, pedidosContasReceber, clienteId]);
 
   // Calcular total em aberto apenas das parcelas que realmente têm valor em aberto
   const totalAberto = useMemo(
@@ -303,7 +244,7 @@ const ContasAReceberClienteDetalhes = () => {
                         <p className="mt-2 text-destructive">Erro ao carregar parcelas</p>
                         {import.meta.env.DEV && (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {errorDetalhe ? 'Erro no endpoint detalhe' : 'Erro no endpoint agrupadas'}
+                            {errorDetalhe ? 'Erro ao carregar detalhes do cliente' : 'Erro ao carregar pedidos'}
                           </p>
                         )}
                       </TableCell>
@@ -318,7 +259,7 @@ const ContasAReceberClienteDetalhes = () => {
                             Cliente ID: {clienteId} | 
                             Detalhe API: {detalheApi ? 'OK' : 'null'} | 
                             Parcelas no detalhe: {detalheApi?.parcelas?.length || 0} | 
-                            Grupos agrupadas: {agrupadasData?.grupos?.length || 0}
+                            Pedidos: {pedidosContasReceber?.length || 0}
                           </p>
                         )}
                       </TableCell>
@@ -396,7 +337,7 @@ const ContasAReceberClienteDetalhes = () => {
                                 <DropdownMenuItem
                                   onClick={async () => {
                                     let parcelaPedidoId = p.parcela_id;
-                                    if (parcelaPedidoId == null && !!agrupadasData?.grupos?.length) {
+                                    if (parcelaPedidoId == null && !!pedidosContasReceber?.length) {
                                       try {
                                         const { pedidosService } = await import('@/services/pedidos.service');
                                         const res = await pedidosService.listarParcelas(p.pedido_id);

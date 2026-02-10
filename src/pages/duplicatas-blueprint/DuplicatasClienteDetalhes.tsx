@@ -8,10 +8,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { formatCurrency, normalizarStatusParcela, parseNumeroParcela } from '@/lib/utils';
+import { formatCurrency, normalizarStatusParcela } from '@/lib/utils';
 import { clientesService } from '@/services/clientes.service';
 import { contasReceberService, type ParcelaDetalhe } from '@/services/contas-receber.service';
-import { duplicatasService } from '@/services/duplicatas.service';
+import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, DollarSign, FileText, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -55,51 +55,26 @@ const DuplicatasClienteDetalhes = () => {
     enabled: !!clienteId,
   });
 
-  const { data: agrupadasData } = useQuery({
-    queryKey: ['duplicatas', 'agrupadas-por-pedido', clienteId],
+  // Usar novo endpoint /pedidos/contas-receber
+  const { data: pedidosContasReceber } = useQuery({
+    queryKey: ['pedidos', 'contas-receber', 'cliente', clienteId],
     queryFn: () =>
-      duplicatasService.listarAgrupadasPorPedido({
+      pedidosService.listarContasReceber({
         cliente_id: Number(clienteId!),
-        status: undefined,
+        situacao: 'em_aberto',
       }),
     enabled: !!clienteId,
   });
 
   const parcelas: ParcelaDetalhe[] = useMemo(() => {
+    // Usar endpoint de detalhe do cliente que retorna todas as parcelas
     if (detalheApi?.parcelas?.length) return detalheApi.parcelas;
 
-    const result: ParcelaDetalhe[] = [];
-    const grupos = agrupadasData?.grupos ?? [];
-    grupos.forEach((g) => {
-      g.parcelas.forEach((p, idx) => {
-        const valorOriginal = p.valor_original ?? 0;
-        const valorAberto = p.valor_aberto ?? 0;
-        const valorPago = valorOriginal - valorAberto;
-        let status: ParcelaDetalhe['status'] = 'ABERTA';
-        if (p.status === 'BAIXADA') status = 'PAGA';
-        else if (valorPago > 0) status = 'PARCIALMENTE_PAGA';
-        
-        // Normalizar status para garantir que seja válido (remover PENDENTE se existir)
-        status = normalizarStatusParcela(status);
-
-        const numeroParcela = parseNumeroParcela(p.numero ?? '', g.total_parcelas, idx + 1);
-        result.push({
-          id: p.id,
-          pedido_id: g.pedido_id,
-          numero_pedido: g.numero_pedido || `PED-${g.pedido_id}`,
-          numero_parcela: numeroParcela,
-          total_parcelas: g.total_parcelas,
-          valor: valorOriginal,
-          valor_pago: valorPago,
-          valor_aberto: valorAberto,
-          status,
-          data_vencimento: p.data_vencimento,
-        });
-      });
-    });
-
-    return result;
-  }, [detalheApi, agrupadasData]);
+    // Se não houver parcelas do endpoint de detalhe, retornar vazio
+    // O novo endpoint /pedidos/contas-receber retorna apenas pedidos, não parcelas
+    // Para ver parcelas, use o endpoint /clientes/:id/detalhe
+    return [];
+  }, [detalheApi]);
 
   const totalAberto = useMemo(
     () => parcelas.reduce((s, p) => s + (p.valor_aberto ?? 0), 0),

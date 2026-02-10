@@ -230,9 +230,9 @@ const ContasAPagar = () => {
     retryDelay: 1000,
   });
 
-  const contas = contasResponse?.data || [];
-  const totalContas = contasResponse?.total || 0;
-  const totalPages = Math.ceil(totalContas / pageSize);
+  const pedidosContasPagarList = pedidosContasPagarResponse?.data || [];
+  const totalPedidos = pedidosContasPagarResponse?.total || 0;
+  const totalPages = Math.ceil(totalPedidos / pageSize);
 
   // Resetar página quando tab ou busca mudar
   useEffect(() => {
@@ -720,9 +720,53 @@ const ContasAPagar = () => {
     return { texto: `Vence em ${dias} dias`, cor: "text-gray-600", bgColor: "bg-gray-100" };
   };
 
-  // Mapear contas financeiras para o formato de exibição
+  // Mapear pedidos para o formato de exibição (novo formato - cada linha = 1 pedido)
   const transacoesDisplay = useMemo(() => {
-    return contas.map((conta) => {
+    // Usar pedidos do novo endpoint se disponíveis
+    if (pedidosContasPagarList.length > 0) {
+      return pedidosContasPagarList.map((pedido) => {
+        const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
+        const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || pedido.fornecedor_nome || "N/A";
+
+        const valorFormatado = new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL'
+        }).format(pedido.valor_em_aberto || 0);
+
+        const dataFormatada = pedido.data_pedido
+          ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR')
+          : "N/A";
+
+        const statusMap: Record<string, string> = {
+          "PENDENTE": "Em aberto",
+          "CONCLUIDO": "Concluído",
+          "CANCELADO": "Cancelado",
+        };
+        const statusFormatado = statusMap[pedido.status] || pedido.status;
+
+        // Calcular dias até vencimento baseado na data do pedido (aproximação)
+        const diasAteVencimento = calcularDiasAteVencimento(pedido.data_pedido);
+        const vencimentoStatus = getVencimentoStatus(diasAteVencimento, pedido.status);
+
+        return {
+          id: pedido.numero_pedido || `PED-${pedido.pedido_id}`,
+          descricao: `Pedido ${pedido.numero_pedido}`,
+          categoria: "Compras",
+          valor: valorFormatado,
+          data: dataFormatada,
+          status: statusFormatado,
+          statusOriginal: pedido.status,
+          contaId: pedido.pedido_id,
+          fornecedor: nomeFornecedor,
+          diasAteVencimento,
+          vencimentoStatus,
+          pedidoId: pedido.pedido_id,
+        };
+      });
+    }
+    
+    // Fallback: usar contas financeiras se não houver pedidos
+    return contasFallback.map((conta) => {
       let nomeFornecedor = "N/A";
       let categoria = "N/A";
       
@@ -750,19 +794,15 @@ const ContasAPagar = () => {
       };
       const statusFormatado = statusMap[conta.status] || conta.status;
 
-      // Usar campos calculados do backend se disponíveis, caso contrário calcular no frontend
       const diasAteVencimento = conta.dias_ate_vencimento !== undefined 
         ? conta.dias_ate_vencimento 
         : calcularDiasAteVencimento(conta.data_vencimento);
       
-      // Se o backend forneceu status_vencimento e proximidade_vencimento, usar eles
       let vencimentoStatus: { texto: string; cor: string; bgColor: string };
       
-      // Não exibir vencimento se a conta estiver paga ou cancelada
       if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") {
         vencimentoStatus = { texto: "", cor: "", bgColor: "" };
       } else if (conta.status_vencimento && conta.proximidade_vencimento) {
-        // Mapear proximidade_vencimento do backend para cores
         const proximidade = conta.proximidade_vencimento;
         let cor = "text-gray-600";
         let bgColor = "bg-gray-100";
@@ -790,7 +830,6 @@ const ContasAPagar = () => {
           bgColor,
         };
       } else {
-        // Fallback: calcular no frontend
         vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
       }
 
@@ -808,7 +847,7 @@ const ContasAPagar = () => {
         vencimentoStatus,
       };
     });
-  }, [contas, fornecedores]);
+  }, [pedidosContasPagarList, contasFallback, fornecedores]);
 
   // Query para buscar conta por ID quando o termo de busca for numérico
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
@@ -915,7 +954,7 @@ const ContasAPagar = () => {
     }
 
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, fornecedores, activeTab]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, pedidosContasPagarList, contasFallback, fornecedores, activeTab]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -1281,7 +1320,7 @@ const ContasAPagar = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoadingContas ? (
+              {(isLoadingPedidosContasPagar || isLoadingContasFallback) ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
@@ -1318,7 +1357,7 @@ const ContasAPagar = () => {
                       <span className="font-medium">{transacao.valor}</span>
                     </TableCell>
                     <TableCell>
-                      {transacao.status === "Pago Total" || transacao.status === "Cancelado" ? (
+                      {transacao.status === "Concluído" || transacao.status === "Cancelado" ? (
                         <span className="text-sm text-muted-foreground">--</span>
                       ) : (
                         <span className="text-sm text-muted-foreground">{transacao.data}</span>
@@ -1332,33 +1371,10 @@ const ContasAPagar = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {editingStatusId === transacao.contaId && updateStatusMutation.isPending ? (
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Atualizando...</span>
-                        </div>
-                      ) : (
-                        <Select
-                          value={transacao.statusOriginal || transacao.status}
-                          onValueChange={(value) => handleStatusChange(transacao.contaId, value)}
-                          disabled={updateStatusMutation.isPending}
-                        >
-                          <SelectTrigger className="h-7 w-[140px] text-xs border-0 bg-transparent hover:bg-transparent">
-                            <SelectValue>
-                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
-                                {transacao.status}
-                              </span>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="PENDENTE">Pendente</SelectItem>
-                            <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
-                            <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
-                            <SelectItem value="VENCIDO">Vencido</SelectItem>
-                            <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      {/* Status do pedido - não editável diretamente, apenas visualização */}
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
+                        {transacao.status}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -1369,18 +1385,17 @@ const ContasAPagar = () => {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
-                            setSelectedContaId(transacao.contaId);
-                            setViewDialogOpen(true);
+                            // Se for pedido, navegar para detalhes do pedido
+                            if ((transacao as any).pedidoId) {
+                              // TODO: Implementar navegação para detalhes do pedido
+                              console.log('Ver detalhes do pedido:', (transacao as any).pedidoId);
+                            } else {
+                              setSelectedContaId(transacao.contaId);
+                              setViewDialogOpen(true);
+                            }
                           }}>
                             <Eye className="w-4 h-4 mr-2" />
-                            Visualizar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedContaId(transacao.contaId);
-                            setEditDialogOpen(true);
-                          }}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Editar
+                            Ver detalhes
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -1438,7 +1453,7 @@ const ContasAPagar = () => {
               </Pagination>
               
               <div className="text-center text-sm text-muted-foreground mt-2">
-                Mostrando {contas.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalContas)} de {totalContas} contas
+                Mostrando {pedidosContasPagarList.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalPedidos)} de {totalPedidos} pedidos
               </div>
             </div>
           )}

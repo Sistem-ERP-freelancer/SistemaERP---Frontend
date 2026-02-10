@@ -80,16 +80,91 @@ export interface CriarDuplicatasResponse {
 
 class ContasReceberService {
   /**
-   * GET /duplicatas/contas-receber/clientes
-   * Lista clientes com totais em aberto (Tela 1). API não aceita parâmetros de filtro.
+   * GET /pedidos/contas-receber
+   * Lista pedidos com valor em aberto (cada linha = 1 pedido)
+   * Substitui o endpoint antigo /duplicatas/contas-receber/clientes
+   */
+  async listarContasReceber(params?: {
+    codigo?: string;
+    cliente_id?: number;
+    cliente_nome?: string;
+    valor_inicial?: number;
+    valor_final?: number;
+    forma_pagamento?: string;
+    situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<Array<{
+    pedido_id: number;
+    numero_pedido: string;
+    cliente_id: number;
+    cliente_nome: string;
+    valor_total: number;
+    valor_em_aberto: number;
+    forma_pagamento: string;
+    status: string;
+    data_pedido: string;
+  }>> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.codigo) queryParams.append('codigo', params.codigo);
+      if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+      if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
+      if (params?.valor_inicial) queryParams.append('valor_inicial', params.valor_inicial.toString());
+      if (params?.valor_final) queryParams.append('valor_final', params.valor_final.toString());
+      if (params?.forma_pagamento) queryParams.append('forma_pagamento', params.forma_pagamento);
+      if (params?.situacao) queryParams.append('situacao', params.situacao);
+      if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
+      if (params?.data_final) queryParams.append('data_final', params.data_final);
+
+      const query = queryParams.toString();
+      const response = await apiClient.get<Array<{
+        pedido_id: number;
+        numero_pedido: string;
+        cliente_id: number;
+        cliente_nome: string;
+        valor_total: number;
+        valor_em_aberto: number;
+        forma_pagamento: string;
+        status: string;
+        data_pedido: string;
+      }>>(`/pedidos/contas-receber${query ? `?${query}` : ''}`);
+      
+      return Array.isArray(response) ? response : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * @deprecated Use listarContasReceber() ao invés deste método
+   * Mantido apenas para compatibilidade temporária
    */
   async listarClientesComDuplicatas(): Promise<ClienteComDuplicatas[]> {
     try {
-      const response = await apiClient.get<ClienteComDuplicatas[] | { data: ClienteComDuplicatas[] }>(
-        '/duplicatas/contas-receber/clientes'
-      );
-      const data = Array.isArray(response) ? response : response?.data;
-      return data || [];
+      // Usar o novo endpoint e transformar para o formato antigo (compatibilidade)
+      const pedidos = await this.listarContasReceber({ situacao: 'em_aberto' });
+      
+      // Agrupar por cliente para manter compatibilidade
+      const clientesMap = new Map<number, ClienteComDuplicatas>();
+      
+      pedidos.forEach(pedido => {
+        if (!clientesMap.has(pedido.cliente_id)) {
+          clientesMap.set(pedido.cliente_id, {
+            cliente_id: pedido.cliente_id,
+            cliente_nome: pedido.cliente_nome,
+            total_aberto: 0,
+            parcelas_aberto: 0,
+            maior_atraso_dias: 0,
+          });
+        }
+        
+        const cliente = clientesMap.get(pedido.cliente_id)!;
+        cliente.total_aberto += pedido.valor_em_aberto;
+        cliente.parcelas_aberto += 1;
+      });
+      
+      return Array.from(clientesMap.values());
     } catch {
       return [];
     }

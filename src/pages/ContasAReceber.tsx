@@ -204,28 +204,39 @@ const ContasAReceber = () => {
     return activeTab === "Todos" || activeTab === "VENCE_HOJE" ? undefined : map[activeTab];
   }, [activeTab]);
 
-  // Buscar duplicatas agrupadas por pedido (uma linha por pedido)
-  const { data: agrupadasData, isLoading: isLoadingAgrupadas } = useQuery({
-    queryKey: ["duplicatas", "agrupadas-por-pedido", statusDuplicatas],
+  // Usar novo endpoint /pedidos/contas-receber (cada linha = 1 pedido)
+  const { data: pedidosContasReceber, isLoading: isLoadingPedidosContasReceber } = useQuery({
+    queryKey: ["pedidos", "contas-receber", statusDuplicatas, activeTab],
     queryFn: async () => {
       try {
-        const params: { status?: string } = {};
-        if (statusDuplicatas) params.status = statusDuplicatas;
-        return await duplicatasService.listarAgrupadasPorPedido(params);
+        const params: {
+          situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
+        } = {};
+        
+        // Mapear status da tab para situacao
+        if (activeTab === "Todos") {
+          // Não filtrar por situação
+        } else if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE") {
+          params.situacao = 'em_aberto';
+        } else if (activeTab === "VENCIDO") {
+          params.situacao = 'em_atraso';
+        } else if (activeTab === "PAGO_TOTAL") {
+          params.situacao = 'concluido';
+        }
+        
+        return await pedidosService.listarContasReceber(params);
       } catch (error) {
-        console.warn("API duplicatas agrupadas não disponível:", error);
-        return { grupos: [], avulsas: [] };
+        console.warn("API contas a receber não disponível:", error);
+        return [];
       }
     },
     retry: false,
   });
 
-  const grupos = agrupadasData?.grupos ?? [];
-  const avulsas = agrupadasData?.avulsas ?? [];
-
-  // Fallback: usar contas-financeiras quando duplicatas agrupadas retornar vazio
-  // (ex.: backend ainda não tem o endpoint /duplicatas/agrupadas-por-pedido)
-  const usarFallbackContasFinanceiras = !isLoadingAgrupadas && grupos.length === 0 && avulsas.length === 0;
+  const pedidos = pedidosContasReceber ?? [];
+  
+  // Fallback: usar contas-financeiras quando pedidos retornar vazio
+  const usarFallbackContasFinanceiras = !isLoadingPedidosContasReceber && pedidos.length === 0;
 
   // Buscar dados do dashboard de contas a receber
   const { data: dashboardReceber, isLoading: isLoadingReceber } = useQuery({
@@ -1131,35 +1142,38 @@ const ContasAReceber = () => {
     retry: false,
   });
 
-  // Linhas agrupadas: uma por pedido (grupos) + uma por duplicata avulsa
-  type LinhaAgrupada =
-    | { tipo: "grupo"; grupo: GrupoDuplicatasPorPedido; key: string }
-    | { tipo: "avulsa"; duplicata: Duplicata; key: string };
+  // Linhas de pedidos: cada linha = 1 pedido (novo formato)
+  type LinhaPedido = {
+    pedido_id: number;
+    numero_pedido: string;
+    cliente_id: number;
+    cliente_nome: string;
+    valor_total: number;
+    valor_em_aberto: number;
+    forma_pagamento: string;
+    status: string;
+    data_pedido: string;
+  };
 
-  const linhasAgrupadas = useMemo(() => {
-    const linhas: LinhaAgrupada[] = [];
-    grupos.forEach((g) => {
-      linhas.push({ tipo: "grupo", grupo: g, key: `grupo-${g.pedido_id}` });
-    });
-    avulsas.forEach((a) => {
-      linhas.push({ tipo: "avulsa", duplicata: a, key: `avulsa-${a.id}` });
-    });
-    if (!searchTerm.trim()) return linhas;
-    const term = searchTerm.toLowerCase();
-    return linhas.filter((l) => {
-      if (l.tipo === "grupo") {
+  const linhasPedidos = useMemo(() => {
+    if (!pedidos || pedidos.length === 0) return [];
+    
+    let linhasFiltradas = pedidos;
+    
+    // Filtrar por termo de busca
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      linhasFiltradas = pedidos.filter((p) => {
         return (
-          l.grupo.numero_pedido?.toLowerCase().includes(term) ||
-          l.grupo.cliente_nome?.toLowerCase().includes(term)
+          p.numero_pedido?.toLowerCase().includes(term) ||
+          p.cliente_nome?.toLowerCase().includes(term) ||
+          p.pedido_id?.toString().includes(term)
         );
-      }
-      const cliente = clientes.find((c) => c.id === l.duplicata.cliente_id);
-      return (
-        l.duplicata.numero?.toLowerCase().includes(term) ||
-        cliente?.nome?.toLowerCase().includes(term)
-      );
-    });
-  }, [grupos, avulsas, searchTerm, clientes]);
+      });
+    }
+    
+    return linhasFiltradas;
+  }, [pedidos, searchTerm]);
 
   // Grupos de contas por pedido (fallback: quando duplicatas agrupadas não está disponível)
   type GrupoContas = {
@@ -1719,7 +1733,7 @@ const ContasAReceber = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(isLoadingAgrupadas || (usarFallbackContasFinanceiras && isLoadingContas)) ? (
+              {(isLoadingPedidosContasReceber || (usarFallbackContasFinanceiras && isLoadingContas)) ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
@@ -1728,7 +1742,7 @@ const ContasAReceber = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : (usarFallbackContasFinanceiras ? gruposContas : linhasAgrupadas).length === 0 ? (
+              ) : (usarFallbackContasFinanceiras ? gruposContas : linhasPedidos).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
@@ -1838,61 +1852,48 @@ const ContasAReceber = () => {
                   );
                 })
               ) : (
-                linhasAgrupadas.map((linha) => {
-                  if (linha.tipo === "grupo") {
-                    const g = linha.grupo;
-                    const parcelaPaga = (p: { status: string; valor_aberto?: number }) =>
-                      p.status === "BAIXADA" || (p.valor_aberto != null && Number(p.valor_aberto) <= 0);
-                    const parcelasEmAberto = g.parcelas.filter(
-                      (p) => p.status !== "BAIXADA" && p.status !== "CANCELADA" && !parcelaPaga(p)
-                    );
-                    const parcelasPagas = g.parcelas.filter(parcelaPaga).length;
-                    const primeiraAberta = parcelasEmAberto[0];
-                    const statusGrupo =
-                      parcelasPagas === g.total_parcelas
-                        ? "Pago Total"
-                        : parcelasPagas > 0
-                          ? "Pago Parcial"
-                          : "Pendente";
-                    return (
-                      <TableRow key={linha.key}>
+                linhasPedidos.map((pedido) => {
+                  const statusPedido = pedido.status === "CONCLUIDO" 
+                    ? "Concluído" 
+                    : pedido.status === "CANCELADO"
+                      ? "Cancelado"
+                      : "Em aberto";
+                  
+                  return (
+                      <TableRow key={`pedido-${pedido.pedido_id}`}>
                         <TableCell>
-                          <span className="font-medium">Pedido {g.numero_pedido}</span>
+                          <span className="font-medium">{pedido.numero_pedido}</span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">{g.cliente_nome}</span>
+                          <span className="text-sm text-muted-foreground">{pedido.cliente_nome}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-muted-foreground">Vendas</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm font-medium">
-                            {parcelasPagas}/{g.total_parcelas} pagas
+                            {pedido.valor_em_aberto > 0 ? "Em aberto" : "Quitado"}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{formatarMoeda(g.valor_aberto)}</span>
+                          <span className="font-medium">{formatarMoeda(pedido.valor_em_aberto)}</span>
                         </TableCell>
                         <TableCell>
-                          {primeiraAberta ? (
-                            <span className="text-sm text-muted-foreground">
-                              {formatarDataBR(primeiraAberta.data_vencimento)}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )}
+                          <span className="text-sm text-muted-foreground">
+                            {formatarDataBR(pedido.data_pedido)}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <span
                             className={`text-xs px-2 py-1 rounded-full font-medium ${
-                              statusGrupo === "Pago Total"
+                              statusPedido === "Concluído"
                                 ? "bg-green-500/10 text-green-600"
-                                : statusGrupo === "Pago Parcial"
-                                  ? "bg-blue-500/10 text-blue-600"
-                                  : "bg-amber-500/10 text-amber-600"
+                                : statusPedido === "Em aberto"
+                                  ? "bg-amber-500/10 text-amber-600"
+                                  : "bg-slate-500/10 text-slate-600"
                             }`}
                           >
-                            {statusGrupo}
+                            {statusPedido}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -1903,16 +1904,33 @@ const ContasAReceber = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuSub>
-                                <DropdownMenuSubTrigger>
+                              <DropdownMenuItem onClick={() => {
+                                // Navegar para detalhes do pedido
+                                navigate(`/pedidos/${pedido.pedido_id}`);
+                              }}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                Ver detalhes
+                              </DropdownMenuItem>
+                              {pedido.valor_em_aberto > 0 && (
+                                <DropdownMenuItem onClick={() => {
+                                  // Navegar para página de pagar parcela
+                                  navigate(`/contas-a-receber/pedido/${pedido.pedido_id}`);
+                                }}>
                                   <DollarSign className="w-4 h-4 mr-2" />
-                                  Pagar parcelas
-                                </DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent className="max-h-80 overflow-y-auto min-w-[320px]">
-                                  <div className="px-2 py-2 text-sm font-medium border-b mb-2">
-                                    Parcelas restantes: {parcelasEmAberto.length}
-                                  </div>
-                                  {g.parcelas.map((parcela, idx) => {
+                                  Pagar
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+                  
+                  // Código antigo para duplicatas avulsas (removido - não existe mais)
+                  return null;
+                })
+              )}
                                     const pagaDup = parcelaPaga(parcela);
                                     const statusDup = pagaDup ? "Baixada" : parcela.status === "CANCELADA" ? "Cancelada" : parcela.status === "PARCIAL" ? "Parcial" : "Aberta";
                                     const podePagar = !pagaDup && parcela.status !== "CANCELADA";
@@ -2145,13 +2163,13 @@ const ContasAReceber = () => {
           </Table>
           
           {/* Contador */}
-          {((!usarFallbackContasFinanceiras && linhasAgrupadas.length > 0) ||
+          {((!usarFallbackContasFinanceiras && linhasPedidos.length > 0) ||
             (usarFallbackContasFinanceiras && gruposContas.length > 0)) && (
             <div className="border-t border-border p-4">
               <div className="text-center text-sm text-muted-foreground">
                 {usarFallbackContasFinanceiras
                   ? `${gruposContas.length} pedido(s)`
-                  : `${linhasAgrupadas.length} pedido(s) e título(s) avulso(s)`}
+                  : `${linhasPedidos.length} pedido(s)`}
               </div>
             </div>
           )}
