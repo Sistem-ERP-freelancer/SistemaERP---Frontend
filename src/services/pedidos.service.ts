@@ -245,25 +245,50 @@ class PedidosService {
   async listarContasReceber(params?: FiltrosContasReceber): Promise<ContaReceber[]> {
     const queryParams = new URLSearchParams();
     
-    // Apenas adicionar parâmetros que têm valor (evita Validation failed)
-    if (params?.codigo) queryParams.append('codigo', params.codigo);
-    if (params?.cliente_id !== undefined && params.cliente_id !== null) {
+    // Apenas adicionar parâmetros que têm valor válido (evita Validation failed)
+    // Validar strings: não vazias e não apenas espaços
+    if (params?.codigo && params.codigo.trim()) {
+      queryParams.append('codigo', params.codigo.trim());
+    }
+    // Validar números: devem ser números válidos e > 0
+    if (params?.cliente_id !== undefined && params.cliente_id !== null && !isNaN(Number(params.cliente_id)) && params.cliente_id > 0) {
       queryParams.append('cliente_id', params.cliente_id.toString());
     }
-    if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
-    if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
+    if (params?.cliente_nome && params.cliente_nome.trim()) {
+      queryParams.append('cliente_nome', params.cliente_nome.trim());
+    }
+    // Validar valores monetários: devem ser números válidos e >= 0
+    if (params?.valor_inicial !== undefined && params.valor_inicial !== null && !isNaN(Number(params.valor_inicial)) && params.valor_inicial >= 0) {
       queryParams.append('valor_inicial', params.valor_inicial.toString());
     }
-    if (params?.valor_final !== undefined && params.valor_final !== null) {
+    if (params?.valor_final !== undefined && params.valor_final !== null && !isNaN(Number(params.valor_final)) && params.valor_final >= 0) {
       queryParams.append('valor_final', params.valor_final.toString());
     }
-    if (params?.forma_pagamento) queryParams.append('forma_pagamento', params.forma_pagamento);
-    if (params?.situacao) queryParams.append('situacao', params.situacao);
-    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
-    if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.forma_pagamento && params.forma_pagamento.trim()) {
+      queryParams.append('forma_pagamento', params.forma_pagamento.trim());
+    }
+    if (params?.situacao && params.situacao.trim()) {
+      queryParams.append('situacao', params.situacao.trim());
+    }
+    // Validar datas: devem estar no formato YYYY-MM-DD
+    if (params?.data_inicial && params.data_inicial.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_inicial.trim())) {
+      queryParams.append('data_inicial', params.data_inicial.trim());
+    }
+    if (params?.data_final && params.data_final.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_final.trim())) {
+      queryParams.append('data_final', params.data_final.trim());
+    }
 
     const query = queryParams.toString();
     const url = `/pedidos/contas-receber${query ? `?${query}` : ''}`;
+    
+    if (import.meta.env.DEV) {
+      console.log('🔍 [PedidosService] listarContasReceber:', {
+        params,
+        url,
+        queryString: query,
+      });
+    }
+    
     return apiClient.get<ContaReceber[]>(url);
   }
 
@@ -275,25 +300,50 @@ class PedidosService {
   async listarContasPagar(params?: FiltrosContasPagar): Promise<ContaPagar[]> {
     const queryParams = new URLSearchParams();
     
-    // Apenas adicionar parâmetros que têm valor (evita Validation failed)
-    if (params?.codigo) queryParams.append('codigo', params.codigo);
-    if (params?.fornecedor_id !== undefined && params.fornecedor_id !== null) {
+    // Apenas adicionar parâmetros que têm valor válido (evita Validation failed)
+    // Validar strings: não vazias e não apenas espaços
+    if (params?.codigo && params.codigo.trim()) {
+      queryParams.append('codigo', params.codigo.trim());
+    }
+    // Validar números: devem ser números válidos e > 0
+    if (params?.fornecedor_id !== undefined && params.fornecedor_id !== null && !isNaN(Number(params.fornecedor_id)) && params.fornecedor_id > 0) {
       queryParams.append('fornecedor_id', params.fornecedor_id.toString());
     }
-    if (params?.fornecedor_nome) queryParams.append('fornecedor_nome', params.fornecedor_nome);
-    if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
+    if (params?.fornecedor_nome && params.fornecedor_nome.trim()) {
+      queryParams.append('fornecedor_nome', params.fornecedor_nome.trim());
+    }
+    // Validar valores monetários: devem ser números válidos e >= 0
+    if (params?.valor_inicial !== undefined && params.valor_inicial !== null && !isNaN(Number(params.valor_inicial)) && params.valor_inicial >= 0) {
       queryParams.append('valor_inicial', params.valor_inicial.toString());
     }
-    if (params?.valor_final !== undefined && params.valor_final !== null) {
+    if (params?.valor_final !== undefined && params.valor_final !== null && !isNaN(Number(params.valor_final)) && params.valor_final >= 0) {
       queryParams.append('valor_final', params.valor_final.toString());
     }
-    if (params?.forma_pagamento) queryParams.append('forma_pagamento', params.forma_pagamento);
-    if (params?.situacao) queryParams.append('situacao', params.situacao);
-    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
-    if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.forma_pagamento && params.forma_pagamento.trim()) {
+      queryParams.append('forma_pagamento', params.forma_pagamento.trim());
+    }
+    if (params?.situacao && params.situacao.trim()) {
+      queryParams.append('situacao', params.situacao.trim());
+    }
+    // Validar datas: devem estar no formato YYYY-MM-DD
+    if (params?.data_inicial && params.data_inicial.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_inicial.trim())) {
+      queryParams.append('data_inicial', params.data_inicial.trim());
+    }
+    if (params?.data_final && params.data_final.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_final.trim())) {
+      queryParams.append('data_final', params.data_final.trim());
+    }
 
     const query = queryParams.toString();
     const url = `/pedidos/contas-pagar${query ? `?${query}` : ''}`;
+    
+    if (import.meta.env.DEV) {
+      console.log('🔍 [PedidosService] listarContasPagar:', {
+        params,
+        url,
+        queryString: query,
+      });
+    }
+    
     return apiClient.get<ContaPagar[]>(url);
   }
 }
