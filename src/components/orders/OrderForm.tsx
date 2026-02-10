@@ -346,6 +346,69 @@ export function OrderForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validação: forma de pagamento obrigatória (conforme guia - removido "A combinar")
+    if (!formaPagamento) {
+      toast.error('Selecione a forma de pagamento.');
+      return;
+    }
+
+    // Validação: data de vencimento obrigatória e >= hoje (conforme guia)
+    if (!dataVencimento?.trim()) {
+      toast.error('Informe a Data de Vencimento inicial.');
+      return;
+    }
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataVencimentoDate = new Date(dataVencimento);
+    dataVencimentoDate.setHours(0, 0, 0, 0);
+
+    if (dataVencimentoDate < hoje) {
+      toast.error('A data de vencimento não pode ser anterior ao dia atual.');
+      return;
+    }
+
+    // Validação de estoque no frontend (conforme guia)
+    const itensComErro: Array<{ produto: string; disponivel: number; solicitado: number }> = [];
+    
+    for (const item of itens) {
+      if (item.produto_id && item.produto_id !== 0 && tipo === 'VENDA') {
+        const produto = produtos.find(p => p.id === item.produto_id);
+        if (produto) {
+          const quantidadeSolicitada = Number(item.quantidade) || 0;
+          const estoqueDisponivel = produto.estoque_disponivel || 0;
+          
+          if (quantidadeSolicitada > estoqueDisponivel) {
+            itensComErro.push({
+              produto: produto.nome,
+              disponivel: estoqueDisponivel,
+              solicitado: quantidadeSolicitada,
+            });
+          }
+        }
+      }
+    }
+
+    if (itensComErro.length > 0) {
+      const mensagemErro = itensComErro.map(erro => 
+        `Estoque insuficiente para o produto ${erro.produto}\nDisponível: ${erro.disponivel} | Solicitado: ${erro.solicitado}`
+      ).join('\n\n');
+      toast.error(mensagemErro);
+      return;
+    }
+
+    // Validação de limite de crédito do cliente (conforme guia)
+    if (tipo === 'VENDA' && clienteId && limiteCredito) {
+      const valorDoPedido = valorTotalPedido;
+      const valorEmAbertoDoCliente = limiteCredito.valorUtilizado || 0;
+      const limite = limiteCredito.limiteCredito || 0;
+
+      if (limite > 0 && (valorEmAbertoDoCliente + valorDoPedido) > limite) {
+        toast.error('Limite de compra excedido');
+        return;
+      }
+    }
+
     const parcelado = queroParcelarDinheiroPix && qtdParcelasNum >= 2;
     if (parcelado && !dataVencimento?.trim()) {
       toast.error('Informe a Data de Vencimento para parcelar o pedido.');
@@ -710,15 +773,18 @@ export function OrderForm({
 
                 <div className="space-y-2">
                   <Label>
-                    Data de Vencimento
+                    Data de Vencimento Inicial
                     {queroParcelarDinheiroPix && qtdParcelasNum >= 2 && (
                       <span className="text-destructive text-xs font-normal ml-1">(obrigatório ao parcelar)</span>
                     )}
+                    <span className="text-destructive text-xs font-normal ml-1">*</span>
                   </Label>
                   <Input
                     type="date"
                     value={dataVencimento}
                     onChange={(e) => setDataVencimento(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    required
                   />
                 </div>
               </div>

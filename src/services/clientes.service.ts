@@ -344,6 +344,28 @@ class ClientesService {
   async buscarLimiteCredito(id: number): Promise<LimiteCredito> {
     return apiClient.get<LimiteCredito>(`/clientes/${id}/limite-credito`);
   }
+
+  /**
+   * Consulta CNPJ no Serasa
+   * GET /clientes/consultar-cnpj/:cnpj
+   * Consulta deve ser feita SOMENTE quando o usuário clicar na lupa
+   * @param cnpj - CNPJ sem formatação (apenas números)
+   * @returns Dados do CNPJ retornados pelo Serasa
+   */
+  async consultarCNPJSerasa(cnpj: string): Promise<{
+    razao_social: string;
+    nome_fantasia?: string;
+    endereco?: string;
+    cep?: string;
+    cidade?: string;
+    uf?: string;
+    telefone?: string;
+    situacao_cadastral?: string;
+  }> {
+    // Remove formatação do CNPJ (apenas números)
+    const cnpjLimpo = cnpj.replace(/\D/g, '');
+    return apiClient.get(`/clientes/consultar-cnpj/${cnpjLimpo}`);
+  }
 }
 
 export const clientesService = new ClientesService();

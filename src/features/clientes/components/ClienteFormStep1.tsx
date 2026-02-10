@@ -3,12 +3,14 @@
  * Informações Básicas
  */
 
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Check, Circle, FileText, Hash, User, DollarSign } from "lucide-react";
 import { cleanDocument, formatCNPJ, formatCPF } from "@/lib/validators";
+import { clientesService } from "@/services/clientes.service";
+import { Building2, Check, Circle, DollarSign, FileText, Hash, Loader2, Search, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ClienteFormData } from "../types/cliente.types";
 
 interface ClienteFormStep1Props {
@@ -23,6 +25,7 @@ export const ClienteFormStep1 = ({
   // Estado local para o valor do input de limite de crédito (permite digitação livre)
   const [limiteCreditoInput, setLimiteCreditoInput] = useState<string>('');
   const [isFocused, setIsFocused] = useState(false);
+  const [consultandoCNPJ, setConsultandoCNPJ] = useState(false);
 
   // Sincroniza o estado local quando formData.limite_credito mudar externamente (apenas se não estiver focado)
   useEffect(() => {
@@ -269,15 +272,64 @@ export const ClienteFormStep1 = ({
           <Hash className="w-4 h-4 text-muted-foreground" />
           {formData.tipoPessoa === "PESSOA_FISICA" ? "CPF" : "CNPJ"} *
         </Label>
-        <Input
-          placeholder={
-            formData.tipoPessoa === "PESSOA_FISICA"
-              ? "000.000.000-00"
-              : "00.000.000/0000-00"
-          }
-          value={formData.cpf_cnpj}
-          onChange={(e) => handleCPFCNPJChange(e.target.value)}
-        />
+        <div className="flex gap-2">
+          <Input
+            placeholder={
+              formData.tipoPessoa === "PESSOA_FISICA"
+                ? "000.000.000-00"
+                : "00.000.000/0000-00"
+            }
+            value={formData.cpf_cnpj}
+            onChange={(e) => handleCPFCNPJChange(e.target.value)}
+            className="flex-1"
+          />
+          {formData.tipoPessoa === "PESSOA_JURIDICA" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={async () => {
+                const cnpjLimpo = cleanDocument(formData.cpf_cnpj);
+                if (cnpjLimpo.length !== 14) {
+                  toast.error('CNPJ deve ter 14 dígitos para consultar');
+                  return;
+                }
+                
+                setConsultandoCNPJ(true);
+                try {
+                  const dados = await clientesService.consultarCNPJSerasa(formData.cpf_cnpj);
+                  
+                  // Preencher campos automaticamente
+                  onFormDataChange({
+                    nome_razao: dados.razao_social || formData.nome_razao,
+                    nome_fantasia: dados.nome_fantasia || formData.nome_fantasia,
+                  });
+                  
+                  // Atualizar endereço se disponível (precisa passar via callback ou atualizar estado pai)
+                  if (dados.endereco || dados.cep || dados.cidade || dados.uf) {
+                    // Nota: endereços são gerenciados no step 3, então apenas mostramos sucesso
+                    toast.success('CNPJ consultado com sucesso! Verifique e ajuste os dados se necessário.');
+                  } else {
+                    toast.success('CNPJ consultado com sucesso!');
+                  }
+                } catch (error: any) {
+                  const mensagem = error?.response?.data?.message || 'CNPJ não encontrado na base do Serasa';
+                  toast.error(mensagem);
+                } finally {
+                  setConsultandoCNPJ(false);
+                }
+              }}
+              disabled={consultandoCNPJ || cleanDocument(formData.cpf_cnpj).length !== 14}
+              title="Consultar CNPJ no Serasa"
+            >
+              {consultandoCNPJ ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+            </Button>
+          )}
+        </div>
         {/* Mensagem de validação em tempo real */}
         {formData.tipoPessoa === "PESSOA_JURIDICA" &&
           cleanDocument(formData.cpf_cnpj).length > 0 &&
