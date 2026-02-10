@@ -11,7 +11,8 @@
 7. [Exemplos de Requisições](#exemplos-de-requisições)
 8. [Regras de Negócio](#regras-de-negócio)
 
----
+------
+
 
 # 📌 RESUMO DO BACKEND IMPLEMENTADO
 
