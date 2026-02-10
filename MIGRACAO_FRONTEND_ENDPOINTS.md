@@ -10,7 +10,7 @@ Os seguintes endpoints **não existem mais** e retornam **404**:
 3. `GET /api/v1/duplicatas/agrupadas-por-pedido?status=ABERTA`
 4. Todos os outros endpoints que começam com `/duplicatas/`
 
----
+--------
 
 ## ✅ NOVOS ENDPOINTS DISPONÍVEIS
 
