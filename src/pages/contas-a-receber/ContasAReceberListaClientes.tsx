@@ -239,7 +239,7 @@ const ContasAReceberListaClientes = ({
       (c) => c.total_aberto > 0 && c.cliente_nome !== '—'
     );
     return result;
-  }, [clientesApi, grupos, avulsas, clientes, contasReceber, itensAgrupado]);
+  }, [clientesApi, pedidos, clientes, contasReceber, itensAgrupado]);
 
   const totalAReceberLista = useMemo(
     () => clientesComDuplicatas.reduce((s, c) => s + (c.total_aberto ?? 0), 0),
