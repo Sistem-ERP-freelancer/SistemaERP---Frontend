@@ -156,7 +156,59 @@ const ContasAPagar = () => {
     return true;
   };
 
-  // Buscar contas a pagar filtradas para exibir na tabela com paginação
+  // Buscar contas a pagar usando novo endpoint /pedidos/contas-pagar (cada linha = 1 pedido)
+  const { data: pedidosContasPagarResponse, isLoading: isLoadingPedidosContasPagar } = useQuery({
+    queryKey: ["pedidos", "contas-pagar", activeTab, currentPage],
+    queryFn: async () => {
+      if (!validarParametrosPaginação(currentPage, pageSize)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+
+      try {
+        // Mapear status da tab para situacao do endpoint
+        let situacao: 'em_aberto' | 'em_atraso' | 'concluido' | undefined = undefined;
+        
+        if (activeTab === "Todos") {
+          // Não filtrar por situação
+        } else if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE") {
+          situacao = 'em_aberto';
+        } else if (activeTab === "VENCIDO") {
+          situacao = 'em_atraso';
+        } else if (activeTab === "PAGO_TOTAL") {
+          situacao = 'concluido';
+        }
+
+        const pedidos = await pedidosService.listarContasPagar({
+          situacao,
+        });
+        
+        // Aplicar paginação manualmente (o endpoint não tem paginação ainda)
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedPedidos = pedidos.slice(startIndex, endIndex);
+        
+        return {
+          data: paginatedPedidos,
+          total: pedidos.length,
+        };
+      } catch (error) {
+        console.warn("API de contas a pagar não disponível:", error);
+        return { data: [], total: 0 };
+      }
+    },
+    retry: (failureCount, error: any) => {
+      if (error?.response) {
+        const status = error.response.status;
+        if ([400, 401, 403, 404].includes(status)) {
+          return false;
+        }
+      }
+      return failureCount < 2;
+    },
+    retryDelay: 1000,
+  });
+
+  // Buscar contas a pagar filtradas para exibir na tabela com paginação (fallback)
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
     queryKey: ["contas-financeiras", "pagar", "tabela", activeTab, currentPage],
     queryFn: async () => {
