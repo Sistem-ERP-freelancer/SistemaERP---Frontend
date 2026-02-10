@@ -285,6 +285,67 @@ const ContasAPagar = () => {
   const pedidosContasPagarList = pedidosContasPagarResponse?.data || [];
   const totalPedidos = pedidosContasPagarResponse?.total || 0;
   const totalPages = Math.ceil(totalPedidos / pageSize);
+  
+  // Fallback: manter contas financeiras para compatibilidade temporária (se não houver pedidos)
+  const { data: contasResponseFallback, isLoading: isLoadingContasFallback } = useQuery({
+    queryKey: ["contas-financeiras", "pagar", "tabela-fallback", activeTab, currentPage],
+    queryFn: async () => {
+      if (!validarParametrosPaginação(currentPage, pageSize)) {
+        throw new Error('Parâmetros de paginação inválidos');
+      }
+
+      try {
+        let status: string | undefined;
+        let proximidadeVencimento: string | undefined;
+
+        const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
+        const proximidadeTabs = ["VENCE_HOJE"];
+        
+        if (statusTabs.includes(activeTab)) {
+          if (activeTab === "VENCIDO") {
+            proximidadeVencimento = "VENCIDA";
+          } else {
+            status = activeTab;
+          }
+        } else if (proximidadeTabs.includes(activeTab)) {
+          proximidadeVencimento = activeTab;
+        }
+
+        const response = await financeiroService.listar({
+          tipo: "PAGAR",
+          page: currentPage,
+          limit: pageSize,
+          status,
+          proximidade_vencimento: proximidadeVencimento,
+        });
+        
+        let contasData = [];
+        let totalData = 0;
+        
+        if (Array.isArray(response)) {
+          contasData = response;
+          totalData = response.length;
+        } else if (response?.data && Array.isArray(response.data)) {
+          contasData = response.data;
+          totalData = response.total || response.data.length;
+        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
+          contasData = (response as any).contas;
+          totalData = (response as any).total || (response as any).contas.length;
+        }
+        
+        return {
+          data: contasData,
+          total: totalData,
+        };
+      } catch (error) {
+        return { data: [], total: 0 };
+      }
+    },
+    enabled: pedidosContasPagarList.length === 0, // Usar fallback apenas se não houver pedidos
+    retry: false,
+  });
+  
+  const contasFallback = contasResponseFallback?.data || [];
 
   // Resetar página quando tab ou busca mudar
   useEffect(() => {
