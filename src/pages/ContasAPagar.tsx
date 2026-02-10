@@ -42,6 +42,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
+import { formatarStatus, formatarFormaPagamento } from "@/lib/utils";
+import type { ContaPagar } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -837,25 +839,18 @@ const ContasAPagar = () => {
   const transacoesDisplay = useMemo(() => {
     // Usar pedidos do novo endpoint se disponíveis
     if (pedidosContasPagarList.length > 0) {
-      return pedidosContasPagarList.map((pedido) => {
+      return pedidosContasPagarList.map((pedido: ContaPagar) => {
         const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
         const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || pedido.fornecedor_nome || "N/A";
 
-        const valorFormatado = new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: 'BRL'
-        }).format(pedido.valor_em_aberto || 0);
+        const valorFormatado = formatarMoeda(pedido.valor_em_aberto || 0);
 
         const dataFormatada = pedido.data_pedido
           ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR')
           : "N/A";
 
-        const statusMap: Record<string, string> = {
-          "PENDENTE": "Em aberto",
-          "CONCLUIDO": "Concluído",
-          "CANCELADO": "Cancelado",
-        };
-        const statusFormatado = statusMap[pedido.status] || pedido.status;
+        const statusFormatado = formatarStatus(pedido.status);
+        const formaPagamentoFormatada = formatarFormaPagamento(pedido.forma_pagamento);
 
         // Calcular dias até vencimento baseado na data do pedido (aproximação)
         const diasAteVencimento = calcularDiasAteVencimento(pedido.data_pedido);
@@ -871,6 +866,7 @@ const ContasAPagar = () => {
           statusOriginal: pedido.status,
           contaId: pedido.pedido_id,
           fornecedor: nomeFornecedor,
+          formaPagamento: formaPagamentoFormatada,
           diasAteVencimento,
           vencimentoStatus,
           pedidoId: pedido.pedido_id,

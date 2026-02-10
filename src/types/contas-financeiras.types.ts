@@ -1,0 +1,70 @@
+/**
+ * Tipos e interfaces para Contas a Receber e Contas a Pagar
+ * Conforme GUIA_MIGRACAO_FRONTEND_PRATICO.md
+ */
+
+export enum FormaPagamento {
+  DINHEIRO = 'DINHEIRO',
+  PIX = 'PIX',
+  CARTAO_CREDITO = 'CARTAO_CREDITO',
+  CARTAO_DEBITO = 'CARTAO_DEBITO',
+  BOLETO = 'BOLETO',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  CHEQUE = 'CHEQUE'
+}
+
+export enum StatusPedido {
+  PENDENTE = 'PENDENTE',
+  APROVADO = 'APROVADO',
+  EM_PROCESSAMENTO = 'EM_PROCESSAMENTO',
+  CONCLUIDO = 'CONCLUIDO',
+  CANCELADO = 'CANCELADO'
+}
+
+export interface ContaReceber {
+  pedido_id: number;
+  numero_pedido: string;
+  cliente_id?: number | null;
+  cliente_nome?: string | null;
+  valor_total: number;
+  valor_em_aberto: number;
+  forma_pagamento: string; // FormaPagamento enum value
+  status: string; // StatusPedido enum value
+  data_pedido: string; // ISO date: "2026-02-10"
+}
+
+export interface ContaPagar {
+  pedido_id: number;
+  numero_pedido: string;
+  fornecedor_id?: number | null;
+  fornecedor_nome?: string | null;
+  valor_total: number;
+  valor_em_aberto: number;
+  forma_pagamento: string; // FormaPagamento enum value
+  status: string; // StatusPedido enum value
+  data_pedido: string; // ISO date: "2026-02-10"
+}
+
+export interface FiltrosContasReceber {
+  codigo?: string;
+  cliente_id?: number;
+  cliente_nome?: string;
+  valor_inicial?: number;
+  valor_final?: number;
+  forma_pagamento?: string;
+  situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
+  data_inicial?: string; // YYYY-MM-DD
+  data_final?: string; // YYYY-MM-DD
+}
+
+export interface FiltrosContasPagar {
+  codigo?: string;
+  fornecedor_id?: number;
+  fornecedor_nome?: string;
+  valor_inicial?: number;
+  valor_final?: number;
+  forma_pagamento?: string;
+  situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
+  data_inicial?: string; // YYYY-MM-DD
+  data_final?: string; // YYYY-MM-DD
+}

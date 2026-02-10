@@ -41,7 +41,8 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatCurrency, parseNumeroParcela } from "@/lib/utils";
+import { formatCurrency, parseNumeroParcela, formatarStatus, formatarFormaPagamento } from "@/lib/utils";
+import type { ContaReceber } from "@/types/contas-financeiras.types";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import {
@@ -162,35 +163,7 @@ const ContasAReceber = () => {
     ? clientesData 
     : clientesData?.data || [];
 
-  // Buscar pedidos de venda
-  const { data: pedidosData } = useQuery({
-    queryKey: ["pedidos", "contas-receber"],
-    queryFn: async () => {
-      try {
-        const response = await pedidosService.listar({
-          tipo: "VENDA",
-          page: 1,
-          limit: 1000,
-        });
-        if (Array.isArray(response)) {
-          return response;
-        }
-        if (response?.data && Array.isArray(response.data)) {
-          return response.data;
-        }
-        if ((response as any)?.pedidos && Array.isArray((response as any).pedidos)) {
-          return (response as any).pedidos;
-        }
-        return [];
-      } catch (error) {
-        console.warn("API de pedidos não disponível:", error);
-        return [];
-      }
-    },
-    retry: false,
-  });
-
-  // Removido: pedidos agora vem de pedidosContasReceber (linha 236)
+  // Removido: pedidos agora vem de pedidosContasReceber (linha 209)
 
   // Mapear tab ativa para status de duplicatas (ABERTA, PARCIAL, BAIXADA, CANCELADA)
   const statusDuplicatas = useMemo(() => {
@@ -1143,27 +1116,15 @@ const ContasAReceber = () => {
   });
 
   // Linhas de pedidos: cada linha = 1 pedido (novo formato)
-  type LinhaPedido = {
-    pedido_id: number;
-    numero_pedido: string;
-    cliente_id: number;
-    cliente_nome: string;
-    valor_total: number;
-    valor_em_aberto: number;
-    forma_pagamento: string;
-    status: string;
-    data_pedido: string;
-  };
-
   const linhasPedidos = useMemo(() => {
-    if (!pedidos || pedidos.length === 0) return [];
+    if (!pedidosContasReceber || pedidosContasReceber.length === 0) return [];
     
-    let linhasFiltradas = pedidos;
+    let linhasFiltradas = pedidosContasReceber;
     
     // Filtrar por termo de busca
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      linhasFiltradas = pedidos.filter((p) => {
+      linhasFiltradas = pedidosContasReceber.filter((p: ContaReceber) => {
         return (
           p.numero_pedido?.toLowerCase().includes(term) ||
           p.cliente_nome?.toLowerCase().includes(term) ||
@@ -1173,7 +1134,7 @@ const ContasAReceber = () => {
     }
     
     return linhasFiltradas;
-  }, [pedidos, searchTerm]);
+  }, [pedidosContasReceber, searchTerm]);
 
   // Grupos de contas por pedido (fallback: quando duplicatas agrupadas não está disponível)
   type GrupoContas = {
@@ -1852,12 +1813,9 @@ const ContasAReceber = () => {
                   );
                 })
               ) : (
-                linhasPedidos.map((pedido) => {
-                  const statusPedido = pedido.status === "CONCLUIDO" 
-                    ? "Concluído" 
-                    : pedido.status === "CANCELADO"
-                      ? "Cancelado"
-                      : "Em aberto";
+                linhasPedidos.map((pedido: ContaReceber) => {
+                  const statusFormatado = formatarStatus(pedido.status);
+                  const formaPagamentoFormatada = formatarFormaPagamento(pedido.forma_pagamento);
                   
                   return (
                       <TableRow key={`pedido-${pedido.pedido_id}`}>
@@ -1865,7 +1823,7 @@ const ContasAReceber = () => {
                           <span className="font-medium">{pedido.numero_pedido}</span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">{pedido.cliente_nome}</span>
+                          <span className="text-sm text-muted-foreground">{pedido.cliente_nome || '-'}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-muted-foreground">Vendas</span>
@@ -1876,7 +1834,7 @@ const ContasAReceber = () => {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{formatarMoeda(pedido.valor_em_aberto)}</span>
+                          <span className="font-medium">{formatCurrency(pedido.valor_em_aberto)}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-muted-foreground">
@@ -1884,16 +1842,21 @@ const ContasAReceber = () => {
                           </span>
                         </TableCell>
                         <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {formaPagamentoFormatada}
+                          </span>
+                        </TableCell>
+                        <TableCell>
                           <span
                             className={`text-xs px-2 py-1 rounded-full font-medium ${
-                              statusPedido === "Concluído"
+                              statusFormatado === "Concluído"
                                 ? "bg-green-500/10 text-green-600"
-                                : statusPedido === "Em aberto"
+                                : statusFormatado === "Em aberto"
                                   ? "bg-amber-500/10 text-amber-600"
                                   : "bg-slate-500/10 text-slate-600"
                             }`}
                           >
-                            {statusPedido}
+                            {statusFormatado}
                           </span>
                         </TableCell>
                         <TableCell>

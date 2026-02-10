@@ -6,6 +6,7 @@ import {
     Pedido,
     PedidosResponse,
 } from '@/types/pedido';
+import type { ContaReceber, ContaPagar, FiltrosContasReceber, FiltrosContasPagar } from '@/types/contas-financeiras.types';
 import { apiClient } from './api';
 import type { ConfirmarPagamentoPayload } from './contas-receber.service';
 
@@ -241,33 +242,21 @@ class PedidosService {
    * GET /pedidos/contas-receber
    * Cada linha = 1 pedido (não agrupado por cliente)
    */
-  async listarContasReceber(params?: {
-    codigo?: string;
-    cliente_id?: number;
-    cliente_nome?: string;
-    valor_inicial?: number;
-    valor_final?: number;
-    forma_pagamento?: string;
-    situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
-    data_inicial?: string;
-    data_final?: string;
-  }): Promise<Array<{
-    pedido_id: number;
-    numero_pedido: string;
-    cliente_id: number;
-    cliente_nome: string;
-    valor_total: number;
-    valor_em_aberto: number;
-    forma_pagamento: string;
-    status: string;
-    data_pedido: string;
-  }>> {
+  async listarContasReceber(params?: FiltrosContasReceber): Promise<ContaReceber[]> {
     const queryParams = new URLSearchParams();
+    
+    // Apenas adicionar parâmetros que têm valor (evita Validation failed)
     if (params?.codigo) queryParams.append('codigo', params.codigo);
-    if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+    if (params?.cliente_id !== undefined && params.cliente_id !== null) {
+      queryParams.append('cliente_id', params.cliente_id.toString());
+    }
     if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
-    if (params?.valor_inicial) queryParams.append('valor_inicial', params.valor_inicial.toString());
-    if (params?.valor_final) queryParams.append('valor_final', params.valor_final.toString());
+    if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
+      queryParams.append('valor_inicial', params.valor_inicial.toString());
+    }
+    if (params?.valor_final !== undefined && params.valor_final !== null) {
+      queryParams.append('valor_final', params.valor_final.toString());
+    }
     if (params?.forma_pagamento) queryParams.append('forma_pagamento', params.forma_pagamento);
     if (params?.situacao) queryParams.append('situacao', params.situacao);
     if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
@@ -275,17 +264,7 @@ class PedidosService {
 
     const query = queryParams.toString();
     const url = `/pedidos/contas-receber${query ? `?${query}` : ''}`;
-    return apiClient.get<Array<{
-      pedido_id: number;
-      numero_pedido: string;
-      cliente_id: number;
-      cliente_nome: string;
-      valor_total: number;
-      valor_em_aberto: number;
-      forma_pagamento: string;
-      status: string;
-      data_pedido: string;
-    }>>(url);
+    return apiClient.get<ContaReceber[]>(url);
   }
 
   /**
@@ -293,33 +272,21 @@ class PedidosService {
    * GET /pedidos/contas-pagar
    * Cada linha = 1 pedido (não agrupado por fornecedor)
    */
-  async listarContasPagar(params?: {
-    codigo?: string;
-    fornecedor_id?: number;
-    fornecedor_nome?: string;
-    valor_inicial?: number;
-    valor_final?: number;
-    forma_pagamento?: string;
-    situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
-    data_inicial?: string;
-    data_final?: string;
-  }): Promise<Array<{
-    pedido_id: number;
-    numero_pedido: string;
-    fornecedor_id: number;
-    fornecedor_nome: string;
-    valor_total: number;
-    valor_em_aberto: number;
-    forma_pagamento: string;
-    status: string;
-    data_pedido: string;
-  }>> {
+  async listarContasPagar(params?: FiltrosContasPagar): Promise<ContaPagar[]> {
     const queryParams = new URLSearchParams();
+    
+    // Apenas adicionar parâmetros que têm valor (evita Validation failed)
     if (params?.codigo) queryParams.append('codigo', params.codigo);
-    if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    if (params?.fornecedor_id !== undefined && params.fornecedor_id !== null) {
+      queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    }
     if (params?.fornecedor_nome) queryParams.append('fornecedor_nome', params.fornecedor_nome);
-    if (params?.valor_inicial) queryParams.append('valor_inicial', params.valor_inicial.toString());
-    if (params?.valor_final) queryParams.append('valor_final', params.valor_final.toString());
+    if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
+      queryParams.append('valor_inicial', params.valor_inicial.toString());
+    }
+    if (params?.valor_final !== undefined && params.valor_final !== null) {
+      queryParams.append('valor_final', params.valor_final.toString());
+    }
     if (params?.forma_pagamento) queryParams.append('forma_pagamento', params.forma_pagamento);
     if (params?.situacao) queryParams.append('situacao', params.situacao);
     if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
@@ -327,17 +294,7 @@ class PedidosService {
 
     const query = queryParams.toString();
     const url = `/pedidos/contas-pagar${query ? `?${query}` : ''}`;
-    return apiClient.get<Array<{
-      pedido_id: number;
-      numero_pedido: string;
-      fornecedor_id: number;
-      fornecedor_nome: string;
-      valor_total: number;
-      valor_em_aberto: number;
-      forma_pagamento: string;
-      status: string;
-      data_pedido: string;
-    }>>(url);
+    return apiClient.get<ContaPagar[]>(url);
   }
 }
 

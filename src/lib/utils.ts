@@ -47,6 +47,40 @@ export function formatDate(date: string | Date): string {
 }
 
 /**
+ * Formata status do pedido para exibição
+ * Conforme GUIA_MIGRACAO_FRONTEND_PRATICO.md
+ */
+export function formatarStatus(status: string): string {
+  const statusMap: Record<string, string> = {
+    'PENDENTE': 'Em aberto',
+    'APROVADO': 'Em aberto',
+    'EM_PROCESSAMENTO': 'Em aberto',
+    'CONCLUIDO': 'Concluído',
+    'CANCELADO': 'Cancelado'
+  };
+  
+  return statusMap[status] || status;
+}
+
+/**
+ * Formata forma de pagamento para exibição
+ * Conforme GUIA_MIGRACAO_FRONTEND_PRATICO.md
+ */
+export function formatarFormaPagamento(forma: string): string {
+  const formasMap: Record<string, string> = {
+    'DINHEIRO': 'Dinheiro',
+    'PIX': 'PIX',
+    'CARTAO_CREDITO': 'Cartão de Crédito',
+    'CARTAO_DEBITO': 'Cartão de Débito',
+    'BOLETO': 'Boleto',
+    'TRANSFERENCIA': 'Transferência',
+    'CHEQUE': 'Cheque'
+  };
+  
+  return formasMap[forma] || forma;
+}
+
+/**
  * Normaliza valores monetários recebidos do backend
  * Converte valores que podem estar em centavos para reais
  * 
