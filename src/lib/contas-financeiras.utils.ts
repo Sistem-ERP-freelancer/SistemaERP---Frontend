@@ -1,9 +1,31 @@
 /**
  * Funções auxiliares para Contas a Receber e Contas a Pagar
- * Conforme GUIA_MIGRACAO_FRONTEND_PRATICO.md
+ * Conforme GUIA_MIGRACAO_FRONTEND_PRATICO.md e GUIA_CORRECAO_CONTAS_PAGAR.md
  */
 
 import type { FiltrosContasReceber, FiltrosContasPagar } from '@/types/contas-financeiras.types';
+
+/**
+ * Normaliza strings de parâmetros de query
+ * Trata: undefined, null, strings vazias, "undefined", "null"
+ * Conforme GUIA_CORRECAO_CONTAS_PAGAR.md
+ */
+export function normalizeString(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  
+  const trimmed = value.trim();
+  
+  // Tratar strings vazias, "undefined", "null"
+  if (
+    trimmed === '' ||
+    trimmed.toLowerCase() === 'undefined' ||
+    trimmed.toLowerCase() === 'null'
+  ) {
+    return undefined;
+  }
+  
+  return trimmed;
+}
 
 /**
  * Constrói URL com filtros, evitando parâmetros vazios

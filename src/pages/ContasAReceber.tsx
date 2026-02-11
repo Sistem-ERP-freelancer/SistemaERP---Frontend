@@ -41,8 +41,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatCurrency, parseNumeroParcela, formatarStatus, formatarFormaPagamento } from "@/lib/utils";
-import type { ContaReceber } from "@/types/contas-financeiras.types";
+import { formatarFormaPagamento, formatarStatus, formatCurrency } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import {
@@ -50,12 +49,12 @@ import {
     Duplicata,
     duplicatasService,
     FormaRecebimento,
-    GrupoDuplicatasPorPedido,
-    ParcelaAgrupada,
+    ParcelaAgrupada
 } from "@/services/duplicatas.service";
 import { ContaFinanceira, CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import type { ChequeDto } from "@/shared/types/cheque.types";
+import type { ContaReceber } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {

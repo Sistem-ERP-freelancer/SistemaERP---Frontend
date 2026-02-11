@@ -7,6 +7,7 @@ import {
     PedidosResponse,
 } from '@/types/pedido';
 import type { ContaReceber, ContaPagar, FiltrosContasReceber, FiltrosContasPagar } from '@/types/contas-financeiras.types';
+import { normalizeString } from '@/lib/contas-financeiras.utils';
 import { apiClient } from './api';
 import type { ConfirmarPagamentoPayload } from './contas-receber.service';
 
@@ -245,37 +246,60 @@ class PedidosService {
   async listarContasReceber(params?: FiltrosContasReceber): Promise<ContaReceber[]> {
     const queryParams = new URLSearchParams();
     
-    // Apenas adicionar parâmetros que têm valor válido (evita Validation failed)
-    // Validar strings: não vazias e não apenas espaços
-    if (params?.codigo && params.codigo.trim()) {
-      queryParams.append('codigo', params.codigo.trim());
+    // Normalizar e validar parâmetros antes de adicionar à query string
+    // Conforme GUIA_CORRECAO_CONTAS_PAGAR.md - Normalização robusta
+    
+    // Normalizar strings primeiro
+    const codigoNormalizado = normalizeString(params?.codigo);
+    const clienteNomeNormalizado = normalizeString(params?.cliente_nome);
+    const formaPagamentoNormalizado = normalizeString(params?.forma_pagamento);
+    const situacaoNormalizado = normalizeString(params?.situacao);
+    const dataInicialNormalizada = normalizeString(params?.data_inicial);
+    const dataFinalNormalizada = normalizeString(params?.data_final);
+    
+    // Adicionar strings normalizadas
+    if (codigoNormalizado) {
+      queryParams.append('codigo', codigoNormalizado);
     }
-    // Validar números: devem ser números válidos e > 0
-    if (params?.cliente_id !== undefined && params.cliente_id !== null && !isNaN(Number(params.cliente_id)) && params.cliente_id > 0) {
-      queryParams.append('cliente_id', params.cliente_id.toString());
+    if (clienteNomeNormalizado) {
+      queryParams.append('cliente_nome', clienteNomeNormalizado);
     }
-    if (params?.cliente_nome && params.cliente_nome.trim()) {
-      queryParams.append('cliente_nome', params.cliente_nome.trim());
+    if (formaPagamentoNormalizado) {
+      queryParams.append('forma_pagamento', formaPagamentoNormalizado);
     }
-    // Validar valores monetários: devem ser números válidos e >= 0
-    if (params?.valor_inicial !== undefined && params.valor_inicial !== null && !isNaN(Number(params.valor_inicial)) && params.valor_inicial >= 0) {
-      queryParams.append('valor_inicial', params.valor_inicial.toString());
+    if (situacaoNormalizado) {
+      queryParams.append('situacao', situacaoNormalizado);
     }
-    if (params?.valor_final !== undefined && params.valor_final !== null && !isNaN(Number(params.valor_final)) && params.valor_final >= 0) {
-      queryParams.append('valor_final', params.valor_final.toString());
+    
+    // Normalizar e validar números
+    // IDs devem ser números válidos e > 0
+    if (params?.cliente_id !== undefined && params.cliente_id !== null) {
+      const clienteIdNum = Number(params.cliente_id);
+      if (!isNaN(clienteIdNum) && clienteIdNum > 0) {
+        queryParams.append('cliente_id', clienteIdNum.toString());
+      }
     }
-    if (params?.forma_pagamento && params.forma_pagamento.trim()) {
-      queryParams.append('forma_pagamento', params.forma_pagamento.trim());
+    
+    // Valores monetários devem ser números válidos e >= 0
+    if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
+      const valorInicialNum = Number(params.valor_inicial);
+      if (!isNaN(valorInicialNum) && valorInicialNum >= 0) {
+        queryParams.append('valor_inicial', valorInicialNum.toString());
+      }
     }
-    if (params?.situacao && params.situacao.trim()) {
-      queryParams.append('situacao', params.situacao.trim());
+    if (params?.valor_final !== undefined && params.valor_final !== null) {
+      const valorFinalNum = Number(params.valor_final);
+      if (!isNaN(valorFinalNum) && valorFinalNum >= 0) {
+        queryParams.append('valor_final', valorFinalNum.toString());
+      }
     }
+    
     // Validar datas: devem estar no formato YYYY-MM-DD
-    if (params?.data_inicial && params.data_inicial.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_inicial.trim())) {
-      queryParams.append('data_inicial', params.data_inicial.trim());
+    if (dataInicialNormalizada && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialNormalizada)) {
+      queryParams.append('data_inicial', dataInicialNormalizada);
     }
-    if (params?.data_final && params.data_final.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_final.trim())) {
-      queryParams.append('data_final', params.data_final.trim());
+    if (dataFinalNormalizada && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalNormalizada)) {
+      queryParams.append('data_final', dataFinalNormalizada);
     }
 
     const query = queryParams.toString();
@@ -300,37 +324,60 @@ class PedidosService {
   async listarContasPagar(params?: FiltrosContasPagar): Promise<ContaPagar[]> {
     const queryParams = new URLSearchParams();
     
-    // Apenas adicionar parâmetros que têm valor válido (evita Validation failed)
-    // Validar strings: não vazias e não apenas espaços
-    if (params?.codigo && params.codigo.trim()) {
-      queryParams.append('codigo', params.codigo.trim());
+    // Normalizar e validar parâmetros antes de adicionar à query string
+    // Conforme GUIA_CORRECAO_CONTAS_PAGAR.md - Normalização robusta
+    
+    // Normalizar strings primeiro
+    const codigoNormalizado = normalizeString(params?.codigo);
+    const fornecedorNomeNormalizado = normalizeString(params?.fornecedor_nome);
+    const formaPagamentoNormalizado = normalizeString(params?.forma_pagamento);
+    const situacaoNormalizado = normalizeString(params?.situacao);
+    const dataInicialNormalizada = normalizeString(params?.data_inicial);
+    const dataFinalNormalizada = normalizeString(params?.data_final);
+    
+    // Adicionar strings normalizadas
+    if (codigoNormalizado) {
+      queryParams.append('codigo', codigoNormalizado);
     }
-    // Validar números: devem ser números válidos e > 0
-    if (params?.fornecedor_id !== undefined && params.fornecedor_id !== null && !isNaN(Number(params.fornecedor_id)) && params.fornecedor_id > 0) {
-      queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    if (fornecedorNomeNormalizado) {
+      queryParams.append('fornecedor_nome', fornecedorNomeNormalizado);
     }
-    if (params?.fornecedor_nome && params.fornecedor_nome.trim()) {
-      queryParams.append('fornecedor_nome', params.fornecedor_nome.trim());
+    if (formaPagamentoNormalizado) {
+      queryParams.append('forma_pagamento', formaPagamentoNormalizado);
     }
-    // Validar valores monetários: devem ser números válidos e >= 0
-    if (params?.valor_inicial !== undefined && params.valor_inicial !== null && !isNaN(Number(params.valor_inicial)) && params.valor_inicial >= 0) {
-      queryParams.append('valor_inicial', params.valor_inicial.toString());
+    if (situacaoNormalizado) {
+      queryParams.append('situacao', situacaoNormalizado);
     }
-    if (params?.valor_final !== undefined && params.valor_final !== null && !isNaN(Number(params.valor_final)) && params.valor_final >= 0) {
-      queryParams.append('valor_final', params.valor_final.toString());
+    
+    // Normalizar e validar números
+    // IDs devem ser números válidos e > 0
+    if (params?.fornecedor_id !== undefined && params.fornecedor_id !== null) {
+      const fornecedorIdNum = Number(params.fornecedor_id);
+      if (!isNaN(fornecedorIdNum) && fornecedorIdNum > 0) {
+        queryParams.append('fornecedor_id', fornecedorIdNum.toString());
+      }
     }
-    if (params?.forma_pagamento && params.forma_pagamento.trim()) {
-      queryParams.append('forma_pagamento', params.forma_pagamento.trim());
+    
+    // Valores monetários devem ser números válidos e >= 0
+    if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
+      const valorInicialNum = Number(params.valor_inicial);
+      if (!isNaN(valorInicialNum) && valorInicialNum >= 0) {
+        queryParams.append('valor_inicial', valorInicialNum.toString());
+      }
     }
-    if (params?.situacao && params.situacao.trim()) {
-      queryParams.append('situacao', params.situacao.trim());
+    if (params?.valor_final !== undefined && params.valor_final !== null) {
+      const valorFinalNum = Number(params.valor_final);
+      if (!isNaN(valorFinalNum) && valorFinalNum >= 0) {
+        queryParams.append('valor_final', valorFinalNum.toString());
+      }
     }
+    
     // Validar datas: devem estar no formato YYYY-MM-DD
-    if (params?.data_inicial && params.data_inicial.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_inicial.trim())) {
-      queryParams.append('data_inicial', params.data_inicial.trim());
+    if (dataInicialNormalizada && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialNormalizada)) {
+      queryParams.append('data_inicial', dataInicialNormalizada);
     }
-    if (params?.data_final && params.data_final.trim() && /^\d{4}-\d{2}-\d{2}$/.test(params.data_final.trim())) {
-      queryParams.append('data_final', params.data_final.trim());
+    if (dataFinalNormalizada && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalNormalizada)) {
+      queryParams.append('data_final', dataFinalNormalizada);
     }
 
     const query = queryParams.toString();

@@ -39,10 +39,10 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { formatarFormaPagamento, formatarStatus } from "@/lib/utils";
 import { CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
-import { formatarStatus, formatarFormaPagamento } from "@/lib/utils";
 import type { ContaPagar } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
