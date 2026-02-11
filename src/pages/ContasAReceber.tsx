@@ -205,7 +205,13 @@ const ContasAReceber = () => {
         return await pedidosService.listarContasReceber(
           hasFilters ? params : undefined
         );
-      } catch (error) {
+      } catch (error: any) {
+        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+        // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
+        if (error?.response?.status === 400) {
+          console.warn("Backend retornou 400 - tratando como banco vazio:", error);
+          return [];
+        }
         console.warn("API contas a receber não disponível:", error);
         return [];
       }
@@ -1715,7 +1721,13 @@ const ContasAReceber = () => {
                   <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
-                      <p>{dashboardReceber?.total === 0 ? "Nenhum cliente com duplicatas em aberto" : "Nenhuma conta a receber encontrada"}</p>
+                      <p className="text-muted-foreground">
+                        {pedidos.length === 0 && !isLoadingPedidosContasReceber
+                          ? "Não há contas a receber no momento"
+                          : dashboardReceber?.total === 0
+                          ? "Nenhum cliente com duplicatas em aberto"
+                          : "Nenhuma conta a receber encontrada"}
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>

@@ -313,7 +313,22 @@ class PedidosService {
       });
     }
     
-    return apiClient.get<ContaReceber[]>(url);
+    try {
+      return await apiClient.get<ContaReceber[]>(url);
+    } catch (error: any) {
+      // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+      // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
+      if (error?.response?.status === 400) {
+        if (import.meta.env.DEV) {
+          console.warn('⚠️ [PedidosService] Backend retornou 400 - tratando como banco vazio:', {
+            url,
+            error: error.message,
+          });
+        }
+        return [];
+      }
+      throw error;
+    }
   }
 
   /**
@@ -391,7 +406,22 @@ class PedidosService {
       });
     }
     
-    return apiClient.get<ContaPagar[]>(url);
+    try {
+      return await apiClient.get<ContaPagar[]>(url);
+    } catch (error: any) {
+      // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+      // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
+      if (error?.response?.status === 400) {
+        if (import.meta.env.DEV) {
+          console.warn('⚠️ [PedidosService] Backend retornou 400 - tratando como banco vazio:', {
+            url,
+            error: error.message,
+          });
+        }
+        return [];
+      }
+      throw error;
+    }
   }
 }
 

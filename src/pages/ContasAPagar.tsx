@@ -195,7 +195,13 @@ const ContasAPagar = () => {
           data: paginatedPedidos,
           total: pedidos.length,
         };
-      } catch (error) {
+      } catch (error: any) {
+        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+        // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
+        if (error?.response?.status === 400) {
+          console.warn("Backend retornou 400 - tratando como banco vazio:", error);
+          return { data: [], total: 0 };
+        }
         console.warn("API de contas a pagar não disponível:", error);
         return { data: [], total: 0 };
       }
@@ -1445,7 +1451,13 @@ const ContasAPagar = () => {
                   <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
-                      <p>{dashboardPagar?.total === 0 ? "Nenhuma conta a pagar em aberto" : "Nenhuma conta a pagar encontrada"}</p>
+                      <p className="text-muted-foreground">
+                        {transacoesDisplay.length === 0 && !isLoadingPedidosContasPagar
+                          ? "Não há contas a pagar no momento"
+                          : dashboardPagar?.total === 0
+                          ? "Nenhuma conta a pagar em aberto"
+                          : "Nenhuma conta a pagar encontrada"}
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>

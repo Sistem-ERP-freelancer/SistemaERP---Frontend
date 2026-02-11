@@ -72,8 +72,16 @@ const ContasAReceberListaClientes = ({
   const { data: pedidosContasReceber } = useQuery({
     queryKey: ['pedidos', 'contas-receber', status],
     queryFn: () =>
-      pedidosService.listarContasReceber({
-        situacao: status === 'todos' ? undefined : status === 'aberto' ? 'em_aberto' : undefined,
+      pedidosService.listarContasReceber(
+        status === 'aberto' ? { situacao: 'em_aberto' } : undefined
+      ).catch((error: any) => {
+        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+        // Tratar como array vazio ao invés de erro
+        if (error?.response?.status === 400) {
+          console.warn("Backend retornou 400 - tratando como banco vazio:", error);
+          return [];
+        }
+        throw error;
       }),
     enabled: status === 'aberto' || status === 'todos',
   });
