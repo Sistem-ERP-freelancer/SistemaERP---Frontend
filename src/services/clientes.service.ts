@@ -50,14 +50,14 @@ export interface Cliente {
 }
 
 export interface CreateClienteDto {
-  nome: string;
+  nome?: string;  // Obrigatório para PF ou se tipoPessoa não informado
   nome_fantasia?: string;
-  nome_razao?: string;
-  tipoPessoa: "PESSOA_FISICA" | "PESSOA_JURIDICA";
-  statusCliente?: StatusCliente;
-  cpf_cnpj: string;
+  nome_razao?: string;  // Obrigatório para PJ (equivale ao nome)
+  tipoPessoa?: "PESSOA_FISICA" | "PESSOA_JURIDICA";  // Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md
+  statusCliente?: StatusCliente;  // Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md
+  cpf_cnpj?: string;  // Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md
   inscricao_estadual?: string;
-  limite_credito?: number;
+  limite_credito?: number | null;  // null = sem limite conforme guia
   contatos?: Array<{
     id?: number;
     telefone: string;

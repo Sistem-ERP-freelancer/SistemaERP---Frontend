@@ -51,16 +51,17 @@ export const ClienteFormStep1 = ({
 
   const handleCPFCNPJChange = (value: string) => {
     const cleaned = cleanDocument(value);
-    const maxLength = formData.tipoPessoa === "PESSOA_FISICA" ? 11 : 14;
+    const tipoPessoa = formData.tipoPessoa || "PESSOA_FISICA"; // Default se não informado
+    const maxLength = tipoPessoa === "PESSOA_FISICA" ? 11 : 14;
     const limited = cleaned.slice(0, maxLength);
 
     let formatted = limited;
-    if (formData.tipoPessoa === "PESSOA_FISICA" && limited.length === 11) {
+    if (tipoPessoa === "PESSOA_FISICA" && limited.length === 11) {
       formatted = formatCPF(limited);
-    } else if (formData.tipoPessoa === "PESSOA_JURIDICA" && limited.length === 14) {
+    } else if (tipoPessoa === "PESSOA_JURIDICA" && limited.length === 14) {
       formatted = formatCNPJ(limited);
     } else if (limited.length > 0) {
-      if (formData.tipoPessoa === "PESSOA_FISICA") {
+      if (tipoPessoa === "PESSOA_FISICA") {
         formatted = limited
           .replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4")
           .replace(/^(\d{3})(\d{3})(\d{3})$/, "$1.$2.$3")
@@ -80,14 +81,18 @@ export const ClienteFormStep1 = ({
   };
 
   const handleNomeChange = (value: string) => {
-    if (formData.tipoPessoa === "PESSOA_JURIDICA") {
+    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome é obrigatório
+    // Se tipoPessoa não estiver definido ou for PF, usar nome
+    // Se for PJ, usar nome_razao
+    const tipoPessoa = formData.tipoPessoa || "PESSOA_FISICA";
+    if (tipoPessoa === "PESSOA_JURIDICA") {
       // Para Pessoa Jurídica, o campo "Razão Social" deve ser enviado como nome_razao
       // NÃO enviar campo nome para Pessoa Jurídica
       onFormDataChange({
         nome_razao: value, // Campo principal que será enviado ao backend
       });
     } else {
-      // Para Pessoa Física, usar apenas nome
+      // Para Pessoa Física ou não informado, usar apenas nome
       onFormDataChange({ nome: value });
     }
   };
@@ -159,12 +164,12 @@ export const ClienteFormStep1 = ({
             type="button"
             onClick={() => handleTipoPessoaChange("PESSOA_JURIDICA")}
             className={`relative p-6 rounded-lg border-2 transition-all ${
-              formData.tipoPessoa === "PESSOA_JURIDICA"
+              (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
                 ? "border-primary bg-primary/5"
                 : "border-border bg-card hover:border-primary/50"
             }`}
           >
-            {formData.tipoPessoa === "PESSOA_JURIDICA" && (
+            {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
               <div className="absolute top-3 right-3">
                 <Check className="w-5 h-5 text-primary" />
               </div>
@@ -172,7 +177,7 @@ export const ClienteFormStep1 = ({
             <div className="flex flex-col items-center gap-3">
               <Building2
                 className={`w-8 h-8 ${
-                  formData.tipoPessoa === "PESSOA_JURIDICA"
+                  (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
                     ? "text-primary"
                     : "text-muted-foreground"
                 }`}
@@ -180,7 +185,7 @@ export const ClienteFormStep1 = ({
               <div className="text-center">
                 <p
                   className={`font-semibold ${
-                    formData.tipoPessoa === "PESSOA_JURIDICA"
+                    (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
                       ? "text-primary"
                       : "text-foreground"
                   }`}
@@ -195,12 +200,12 @@ export const ClienteFormStep1 = ({
             type="button"
             onClick={() => handleTipoPessoaChange("PESSOA_FISICA")}
             className={`relative p-6 rounded-lg border-2 transition-all ${
-              formData.tipoPessoa === "PESSOA_FISICA"
+              (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
                 ? "border-primary bg-primary/5"
                 : "border-border bg-card hover:border-primary/50"
             }`}
           >
-            {formData.tipoPessoa === "PESSOA_FISICA" && (
+            {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA" && (
               <div className="absolute top-3 right-3">
                 <Check className="w-5 h-5 text-primary" />
               </div>
@@ -208,7 +213,7 @@ export const ClienteFormStep1 = ({
             <div className="flex flex-col items-center gap-3">
               <User
                 className={`w-8 h-8 ${
-                  formData.tipoPessoa === "PESSOA_FISICA"
+                  (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
                     ? "text-primary"
                     : "text-muted-foreground"
                 }`}
@@ -216,7 +221,7 @@ export const ClienteFormStep1 = ({
               <div className="text-center">
                 <p
                   className={`font-semibold ${
-                    formData.tipoPessoa === "PESSOA_FISICA"
+                    (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
                       ? "text-primary"
                       : "text-foreground"
                   }`}
@@ -230,60 +235,65 @@ export const ClienteFormStep1 = ({
         </div>
       </div>
 
-      {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) */}
-      {formData.tipoPessoa === "PESSOA_JURIDICA" && (
+      {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) - Obrigatório conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL.md */}
+      {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-muted-foreground" />
-            Nome Fantasia
+            Nome Fantasia <span className="text-destructive">*</span>
           </Label>
           <Input
-            placeholder="Nome Fantasia da Empresa"
+            placeholder="Nome fantasia da empresa"
             value={formData.nome_fantasia || ""}
             onChange={(e) => onFormDataChange({ nome_fantasia: e.target.value })}
           />
         </div>
       )}
 
-      {/* Nome / Razão Social (SEGUNDO) */}
+      {/* Nome / Razão Social (SEGUNDO) - Para PJ: Razão Social opcional; para PF: Nome obrigatório */}
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-muted-foreground" />
-          {formData.tipoPessoa === "PESSOA_JURIDICA" ? "Razão Social" : "Nome"} *
+          {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" ? (
+            <>Razão Social <span className="text-xs text-muted-foreground">(opcional)</span></>
+          ) : (
+            <>Nome <span className="text-destructive">*</span></>
+          )}
         </Label>
         <Input
           placeholder={
-            formData.tipoPessoa === "PESSOA_JURIDICA"
+            (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
               ? "Razão Social da Empresa"
               : "Nome do cliente"
           }
           value={
-            formData.tipoPessoa === "PESSOA_JURIDICA"
-              ? formData.nome_razao || formData.nome
-              : formData.nome
+            (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
+              ? formData.nome_razao || formData.nome || ""
+              : formData.nome || ""
           }
           onChange={(e) => handleNomeChange(e.target.value)}
         />
       </div>
 
-      {/* CPF/CNPJ */}
+      {/* CPF/CNPJ - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
           <Hash className="w-4 h-4 text-muted-foreground" />
-          {formData.tipoPessoa === "PESSOA_FISICA" ? "CPF" : "CNPJ"} *
+          {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA" ? "CPF" : "CNPJ"}
+          <span className="text-xs text-muted-foreground">(opcional)</span>
         </Label>
         <div className="flex gap-2">
           <Input
             placeholder={
-              formData.tipoPessoa === "PESSOA_FISICA"
+              (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
                 ? "000.000.000-00"
                 : "00.000.000/0000-00"
             }
-            value={formData.cpf_cnpj}
+            value={formData.cpf_cnpj || ""}
             onChange={(e) => handleCPFCNPJChange(e.target.value)}
             className="flex-1"
           />
-          {formData.tipoPessoa === "PESSOA_JURIDICA" && (
+          {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
             <Button
               type="button"
               variant="outline"
@@ -331,14 +341,16 @@ export const ClienteFormStep1 = ({
           )}
         </div>
         {/* Mensagem de validação em tempo real */}
-        {formData.tipoPessoa === "PESSOA_JURIDICA" &&
+        {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" &&
+          formData.cpf_cnpj &&
           cleanDocument(formData.cpf_cnpj).length > 0 &&
           cleanDocument(formData.cpf_cnpj).length !== 14 && (
             <p className="text-xs text-destructive mt-1">
               CNPJ deve ter 14 dígitos.
             </p>
           )}
-        {formData.tipoPessoa === "PESSOA_FISICA" &&
+        {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA" &&
+          formData.cpf_cnpj &&
           cleanDocument(formData.cpf_cnpj).length > 0 &&
           cleanDocument(formData.cpf_cnpj).length !== 11 && (
             <p className="text-xs text-destructive mt-1">
@@ -347,8 +359,8 @@ export const ClienteFormStep1 = ({
           )}
       </div>
 
-      {/* Inscrição Estadual - Apenas para Pessoa Jurídica */}
-      {formData.tipoPessoa === "PESSOA_JURIDICA" && (
+      {/* Inscrição Estadual - Apenas para Pessoa Jurídica - Opcional */}
+      {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <Hash className="w-4 h-4 text-muted-foreground" />
@@ -364,15 +376,16 @@ export const ClienteFormStep1 = ({
         </div>
       )}
 
-      {/* Limite de Crédito */}
-      <div className="space-y-3">
-        <Label className="flex items-center gap-2 text-sm font-semibold">
-          <DollarSign className="w-5 h-5 text-primary" />
+      {/* Limite de Crédito - Mesmo design da seção de edição */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-muted-foreground" />
           Limite de Crédito
+          <span className="text-xs text-muted-foreground">(opcional)</span>
         </Label>
-        <div className="bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/20 rounded-lg p-4 space-y-2">
+        <div className="bg-muted/30 border border-border rounded-lg p-4 space-y-2">
           <div className="relative">
-            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-primary font-bold text-lg">R$</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-base">R$</span>
             <Input
               type="text"
               placeholder="0,00"
@@ -380,38 +393,40 @@ export const ClienteFormStep1 = ({
               onChange={(e) => handleLimiteCreditoChange(e.target.value)}
               onBlur={handleLimiteCreditoBlur}
               onFocus={handleLimiteCreditoFocus}
-              className="pl-10 h-12 text-lg font-semibold border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/20 bg-background"
+              className="pl-9 h-11 text-base font-medium border-border bg-background rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
-          <p className="text-xs text-muted-foreground ml-1">
-            Valor máximo de crédito disponível para este cliente
+          <p className="text-xs text-muted-foreground">
+            Valor máximo de crédito disponível para este cliente. Deixe em branco para sem limite.
           </p>
         </div>
       </div>
 
-      {/* Status Inicial */}
+      {/* Status Inicial - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
       <div className="space-y-3">
-        <Label className="text-sm font-semibold">Status Inicial</Label>
+        <Label className="text-sm font-semibold">
+          Status Inicial <span className="text-xs text-muted-foreground font-normal">(opcional)</span>
+        </Label>
         <div className="grid grid-cols-2 gap-4">
           <button
             type="button"
             onClick={() => onFormDataChange({ statusCliente: "ATIVO" })}
             className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-              formData.statusCliente === "ATIVO"
+              (formData.statusCliente || "ATIVO") === "ATIVO"
                 ? "border-primary bg-primary/5"
                 : "border-border bg-card hover:border-primary/50"
             }`}
           >
             <Circle
               className={`w-4 h-4 ${
-                formData.statusCliente === "ATIVO"
+                (formData.statusCliente || "ATIVO") === "ATIVO"
                   ? "text-green-500 fill-green-500"
                   : "text-muted-foreground"
               }`}
             />
             <span
               className={`font-medium ${
-                formData.statusCliente === "ATIVO"
+                (formData.statusCliente || "ATIVO") === "ATIVO"
                   ? "text-primary"
                   : "text-foreground"
               }`}

@@ -4,26 +4,26 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { CondicaoPagamento } from "@/shared/types/condicao-pagamento.types";
 import { Loader2, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import {
-  ClienteFormData,
-  ContatoFormData,
-  EnderecoFormData,
+    ClienteFormData,
+    ContatoFormData,
+    EnderecoFormData,
 } from "../types/cliente.types";
 import { ClienteFormStep1 } from "./ClienteFormStep1";
 import { ClienteFormStep2 } from "./ClienteFormStep2";
 import { ClienteFormStep3 } from "./ClienteFormStep3";
 import { ClienteFormStep4 } from "./ClienteFormStep4";
-import { CondicaoPagamento } from "@/shared/types/condicao-pagamento.types";
 
 interface ClienteCreateDialogProps {
   open: boolean;
@@ -44,39 +44,22 @@ export const ClienteCreateDialog = ({
   isPending = false,
 }: ClienteCreateDialogProps) => {
   const [currentStep, setCurrentStep] = useState(1);
+  // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome é obrigatório
+  // Todos os outros campos são opcionais (valores padrão apenas para UI)
   const [formData, setFormData] = useState<ClienteFormData>({
     nome: "",
     nome_fantasia: "",
     nome_razao: "",
-    tipoPessoa: "PESSOA_FISICA",
-    statusCliente: "ATIVO",
+    tipoPessoa: "PESSOA_FISICA", // Valor padrão apenas para UI, não será enviado se não selecionado
+    statusCliente: "ATIVO", // Valor padrão apenas para UI, não será enviado se não selecionado
     cpf_cnpj: "",
     inscricao_estadual: "",
     limite_credito: undefined,
   });
-  const [enderecos, setEnderecos] = useState<EnderecoFormData[]>([
-    {
-      cep: "",
-      logradouro: "",
-      numero: "",
-      complemento: "",
-      bairro: "",
-      cidade: "",
-      estado: "",
-      referencia: "",
-    },
-  ]);
-  const [contatos, setContatos] = useState<ContatoFormData[]>([
-    {
-      telefone: "",
-      email: "",
-      nomeContato: "",
-      outroTelefone: "",
-      nomeOutroTelefone: "",
-      observacao: "",
-      ativo: true,
-    },
-  ]);
+  // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: endereços e contatos são opcionais
+  // Não criar arrays vazios por padrão - usuário adiciona se necessário
+  const [enderecos, setEnderecos] = useState<EnderecoFormData[]>([]);
+  const [contatos, setContatos] = useState<ContatoFormData[]>([]);
   const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
 
   const handleFormDataChange = (data: Partial<ClienteFormData>) => {

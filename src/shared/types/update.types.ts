@@ -32,11 +32,12 @@ export interface UpdateClientePayload {
   nome?: string;
   tipoPessoa?: 'PESSOA_FISICA' | 'PESSOA_JURIDICA';
   statusCliente?: 'ATIVO' | 'INATIVO' | 'BLOQUEADO' | 'INADIMPLENTE';
-  cpf_cnpj?: string; // 11 dígitos (CPF) ou 14 dígitos (CNPJ)
+  cpf_cnpj?: string | null; // 11 dígitos (CPF) ou 14 dígitos (CNPJ) ou null para remover
   nome_fantasia?: string | null;
   nome_razao?: string | null;
   inscricao_estadual?: string | null;
-  
+  limite_credito?: number | null; // null = sem limite; número ≥ 0 = limite em reais
+
   // Array de endereços (OPCIONAL - se não enviar, mantém existentes)
   enderecos?: UpdateEndereco[];
   
@@ -50,7 +51,7 @@ export interface UpdateFornecedorPayload {
   nome_razao?: string | null;
   tipoFornecedor?: 'PESSOA_FISICA' | 'PESSOA_JURIDICA';
   statusFornecedor?: 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
-  cpf_cnpj?: string; // 11 dígitos (CPF) ou 14 dígitos (CNPJ)
+  cpf_cnpj?: string | null; // 11 dígitos (CPF) ou 14 dígitos (CNPJ) ou null para remover
   inscricao_estadual?: string | null;
   
   // Array de endereços (OPCIONAL - se não enviar, mantém existentes)
@@ -95,7 +96,8 @@ export interface ClienteFormState {
   nome_razao?: string;
   inscricao_estadual?: string;
   statusCliente?: 'ATIVO' | 'INATIVO' | 'BLOQUEADO' | 'INADIMPLENTE';
-  
+  limite_credito?: number | null;
+
   // Arrays de relacionamentos
   enderecos: EnderecoFormState[];
   contatos: ContatoFormState[];

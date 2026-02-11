@@ -68,6 +68,7 @@ import {
     Check,
     Circle,
     CreditCard,
+    DollarSign,
     Edit,
     Eye,
     FileText,
@@ -129,7 +130,9 @@ const Clientes = () => {
     statusCliente: "ATIVO",
     cpf_cnpj: "",
     inscricao_estadual: "",
+    limite_credito: undefined,
   });
+  const [editLimiteCreditoInput, setEditLimiteCreditoInput] = useState("");
   const [editEnderecos, setEditEnderecos] = useState<
     Array<{
       id?: number;
@@ -1406,19 +1409,32 @@ const Clientes = () => {
       setClienteOriginal(JSON.parse(JSON.stringify(selectedCliente)));
       
       // Preencher formulário com dados do cliente
+      // Para PJ: se backend retornou nome_razao igual a nome_fantasia (fallback), exibir Razão Social vazio para não duplicar na tela
+      const nomeRazaoInicial =
+        selectedCliente.tipoPessoa === "PESSOA_JURIDICA" &&
+        (selectedCliente.nome_razao || "") === (selectedCliente.nome_fantasia || "")
+          ? ""
+          : selectedCliente.nome_razao || "";
+      const limiteCreditoVal = selectedCliente.limite_credito ?? null;
+      const limiteCreditoDisplay =
+        limiteCreditoVal != null && !isNaN(limiteCreditoVal) && limiteCreditoVal >= 0
+          ? new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(limiteCreditoVal)
+          : "";
       setEditCliente({
         nome: selectedCliente.nome,
         nome_fantasia: selectedCliente.nome_fantasia || "",
-        nome_razao: selectedCliente.nome_razao || "",
+        nome_razao: nomeRazaoInicial,
         tipoPessoa: selectedCliente.tipoPessoa,
         statusCliente: selectedCliente.statusCliente as
           | "ATIVO"
           | "INATIVO"
           | "BLOQUEADO"
           | "INADIMPLENTE",
-        cpf_cnpj: selectedCliente.cpf_cnpj,
+        cpf_cnpj: selectedCliente.cpf_cnpj || "",
         inscricao_estadual: selectedCliente.inscricao_estadual || "",
+        limite_credito: limiteCreditoVal ?? undefined,
       });
+      setEditLimiteCreditoInput(limiteCreditoDisplay);
 
       // Preencher endereços
       if (selectedCliente.enderecos && selectedCliente.enderecos.length > 0) {
@@ -1476,7 +1492,9 @@ const Clientes = () => {
         statusCliente: "ATIVO",
         cpf_cnpj: "",
         inscricao_estadual: "",
+        limite_credito: undefined,
       });
+      setEditLimiteCreditoInput("");
       setEditEnderecos([]);
       setEditContatos([]);
       setClienteOriginal(null);
@@ -1527,69 +1545,79 @@ const Clientes = () => {
               condicoesPagamento,
             }) => {
               // Validação final antes de criar
-              if (cliente.tipoPessoa === "PESSOA_JURIDICA") {
-                if (!cliente.nome_razao || !cliente.cpf_cnpj) {
-                  toast.error(
-                    "Preencha os campos obrigatórios (Razão Social e CNPJ)"
-                  );
+              // Conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL copy.md: PJ = só Nome Fantasia obrigatório; não exigir "nome" para PJ
+              // Se for PJ (ou tiver só Nome Fantasia preenchido), validar apenas nome_fantasia
+              const ehPessoaJuridica = cliente.tipoPessoa === "PESSOA_JURIDICA" ||
+                (!!(cliente.nome_fantasia?.trim()) && !(cliente.nome?.trim()));
+              if (ehPessoaJuridica) {
+                if (!cliente.nome_fantasia || cliente.nome_fantasia.trim() === '') {
+                  toast.error("Nome Fantasia é obrigatório para Pessoa Jurídica.");
                   return;
                 }
+                // Para PJ não exige "nome"; backend usa nome_fantasia como nome
               } else {
-                if (!cliente.nome || !cliente.cpf_cnpj) {
-                  toast.error("Preencha os campos obrigatórios");
+                // Para PF: nome é obrigatório
+                if (!cliente.nome || cliente.nome.trim() === '') {
+                  toast.error("Nome é obrigatório");
                   return;
                 }
               }
 
-              // Limpa e valida o documento
-              const cleanedDoc = cleanDocument(cliente.cpf_cnpj);
+              // CPF/CNPJ é opcional - validar apenas se informado
+              let formattedDoc: string | undefined = undefined;
+              if (cliente.cpf_cnpj && cliente.cpf_cnpj.trim() !== '') {
+                const cleanedDoc = cleanDocument(cliente.cpf_cnpj);
+                const tipoPessoa = cliente.tipoPessoa || "PESSOA_FISICA"; // Default se não informado
 
-              // Valida o documento
-              if (cliente.tipoPessoa === "PESSOA_FISICA") {
-                if (cleanedDoc.length !== 11) {
-                  toast.error("CPF deve ter 11 dígitos");
-                  return;
-                }
-              } else {
-                if (cleanedDoc.length !== 14) {
-                  toast.error("CNPJ deve ter 14 dígitos");
-                  return;
+                // Valida o documento apenas se informado
+                if (tipoPessoa === "PESSOA_FISICA") {
+                  if (cleanedDoc.length !== 11) {
+                    toast.error("CPF deve ter 11 dígitos");
+                    return;
+                  }
+                  formattedDoc = formatCPF(cleanedDoc);
+                } else {
+                  if (cleanedDoc.length !== 14) {
+                    toast.error("CNPJ deve ter 14 dígitos");
+                    return;
+                  }
+                  formattedDoc = formatCNPJ(cleanedDoc);
                 }
               }
-
-              // Formata o documento antes de enviar
-              const formattedDoc =
-                cliente.tipoPessoa === "PESSOA_FISICA"
-                  ? formatCPF(cleanedDoc)
-                  : formatCNPJ(cleanedDoc);
 
               // Cria o objeto com o documento formatado
-              // Para Pessoa Jurídica: apenas nome_razao e nome_fantasia (SEM nome)
-              // Para Pessoa Física: apenas nome (SEM nome_razao)
+              // Conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL copy.md (Opção A): PJ envia apenas nome_fantasia; backend preenche nome com nome_fantasia
               const clienteToCreate: CreateClienteDto = {
-                tipoPessoa: cliente.tipoPessoa,
-                cpf_cnpj: formattedDoc,
-                statusCliente: cliente.statusCliente,
-                // Para Pessoa Jurídica: nome_razao e nome_fantasia (SEM nome)
+                // PJ: enviar apenas nome_fantasia (e nome_razao se preenchido). Não enviar "nome"; backend usa nome_fantasia.
                 ...(cliente.tipoPessoa === "PESSOA_JURIDICA" 
                   ? {
-                      nome_razao: cliente.nome_razao || "",
-                      nome_fantasia: cliente.nome_fantasia,
-                      inscricao_estadual: cliente.inscricao_estadual,
+                      tipoPessoa: "PESSOA_JURIDICA",
+                      statusCliente: cliente.statusCliente || "ATIVO",
+                      nome_fantasia: cliente.nome_fantasia?.trim() || "",
+                      ...(cliente.nome_razao?.trim() ? { nome_razao: cliente.nome_razao.trim() } : {}),
                     }
                   : {
-                      // Para Pessoa Física: apenas nome
+                      // PF: nome obrigatório
                       nome: cliente.nome || "",
                     }),
-                ...(cliente.limite_credito !== undefined && cliente.limite_credito > 0 
+                // Campos opcionais - só enviar se informados
+                ...(cliente.tipoPessoa ? { tipoPessoa: cliente.tipoPessoa } : {}),
+                ...(cliente.statusCliente ? { statusCliente: cliente.statusCliente } : {}),
+                ...(cliente.inscricao_estadual && cliente.inscricao_estadual.trim() ? { inscricao_estadual: cliente.inscricao_estadual } : {}),
+                ...(formattedDoc ? { cpf_cnpj: formattedDoc } : {}),
+                // Limite de crédito: null se não informado (sem limite), número se informado
+                ...(cliente.limite_credito !== undefined && cliente.limite_credito !== null && cliente.limite_credito >= 0
                   ? { limite_credito: cliente.limite_credito } 
+                  : cliente.limite_credito === null 
+                    ? { limite_credito: null }
+                    : {}),
+                // Endereços e contatos apenas se tiverem dados válidos
+                ...(enderecosData.filter((end) => end.cep || end.logradouro || end.cidade).length > 0
+                  ? { enderecos: enderecosData.filter((end) => end.cep || end.logradouro || end.cidade) }
                   : {}),
-                enderecos: enderecosData.filter(
-                  (end) => end.cep || end.logradouro || end.cidade
-                ),
-                contatos: contatosData.filter(
-                  (cont) => cont.telefone || cont.email || cont.nomeContato
-                ),
+                ...(contatosData.filter((cont) => cont.telefone || cont.email || cont.nomeContato).length > 0
+                  ? { contatos: contatosData.filter((cont) => cont.telefone || cont.email || cont.nomeContato) }
+                  : {}),
                 ...(condicoesPagamento && condicoesPagamento.length > 0
                   ? {
                       condicoes_pagamento: condicoesPagamento.map((cp) => {
@@ -2126,8 +2154,19 @@ const Clientes = () => {
                     <Label className="text-sm text-muted-foreground">
                       CPF/CNPJ
                     </Label>
-                    <p className="font-medium text-base">
-                      {selectedCliente.cpf_cnpj || "-"}
+                    <p className="font-medium text-base font-mono">
+                      {selectedCliente.cpf_cnpj 
+                        ? (() => {
+                            const cleaned = cleanDocument(selectedCliente.cpf_cnpj);
+                            if (!cleaned) return selectedCliente.cpf_cnpj;
+                            if (selectedCliente.tipoPessoa === "PESSOA_FISICA" && cleaned.length === 11) {
+                              return formatCPF(cleaned);
+                            } else if (selectedCliente.tipoPessoa === "PESSOA_JURIDICA" && cleaned.length === 14) {
+                              return formatCNPJ(cleaned);
+                            }
+                            return selectedCliente.cpf_cnpj;
+                          })()
+                        : "-"}
                     </p>
                   </div>
                   {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" && (
@@ -2538,7 +2577,9 @@ const Clientes = () => {
               statusCliente: "ATIVO",
               cpf_cnpj: "",
               inscricao_estadual: "",
+              limite_credito: undefined,
             });
+            setEditLimiteCreditoInput("");
             setEditEnderecos([
               {
                 cep: "",
@@ -2583,6 +2624,11 @@ const Clientes = () => {
                   size="sm"
                   onClick={() => {
                     if (selectedCliente) {
+                      const lcVal = selectedCliente.limite_credito ?? null;
+                      const lcDisplay =
+                        lcVal != null && !isNaN(lcVal) && lcVal >= 0
+                          ? new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(lcVal)
+                          : "";
                       setEditCliente({
                         nome: selectedCliente.nome,
                         nome_fantasia: selectedCliente.nome_fantasia || "",
@@ -2596,7 +2642,9 @@ const Clientes = () => {
                         cpf_cnpj: selectedCliente.cpf_cnpj,
                         inscricao_estadual:
                           selectedCliente.inscricao_estadual || "",
+                        limite_credito: lcVal ?? undefined,
                       });
+                      setEditLimiteCreditoInput(lcDisplay);
                       if (
                         selectedCliente.enderecos &&
                         selectedCliente.enderecos.length > 0
@@ -2766,20 +2814,20 @@ const Clientes = () => {
                     </div>
                   </div>
 
-                  {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) */}
+                  {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) - Obrigatório conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL.md */}
                   {(editCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
                     "PESSOA_JURIDICA" && (
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-muted-foreground" />
-                        Nome Fantasia
+                        Nome Fantasia <span className="text-destructive">*</span>
                       </Label>
                       <Input
-                        placeholder="Nome Fantasia da Empresa"
+                        placeholder="Nome fantasia da empresa"
                         value={
-                          editCliente.nome_fantasia !== undefined
+                          (editCliente.nome_fantasia !== undefined
                             ? editCliente.nome_fantasia
-                            : selectedCliente.nome_fantasia || ""
+                            : selectedCliente.nome_fantasia) || ""
                         }
                         onChange={(e) =>
                           setEditCliente({
@@ -2791,15 +2839,16 @@ const Clientes = () => {
                     </div>
                   )}
 
-                  {/* Nome / Razão Social (SEGUNDO) */}
+                  {/* Nome / Razão Social (SEGUNDO) - Para PJ: Razão Social opcional; para PF: Nome obrigatório */}
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-muted-foreground" />
                       {(editCliente.tipoPessoa ||
-                        selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
-                        ? "Razão Social"
-                        : "Nome"}{" "}
-                      *
+                        selectedCliente.tipoPessoa) === "PESSOA_JURIDICA" ? (
+                        <>Razão Social <span className="text-xs text-muted-foreground">(opcional)</span></>
+                      ) : (
+                        <>Nome <span className="text-destructive">*</span></>
+                      )}
                     </Label>
                     <Input
                       placeholder={
@@ -2811,15 +2860,12 @@ const Clientes = () => {
                       value={
                         (editCliente.tipoPessoa ||
                           selectedCliente.tipoPessoa) === "PESSOA_JURIDICA"
-                          ? editCliente.nome_razao !== undefined
+                          ? (editCliente.nome_razao !== undefined
                             ? editCliente.nome_razao
-                            : selectedCliente.nome_razao || 
-                            editCliente.nome ||
-                              selectedCliente.nome || 
-                              ""
-                          : editCliente.nome !== undefined
+                            : selectedCliente.nome_razao ?? "")
+                          : (editCliente.nome !== undefined
                             ? editCliente.nome
-                            : selectedCliente.nome || ""
+                            : selectedCliente.nome) || ""
                       }
                       onChange={(e) => {
                         const tipo =
@@ -2843,15 +2889,15 @@ const Clientes = () => {
                     />
                   </div>
 
-                  {/* CPF/CNPJ */}
+                  {/* CPF/CNPJ - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-muted-foreground" />
                       {(editCliente.tipoPessoa ||
                         selectedCliente.tipoPessoa) === "PESSOA_FISICA"
                         ? "CPF"
-                        : "CNPJ"}{" "}
-                      *
+                        : "CNPJ"}
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
                     </Label>
                     <Input
                       placeholder={
@@ -2861,9 +2907,9 @@ const Clientes = () => {
                           : "00.000.000/0000-00"
                       }
                       value={
-                        editCliente.cpf_cnpj !== undefined
+                        (editCliente.cpf_cnpj !== undefined
                           ? editCliente.cpf_cnpj
-                          : selectedCliente.cpf_cnpj || ""
+                          : selectedCliente.cpf_cnpj) || ""
                       }
                       onChange={(e) => {
                         const value = e.target.value;
@@ -2906,6 +2952,9 @@ const Clientes = () => {
                               .replace(/^(\d{2})$/, "$1");
                           }
                         }
+                        // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: CPF é opcional
+                        // Se o campo estiver vazio, usar string vazia para o input (não null)
+                        // Mas será convertido para null no payload antes de enviar
                         setEditCliente({
                           ...editCliente,
                           cpf_cnpj: formatted || "",
@@ -2958,9 +3007,8 @@ const Clientes = () => {
                       <Input
                         placeholder="000.000.000.000"
                         value={
-                          editCliente.inscricao_estadual ||
-                          selectedCliente.inscricao_estadual ||
-                          ""
+                          (editCliente.inscricao_estadual ||
+                          selectedCliente.inscricao_estadual) || ""
                         }
                         onChange={(e) =>
                           setEditCliente({
@@ -2971,6 +3019,73 @@ const Clientes = () => {
                       />
                     </div>
                   )}
+
+                  {/* Limite de Crédito (opcional) - Mesmo design da seção de criar */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-muted-foreground" />
+                      Limite de Crédito
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <div className="bg-muted/30 border border-border rounded-lg p-4 space-y-2">
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-base">R$</span>
+                        <Input
+                          placeholder="0,00"
+                          value={editLimiteCreditoInput}
+                          className="pl-9 h-11 text-base font-medium border-border bg-background rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const apenasNumeros = value.replace(/\D/g, "");
+                            if (apenasNumeros === "") {
+                              setEditLimiteCreditoInput("");
+                              setEditCliente({ ...editCliente, limite_credito: null });
+                              return;
+                            }
+                            const valorEmCentavos = parseInt(apenasNumeros, 10);
+                            const valorDecimal = Math.min(valorEmCentavos / 100, 999999999.99);
+                            setEditCliente({ ...editCliente, limite_credito: valorDecimal });
+                            setEditLimiteCreditoInput(
+                              new Intl.NumberFormat("pt-BR", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }).format(valorDecimal)
+                            );
+                          }}
+                          onBlur={() => {
+                            const val = editCliente.limite_credito;
+                            if (val != null && !isNaN(val) && val >= 0) {
+                              setEditLimiteCreditoInput(
+                                new Intl.NumberFormat("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }).format(val)
+                              );
+                            } else {
+                              setEditLimiteCreditoInput("");
+                            }
+                          }}
+                          onFocus={() => {
+                            if (
+                              editCliente.limite_credito != null &&
+                              !isNaN(editCliente.limite_credito) &&
+                              editCliente.limite_credito >= 0
+                            ) {
+                              setEditLimiteCreditoInput(
+                                new Intl.NumberFormat("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                }).format(editCliente.limite_credito)
+                              );
+                            }
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Valor máximo de crédito para este cliente. Deixe em branco para sem limite.
+                      </p>
+                    </div>
+                  </div>
 
                 </div>
               </div>
@@ -3050,7 +3165,7 @@ const Clientes = () => {
                           <Label>CEP</Label>
                           <Input
                             placeholder="00000-000"
-                            value={endereco.cep}
+                            value={endereco.cep || ""}
                             onChange={(e) => {
                               const formatted = formatCEP(e.target.value);
                               const newEnderecos = [...editEnderecos];
@@ -3064,7 +3179,7 @@ const Clientes = () => {
                           <Label>Logradouro</Label>
                           <Input
                             placeholder="Rua, Avenida, etc."
-                            value={endereco.logradouro}
+                            value={endereco.logradouro || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].logradouro = e.target.value;
@@ -3076,7 +3191,7 @@ const Clientes = () => {
                           <Label>Número</Label>
                           <Input
                             placeholder="123"
-                            value={endereco.numero}
+                            value={endereco.numero || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].numero = e.target.value;
@@ -3088,7 +3203,7 @@ const Clientes = () => {
                           <Label>Complemento</Label>
                           <Input
                             placeholder="Apto, Sala, etc."
-                            value={endereco.complemento}
+                            value={endereco.complemento || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].complemento = e.target.value;
@@ -3100,7 +3215,7 @@ const Clientes = () => {
                           <Label>Bairro</Label>
                           <Input
                             placeholder="Nome do bairro"
-                            value={endereco.bairro}
+                            value={endereco.bairro || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].bairro = e.target.value;
@@ -3112,7 +3227,7 @@ const Clientes = () => {
                           <Label>Cidade</Label>
                           <Input
                             placeholder="Nome da cidade"
-                            value={endereco.cidade}
+                            value={endereco.cidade || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].cidade = e.target.value;
@@ -3125,7 +3240,7 @@ const Clientes = () => {
                           <Input
                             placeholder="SP"
                             maxLength={2}
-                            value={endereco.estado}
+                            value={endereco.estado || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].estado =
@@ -3138,7 +3253,7 @@ const Clientes = () => {
                           <Label>Referência</Label>
                           <Input
                             placeholder="Ponto de referência (máx. 100 caracteres)"
-                            value={endereco.referencia}
+                            value={endereco.referencia || ""}
                             onChange={(e) => {
                               const newEnderecos = [...editEnderecos];
                               newEnderecos[index].referencia = e.target.value;
@@ -3250,7 +3365,7 @@ const Clientes = () => {
                             </Label>
                             <Input
                               placeholder="(00) 00000-0000"
-                              value={contato.telefone}
+                              value={contato.telefone || ""}
                               onChange={(e) => {
                                 const formatted = formatTelefone(e.target.value);
                                 const newContatos = [...editContatos];
@@ -3268,7 +3383,7 @@ const Clientes = () => {
                             <Input
                               type="email"
                               placeholder="exemplo@email.com"
-                              value={contato.email}
+                              value={contato.email || ""}
                               onChange={(e) => {
                                 const newContatos = [...editContatos];
                                 newContatos[index].email = e.target.value;
@@ -3284,7 +3399,7 @@ const Clientes = () => {
                           </Label>
                           <Input
                             placeholder="Nome do responsável"
-                            value={contato.nomeContato}
+                            value={contato.nomeContato || ""}
                             onChange={(e) => {
                               const newContatos = [...editContatos];
                               newContatos[index].nomeContato = e.target.value;
@@ -3298,7 +3413,7 @@ const Clientes = () => {
                           <Label>Nome do Outro Telefone</Label>
                             <Input
                             placeholder="Nome do responsável"
-                            value={contato.nomeOutroTelefone}
+                            value={contato.nomeOutroTelefone || ""}
                               onChange={(e) => {
                                 const newContatos = [...editContatos];
                               newContatos[index].nomeOutroTelefone =
@@ -3311,7 +3426,7 @@ const Clientes = () => {
                           <Label>Outro Telefone</Label>
                             <Input
                             placeholder="(00) 00000-0000"
-                            value={contato.outroTelefone}
+                            value={contato.outroTelefone || ""}
                               onChange={(e) => {
                                 const formatted = formatTelefone(e.target.value);
                                 const newContatos = [...editContatos];
@@ -3327,7 +3442,7 @@ const Clientes = () => {
                           <Label>Observação</Label>
                           <Input
                             placeholder="Observações sobre o contato (máx. 500 caracteres)"
-                            value={contato.observacao}
+                            value={contato.observacao || ""}
                             onChange={(e) => {
                               const newContatos = [...editContatos];
                               newContatos[index].observacao = e.target.value;
@@ -3362,6 +3477,16 @@ const Clientes = () => {
                       onClick={async () => {
                         if (!selectedClienteId || !clienteOriginal) return;
                         
+                        // Conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL.md: PJ exige Nome Fantasia
+                        const tipoPessoa = editCliente.tipoPessoa ?? clienteOriginal.tipoPessoa;
+                        if (tipoPessoa === "PESSOA_JURIDICA") {
+                          const nomeFantasiaAtual = (editCliente.nome_fantasia !== undefined ? editCliente.nome_fantasia : clienteOriginal.nome_fantasia) ?? "";
+                          if (!nomeFantasiaAtual || nomeFantasiaAtual.trim() === "") {
+                            toast.error("Nome Fantasia é obrigatório para Pessoa Jurídica.");
+                            return;
+                          }
+                        }
+                        
                         setIsSavingCliente(true);
                         // Declarar variáveis fora do try para uso no catch
                         let formState: any = null;
@@ -3390,6 +3515,7 @@ const Clientes = () => {
                             tipoPessoa: editCliente.tipoPessoa,
                             cpf_cnpj: editCliente.cpf_cnpj,
                             inscricao_estadual: editCliente.inscricao_estadual,
+                            limite_credito: editCliente.limite_credito,
                             enderecos: editEnderecos, // Sempre enviar array se houver endereços
                             contatos: editContatos,
                           };
@@ -3453,7 +3579,21 @@ const Clientes = () => {
                             });
                           }
 
-                          // Invalidar queries e mostrar sucesso
+                          // Atualizar cache da lista com o cliente retornado pelo PATCH (ex.: limite_credito: null)
+                          // para que, ao reabrir a edição, o valor removido não "volte"
+                          queryClient.setQueriesData<{ clientes: typeof clienteAtualizado[]; total: number }>(
+                            { queryKey: ["clientes"], exact: false },
+                            (old) => {
+                              if (!old?.clientes?.length) return old;
+                              return {
+                                ...old,
+                                clientes: old.clientes.map((c) =>
+                                  c.id === clienteAtualizado.id ? clienteAtualizado : c
+                                ),
+                              };
+                            }
+                          );
+
                           await queryClient.invalidateQueries({ 
                             queryKey: ["clientes"],
                             exact: false,
@@ -3815,7 +3955,9 @@ const Clientes = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-contato-telefone">Telefone *</Label>
+                <Label htmlFor="edit-contato-telefone">
+                  Telefone <span className="text-xs text-muted-foreground">(opcional)</span>
+                </Label>
                 <Input
                   id="edit-contato-telefone"
                   value={editingContato.telefone ?? ""}

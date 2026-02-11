@@ -79,7 +79,8 @@ export const ContatoForm = ({
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <PhoneIcon className="w-4 h-4 text-muted-foreground" />
-              Telefone *
+              Telefone
+              <span className="text-xs text-muted-foreground">(opcional)</span>
             </Label>
             <Input
               placeholder="(00) 00000-0000"

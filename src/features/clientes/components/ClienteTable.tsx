@@ -2,41 +2,42 @@
  * Componente de tabela de clientes
  */
 
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
+import { cleanDocument, formatCNPJ, formatCPF } from "@/lib/validators";
 import { StatusCliente } from "@/services/clientes.service";
 import { motion } from "framer-motion";
 import {
-  Edit,
-  Eye,
-  Loader2,
-  Mail,
-  Phone,
-  Trash2,
-  Users,
-  XCircle,
-  MoreVertical,
-  FileText,
+    Edit,
+    Eye,
+    FileText,
+    Loader2,
+    Mail,
+    MoreVertical,
+    Phone,
+    Trash2,
+    Users,
+    XCircle,
 } from "lucide-react";
 
 interface Cliente {
@@ -107,6 +108,38 @@ export const ClienteTable = ({
         return "Inadimplente";
       default:
         return status;
+    }
+  };
+
+  const formatarDocumento = (cpfCnpj: string | null | undefined, tipoPessoa: "PESSOA_FISICA" | "PESSOA_JURIDICA"): string => {
+    if (!cpfCnpj || cpfCnpj.trim() === "") {
+      return "-";
+    }
+    
+    // Remove formatação existente e pega apenas números
+    const cleaned = cleanDocument(cpfCnpj);
+    
+    if (!cleaned) {
+      return cpfCnpj; // Retorna o valor original se não conseguir limpar
+    }
+    
+    // Formata baseado no tipo de pessoa e tamanho do documento
+    if (tipoPessoa === "PESSOA_FISICA") {
+      // CPF tem 11 dígitos
+      if (cleaned.length === 11) {
+        return formatCPF(cleaned);
+      }
+      // Se não tem 11 dígitos, pode estar incompleto ou ser CNPJ incorreto
+      // Retorna formatado parcialmente se possível
+      return cleaned;
+    } else {
+      // CNPJ tem 14 dígitos
+      if (cleaned.length === 14) {
+        return formatCNPJ(cleaned);
+      }
+      // Se não tem 14 dígitos, pode estar incompleto ou ser CPF incorreto
+      // Retorna formatado parcialmente se possível
+      return cleaned;
     }
   };
   return (
@@ -205,7 +238,7 @@ export const ClienteTable = ({
                 </TableCell>
                 <TableCell>
                   <span className="font-mono text-sm text-muted-foreground">
-                    {cliente.cpf_cnpj}
+                    {formatarDocumento(cliente.cpf_cnpj, cliente.tipoPessoa)}
                   </span>
                 </TableCell>
                 <TableCell>

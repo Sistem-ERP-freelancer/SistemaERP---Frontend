@@ -1,107 +1,107 @@
 import AppLayout from "@/components/layout/AppLayout";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogOverlay,
+    AlertDialogPortal,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogOverlay,
-  AlertDialogPortal,
-} from "@/components/ui/alert-dialog";
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cleanDocument, formatCNPJ, formatCPF, formatCEP, formatTelefone } from "@/lib/validators";
-import {
-  CreateFornecedorDto,
-  fornecedoresService,
-} from "@/services/fornecedores.service";
 import { prepararAtualizacaoFornecedor } from "@/features/fornecedores/utils/prepararAtualizacaoFornecedor";
+import { cleanDocument, formatCEP, formatCNPJ, formatCPF, formatTelefone } from "@/lib/validators";
+import {
+    CreateFornecedorDto,
+    fornecedoresService,
+} from "@/services/fornecedores.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Ban,
-  Building2,
-  Calendar,
-  Check,
-  CheckCircle,
-  Circle,
-  Edit,
-  Eye,
-  FileText,
-  Filter,
-  Hash,
-  Loader2,
-  Mail,
-  Mail as MailIcon,
-  MapPin,
-  MapPin as MapPinIcon,
-  Phone,
-  Phone as PhoneIcon,
-  Plus,
-  RotateCcw,
-  Save,
-  Search,
-  Trash2,
-  Truck,
-  User,
-  User as UserIcon,
-  Users,
-  XCircle,
-  MoreVertical,
+    Ban,
+    Building2,
+    Calendar,
+    Check,
+    CheckCircle,
+    Circle,
+    Edit,
+    Eye,
+    FileText,
+    Filter,
+    Hash,
+    Loader2,
+    Mail,
+    Mail as MailIcon,
+    MapPin,
+    MapPin as MapPinIcon,
+    MoreVertical,
+    Phone,
+    Phone as PhoneIcon,
+    Plus,
+    RotateCcw,
+    Save,
+    Search,
+    Trash2,
+    Truck,
+    User,
+    User as UserIcon,
+    Users,
+    XCircle,
 } from "lucide-react";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const Fornecedores = () => {
@@ -119,14 +119,18 @@ const Fornecedores = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
+  // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
+  // Todos os outros campos são opcionais (valores padrão apenas para UI)
   const [newFornecedor, setNewFornecedor] = useState<CreateFornecedorDto>({
     nome_fantasia: "",
     nome_razao: "",
-    tipoFornecedor: "PESSOA_JURIDICA",
-    statusFornecedor: "ATIVO",
+    tipoFornecedor: "PESSOA_JURIDICA", // Valor padrão apenas para UI, não será enviado se não selecionado
+    statusFornecedor: "ATIVO", // Valor padrão apenas para UI, não será enviado se não selecionado
     cpf_cnpj: "",
     inscricao_estadual: "",
   });
+  // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: endereços e contatos são opcionais
+  // Não criar arrays vazios por padrão - usuário adiciona se necessário
   const [enderecos, setEnderecos] = useState<
     Array<{
       cep: string;
@@ -138,18 +142,7 @@ const Fornecedores = () => {
       estado: string;
       referencia: string;
     }>
-  >([
-    {
-      cep: "",
-      logradouro: "",
-      numero: "",
-      complemento: "",
-      bairro: "",
-      cidade: "",
-      estado: "",
-      referencia: "",
-    },
-  ]);
+  >([]);
   const [contatos, setContatos] = useState<
     Array<{
       telefone: string;
@@ -157,14 +150,7 @@ const Fornecedores = () => {
       nomeContato: string;
       observacao: string;
     }>
-  >([
-    {
-      telefone: "",
-      email: "",
-      nomeContato: "",
-      observacao: "",
-    },
-  ]);
+  >([]);
   const [filtrosAvancados, setFiltrosAvancados] = useState({
     tipoFornecedor: "",
     statusFornecedor: "",
@@ -688,65 +674,67 @@ const Fornecedores = () => {
         : "");
 
     // Validação final antes de criar
-    if (newFornecedor.tipoFornecedor === "PESSOA_JURIDICA") {
-      if (
-        !newFornecedor.nome_fantasia ||
-        !newFornecedor.nome_razao ||
-        !newFornecedor.cpf_cnpj
-      ) {
-        toast.error(
-          "Preencha os campos obrigatórios (Nome Fantasia, Razão Social e CNPJ)"
-        );
-        return;
-      }
-    } else {
-      if (!newFornecedor.nome_razao || !newFornecedor.cpf_cnpj) {
-        toast.error("Preencha os campos obrigatórios (Nome e CPF)");
-        return;
-      }
-    }
-
-    // Validar nome_fantasia
-    if (!nomeFantasia || nomeFantasia.trim().length === 0) {
+    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
+    // Garantir que nome_fantasia esteja preenchido (sempre obrigatório)
+    const nomeFantasiaFinal = nomeFantasia || newFornecedor.nome_fantasia || "";
+    
+    if (!nomeFantasiaFinal || nomeFantasiaFinal.trim().length === 0) {
       toast.error("O nome fantasia é obrigatório");
       return;
     }
 
-    if (nomeFantasia.length > 255) {
+    if (nomeFantasiaFinal.length > 255) {
       toast.error("O nome fantasia deve ter no máximo 255 caracteres");
       return;
     }
 
-    // Preparar dados de endereços
-    // Conforme GUIA-FRONTEND-ATUALIZACAO-CAMPOS-VAZIOS.md:
-    // Campos de texto vazios: usar "" (será convertido para null no backend)
-    const enderecosFormatados = enderecos.map((end) => ({
-      cep: end.cep ?? "",
-      logradouro: end.logradouro ?? "",
-      numero: end.numero ?? "",
-      complemento: end.complemento ?? "",
-      bairro: end.bairro ?? "",
-      cidade: end.cidade ?? "",
-      estado: end.estado ?? "",
-      referencia: end.referencia ?? "",
-    }));
+    // CPF/CNPJ é opcional - validar apenas se informado
+    let cpfCnpjFormatado: string | undefined = undefined;
+    if (newFornecedor.cpf_cnpj && newFornecedor.cpf_cnpj.trim() !== '') {
+      const cleanedDoc = cleanDocument(newFornecedor.cpf_cnpj);
+      const tipoFornecedor = newFornecedor.tipoFornecedor || "PESSOA_JURIDICA"; // Default se não informado
+      
+      if (tipoFornecedor === "PESSOA_FISICA") {
+        if (cleanedDoc.length !== 11) {
+          toast.error("CPF deve ter 11 dígitos");
+          return;
+        }
+        cpfCnpjFormatado = formatCPF(cleanedDoc);
+      } else {
+        if (cleanedDoc.length !== 14) {
+          toast.error("CNPJ deve ter 14 dígitos");
+          return;
+        }
+        cpfCnpjFormatado = formatCNPJ(cleanedDoc);
+      }
+    }
 
-    // Preparar dados de contatos (formato snake_case para API)
-    // Campos de texto vazios: usar "" (será convertido para null no backend)
-    const contatosFormatados = contatos.map((cont) => ({
-      nome_contato: cont.nomeContato ?? "",
-      email: cont.email ?? "",
-      telefone: cont.telefone ?? "",
-      observacao: cont.observacao ?? "",
-      ativo: cont.ativo !== undefined ? cont.ativo : true,
-    }));
+    // Preparar dados conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md
+    // Não enviar campos vazios/undefined - apenas campos preenchidos
+    
+    // Endereços: apenas se tiverem dados válidos (CEP, logradouro ou cidade)
+    const enderecosValidos = enderecos.filter(
+      (end) => (end.cep && end.cep.trim()) || (end.logradouro && end.logradouro.trim()) || (end.cidade && end.cidade.trim())
+    );
+    
+    // Contatos: apenas se tiverem telefone (conforme guia)
+    const contatosValidos = contatos.filter(
+      (cont) => cont.telefone && cont.telefone.trim() !== ''
+    );
 
-    // Preparar payload completo
-    const payload = {
-      ...newFornecedor,
-      nome_fantasia: nomeFantasia,
-      enderecos: enderecosFormatados.length > 0 ? enderecosFormatados : [],
-      contato: contatosFormatados.length > 0 ? contatosFormatados : [],
+    // Preparar payload completo - apenas campos preenchidos
+    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
+    // Todos os outros campos são opcionais
+    const payload: any = {
+      nome_fantasia: nomeFantasiaFinal,
+      // Campos opcionais - só enviar se informados
+      ...(newFornecedor.tipoFornecedor ? { tipoFornecedor: newFornecedor.tipoFornecedor } : {}),
+      ...(newFornecedor.statusFornecedor ? { statusFornecedor: newFornecedor.statusFornecedor } : {}),
+      ...(cpfCnpjFormatado ? { cpf_cnpj: cpfCnpjFormatado } : {}),
+      ...(newFornecedor.nome_razao && newFornecedor.nome_razao.trim() ? { nome_razao: newFornecedor.nome_razao } : {}),
+      ...(newFornecedor.inscricao_estadual && newFornecedor.inscricao_estadual.trim() ? { inscricao_estadual: newFornecedor.inscricao_estadual } : {}),
+      ...(enderecosValidos.length > 0 ? { enderecos: enderecosValidos } : {}),
+      ...(contatosValidos.length > 0 ? { contato: contatosValidos } : {}),
     };
 
     createFornecedorMutation.mutate(payload);
@@ -1936,34 +1924,33 @@ const Fornecedores = () => {
                       </div>
                     </div>
 
-                    {/* Nome Fantasia - Apenas para Pessoa Jurídica */}
-                    {newFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-muted-foreground" />
-                          Nome Fantasia *
-                        </Label>
-                        <Input
-                          placeholder="Nome Fantasia da Empresa"
-                          value={newFornecedor.nome_fantasia}
-                          onChange={(e) =>
-                            setNewFornecedor({
-                              ...newFornecedor,
-                              nome_fantasia: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    )}
+                    {/* Nome Fantasia - Sempre obrigatório conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Nome Fantasia <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        placeholder="Nome Fantasia"
+                        value={newFornecedor.nome_fantasia || ""}
+                        onChange={(e) =>
+                          setNewFornecedor({
+                            ...newFornecedor,
+                            nome_fantasia: e.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </div>
 
-                    {/* Nome / Razão Social */}
+                    {/* Nome / Razão Social - Opcional */}
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-muted-foreground" />
                         {newFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
                           ? "Razão Social"
-                          : "Nome"}{" "}
-                        *
+                          : "Nome"}
+                        <span className="text-xs text-muted-foreground">(opcional)</span>
                       </Label>
                       <Input
                         placeholder={
@@ -1987,14 +1974,14 @@ const Fornecedores = () => {
                       />
                     </div>
 
-                    {/* CPF/CNPJ */}
+                    {/* CPF/CNPJ - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Hash className="w-4 h-4 text-muted-foreground" />
                         {newFornecedor.tipoFornecedor === "PESSOA_FISICA"
                           ? "CPF"
-                          : "CNPJ"}{" "}
-                        *
+                          : "CNPJ"}
+                        <span className="text-xs text-muted-foreground">(opcional)</span>
                       </Label>
                       <Input
                         placeholder={
@@ -2396,7 +2383,8 @@ const Fornecedores = () => {
                             <div className="space-y-2">
                               <Label className="flex items-center gap-2">
                                 <PhoneIcon className="w-4 h-4 text-muted-foreground" />
-                                Telefone *
+                                Telefone
+                                <span className="text-xs text-muted-foreground">(opcional)</span>
                               </Label>
                               <Input
                                 placeholder="(00) 00000-0000"
@@ -2954,7 +2942,18 @@ const Fornecedores = () => {
                     </TableCell>
                     <TableCell>
                       <span className="font-mono text-sm text-muted-foreground">
-                        {fornecedor.cpf_cnpj || "-"}
+                        {fornecedor.cpf_cnpj 
+                          ? (() => {
+                              const cleaned = cleanDocument(fornecedor.cpf_cnpj);
+                              if (!cleaned) return fornecedor.cpf_cnpj;
+                              if (fornecedor.tipoFornecedor === "PESSOA_FISICA" && cleaned.length === 11) {
+                                return formatCPF(cleaned);
+                              } else if (fornecedor.tipoFornecedor === "PESSOA_JURIDICA" && cleaned.length === 14) {
+                                return formatCNPJ(cleaned);
+                              }
+                              return fornecedor.cpf_cnpj;
+                            })()
+                          : "-"}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -3635,34 +3634,33 @@ const Fornecedores = () => {
                     </div>
                   </div>
 
-                  {/* Nome Fantasia - Apenas para Pessoa Jurídica */}
-                  {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && (
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                        Nome Fantasia
-                      </Label>
-                      <Input
-                        placeholder="Nome Fantasia da Empresa"
-                        value={editFornecedor.nome_fantasia || ""}
-                        onChange={(e) =>
-                          setEditFornecedor({
-                            ...editFornecedor,
-                            nome_fantasia: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  )}
+                  {/* Nome Fantasia - Sempre obrigatório conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      Nome Fantasia <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      placeholder="Nome Fantasia"
+                      value={editFornecedor.nome_fantasia || ""}
+                      onChange={(e) =>
+                        setEditFornecedor({
+                          ...editFornecedor,
+                          nome_fantasia: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </div>
 
-                  {/* Nome / Razão Social */}
+                  {/* Nome / Razão Social - Opcional */}
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-muted-foreground" />
                       {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
                         ? "Razão Social"
-                        : "Nome"}{" "}
-                      *
+                        : "Nome"}
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
                     </Label>
                     <Input
                       placeholder={
@@ -3685,14 +3683,14 @@ const Fornecedores = () => {
                     />
                   </div>
 
-                  {/* CPF/CNPJ */}
+                  {/* CPF/CNPJ - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-muted-foreground" />
                       {editFornecedor.tipoFornecedor === "PESSOA_FISICA"
                         ? "CPF"
-                        : "CNPJ"}{" "}
-                      *
+                        : "CNPJ"}
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
                     </Label>
                     <Input
                       placeholder={
@@ -4056,7 +4054,8 @@ const Fornecedores = () => {
                         <div className="space-y-2">
                           <Label className="flex items-center gap-2">
                             <PhoneIcon className="w-4 h-4 text-muted-foreground" />
-                            Telefone *
+                            Telefone
+                            <span className="text-xs text-muted-foreground">(opcional)</span>
                           </Label>
                           <Input
                             placeholder="(00) 00000-0000"

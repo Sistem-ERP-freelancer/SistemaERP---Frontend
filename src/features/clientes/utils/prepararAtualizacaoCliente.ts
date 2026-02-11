@@ -4,8 +4,8 @@
  * Esta função converte os dados do formulário de edição para o formato esperado pelo método atualizarParcial
  */
 
-import { ClienteFormState } from '@/shared/types/update.types';
 import { Cliente } from '@/services/clientes.service';
+import { ClienteFormState } from '@/shared/types/update.types';
 
 interface EditFormData {
   nome?: string;
@@ -15,6 +15,7 @@ interface EditFormData {
   statusCliente?: 'ATIVO' | 'INATIVO' | 'BLOQUEADO' | 'INADIMPLENTE';
   cpf_cnpj?: string;
   inscricao_estadual?: string;
+  limite_credito?: number | null;
   enderecos?: Array<{
     id?: number;
     cep?: string;
@@ -62,9 +63,25 @@ export function prepararAtualizacaoCliente(
     camposAlterados.push('tipoPessoa');
   }
 
-  if (dadosEditados.cpf_cnpj !== undefined && dadosEditados.cpf_cnpj !== clienteOriginal.cpf_cnpj) {
-    formState.cpf_cnpj = dadosEditados.cpf_cnpj;
-    camposAlterados.push('cpf_cnpj');
+  // Detectar alteração no CPF/CNPJ (incluindo quando é removido/limpo)
+  // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: CPF é opcional
+  if (dadosEditados.cpf_cnpj !== undefined) {
+    const cpfEditado = dadosEditados.cpf_cnpj || "";
+    const cpfOriginal = clienteOriginal.cpf_cnpj || "";
+    // Comparar valores normalizados (sem formatação)
+    // Se ambos estão vazios, não considerar como alteração
+    const cpfEditadoLimpo = cpfEditado.replace(/\D/g, '');
+    const cpfOriginalLimpo = cpfOriginal.replace(/\D/g, '');
+    
+    // Considerar alteração se:
+    // 1. Valores são diferentes (incluindo quando um está vazio e outro não)
+    // 2. Ou quando editado está vazio mas original tinha valor (remoção)
+    if (cpfEditadoLimpo !== cpfOriginalLimpo) {
+      // Se o campo foi limpo (string vazia), manter como string vazia
+      // Será convertido para null no prepararPayloadAtualizacaoCliente
+      formState.cpf_cnpj = dadosEditados.cpf_cnpj || "";
+      camposAlterados.push('cpf_cnpj');
+    }
   }
 
   if (dadosEditados.nome_fantasia !== undefined && dadosEditados.nome_fantasia !== (clienteOriginal.nome_fantasia || '')) {
@@ -80,6 +97,15 @@ export function prepararAtualizacaoCliente(
   if (dadosEditados.inscricao_estadual !== undefined && dadosEditados.inscricao_estadual !== (clienteOriginal.inscricao_estadual || '')) {
     formState.inscricao_estadual = dadosEditados.inscricao_estadual;
     camposAlterados.push('inscricao_estadual');
+  }
+
+  if (dadosEditados.limite_credito !== undefined) {
+    const originalVal = clienteOriginal.limite_credito ?? null;
+    const editVal = dadosEditados.limite_credito ?? null;
+    if (originalVal !== editVal) {
+      formState.limite_credito = dadosEditados.limite_credito;
+      camposAlterados.push('limite_credito');
+    }
   }
 
   // Processar endereços

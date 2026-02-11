@@ -5,14 +5,14 @@
  */
 
 import {
-  ClienteFormState,
-  ContatoFormState,
-  EnderecoFormState,
-  FornecedorFormState,
-  UpdateClientePayload,
-  UpdateContato,
-  UpdateEndereco,
-  UpdateFornecedorPayload,
+    ClienteFormState,
+    ContatoFormState,
+    EnderecoFormState,
+    FornecedorFormState,
+    UpdateClientePayload,
+    UpdateContato,
+    UpdateEndereco,
+    UpdateFornecedorPayload,
 } from '@/shared/types/update.types';
 
 /**
@@ -157,7 +157,25 @@ export function prepararPayloadAtualizacaoCliente(
   }
   
   if (camposAlterados.includes('cpf_cnpj') && dadosForm.cpf_cnpj !== undefined) {
-    payload.cpf_cnpj = cleanDocument(dadosForm.cpf_cnpj);
+    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: CPF é opcional
+    // Limpar formatação e converter string vazia para null
+    const cleaned = cleanDocument(dadosForm.cpf_cnpj);
+    // Se o campo foi limpo (vazio), enviar null para remover do banco
+    // Se tem valor, enviar apenas números (sem formatação)
+    if (!cleaned || cleaned.length === 0) {
+      payload.cpf_cnpj = null;
+    } else {
+      payload.cpf_cnpj = cleaned;
+    }
+    
+    if (import.meta.env.DEV) {
+      console.log('[prepararPayloadAtualizacaoCliente] CPF/CNPJ processado:', {
+        original: dadosForm.cpf_cnpj,
+        cleaned,
+        final: payload.cpf_cnpj,
+        isNull: payload.cpf_cnpj === null
+      });
+    }
   }
   
   if (camposAlterados.includes('nome_fantasia') && dadosForm.nome_fantasia !== undefined) {
@@ -170,6 +188,18 @@ export function prepararPayloadAtualizacaoCliente(
   
   if (camposAlterados.includes('inscricao_estadual') && dadosForm.inscricao_estadual !== undefined) {
     payload.inscricao_estadual = emptyToNull(dadosForm.inscricao_estadual);
+  }
+
+  // Limite de crédito: número ≥ 0 ou null (vazio = sem limite). Conforme GUIA_FRONTEND_LIMITE_CREDITO_EDICAO.md
+  // Quando o usuário remove o limite na edição, enviar null para o backend persistir "sem limite"
+  if (camposAlterados.includes('limite_credito')) {
+    const val = dadosForm.limite_credito;
+    if (val === null || val === undefined || (typeof val === 'number' && (isNaN(val) || val < 0))) {
+      payload.limite_credito = null;
+    } else {
+      const num = typeof val === 'number' ? val : Number(val);
+      payload.limite_credito = !isNaN(num) && num >= 0 ? Math.round(num * 100) / 100 : null;
+    }
   }
   
   // 2. Processar endereços
@@ -222,8 +252,25 @@ export function prepararPayloadAtualizacaoFornecedor(
   }
   
   if (camposAlterados.includes('cpf_cnpj') && dadosForm.cpf_cnpj !== undefined) {
-    // Remover formatação (apenas números)
-    payload.cpf_cnpj = cleanDocument(dadosForm.cpf_cnpj);
+    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: CPF é opcional
+    // Remover formatação (apenas números) e converter string vazia para null
+    const cleaned = cleanDocument(dadosForm.cpf_cnpj);
+    // Se o campo foi limpo (vazio), enviar null para remover do banco
+    // Se tem valor, enviar apenas números (sem formatação)
+    if (!cleaned || cleaned.length === 0) {
+      payload.cpf_cnpj = null;
+    } else {
+      payload.cpf_cnpj = cleaned;
+    }
+    
+    if (import.meta.env.DEV) {
+      console.log('[prepararPayloadAtualizacaoFornecedor] CPF/CNPJ processado:', {
+        original: dadosForm.cpf_cnpj,
+        cleaned,
+        final: payload.cpf_cnpj,
+        isNull: payload.cpf_cnpj === null
+      });
+    }
   }
   
   // Campo opcional: "" vira null
