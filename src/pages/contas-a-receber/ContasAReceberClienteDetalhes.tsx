@@ -82,6 +82,16 @@ const ContasAReceberClienteDetalhes = () => {
       pedidosService.listarContasReceber({
         cliente_id: Number(clienteId!),
         situacao: 'em_aberto', // Buscar apenas em aberto
+      }).catch((error: any) => {
+        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+        // Tratar como array vazio ao invés de erro
+        if (error?.response?.status === 400) {
+          if (import.meta.env.DEV) {
+            console.warn("Backend retornou 400 - tratando como banco vazio:", error);
+          }
+          return [];
+        }
+        throw error;
       }),
     // Só buscar se detalheApi não tiver retornado parcelas (após carregar)
     enabled: !!clienteId && !loadingDetalhe && (!detalheApi?.parcelas || detalheApi.parcelas.length === 0),

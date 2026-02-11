@@ -1,3 +1,5 @@
+import { normalizeString } from '@/lib/contas-financeiras.utils';
+import type { ContaPagar, ContaReceber, FiltrosContasPagar, FiltrosContasReceber } from '@/types/contas-financeiras.types';
 import {
     AtualizarCondicaoPagamentoPayload,
     CreatePedidoDto,
@@ -6,8 +8,6 @@ import {
     Pedido,
     PedidosResponse,
 } from '@/types/pedido';
-import type { ContaReceber, ContaPagar, FiltrosContasReceber, FiltrosContasPagar } from '@/types/contas-financeiras.types';
-import { normalizeString } from '@/lib/contas-financeiras.utils';
 import { apiClient } from './api';
 import type { ConfirmarPagamentoPayload } from './contas-receber.service';
 

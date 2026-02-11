@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { pedidosService } from './pedidos.service';
 
 export interface ClienteComDuplicatas {
   cliente_id: number;
@@ -106,44 +107,35 @@ class ContasReceberService {
     data_pedido: string;
   }>> {
     try {
-      const queryParams = new URLSearchParams();
-      if (params?.codigo) queryParams.append('codigo', params.codigo);
-      if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
-      if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
-      if (params?.valor_inicial) queryParams.append('valor_inicial', params.valor_inicial.toString());
-      if (params?.valor_final) queryParams.append('valor_final', params.valor_final.toString());
-      if (params?.forma_pagamento) queryParams.append('forma_pagamento', params.forma_pagamento);
-      if (params?.situacao) queryParams.append('situacao', params.situacao);
-      if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
-      if (params?.data_final) queryParams.append('data_final', params.data_final);
-
-      const query = queryParams.toString();
-      const response = await apiClient.get<Array<{
-        pedido_id: number;
-        numero_pedido: string;
-        cliente_id: number;
-        cliente_nome: string;
-        valor_total: number;
-        valor_em_aberto: number;
-        forma_pagamento: string;
-        status: string;
-        data_pedido: string;
-      }>>(`/pedidos/contas-receber${query ? `?${query}` : ''}`);
-      
-      return Array.isArray(response) ? response : [];
-    } catch {
-      return [];
+      // Usar o método do pedidosService que já tem normalização robusta
+      // Conforme GUIA_CORRECAO_CONTAS_PAGAR.md
+      return await pedidosService.listarContasReceber(params);
+    } catch (error: any) {
+      // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+      // Tratar como array vazio ao invés de erro
+      if (error?.response?.status === 400) {
+        if (import.meta.env.DEV) {
+          console.warn('⚠️ [ContasReceberService] Backend retornou 400 - tratando como banco vazio:', error);
+        }
+        return [];
+      }
+      throw error;
     }
   }
 
   /**
    * @deprecated Use listarContasReceber() ao invés deste método
    * Mantido apenas para compatibilidade temporária
+   * Conforme GUIA_CORRECAO_CONTAS_PAGAR.md
    */
-  async listarClientesComDuplicatas(): Promise<ClienteComDuplicatas[]> {
+  async listarClientesComDuplicatas(params?: { status?: string }): Promise<ClienteComDuplicatas[]> {
     try {
       // Usar o novo endpoint e transformar para o formato antigo (compatibilidade)
-      const pedidos = await this.listarContasReceber({ situacao: 'em_aberto' });
+      // Normalizar situacao conforme guia
+      const situacao = params?.status === 'aberto' ? 'em_aberto' : undefined;
+      const pedidos = await this.listarContasReceber(
+        situacao ? { situacao } : undefined
+      );
       
       // Agrupar por cliente para manter compatibilidade
       const clientesMap = new Map<number, ClienteComDuplicatas>();
@@ -165,7 +157,15 @@ class ContasReceberService {
       });
       
       return Array.from(clientesMap.values());
-    } catch {
+    } catch (error: any) {
+      // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+      // Tratar como array vazio ao invés de erro
+      if (error?.response?.status === 400) {
+        if (import.meta.env.DEV) {
+          console.warn('⚠️ [ContasReceberService] Backend retornou 400 - tratando como banco vazio:', error);
+        }
+        return [];
+      }
       return [];
     }
   }

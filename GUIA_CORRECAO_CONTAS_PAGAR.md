@@ -1,4 +1,4 @@
-# 🔧 Guia de Correção - Erro 400 no Endpoint de Contas a Pagar
+# 🔧 Guia de Correção - Erro 400 nos Endpoints de Contas a Pagar e Receber
 
 ## 📋 Índice
 
@@ -16,18 +16,21 @@
 
 ### Descrição do Erro
 
-Ao abrir o módulo de **Contas a Pagar** no frontend, o console do navegador exibia o seguinte erro:
+Ao abrir os módulos de **Contas a Pagar** e **Contas a Receber** no frontend, o console do navegador exibia erros 400:
 
+**Contas a Pagar:**
 ```
 ❌ [API Error] 
-Object { 
-  url: "https://sistemaerp-3.onrender.com/api/v1/pedidos/contas-pagar", 
-  status: 400, 
-  statusText: "", 
-  errorData: {…}, 
-  errorText: null, 
-  headers: {…} 
-}
+GET https://sistemaerp-3.onrender.com/api/v1/pedidos/contas-pagar
+Status: 400
+```
+
+**Contas a Receber:**
+```
+❌ [API Error] 
+GET https://sistemaerp-3.onrender.com/api/v1/pedidos/contas-receber
+GET https://sistemaerp-3.onrender.com/api/v1/pedidos/contas-receber?situacao=em_aberto
+Status: 400
 ```
 
 ### Mensagem de Erro Original
@@ -129,9 +132,13 @@ app.useGlobalPipes(
 
 ---
 
-### Solução 2: Normalização e Validação Robusta no Controller
+### Solução 2: Normalização e Validação Robusta nos Controllers
 
 **Arquivo:** `src/pedido/controller/pedido.controller.ts`
+
+**Endpoints Corrigidos:**
+- ✅ `GET /pedidos/contas-pagar` - Endpoint de contas a pagar
+- ✅ `GET /pedidos/contas-receber` - Endpoint de contas a receber
 
 **Mudanças Implementadas:**
 
@@ -392,13 +399,16 @@ node test-contas-pagar-endpoint.js
    - Adicionada configuração `validateCustomDecorators: false` no ValidationPipe
 
 2. **`src/pedido/controller/pedido.controller.ts`**
-   - Implementada função `normalizeString` para normalização
+   - ✅ Corrigido método `listarContasPagar()` - Endpoint de contas a pagar
+   - ✅ Corrigido método `listarContasReceber()` - Endpoint de contas a receber
+   - Implementada função `normalizeString` para normalização (usada em ambos)
    - Adicionada normalização de todos os parâmetros
    - Melhorada validação de parâmetros numéricos
    - Adicionada validação de formato de datas
 
 3. **`test-contas-pagar-endpoint.js`** (novo)
    - Script de teste automatizado com 10 cenários
+   - Pode ser adaptado para testar também o endpoint `contas-receber`
 
 ---
 
@@ -406,7 +416,7 @@ node test-contas-pagar-endpoint.js
 
 ### Problema Resolvido ✅
 
-O erro 400 Bad Request no endpoint `/pedidos/contas-pagar` foi completamente resolvido através de:
+Os erros 400 Bad Request nos endpoints `/pedidos/contas-pagar` e `/pedidos/contas-receber` foram completamente resolvidos através de:
 
 1. **Ajuste do ValidationPipe:** Desabilitada validação de decorators customizados em query parameters
 2. **Normalização Robusta:** Todos os parâmetros são normalizados antes do processamento
@@ -414,11 +424,12 @@ O erro 400 Bad Request no endpoint `/pedidos/contas-pagar` foi completamente res
 
 ### Benefícios
 
-- ✅ Endpoint funciona corretamente mesmo com parâmetros `undefined`
+- ✅ Ambos os endpoints (`contas-pagar` e `contas-receber`) funcionam corretamente mesmo com parâmetros `undefined`
 - ✅ Trata strings vazias, `null`, e `undefined` de forma consistente
 - ✅ Validação adequada de parâmetros numéricos
 - ✅ Mensagens de erro mais claras e específicas
 - ✅ Código mais robusto e preparado para casos extremos
+- ✅ Consistência entre os dois endpoints relacionados
 
 ### Próximos Passos Recomendados
 

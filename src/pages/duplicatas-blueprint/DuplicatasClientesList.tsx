@@ -58,9 +58,9 @@ const DuplicatasClientesList = () => {
   const { data: pedidosContasReceber } = useQuery({
     queryKey: ['pedidos', 'contas-receber', filtroStatus],
     queryFn: () =>
-      pedidosService.listarContasReceber({
-        situacao: filtroStatus === 'todos' ? undefined : 'em_aberto',
-      }),
+      pedidosService.listarContasReceber(
+        filtroStatus === 'todos' ? undefined : { situacao: 'em_aberto' }
+      ),
   });
 
   const pedidos = pedidosContasReceber ?? [];

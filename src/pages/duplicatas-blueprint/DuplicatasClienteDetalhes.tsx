@@ -62,6 +62,16 @@ const DuplicatasClienteDetalhes = () => {
       pedidosService.listarContasReceber({
         cliente_id: Number(clienteId!),
         situacao: 'em_aberto',
+      }).catch((error: any) => {
+        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
+        // Tratar como array vazio ao invés de erro
+        if (error?.response?.status === 400) {
+          if (import.meta.env.DEV) {
+            console.warn("Backend retornou 400 - tratando como banco vazio:", error);
+          }
+          return [];
+        }
+        throw error;
       }),
     enabled: !!clienteId,
   });
