@@ -180,9 +180,11 @@ const ContasAPagar = () => {
           situacao = 'concluido';
         }
 
-        const pedidos = await pedidosService.listarContasPagar({
-          situacao,
-        });
+        // Só passar objeto de filtros se tiver algum filtro válido
+        // Evita enviar { situacao: undefined } que pode causar erro 400
+        const pedidos = await pedidosService.listarContasPagar(
+          situacao ? { situacao } : undefined
+        );
         
         // Aplicar paginação manualmente (o endpoint não tem paginação ainda)
         const startIndex = (currentPage - 1) * pageSize;

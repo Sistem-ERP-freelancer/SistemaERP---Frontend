@@ -1,6 +1,6 @@
 // Cliente HTTP base para todas as requisições da API
 
-import { validateToken, getTokenInfo, type TokenPayload } from '@/lib/token-utils';
+import { getTokenInfo, validateToken } from '@/lib/token-utils';
 
 // Detecta automaticamente a URL da API baseado no ambiente
 const getApiBaseUrl = () => {
@@ -208,6 +208,13 @@ class ApiClient {
             } else if (errorMessage.toLowerCase().includes('cliente não encontrado') ||
                        errorMessage.toLowerCase().includes('cliente nao encontrado')) {
               errorMessage = 'Cliente não encontrado. Verifique se o ID está correto.';
+            } else if (
+              errorMessage.toLowerCase().includes('validation failed') ||
+              errorMessage.toLowerCase().includes('numeric string is expected')
+            ) {
+              // Erro de validação de parâmetros (ex.: contas-receber/contas-pagar)
+              // Ver GUIA_EVITAR_ERRO_VALIDATION_NUMERIC.md
+              errorMessage = 'Não foi possível carregar os dados. Tente novamente.';
             }
             break;
           

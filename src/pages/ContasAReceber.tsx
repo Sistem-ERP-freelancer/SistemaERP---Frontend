@@ -197,7 +197,15 @@ const ContasAReceber = () => {
           params.situacao = 'concluido';
         }
         
-        return await pedidosService.listarContasReceber(params);
+        // Só passar objeto de filtros se tiver algum filtro válido
+        // Evita enviar objeto vazio que pode causar erro 400
+        const hasFilters = params.situacao || params.cliente_id || params.cliente_nome || 
+                          params.valor_inicial || params.valor_final || params.forma_pagamento ||
+                          params.data_inicial || params.data_final || params.codigo;
+        
+        return await pedidosService.listarContasReceber(
+          hasFilters ? params : undefined
+        );
       } catch (error) {
         console.warn("API contas a receber não disponível:", error);
         return [];
