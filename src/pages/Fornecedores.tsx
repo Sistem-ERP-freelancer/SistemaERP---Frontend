@@ -1,3 +1,4 @@
+import { CampoCnpjComConsulta } from "@/components/CampoCnpjComConsulta";
 import AppLayout from "@/components/layout/AppLayout";
 import {
     AlertDialog,
@@ -64,6 +65,7 @@ import {
 } from "@/components/ui/table";
 import { prepararAtualizacaoFornecedor } from "@/features/fornecedores/utils/prepararAtualizacaoFornecedor";
 import { cleanDocument, formatCEP, formatCNPJ, formatCPF, formatTelefone } from "@/lib/validators";
+import { ConsultaCnpjResponse } from "@/services/cnpj.service";
 import {
     CreateFornecedorDto,
     fornecedoresService,
@@ -119,11 +121,11 @@ const Fornecedores = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
-  // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
+  // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: apenas nome_fantasia é obrigatório
+  // Campo nome_razao NÃO EXISTE - não usar
   // Todos os outros campos são opcionais (valores padrão apenas para UI)
   const [newFornecedor, setNewFornecedor] = useState<CreateFornecedorDto>({
     nome_fantasia: "",
-    nome_razao: "",
     tipoFornecedor: "PESSOA_JURIDICA", // Valor padrão apenas para UI, não será enviado se não selecionado
     statusFornecedor: "ATIVO", // Valor padrão apenas para UI, não será enviado se não selecionado
     cpf_cnpj: "",
@@ -160,9 +162,9 @@ const Fornecedores = () => {
   });
 
   // Estados para edição
+  // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE
   const [editFornecedor, setEditFornecedor] = useState<CreateFornecedorDto>({
     nome_fantasia: "",
-    nome_razao: "",
     tipoFornecedor: "PESSOA_FISICA",
     statusFornecedor: "ATIVO",
     cpf_cnpj: "",
@@ -579,32 +581,16 @@ const Fornecedores = () => {
     setCurrentStep(1);
     setNewFornecedor({
       nome_fantasia: "",
-      nome_razao: "",
       tipoFornecedor: "PESSOA_JURIDICA",
       statusFornecedor: "ATIVO",
       cpf_cnpj: "",
       inscricao_estadual: "",
     });
-    setEnderecos([
-      {
-        cep: "",
-        logradouro: "",
-        numero: "",
-        complemento: "",
-        bairro: "",
-        cidade: "",
-        estado: "",
-        referencia: "",
-      },
-    ]);
-    setContatos([
-      {
-        telefone: "",
-        email: "",
-        nomeContato: "",
-        observacao: "",
-      },
-    ]);
+    // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: endereços e contatos são opcionais
+    // Campo nome_razao NÃO EXISTE - não usar
+    // Não criar arrays vazios por padrão - usuário adiciona se necessário
+    setEnderecos([]);
+    setContatos([]);
   };
 
   // Mutation para criar fornecedor
@@ -634,24 +620,17 @@ const Fornecedores = () => {
 
   const handleNextStep = () => {
     if (currentStep === 1) {
-      // Validação específica por tipo
-      if (newFornecedor.tipoFornecedor === "PESSOA_JURIDICA") {
-        if (
-          !newFornecedor.nome_fantasia ||
-          !newFornecedor.nome_razao ||
-          !newFornecedor.cpf_cnpj
-        ) {
-          toast.error(
-            "Preencha os campos obrigatórios (Nome Fantasia, Razão Social e CNPJ)"
-          );
-          return;
-        }
-      } else {
-        if (!newFornecedor.nome_razao || !newFornecedor.cpf_cnpj) {
-          toast.error("Preencha os campos obrigatórios (Nome e CPF)");
-          return;
-        }
+      // Conforme GUIA_FRONTEND_FORNECEDOR_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
+      if (!newFornecedor.nome_fantasia || newFornecedor.nome_fantasia.trim().length === 0) {
+        toast.error("O nome fantasia é obrigatório");
+        return;
       }
+      
+      if (newFornecedor.nome_fantasia.length > 255) {
+        toast.error("O nome fantasia deve ter no máximo 255 caracteres");
+        return;
+      }
+      
       setCurrentStep(2);
     } else if (currentStep === 2) {
       setCurrentStep(3);
@@ -664,26 +643,90 @@ const Fornecedores = () => {
     }
   };
 
-  const handleCreate = () => {
-    // Garantir que nome_fantasia esteja preenchido
-    // Para Pessoa Física, usar nome_razao se nome_fantasia estiver vazio
-    const nomeFantasia =
-      newFornecedor.nome_fantasia ||
-      (newFornecedor.tipoFornecedor === "PESSOA_FISICA"
-        ? newFornecedor.nome_razao
-        : "");
+  // Função para preencher campos automaticamente após consulta CNPJ
+  const handlePreencherCamposCnpj = (dados: ConsultaCnpjResponse) => {
+    // Preencher nome fantasia
+    if (dados.nomeFantasia) {
+      setNewFornecedor((prev) => ({
+        ...prev,
+        nome_fantasia: dados.nomeFantasia,
+      }));
+    }
 
-    // Validação final antes de criar
-    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
-    // Garantir que nome_fantasia esteja preenchido (sempre obrigatório)
-    const nomeFantasiaFinal = nomeFantasia || newFornecedor.nome_fantasia || "";
-    
-    if (!nomeFantasiaFinal || nomeFantasiaFinal.trim().length === 0) {
+    // Definir tipo como Pessoa Jurídica
+    setNewFornecedor((prev) => ({
+      ...prev,
+      tipoFornecedor: "PESSOA_JURIDICA",
+    }));
+
+    // Preencher inscrição estadual
+    if (dados.inscricaoEstadual) {
+      setNewFornecedor((prev) => ({
+        ...prev,
+        inscricao_estadual: dados.inscricaoEstadual || "",
+      }));
+    }
+
+    // Preencher endereço se houver dados (com formatação visual)
+    if (dados.logradouro || dados.cep || dados.cidade) {
+      // Formatar CEP visualmente
+      const cepFormatado = dados.cep ? formatCEP(dados.cep) : "";
+      
+      const novoEndereco = {
+        cep: cepFormatado,
+        logradouro: dados.logradouro || "",
+        numero: dados.numero || "",
+        complemento: "",
+        bairro: dados.bairro || "",
+        cidade: dados.cidade || "",
+        estado: dados.uf || "",
+        referencia: "",
+      };
+
+      // Se não houver endereços, criar um novo; senão, atualizar o primeiro
+      if (enderecos.length === 0) {
+        setEnderecos([novoEndereco]);
+      } else {
+        setEnderecos([
+          { ...enderecos[0], ...novoEndereco },
+          ...enderecos.slice(1),
+        ]);
+      }
+    }
+
+    // Preencher contato se houver telefone (com formatação visual)
+    if (dados.telefones && dados.telefones.length > 0) {
+      // Formatar telefone visualmente
+      const telefoneFormatado = formatTelefone(dados.telefones[0]);
+      
+      const novoContato = {
+        telefone: telefoneFormatado,
+        email: "",
+        nomeContato: "",
+        observacao: "",
+      };
+
+      // Se não houver contatos, criar um novo; senão, atualizar o primeiro
+      if (contatos.length === 0) {
+        setContatos([novoContato]);
+      } else {
+        setContatos([
+          { ...contatos[0], ...novoContato },
+          ...contatos.slice(1),
+        ]);
+      }
+    }
+  };
+
+  const handleCreate = () => {
+    // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: apenas nome_fantasia é obrigatório
+    // Campo nome_razao NÃO DEVE SER USADO - é campo interno do backend
+    if (!newFornecedor.nome_fantasia || newFornecedor.nome_fantasia.trim().length === 0) {
       toast.error("O nome fantasia é obrigatório");
       return;
     }
 
-    if (nomeFantasiaFinal.length > 255) {
+    if (newFornecedor.nome_fantasia.length > 255) {
       toast.error("O nome fantasia deve ter no máximo 255 caracteres");
       return;
     }
@@ -709,8 +752,9 @@ const Fornecedores = () => {
       }
     }
 
-    // Preparar dados conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md
+    // Preparar dados conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md
     // Não enviar campos vazios/undefined - apenas campos preenchidos
+    // ⚠️ NÃO incluir nome_razao - o backend usa nome_fantasia automaticamente se não informado
     
     // Endereços: apenas se tiverem dados válidos (CEP, logradouro ou cidade)
     const enderecosValidos = enderecos.filter(
@@ -723,18 +767,18 @@ const Fornecedores = () => {
     );
 
     // Preparar payload completo - apenas campos preenchidos
-    // Conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md: apenas nome_fantasia é obrigatório
-    // Todos os outros campos são opcionais
+    // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: apenas nome_fantasia é obrigatório
+    // Campo nome_razao NÃO DEVE SER USADO - é campo interno do backend
     const payload: any = {
-      nome_fantasia: nomeFantasiaFinal,
+      nome_fantasia: newFornecedor.nome_fantasia.trim(),
       // Campos opcionais - só enviar se informados
       ...(newFornecedor.tipoFornecedor ? { tipoFornecedor: newFornecedor.tipoFornecedor } : {}),
       ...(newFornecedor.statusFornecedor ? { statusFornecedor: newFornecedor.statusFornecedor } : {}),
       ...(cpfCnpjFormatado ? { cpf_cnpj: cpfCnpjFormatado } : {}),
-      ...(newFornecedor.nome_razao && newFornecedor.nome_razao.trim() ? { nome_razao: newFornecedor.nome_razao } : {}),
-      ...(newFornecedor.inscricao_estadual && newFornecedor.inscricao_estadual.trim() ? { inscricao_estadual: newFornecedor.inscricao_estadual } : {}),
+      ...(newFornecedor.inscricao_estadual && newFornecedor.inscricao_estadual.trim() ? { inscricao_estadual: newFornecedor.inscricao_estadual.trim() } : {}),
       ...(enderecosValidos.length > 0 ? { enderecos: enderecosValidos } : {}),
       ...(contatosValidos.length > 0 ? { contato: contatosValidos } : {}),
+      // NÃO incluir nome_razao - o backend gerencia isso automaticamente
     };
 
     createFornecedorMutation.mutate(payload);
@@ -956,9 +1000,9 @@ const Fornecedores = () => {
       setEditDialogOpen(false);
       setSelectedFornecedorId(null);
       // Resetar estados
+      // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não usar
       setEditFornecedor({
         nome_fantasia: "",
-        nome_razao: "",
         tipoFornecedor: "PESSOA_FISICA",
         statusFornecedor: "ATIVO",
         cpf_cnpj: "",
@@ -1268,7 +1312,7 @@ const Fornecedores = () => {
       // Preencher formulário com dados do fornecedor
       setEditFornecedor({
         nome_fantasia: selectedFornecedor.nome_fantasia || "",
-        nome_razao: selectedFornecedor.nome_razao || "",
+        // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não usar
         tipoFornecedor: selectedFornecedor.tipoFornecedor || "PESSOA_FISICA",
         statusFornecedor: selectedFornecedor.statusFornecedor || "ATIVO",
         cpf_cnpj: selectedFornecedor.cpf_cnpj || "",
@@ -1321,7 +1365,7 @@ const Fornecedores = () => {
     if (!editDialogOpen) {
       setEditFornecedor({
         nome_fantasia: "",
-        nome_razao: "",
+        // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não usar
         tipoFornecedor: "PESSOA_FISICA",
         statusFornecedor: "ATIVO",
         cpf_cnpj: "",
@@ -1436,14 +1480,7 @@ const Fornecedores = () => {
       payload.nome_fantasia = nomeFantasia;
     }
     
-    // nome_razao (snake_case, string)
-    const nomeRazao = prepararCampoParaEnvio(
-      editFornecedor.nome_razao,
-      fornecedorOriginal.nome_razao
-    );
-    if (nomeRazao !== undefined) {
-      payload.nome_razao = nomeRazao;
-    }
+    // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não enviar
     
     // tipoFornecedor (camelCase, enum)
     if (editFornecedor.tipoFornecedor !== fornecedorOriginal.tipoFornecedor) {
@@ -1943,38 +1980,7 @@ const Fornecedores = () => {
                       />
                     </div>
 
-                    {/* Nome / Razão Social - Opcional */}
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                        {newFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                          ? "Razão Social"
-                          : "Nome"}
-                        <span className="text-xs text-muted-foreground">(opcional)</span>
-                      </Label>
-                      <Input
-                        placeholder={
-                          newFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                            ? "Razão Social da Empresa"
-                            : "Nome do fornecedor"
-                        }
-                        value={newFornecedor.nome_razao}
-                        onChange={(e) => {
-                          const nomeRazao = e.target.value;
-                          setNewFornecedor({
-                            ...newFornecedor,
-                            nome_razao: nomeRazao,
-                            // Para Pessoa Física, preencher nome_fantasia automaticamente
-                            nome_fantasia:
-                              newFornecedor.tipoFornecedor === "PESSOA_FISICA"
-                                ? nomeRazao
-                                : newFornecedor.nome_fantasia,
-                          });
-                        }}
-                      />
-                    </div>
-
-                    {/* CPF/CNPJ - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
+                    {/* CPF/CNPJ - Opcional conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md */}
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Hash className="w-4 h-4 text-muted-foreground" />
@@ -1983,32 +1989,33 @@ const Fornecedores = () => {
                           : "CNPJ"}
                         <span className="text-xs text-muted-foreground">(opcional)</span>
                       </Label>
-                      <Input
-                        placeholder={
-                          newFornecedor.tipoFornecedor === "PESSOA_FISICA"
-                            ? "000.000.000-00"
-                            : "00.000.000/0000-00"
-                        }
-                        value={newFornecedor.cpf_cnpj}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const cleaned = cleanDocument(value);
-                          const tipo = newFornecedor.tipoFornecedor;
-                          const maxLength = tipo === "PESSOA_FISICA" ? 11 : 14;
-                          const limited = cleaned.slice(0, maxLength);
-                          let formatted = limited;
-                          if (
-                            tipo === "PESSOA_FISICA" &&
-                            limited.length === 11
-                          ) {
-                            formatted = formatCPF(limited);
-                          } else if (
-                            tipo === "PESSOA_JURIDICA" &&
-                            limited.length === 14
-                          ) {
-                            formatted = formatCNPJ(limited);
-                          } else if (limited.length > 0) {
-                            if (tipo === "PESSOA_FISICA") {
+                      {newFornecedor.tipoFornecedor === "PESSOA_JURIDICA" ? (
+                        // Campo CNPJ com consulta para Pessoa Jurídica
+                        <CampoCnpjComConsulta
+                          value={newFornecedor.cpf_cnpj || ""}
+                          onChange={(value) =>
+                            setNewFornecedor({
+                              ...newFornecedor,
+                              cpf_cnpj: value,
+                            })
+                          }
+                          tipoConsulta="fornecedor"
+                          onPreencherCampos={handlePreencherCamposCnpj}
+                          placeholder="00.000.000/0000-00"
+                        />
+                      ) : (
+                        // Campo CPF simples para Pessoa Física
+                        <Input
+                          placeholder="000.000.000-00"
+                          value={newFornecedor.cpf_cnpj}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const cleaned = cleanDocument(value);
+                            const limited = cleaned.slice(0, 11);
+                            let formatted = limited;
+                            if (limited.length === 11) {
+                              formatted = formatCPF(limited);
+                            } else if (limited.length > 0) {
                               formatted = limited
                                 .replace(
                                   /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
@@ -2017,27 +2024,14 @@ const Fornecedores = () => {
                                 .replace(/^(\d{3})(\d{3})(\d{3})$/, "$1.$2.$3")
                                 .replace(/^(\d{3})(\d{3})$/, "$1.$2")
                                 .replace(/^(\d{3})$/, "$1");
-                            } else {
-                              formatted = limited
-                                .replace(
-                                  /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
-                                  "$1.$2.$3/$4-$5"
-                                )
-                                .replace(
-                                  /^(\d{2})(\d{3})(\d{3})(\d{4})$/,
-                                  "$1.$2.$3/$4"
-                                )
-                                .replace(/^(\d{2})(\d{3})(\d{3})$/, "$1.$2.$3")
-                                .replace(/^(\d{2})(\d{3})$/, "$1.$2")
-                                .replace(/^(\d{2})$/, "$1");
                             }
-                          }
-                          setNewFornecedor({
-                            ...newFornecedor,
-                            cpf_cnpj: formatted,
-                          });
-                        }}
-                      />
+                            setNewFornecedor({
+                              ...newFornecedor,
+                              cpf_cnpj: formatted,
+                            });
+                          }}
+                        />
+                      )}
                       {/* Mensagem de validação em tempo real - apenas tamanho */}
                       {newFornecedor.tipoFornecedor === "PESSOA_JURIDICA" &&
                         cleanDocument(newFornecedor.cpf_cnpj || "").length >
@@ -2155,37 +2149,45 @@ const Fornecedores = () => {
                 {/* Passo 2: Endereços */}
                 {currentStep === 2 && (
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <MapPinIcon className="w-5 h-5 text-primary" />
-                        Endereços
-                      </h3>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setEnderecos([
-                            ...enderecos,
-                            {
-                              cep: "",
-                              logradouro: "",
-                              numero: "",
-                              complemento: "",
-                              bairro: "",
-                              cidade: "",
-                              estado: "",
-                              referencia: "",
-                            },
-                          ])
-                        }
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Adicionar Endereço
-                      </Button>
-                    </div>
+                    <div className="bg-card border rounded-lg p-6 space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-blue-500/10">
+                            <MapPinIcon className="w-5 h-5 text-blue-500" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold">Endereços</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Localizações do fornecedor
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setEnderecos([
+                              ...enderecos,
+                              {
+                                cep: "",
+                                logradouro: "",
+                                numero: "",
+                                complemento: "",
+                                bairro: "",
+                                cidade: "",
+                                estado: "",
+                                referencia: "",
+                              },
+                            ])
+                          }
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Adicionar Endereço
+                        </Button>
+                      </div>
 
-                    {enderecos.map((endereco, index) => (
+                      {enderecos.map((endereco, index) => (
                       <div
                         key={index}
                         className="space-y-4 p-4 border rounded-lg"
@@ -2321,40 +2323,46 @@ const Fornecedores = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
 
                 {/* Passo 3: Contatos */}
                 {currentStep === 3 && (
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <PhoneIcon className="w-5 h-5 text-primary" />
-                        Contatos
-                      </h3>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setContatos([
-                          ...contatos,
-                          {
-                            telefone: "",
-                            email: "",
-                            nomeContato: "",
-                            observacao: "",
-                          },
-                        ])
-                        }
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Adicionar Contato
-                      </Button>
-                    </div>
+                    <div className="bg-card border rounded-lg p-6 space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <PhoneIcon className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold">Contatos</h3>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setContatos([
+                            ...contatos,
+                            {
+                              telefone: "",
+                              email: "",
+                              nomeContato: "",
+                              observacao: "",
+                            },
+                          ])
+                          }
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Adicionar Contato
+                        </Button>
+                      </div>
 
-                    {contatos.map((contato, index) => (
+                      {contatos.map((contato, index) => (
                       <div
                         key={index}
                         className="space-y-4 p-4 border rounded-lg"
@@ -2444,7 +2452,8 @@ const Fornecedores = () => {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -2929,15 +2938,9 @@ const Fornecedores = () => {
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium">
-                          {fornecedor.nome_fantasia || fornecedor.nome_razao || "-"}
+                          {fornecedor.nome_fantasia || "-"}
                         </span>
-                        {fornecedor.tipoFornecedor === "PESSOA_JURIDICA" &&
-                          fornecedor.nome_razao &&
-                          fornecedor.nome_fantasia !== fornecedor.nome_razao && (
-                            <span className="text-sm text-muted-foreground">
-                              {fornecedor.nome_razao}
-                            </span>
-                          )}
+                        {/* Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não exibir */}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -2970,8 +2973,11 @@ const Fornecedores = () => {
                       <div className="flex items-center gap-1">
                         <Phone className="w-3 h-3 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">
-                          {fornecedor.contato && fornecedor.contato.length > 0
-                            ? fornecedor.contato[0].telefone || "-"
+                          {fornecedor.contato && fornecedor.contato.length > 0 && fornecedor.contato[0].telefone
+                            ? (() => {
+                                const cleaned = cleanDocument(fornecedor.contato[0].telefone);
+                                return cleaned.length >= 10 ? formatTelefone(cleaned) : fornecedor.contato[0].telefone;
+                              })()
                             : "-"}
                         </span>
                       </div>
@@ -3236,22 +3242,24 @@ const Fornecedores = () => {
                       </p>
                     </div>
                   )}
-                  <div className="space-y-3">
-                    <Label className="text-sm text-muted-foreground">
-                      {selectedFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                        ? "Razão Social"
-                        : "Nome"}
-                    </Label>
-                    <p className="font-medium text-base">
-                      {selectedFornecedor.nome_razao || "-"}
-                    </p>
-                  </div>
+                  {/* Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não exibir */}
                   <div className="space-y-3">
                     <Label className="text-sm text-muted-foreground">
                       CPF/CNPJ
                     </Label>
-                    <p className="font-medium text-base">
-                      {selectedFornecedor.cpf_cnpj || "-"}
+                    <p className="font-medium text-base font-mono">
+                      {selectedFornecedor.cpf_cnpj 
+                        ? (() => {
+                            const cleaned = cleanDocument(selectedFornecedor.cpf_cnpj);
+                            if (!cleaned) return selectedFornecedor.cpf_cnpj;
+                            if (selectedFornecedor.tipoFornecedor === "PESSOA_FISICA" && cleaned.length === 11) {
+                              return formatCPF(cleaned);
+                            } else if (selectedFornecedor.tipoFornecedor === "PESSOA_JURIDICA" && cleaned.length === 14) {
+                              return formatCNPJ(cleaned);
+                            }
+                            return selectedFornecedor.cpf_cnpj;
+                          })()
+                        : "-"}
                     </p>
                   </div>
                   <div className="space-y-3">
@@ -3312,7 +3320,14 @@ const Fornecedores = () => {
                               <Label className="text-xs text-muted-foreground">
                                 CEP
                               </Label>
-                              <p>{endereco.cep || "-"}</p>
+                              <p>
+                                {endereco.cep 
+                                  ? (() => {
+                                      const cleaned = cleanDocument(endereco.cep);
+                                      return cleaned.length === 8 ? formatCEP(cleaned) : endereco.cep;
+                                    })()
+                                  : "-"}
+                              </p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
@@ -3382,7 +3397,14 @@ const Fornecedores = () => {
                               <Label className="text-xs text-muted-foreground">
                                 Telefone
                               </Label>
-                              <p>{contato.telefone || "-"}</p>
+                              <p>
+                                {contato.telefone 
+                                  ? (() => {
+                                      const cleaned = cleanDocument(contato.telefone);
+                                      return cleaned.length >= 10 ? formatTelefone(cleaned) : contato.telefone;
+                                    })()
+                                  : "-"}
+                              </p>
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground">
@@ -3473,7 +3495,7 @@ const Fornecedores = () => {
               <p className="text-sm text-muted-foreground">
                 Tem certeza que deseja excluir o fornecedor{" "}
                 <span className="font-semibold text-foreground">
-                  {selectedFornecedor.nome_fantasia || selectedFornecedor.nome_razao}
+                  {selectedFornecedor.nome_fantasia}
                 </span>
                 ?
               </p>
@@ -3653,37 +3675,7 @@ const Fornecedores = () => {
                     />
                   </div>
 
-                  {/* Nome / Razão Social - Opcional */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                      {editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                        ? "Razão Social"
-                        : "Nome"}
-                      <span className="text-xs text-muted-foreground">(opcional)</span>
-                    </Label>
-                    <Input
-                      placeholder={
-                        editFornecedor.tipoFornecedor === "PESSOA_JURIDICA"
-                          ? "Razão Social da Empresa"
-                          : "Nome do fornecedor"
-                      }
-                      value={editFornecedor.nome_razao || ""}
-                      onChange={(e) => {
-                        const nomeRazao = e.target.value;
-                        setEditFornecedor({
-                          ...editFornecedor,
-                          nome_razao: nomeRazao,
-                          nome_fantasia:
-                            editFornecedor.tipoFornecedor === "PESSOA_FISICA"
-                              ? nomeRazao
-                              : editFornecedor.nome_fantasia,
-                        });
-                      }}
-                    />
-                  </div>
-
-                  {/* CPF/CNPJ - Opcional conforme GUIA_FRONTEND_CAMPOS_OPCIONAIS.md */}
+                  {/* CPF/CNPJ - Opcional conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md */}
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-muted-foreground" />
@@ -4168,9 +4160,9 @@ const Fornecedores = () => {
                       }
 
                       // Preparar dados do formulário para o formato esperado
+                      // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: campo nome_razao NÃO EXISTE - não enviar
                       const dadosEditados = {
                         nome_fantasia: editFornecedor.nome_fantasia,
-                        nome_razao: editFornecedor.nome_razao,
                         tipoFornecedor: editFornecedor.tipoFornecedor,
                         cpf_cnpj: editFornecedor.cpf_cnpj,
                         inscricao_estadual: editFornecedor.inscricao_estadual,

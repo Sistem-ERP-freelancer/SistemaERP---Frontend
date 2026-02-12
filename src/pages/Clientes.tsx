@@ -2580,29 +2580,8 @@ const Clientes = () => {
               limite_credito: undefined,
             });
             setEditLimiteCreditoInput("");
-            setEditEnderecos([
-              {
-                cep: "",
-                logradouro: "",
-                numero: "",
-                complemento: "",
-                bairro: "",
-                cidade: "",
-                estado: "",
-                referencia: "",
-              },
-            ]);
-            setEditContatos([
-              {
-                telefone: "",
-                email: "",
-                nomeContato: "",
-                outroTelefone: "",
-                nomeOutroTelefone: "",
-                observacao: "",
-                ativo: true,
-              },
-            ]);
+            setEditEnderecos([]);
+            setEditContatos([]);
           }
         }}
       >

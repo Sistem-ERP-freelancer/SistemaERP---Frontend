@@ -1,7 +1,6 @@
-import { apiClient } from "./api";
-import { UpdateFornecedorPayload } from "@/shared/types/update.types";
 import { prepararPayloadAtualizacaoFornecedor, tratarErroAtualizacao } from "@/lib/update-payload";
 import { FornecedorFormState } from "@/shared/types/update.types";
+import { apiClient } from "./api";
 
 export interface Contato {
   id?: number;
@@ -31,12 +30,12 @@ export interface Endereco {
 
 export interface Fornecedor {
   id: number;
-  nome_fantasia?: string;
-  nome_razao: string;
-  tipoFornecedor: "PESSOA_FISICA" | "PESSOA_JURIDICA";
-  statusFornecedor: "ATIVO" | "INATIVO" | "BLOQUEADO";
-  cpf_cnpj?: string;
-  inscricao_estadual?: string;
+  nome_fantasia: string; // Obrigatório
+  nome_razao?: string | null; // Campo interno do backend (apenas leitura) - não enviar no CreateFornecedorDto
+  tipoFornecedor?: "PESSOA_FISICA" | "PESSOA_JURIDICA" | null;
+  statusFornecedor?: "ATIVO" | "INATIVO" | "BLOQUEADO" | null;
+  cpf_cnpj?: string | null;
+  inscricao_estadual?: string | null;
   criandoEm?: string;
   atualizadoEm?: string;
   enderecos?: Endereco[];
@@ -68,14 +67,19 @@ export interface CreateContatoDto {
 }
 
 export interface CreateFornecedorDto {
+  // Obrigatório
   nome_fantasia: string;
-  nome_razao: string;
-  tipoFornecedor: "PESSOA_FISICA" | "PESSOA_JURIDICA";
-  statusFornecedor?: "ATIVO" | "INATIVO" | "BLOQUEADO";
-  cpf_cnpj: string;
-  inscricao_estadual?: string;
-  enderecos?: CreateEnderecoDto[];
-  contato?: CreateContatoDto[];
+  
+  // Opcionais (conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md)
+  // ⚠️ nome_razao NÃO DEVE SER USADO no frontend - é campo interno do backend
+  // Se não enviar nome_razao, o backend usa nome_fantasia automaticamente
+  tipoFornecedor?: "PESSOA_FISICA" | "PESSOA_JURIDICA" | null;
+  statusFornecedor?: "ATIVO" | "INATIVO" | "BLOQUEADO" | null;
+  cpf_cnpj?: string | null;
+  documento?: string | null; // Alias de cpf_cnpj
+  inscricao_estadual?: string | null;
+  enderecos?: CreateEnderecoDto[] | null;
+  contato?: CreateContatoDto[] | null;
 }
 
 export interface FornecedoresResponse {
@@ -121,17 +125,28 @@ class FornecedoresService {
   }
 
   async criar(data: CreateFornecedorDto): Promise<Fornecedor> {
-    // Mapear campos do DTO para o formato esperado pela API
+    // Conforme GUIA_IMPLEMENTACAO_FRONTEND_FORNECEDOR.md: apenas nome_fantasia é obrigatório
+    // Campo nome_razao NÃO EXISTE - não enviar
+    // Não enviar campos vazios/undefined - apenas campos preenchidos
     const payload: any = {
       nome_fantasia: data.nome_fantasia,
-      nome_razao: data.nome_razao,
-      cpf_cnpj: data.cpf_cnpj,
-      tipoFornecedor: data.tipoFornecedor,
-      statusFornecedor: data.statusFornecedor || "ATIVO",
     };
 
-    if (data.inscricao_estadual) {
-      payload.inscricao_estadual = data.inscricao_estadual;
+    // Campos opcionais - só enviar se informados
+    if (data.tipoFornecedor) {
+      payload.tipoFornecedor = data.tipoFornecedor;
+    }
+    
+    if (data.statusFornecedor) {
+      payload.statusFornecedor = data.statusFornecedor;
+    }
+    
+    if (data.cpf_cnpj && data.cpf_cnpj.trim()) {
+      payload.cpf_cnpj = data.cpf_cnpj;
+    }
+
+    if (data.inscricao_estadual && data.inscricao_estadual.trim()) {
+      payload.inscricao_estadual = data.inscricao_estadual.trim();
     }
 
     // Adicionar endereços se fornecidos

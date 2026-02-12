@@ -99,29 +99,8 @@ export const ClienteCreateDialog = ({
       inscricao_estadual: "",
       limite_credito: undefined,
     });
-    setEnderecos([
-      {
-        cep: "",
-        logradouro: "",
-        numero: "",
-        complemento: "",
-        bairro: "",
-        cidade: "",
-        estado: "",
-        referencia: "",
-      },
-    ]);
-    setContatos([
-      {
-        telefone: "",
-        email: "",
-        nomeContato: "",
-        outroTelefone: "",
-        nomeOutroTelefone: "",
-        observacao: "",
-        ativo: true,
-      },
-    ]);
+    setEnderecos([]);
+    setContatos([]);
     setCondicoesPagamento([]);
   };
 
@@ -166,6 +145,8 @@ export const ClienteCreateDialog = ({
             <ClienteFormStep1
               formData={formData}
               onFormDataChange={handleFormDataChange}
+              onPreencherEnderecos={setEnderecos}
+              onPreencherContatos={setContatos}
             />
           )}
 

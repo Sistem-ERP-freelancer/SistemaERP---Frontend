@@ -46,34 +46,40 @@ export const ClienteFormStep3 = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold flex items-center gap-2">
-          <PhoneIcon className="w-5 h-5 text-primary" />
-          Contatos
-        </h3>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleAddContato}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Adicionar Contato
-        </Button>
-      </div>
+      <div className="bg-card border rounded-lg p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <PhoneIcon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">Contatos</h3>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddContato}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar Contato
+          </Button>
+        </div>
 
-      {contatos.map((contato, index) => (
-        <ContatoForm
-          key={index}
-          contato={contato}
-          index={index}
-          totalContatos={contatos.length}
-          onChange={(updated) => handleContatoChange(index, updated)}
-          onRemove={() => handleRemoveContato(index)}
-          showAtivoSwitch={false}
-          showOutroTelefone={totalEnderecos > 1}
-        />
-      ))}
+        {contatos.map((contato, index) => (
+          <ContatoForm
+            key={index}
+            contato={contato}
+            index={index}
+            totalContatos={contatos.length}
+            onChange={(updated) => handleContatoChange(index, updated)}
+            onRemove={() => handleRemoveContato(index)}
+            showAtivoSwitch={false}
+            showOutroTelefone={totalEnderecos > 1}
+          />
+        ))}
+      </div>
     </div>
   );
 };

@@ -3,29 +3,31 @@
  * Informações Básicas
  */
 
-import { Button } from "@/components/ui/button";
+import { CampoCnpjComConsulta } from "@/components/CampoCnpjComConsulta";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cleanDocument, formatCNPJ, formatCPF } from "@/lib/validators";
-import { clientesService } from "@/services/clientes.service";
-import { Building2, Check, Circle, DollarSign, FileText, Hash, Loader2, Search, User } from "lucide-react";
+import { cleanDocument, formatCEP, formatCNPJ, formatCPF, formatTelefone } from "@/lib/validators";
+import { ConsultaCnpjResponse } from "@/services/cnpj.service";
+import { Building2, Check, Circle, DollarSign, FileText, Hash, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { ClienteFormData } from "../types/cliente.types";
+import { ClienteFormData, ContatoFormData, EnderecoFormData } from "../types/cliente.types";
 
 interface ClienteFormStep1Props {
   formData: ClienteFormData;
   onFormDataChange: (data: Partial<ClienteFormData>) => void;
+  onPreencherEnderecos?: (enderecos: EnderecoFormData[]) => void;
+  onPreencherContatos?: (contatos: ContatoFormData[]) => void;
 }
 
 export const ClienteFormStep1 = ({
   formData,
   onFormDataChange,
+  onPreencherEnderecos,
+  onPreencherContatos,
 }: ClienteFormStep1Props) => {
   // Estado local para o valor do input de limite de crédito (permite digitação livre)
   const [limiteCreditoInput, setLimiteCreditoInput] = useState<string>('');
   const [isFocused, setIsFocused] = useState(false);
-  const [consultandoCNPJ, setConsultandoCNPJ] = useState(false);
 
   // Sincroniza o estado local quando formData.limite_credito mudar externamente (apenas se não estiver focado)
   useEffect(() => {
@@ -282,64 +284,84 @@ export const ClienteFormStep1 = ({
           {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA" ? "CPF" : "CNPJ"}
           <span className="text-xs text-muted-foreground">(opcional)</span>
         </Label>
-        <div className="flex gap-2">
+        {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" ? (
+          // Campo CNPJ com consulta para Pessoa Jurídica
+          <CampoCnpjComConsulta
+            value={formData.cpf_cnpj || ""}
+            onChange={(value) => handleCPFCNPJChange(value)}
+            tipoConsulta="cliente"
+            placeholder="00.000.000/0000-00"
+            onPreencherCampos={(dados: ConsultaCnpjResponse) => {
+              // Preencher nome fantasia
+              if (dados.nomeFantasia) {
+                onFormDataChange({
+                  nome_fantasia: dados.nomeFantasia,
+                });
+              }
+
+              // Preencher razão social
+              if (dados.razaoSocial) {
+                onFormDataChange({
+                  nome_razao: dados.razaoSocial,
+                });
+              }
+
+              // Definir tipo como Pessoa Jurídica
+              onFormDataChange({
+                tipoPessoa: "PESSOA_JURIDICA",
+              });
+
+              // Preencher inscrição estadual
+              if (dados.inscricaoEstadual) {
+                onFormDataChange({
+                  inscricao_estadual: dados.inscricaoEstadual,
+                });
+              }
+
+              // Preencher endereço se houver dados (com formatação visual)
+              if ((dados.logradouro || dados.cep || dados.cidade) && onPreencherEnderecos) {
+                // Formatar CEP visualmente
+                const cepFormatado = dados.cep ? formatCEP(dados.cep) : "";
+                
+                const novoEndereco: EnderecoFormData = {
+                  cep: cepFormatado,
+                  logradouro: dados.logradouro || "",
+                  numero: dados.numero || "",
+                  complemento: "",
+                  bairro: dados.bairro || "",
+                  cidade: dados.cidade || "",
+                  estado: dados.uf || "",
+                  referencia: "",
+                };
+                onPreencherEnderecos([novoEndereco]);
+              }
+
+              // Preencher contato se houver telefone (com formatação visual)
+              if (dados.telefones && dados.telefones.length > 0 && onPreencherContatos) {
+                // Formatar telefone visualmente
+                const telefoneFormatado = formatTelefone(dados.telefones[0]);
+                
+                const novoContato: ContatoFormData = {
+                  telefone: telefoneFormatado,
+                  email: "",
+                  nomeContato: "",
+                  outroTelefone: "",
+                  nomeOutroTelefone: "",
+                  observacao: "",
+                  ativo: true,
+                };
+                onPreencherContatos([novoContato]);
+              }
+            }}
+          />
+        ) : (
+          // Campo CPF simples para Pessoa Física
           <Input
-            placeholder={
-              (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
-                ? "000.000.000-00"
-                : "00.000.000/0000-00"
-            }
+            placeholder="000.000.000-00"
             value={formData.cpf_cnpj || ""}
             onChange={(e) => handleCPFCNPJChange(e.target.value)}
-            className="flex-1"
           />
-          {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={async () => {
-                const cnpjLimpo = cleanDocument(formData.cpf_cnpj);
-                if (cnpjLimpo.length !== 14) {
-                  toast.error('CNPJ deve ter 14 dígitos para consultar');
-                  return;
-                }
-                
-                setConsultandoCNPJ(true);
-                try {
-                  const dados = await clientesService.consultarCNPJSerasa(formData.cpf_cnpj);
-                  
-                  // Preencher campos automaticamente
-                  onFormDataChange({
-                    nome_razao: dados.razao_social || formData.nome_razao,
-                    nome_fantasia: dados.nome_fantasia || formData.nome_fantasia,
-                  });
-                  
-                  // Atualizar endereço se disponível (precisa passar via callback ou atualizar estado pai)
-                  if (dados.endereco || dados.cep || dados.cidade || dados.uf) {
-                    // Nota: endereços são gerenciados no step 3, então apenas mostramos sucesso
-                    toast.success('CNPJ consultado com sucesso! Verifique e ajuste os dados se necessário.');
-                  } else {
-                    toast.success('CNPJ consultado com sucesso!');
-                  }
-                } catch (error: any) {
-                  const mensagem = error?.response?.data?.message || 'CNPJ não encontrado na base do Serasa';
-                  toast.error(mensagem);
-                } finally {
-                  setConsultandoCNPJ(false);
-                }
-              }}
-              disabled={consultandoCNPJ || cleanDocument(formData.cpf_cnpj).length !== 14}
-              title="Consultar CNPJ no Serasa"
-            >
-              {consultandoCNPJ ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
-            </Button>
-          )}
-        </div>
+        )}
         {/* Mensagem de validação em tempo real */}
         {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" &&
           formData.cpf_cnpj &&
