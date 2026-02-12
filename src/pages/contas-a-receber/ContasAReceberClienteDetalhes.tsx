@@ -1,24 +1,24 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
 import { formatCurrency, normalizarStatusParcela } from '@/lib/utils';
 import { clientesService } from '@/services/clientes.service';
 import {
-    contasReceberService,
-    type ParcelaDetalhe,
+  contasReceberService,
+  type ParcelaDetalhe,
 } from '@/services/contas-receber.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
