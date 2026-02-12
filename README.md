@@ -3,7 +3,7 @@
 Sistema ERP completo para gerenciamento de estoque, financeiro, pedidos, fornecedores e clientes.
 
 ## 🚀 Como executar o projeto
-
+çli
 ### Pré-requisitos
 
 - Node.js (versão 18 ou superior)
