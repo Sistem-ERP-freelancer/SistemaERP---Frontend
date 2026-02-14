@@ -1,12 +1,22 @@
 import { apiClient } from './api';
 import { pedidosService } from './pedidos.service';
 
-export interface ClienteComDuplicatas {
+/** Status: pendente = aberto, parcial = pagamento parcial, quitado = pago, vencida = em atraso */
+export type StatusParcela = 'pendente' | 'parcial' | 'quitado' | 'vencida';
+
+/** Cliente com pedidos (agrupado por cliente_id); inclui em aberto e quitados (total_aberto 0) */
+export interface ClienteComPedidos {
   cliente_id: number;
   cliente_nome: string;
   total_aberto: number;
+  /** Total já pago por este cliente (soma dos pedidos) */
+  total_pago: number;
   parcelas_aberto: number;
   maior_atraso_dias: number;
+  /** pendente = não pagou nada, parcial = começou a pagar, quitado = pagou, vencida = em atraso */
+  status_parcela: StatusParcela;
+  /** Primeiro pedido - para botão Registrar Pagamento / Ver detalhes */
+  primeiro_pedido_id?: number;
 }
 
 export interface ParcelaDetalhe {
@@ -128,7 +138,8 @@ class ContasReceberService {
    * Mantido apenas para compatibilidade temporária
    * Conforme GUIA_CORRECAO_CONTAS_PAGAR.md
    */
-  async listarClientesComDuplicatas(params?: { status?: string }): Promise<ClienteComDuplicatas[]> {
+  /** @deprecated Use agrupamento via listarContasReceber - mantido para compatibilidade */
+  async listarClientesComDuplicatas(params?: { status?: string }): Promise<ClienteComPedidos[]> {
     try {
       // Usar o novo endpoint e transformar para o formato antigo (compatibilidade)
       // Normalizar situacao conforme guia
@@ -138,7 +149,7 @@ class ContasReceberService {
       );
       
       // Agrupar por cliente para manter compatibilidade
-      const clientesMap = new Map<number, ClienteComDuplicatas>();
+      const clientesMap = new Map<number, ClienteComPedidos>();
       
       pedidos.forEach(pedido => {
         if (!clientesMap.has(pedido.cliente_id)) {
