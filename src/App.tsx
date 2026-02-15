@@ -10,8 +10,8 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AdminPanel from "./pages/AdminPanel";
 import Clientes from "./pages/Clientes";
 import ContasAReceberClienteDetalhes from "./pages/contas-a-receber/ContasAReceberClienteDetalhes";
-import ContasAReceberDuplicatasParcela from "./pages/contas-a-receber/ContasAReceberDuplicatasParcela";
-import ContasAReceberPagarParcela from "./pages/contas-a-receber/ContasAReceberPagarParcela";
+import ContasAReceberPedidoDetalhes from "./pages/contas-a-receber/ContasAReceberPedidoDetalhes";
+import ContasAReceberPedidoPagamentos from "./pages/contas-a-receber/ContasAReceberPedidoPagamentos";
 import ContasAPagar from "./pages/ContasAPagar";
 import ContasAReceber from "./pages/ContasAReceber";
 import Dashboard from "./pages/Dashboard";
@@ -141,18 +141,18 @@ const App = () => (
               }
             />
             <Route 
-              path="/contas-a-receber/clientes/:clienteId/pagar/:pedidoId/:parcelaId" 
+              path="/financeiro/contas-receber/:pedidoId" 
               element={
                 <ProtectedRoute>
-                  <ContasAReceberPagarParcela />
+                  <ContasAReceberPedidoDetalhes />
                 </ProtectedRoute>
               }
             />
             <Route 
-              path="/contas-a-receber/clientes/:clienteId/duplicatas/:pedidoId/:parcelaId" 
+              path="/financeiro/contas-receber/:pedidoId/pagamentos" 
               element={
                 <ProtectedRoute>
-                  <ContasAReceberDuplicatasParcela />
+                  <ContasAReceberPedidoPagamentos />
                 </ProtectedRoute>
               }
             />

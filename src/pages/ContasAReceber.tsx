@@ -4,7 +4,6 @@ import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
@@ -12,9 +11,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -41,19 +37,11 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatarFormaPagamento, formatarStatus, formatCurrency } from "@/lib/utils";
+import { formatarStatus } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
-import {
-    DarBaixaDto,
-    Duplicata,
-    duplicatasService,
-    FormaRecebimento,
-    ParcelaAgrupada
-} from "@/services/duplicatas.service";
 import { ContaFinanceira, CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
-import type { ChequeDto } from "@/shared/types/cheque.types";
 import type { ContaReceber } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -67,39 +55,15 @@ import {
     Info,
     Loader2,
     MoreVertical,
-    Plus,
-    Receipt,
     Search,
-    ShoppingCart,
-    Trash2,
+    ShoppingCart
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-const FORMAS_RECEBIMENTO: { value: FormaRecebimento; label: string }[] = [
-  { value: "DINHEIRO", label: "Dinheiro" },
-  { value: "PIX", label: "PIX" },
-  { value: "CARTAO_CREDITO", label: "Cartão de Crédito" },
-  { value: "CARTAO_DEBITO", label: "Cartão de Débito" },
-  { value: "BOLETO", label: "Boleto" },
-  { value: "TRANSFERENCIA", label: "Transferência" },
-  { value: "CHEQUE", label: "Cheque" },
-];
-
-const CHEQUE_EMPTY: ChequeDto = {
-  titular: "",
-  cpf_cnpj_titular: "",
-  banco: "",
-  agencia: "",
-  conta: "",
-  numero_cheque: "",
-  valor: 0,
-  data_vencimento: "",
-};
-
 const ContasAReceber = () => {
-  const [viewMode, setViewMode] = useState<"clientes" | "pedidos">("clientes");
+  const [viewMode, setViewMode] = useState<"clientes" | "pedidos">("pedidos");
   /** Guia: card Total a Receber preferir soma da lista de clientes (bate com a tabela). */
   const [totalAReceberFromLista, setTotalAReceberFromLista] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("Todos");
@@ -111,18 +75,6 @@ const ContasAReceber = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
-  const [dialogBaixa, setDialogBaixa] = useState(false);
-  const [parcelaParaBaixa, setParcelaParaBaixa] = useState<Duplicata | null>(null);
-  const [baixaForm, setBaixaForm] = useState<DarBaixaDto & { cheques?: ChequeDto[] }>({
-    valor_pago: 0,
-    data_baixa: new Date().toISOString().split("T")[0],
-    forma_recebimento: "PIX",
-    juros: 0,
-    multa: 0,
-    desconto: 0,
-    observacao: "",
-    cheques: [],
-  });
   const [newTransacao, setNewTransacao] = useState<CreateContaFinanceiraDto & { 
     data_emissao: string;
   }>({
@@ -135,6 +87,15 @@ const ContasAReceber = () => {
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+
+  // Sincronizar tab da URL (ex: /contas-a-receber?tab=VENCIDO)
+  useEffect(() => {
+    if (tabFromUrl && ['PENDENTE', 'PAGO_PARCIAL', 'PAGO_TOTAL', 'VENCIDO', 'VENCE_HOJE', 'CANCELADO'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   const handleTotalAReceberFromLista = useCallback((total: number) => {
     setTotalAReceberFromLista(total);
@@ -164,21 +125,9 @@ const ContasAReceber = () => {
 
   // Removido: pedidos agora vem de pedidosContasReceber (linha 209)
 
-  // Mapear tab ativa para status de duplicatas (ABERTA, PARCIAL, BAIXADA, CANCELADA)
-  const statusDuplicatas = useMemo(() => {
-    const map: Record<string, string | undefined> = {
-      PENDENTE: "ABERTA",
-      PAGO_PARCIAL: "PARCIAL",
-      PAGO_TOTAL: "BAIXADA",
-      VENCIDO: undefined, // mostrar todas com vencimento
-      CANCELADO: "CANCELADA",
-    };
-    return activeTab === "Todos" || activeTab === "VENCE_HOJE" ? undefined : map[activeTab];
-  }, [activeTab]);
-
-  // Usar novo endpoint /pedidos/contas-receber (cada linha = 1 pedido)
+  // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido)
   const { data: pedidosContasReceber, isLoading: isLoadingPedidosContasReceber } = useQuery({
-    queryKey: ["pedidos", "contas-receber", statusDuplicatas, activeTab],
+    queryKey: ["pedidos", "contas-receber", activeTab],
     queryFn: async () => {
       try {
         const params: {
@@ -633,133 +582,6 @@ const ContasAReceber = () => {
     updateStatusMutation.mutate({ id: contaId, status: newStatus });
   };
 
-  // Dar baixa em duplicata (parcela)
-  const baixaMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: DarBaixaDto }) =>
-      duplicatasService.darBaixa(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["duplicatas"] });
-      queryClient.invalidateQueries({ queryKey: ["contas-receber"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard", "total-recebido"] });
-      toast.success("Baixa registrada com sucesso!");
-      setDialogBaixa(false);
-      setParcelaParaBaixa(null);
-      setBaixaForm({
-        valor_pago: 0,
-        data_baixa: new Date().toISOString().split("T")[0],
-        forma_recebimento: "PIX",
-        juros: 0,
-        multa: 0,
-        desconto: 0,
-        observacao: "",
-        cheques: [],
-      });
-    },
-    onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.message || error?.message || "Erro ao registrar baixa"
-      );
-    },
-  });
-
-  const abrirBaixaParcela = async (parcela: ParcelaAgrupada) => {
-    try {
-      const dup = await duplicatasService.buscarPorId(parcela.id);
-      setParcelaParaBaixa(dup);
-      setBaixaForm({
-        valor_pago: dup.valor_aberto || parcela.valor_aberto || 0,
-        data_baixa: new Date().toISOString().split("T")[0],
-        forma_recebimento: "PIX",
-        juros: 0,
-        multa: 0,
-        desconto: 0,
-        observacao: "",
-        cheques: [],
-      });
-      setDialogBaixa(true);
-    } catch (error) {
-      toast.error("Erro ao carregar dados da parcela");
-    }
-  };
-
-  const abrirBaixaAvulsa = (dup: Duplicata) => {
-    setParcelaParaBaixa(dup);
-    setBaixaForm({
-      valor_pago: dup.valor_aberto || 0,
-      data_baixa: new Date().toISOString().split("T")[0],
-      forma_recebimento: "PIX",
-      juros: 0,
-      multa: 0,
-      desconto: 0,
-      observacao: "",
-      cheques: [],
-    });
-    setDialogBaixa(true);
-  };
-
-  const somaChequesBaixa = (baixaForm.cheques || []).reduce((s, c) => s + (c.valor || 0), 0);
-  const valorLiquidoBaixa =
-    (baixaForm.valor_pago || 0) + (baixaForm.juros || 0) + (baixaForm.multa || 0) - (baixaForm.desconto || 0);
-
-  const adicionarChequeBaixa = () => {
-    setBaixaForm({
-      ...baixaForm,
-      cheques: [...(baixaForm.cheques || []), { ...CHEQUE_EMPTY }],
-    });
-  };
-
-  const removerChequeBaixa = (idx: number) => {
-    setBaixaForm({
-      ...baixaForm,
-      cheques: (baixaForm.cheques || []).filter((_, i) => i !== idx),
-    });
-  };
-
-  const atualizarChequeBaixa = (idx: number, campo: keyof ChequeDto, valor: string | number) => {
-    const novos = [...(baixaForm.cheques || [])];
-    novos[idx] = { ...novos[idx], [campo]: valor };
-    setBaixaForm({ ...baixaForm, cheques: novos });
-  };
-
-  const handleDarBaixa = () => {
-    if (!parcelaParaBaixa) return;
-    if (!baixaForm.valor_pago || baixaForm.valor_pago <= 0) {
-      toast.error("Informe o valor pago");
-      return;
-    }
-    const valorAberto = parcelaParaBaixa.valor_aberto || 0;
-    if (valorLiquidoBaixa > valorAberto) {
-      toast.error("Valor líquido não pode ser maior que o valor aberto");
-      return;
-    }
-    if (baixaForm.forma_recebimento === "CHEQUE") {
-      const cheques = baixaForm.cheques || [];
-      if (cheques.length === 0) {
-        toast.error("Adicione pelo menos um cheque");
-        return;
-      }
-      if (Math.abs(somaChequesBaixa - baixaForm.valor_pago) > 0.01) {
-        toast.error("Soma dos cheques deve ser igual ao valor pago");
-        return;
-      }
-    }
-    const payload: DarBaixaDto = {
-      valor_pago: baixaForm.valor_pago,
-      data_baixa: baixaForm.data_baixa,
-      forma_recebimento: baixaForm.forma_recebimento,
-      juros: baixaForm.juros,
-      multa: baixaForm.multa,
-      desconto: baixaForm.desconto,
-      observacao: baixaForm.observacao,
-      ...(baixaForm.forma_recebimento === "CHEQUE" && baixaForm.cheques?.length
-        ? { cheques: baixaForm.cheques }
-        : {}),
-    };
-    baixaMutation.mutate({ id: parcelaParaBaixa.id, data: payload });
-  };
-
   const formatarMoeda = (valor: number | undefined | null) => {
     const n = valor == null || Number.isNaN(Number(valor)) ? 0 : Number(valor);
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -767,6 +589,41 @@ const ContasAReceber = () => {
 
   const formatarDataBR = (data: string) =>
     data ? new Date(data).toLocaleDateString("pt-BR") : "N/A";
+
+  const calcularDiasAteVencimento = (dataVencimento: string | undefined | null): number | null => {
+    if (!dataVencimento) return null;
+    try {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const vencimento = new Date(dataVencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      const diffTime = vencimento.getTime() - hoje.getTime();
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
+    }
+  };
+
+  const getVencimentoStatus = (dias: number | null, status: string): { texto: string; cor: string; bgColor: string } => {
+    if (status === "QUITADO" || status === "PAGO_TOTAL" || status === "CANCELADO") return { texto: "", cor: "", bgColor: "" };
+    if (dias === null) return { texto: "Data inválida", cor: "text-gray-500", bgColor: "bg-gray-100" };
+    if (dias < 0) return { texto: "Vencida", cor: "text-red-600", bgColor: "bg-red-100" };
+    if (dias === 0) return { texto: "Vence hoje", cor: "text-red-600", bgColor: "bg-red-100" };
+    if (dias <= 3) return { texto: `Vence em ${dias} ${dias === 1 ? "dia" : "dias"}`, cor: "text-orange-600", bgColor: "bg-orange-100" };
+    if (dias <= 7) return { texto: `Vence em ${dias} dias`, cor: "text-amber-600", bgColor: "bg-amber-100" };
+    if (dias <= 30) return { texto: `Vence em ${dias} dias`, cor: "text-blue-600", bgColor: "bg-blue-100" };
+    return { texto: `Vence em ${dias} dias`, cor: "text-gray-600", bgColor: "bg-gray-100" };
+  };
+
+  const getStatusColor = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "pendente" || s === "em aberto" || s === "aberto") return "bg-amber-500/10 text-amber-500";
+    if (s === "pago parcial" || s.includes("parcial")) return "bg-blue-500/10 text-blue-500";
+    if (s === "quitado" || s === "concluído" || s === "pago total") return "bg-green-500/10 text-green-500";
+    if (s === "vencido") return "bg-red-500/10 text-red-500";
+    if (s === "cancelado") return "bg-slate-600/10 text-slate-600";
+    return "bg-muted text-muted-foreground";
+  };
 
   // Estado para edição
   const [editConta, setEditConta] = useState<CreateContaFinanceiraDto & { data_emissao: string } | null>(null);
@@ -803,30 +660,8 @@ const ContasAReceber = () => {
     }
   };
 
-  // Função auxiliar para formatar descrição com informações de parcela
-  const formatarDescricaoComParcela = (conta: any): string => {
-    let descricao = conta.descricao || '';
-    
-    // Sempre usar total_parcelas e numero_parcela quando disponíveis
-    if (conta.total_parcelas !== undefined && conta.total_parcelas !== null) {
-      const parcelaInfo = conta.parcela_texto 
-        ? conta.parcela_texto 
-        : conta.numero_parcela !== undefined && conta.numero_parcela !== null
-          ? `Parcela ${conta.numero_parcela}/${conta.total_parcelas}`
-          : `Parcela 1/${conta.total_parcelas}`;
-      
-      // Substituir qualquer informação de parcela existente
-      const regexParcela = /Parcela\s+\d+\/\d+/gi;
-      if (regexParcela.test(descricao)) {
-        descricao = descricao.replace(regexParcela, parcelaInfo);
-      } else {
-        // Se não tiver informação de parcela, adicionar
-        descricao = `${descricao} - ${parcelaInfo}`;
-      }
-    }
-    
-    return descricao;
-  };
+  // Modelo sem parcelas: descrição simples (GUIA_MIGRACAO_SEM_PARCELAS)
+  const formatarDescricao = (conta: any): string => conta?.descricao || '';
 
   // Quando a conta for carregada, preencher o formulário de edição
   useEffect(() => {
@@ -842,9 +677,6 @@ const ContasAReceber = () => {
         pedido_id: contaSelecionada.pedido_id,
         forma_pagamento: contaSelecionada.forma_pagamento,
         data_pagamento: contaSelecionada.data_pagamento ? converterDataParaISO(contaSelecionada.data_pagamento) : undefined,
-        numero_parcela: contaSelecionada.numero_parcela,
-        total_parcelas: contaSelecionada.total_parcelas,
-        parcela_texto: contaSelecionada.parcela_texto,
         observacoes: contaSelecionada.observacoes,
       });
     }
@@ -913,15 +745,6 @@ const ContasAReceber = () => {
     if (editConta.data_pagamento && editConta.data_pagamento.trim()) {
       dadosAtualizacao.data_pagamento = editConta.data_pagamento;
     }
-    if (editConta.numero_parcela !== undefined && editConta.numero_parcela !== null) {
-      dadosAtualizacao.numero_parcela = editConta.numero_parcela;
-    }
-    if (editConta.total_parcelas !== undefined && editConta.total_parcelas !== null) {
-      dadosAtualizacao.total_parcelas = editConta.total_parcelas;
-    }
-    if (editConta.parcela_texto && editConta.parcela_texto.trim()) {
-      dadosAtualizacao.parcela_texto = editConta.parcela_texto.trim();
-    }
     if (editConta.observacoes && editConta.observacoes.trim()) {
       dadosAtualizacao.observacoes = editConta.observacoes.trim();
     }
@@ -958,66 +781,6 @@ const ContasAReceber = () => {
       case "CANCELADO": return "bg-slate-600/10 text-slate-600 hover:bg-slate-600/20";
       default: return "bg-card text-muted-foreground hover:bg-secondary";
     }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "pendente": return "bg-amber-500/10 text-amber-500";
-      case "pago parcial": return "bg-blue-500/10 text-blue-500";
-      case "pago total": return "bg-green-500/10 text-green-500";
-      case "vencido": return "bg-red-500/10 text-red-500";
-      case "cancelado": return "bg-slate-600/10 text-slate-600";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
-
-  // Função para calcular dias até vencimento
-  const calcularDiasAteVencimento = (dataVencimento: string): number | null => {
-    if (!dataVencimento) return null;
-    try {
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(dataVencimento);
-      vencimento.setHours(0, 0, 0, 0);
-      const diffTime = vencimento.getTime() - hoje.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays;
-    } catch {
-      return null;
-    }
-  };
-
-  // Função para obter status de vencimento
-  const getVencimentoStatus = (dias: number | null, status: string): { texto: string; cor: string; bgColor: string } => {
-    if (status === "PAGO_TOTAL" || status === "CANCELADO") {
-      return { texto: "", cor: "", bgColor: "" };
-    }
-    
-    if (dias === null) {
-      return { texto: "Data inválida", cor: "text-gray-500", bgColor: "bg-gray-100" };
-    }
-    
-    if (dias < 0) {
-      return { texto: "Vencida", cor: "text-red-600", bgColor: "bg-red-100" };
-    }
-    
-    if (dias === 0) {
-      return { texto: "Vence hoje", cor: "text-red-600", bgColor: "bg-red-100" };
-    }
-    
-    if (dias <= 3) {
-      return { texto: `Vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`, cor: "text-orange-600", bgColor: "bg-orange-100" };
-    }
-    
-    if (dias <= 7) {
-      return { texto: `Vence em ${dias} dias`, cor: "text-amber-600", bgColor: "bg-amber-100" };
-    }
-    
-    if (dias <= 30) {
-      return { texto: `Vence em ${dias} dias`, cor: "text-blue-600", bgColor: "bg-blue-100" };
-    }
-    
-    return { texto: `Vence em ${dias} dias`, cor: "text-gray-600", bgColor: "bg-gray-100" };
   };
 
   // Mapear contas financeiras para o formato de exibição
@@ -1096,7 +859,7 @@ const ContasAReceber = () => {
 
       return {
         id: conta.numero_conta || `CONTA-${conta.id}`,
-        descricao: formatarDescricaoComParcela(conta),
+        descricao: formatarDescricao(conta),
         categoria: categoria,
         valor: valorFormatado,
         data: dataFormatada,
@@ -1149,7 +912,7 @@ const ContasAReceber = () => {
     return linhasFiltradas;
   }, [pedidosContasReceber, searchTerm]);
 
-  // Grupos de contas por pedido (fallback: quando duplicatas agrupadas não está disponível)
+  // Grupos de contas por pedido (fallback)
   type GrupoContas = {
     key: string;
     pedido_id?: number;
@@ -1223,6 +986,45 @@ const ContasAReceber = () => {
     );
   }, [contas, clientes, searchTerm]);
 
+  // Transações para exibição (mesma estrutura de Contas a Pagar)
+  const transacoesDisplayReceber = useMemo(() => {
+    return linhasPedidos.map((p: ContaReceber) => {
+      const diasAteVencimento = calcularDiasAteVencimento(p.data_vencimento ?? p.data_pedido);
+      const vencimentoStatus = getVencimentoStatus(diasAteVencimento, p.status);
+      const statusFormatado = formatarStatus(p.status);
+      return {
+        id: p.numero_pedido,
+        descricao: `Pedido ${p.numero_pedido}`,
+        cliente: p.cliente_nome || "—",
+        categoria: "Vendas",
+        valor: formatarMoeda(p.valor_em_aberto),
+        data: p.data_vencimento ? formatarDataBR(p.data_vencimento) : formatarDataBR(p.data_pedido),
+        vencimentoStatus,
+        status: statusFormatado,
+        pedidoId: p.pedido_id,
+      };
+    });
+  }, [linhasPedidos]);
+
+  const transacoesDisplayGrupos = useMemo(() => {
+    return gruposContas.map((g) => {
+      const diasAteVencimento = calcularDiasAteVencimento(g.primeira_vencimento ?? undefined);
+      const vencimentoStatus = getVencimentoStatus(diasAteVencimento, g.statusConsolidado === "Pago Total" ? "QUITADO" : "ABERTO");
+      return {
+        id: g.descricaoBase.split(" ")[0] || g.key,
+        descricao: g.descricaoBase,
+        cliente: g.cliente_nome,
+        categoria: g.categoria,
+        valor: formatarMoeda(g.valor_aberto),
+        data: g.primeira_vencimento ? formatarDataBR(g.primeira_vencimento) : "—",
+        vencimentoStatus,
+        status: g.statusConsolidado,
+        pedidoId: g.pedido_id,
+        grupoKey: g.key,
+      };
+    });
+  }, [gruposContas]);
+
   // Filtrar por busca e por tab ativa (mantido para fallback contas-financeiras)
   const filteredTransacoes = useMemo(() => {
     let filtered = transacoesDisplay;
@@ -1284,7 +1086,7 @@ const ContasAReceber = () => {
 
         return [{
           id: conta.numero_conta || `CONTA-${conta.id}`,
-          descricao: formatarDescricaoComParcela(conta),
+          descricao: formatarDescricao(conta),
           categoria: categoria,
           valor: valorFormatado,
           data: dataFormatada,
@@ -1335,9 +1137,6 @@ const ContasAReceber = () => {
       pedido_id: newTransacao.pedido_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
-      numero_parcela: newTransacao.numero_parcela || undefined,
-      total_parcelas: newTransacao.total_parcelas || undefined,
-      parcela_texto: newTransacao.parcela_texto || undefined,
       observacoes: newTransacao.observacoes || undefined,
     };
 
@@ -1437,8 +1236,8 @@ const ContasAReceber = () => {
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
                           {pedidos.map((pedido) => (
-                            <SelectItem key={pedido.id} value={pedido.id.toString()}>
-                              {pedido.numero_pedido || `PED-${pedido.id}`}
+                            <SelectItem key={pedido.pedido_id} value={pedido.pedido_id.toString()}>
+                              {pedido.numero_pedido || `PED-${pedido.pedido_id}`}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1511,43 +1310,6 @@ const ContasAReceber = () => {
                         <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                {/* Parcelas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-blue-500" />
-                    Parcelas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Número da Parcela</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 1"
-                        value={newTransacao.numero_parcela || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, numero_parcela: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Total de Parcelas</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 3"
-                        value={newTransacao.total_parcelas || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, total_parcelas: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Texto da Parcela</Label>
-                      <Input 
-                        placeholder="Ex: 1/3"
-                        maxLength={20}
-                        value={newTransacao.parcela_texto || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, parcela_texto: e.target.value || undefined})}
-                      />
-                    </div>
                   </div>
                 </div>
 
@@ -1696,10 +1458,8 @@ const ContasAReceber = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Pedido / Número</TableHead>
+                <TableHead>ID</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Parcelas</TableHead>
                 <TableHead>Valor</TableHead>
                 <TableHead>Data Vencimento</TableHead>
                 <TableHead>Status</TableHead>
@@ -1709,72 +1469,52 @@ const ContasAReceber = () => {
             <TableBody>
               {(isLoadingPedidosContasReceber || (usarFallbackContasFinanceiras && isLoadingContas)) ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas a receber...
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : (usarFallbackContasFinanceiras ? gruposContas : linhasPedidos).length === 0 ? (
+              ) : (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">
                         {pedidos.length === 0 && !isLoadingPedidosContasReceber
                           ? "Não há contas a receber no momento"
                           : dashboardReceber?.total === 0
-                          ? "Nenhum cliente com duplicatas em aberto"
+                          ? "Nenhum pedido em aberto"
                           : "Nenhuma conta a receber encontrada"}
                       </p>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : usarFallbackContasFinanceiras ? (
-                gruposContas.map((grupo) => {
-                  const parcelasPendentes = grupo.parcelas.filter(
-                    (p) => p.status !== "PAGO_TOTAL" && p.status !== "CANCELADO"
-                  );
+                transacoesDisplayGrupos.map((transacao) => {
+                  const grupo = gruposContas.find((g) => g.key === (transacao as any).grupoKey);
                   return (
-                    <TableRow key={grupo.key}>
+                    <TableRow key={transacao.id}>
                       <TableCell>
-                        <span className="font-medium">{grupo.descricaoBase}</span>
+                        <span className="font-medium">{transacao.id}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm text-muted-foreground">{grupo.cliente_nome}</span>
+                        <span className="text-sm text-muted-foreground">{transacao.cliente}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm text-muted-foreground">{grupo.categoria}</span>
+                        <span className="font-medium">{transacao.valor}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm font-medium">
-                          {grupo.parcelas_pagas}/{grupo.total_parcelas} pagas · {grupo.parcelas_restantes} restantes
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">{formatarMoeda(grupo.valor_aberto)}</span>
-                      </TableCell>
-                      <TableCell>
-                        {grupo.primeira_vencimento ? (
-                          <span className="text-sm text-muted-foreground">
-                            {formatarDataBR(grupo.primeira_vencimento)}
-                          </span>
-                        ) : (
+                        {transacao.status === "Pago Total" || transacao.status === "Cancelado" ? (
                           <span className="text-sm text-muted-foreground">—</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">{transacao.data}</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full font-medium ${
-                            grupo.statusConsolidado === "Pago Total"
-                              ? "bg-green-500/10 text-green-600"
-                              : grupo.statusConsolidado === "Pago Parcial"
-                                ? "bg-blue-500/10 text-blue-600"
-                                : "bg-amber-500/10 text-amber-600"
-                          }`}
-                        >
-                          {grupo.statusConsolidado}
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
+                          {transacao.status}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -1786,45 +1526,18 @@ const ContasAReceber = () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => {
-                              setSelectedContaId(grupo.parcelas[0]?.id ?? null);
+                              setSelectedContaId(grupo?.parcelas[0]?.id ?? null);
                               setViewDialogOpen(true);
                             }}>
                               <Eye className="w-4 h-4 mr-2" />
                               Visualizar
                             </DropdownMenuItem>
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger>
+                            {grupo?.pedido_id && (grupo?.valor_aberto ?? 0) > 0 && (
+                              <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${grupo.pedido_id}/pagamentos`)}>
                                 <DollarSign className="w-4 h-4 mr-2" />
-                                Pagar parcelas
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuSubContent className="max-h-80 overflow-y-auto min-w-[320px]">
-                                <div className="px-2 py-2 text-sm font-medium border-b mb-2">
-                                  Parcelas restantes: {grupo.parcelas_restantes}
-                                </div>
-                                {grupo.parcelas.map((parcela, idx) => {
-                                  const paga =
-                                    parcela.status === "PAGO_TOTAL" ||
-                                    (parcela.valor_restante != null && Number(parcela.valor_restante) <= 0);
-                                  const statusConta = paga ? "Pago" : parcela.status === "CANCELADO" ? "Cancelado" : parcela.status === "PAGO_PARCIAL" ? "Parcial" : "Pendente";
-                                  const podePagar = !paga && parcela.status !== "CANCELADO";
-                                  return (
-                                    <DropdownMenuItem
-                                      key={parcela.id}
-                                      disabled={!podePagar}
-                                      onClick={podePagar ? () => handleStatusChange(parcela.id, "PAGO_TOTAL") : undefined}
-                                      className="flex flex-col items-start gap-0.5 py-2"
-                                    >
-                                      <span className="font-medium">
-                                        Parcela {idx + 1}/{grupo.total_parcelas} – {formatarMoeda(parcela.valor_restante ?? parcela.valor_original)} – Vence {formatarDataBR(parcela.data_vencimento)}
-                                      </span>
-                                      <span className={`text-xs ${podePagar ? "text-amber-600" : "text-muted-foreground"}`}>
-                                        {statusConta} {podePagar && "• Clique para pagar"}
-                                      </span>
-                                    </DropdownMenuItem>
-                                  );
-                                })}
-                              </DropdownMenuSubContent>
-                            </DropdownMenuSub>
+                                Pagamentos
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1832,82 +1545,52 @@ const ContasAReceber = () => {
                   );
                 })
               ) : (
-                linhasPedidos.map((pedido: ContaReceber) => {
-                  const statusFormatado = formatarStatus(pedido.status);
-                  const formaPagamentoFormatada = formatarFormaPagamento(pedido.forma_pagamento);
-                  
-                  return (
-                      <TableRow key={`pedido-${pedido.pedido_id}`}>
-                        <TableCell>
-                          <span className="font-medium">{pedido.numero_pedido}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">{pedido.cliente_nome || '-'}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">Vendas</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm font-medium">
-                            {pedido.valor_em_aberto > 0 ? "Em aberto" : "Quitado"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium">{formatCurrency(pedido.valor_em_aberto)}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">
-                            {formatarDataBR(pedido.data_pedido)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">
-                            {formaPagamentoFormatada}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full font-medium ${
-                              statusFormatado === "Concluído"
-                                ? "bg-green-500/10 text-green-600"
-                                : statusFormatado === "Em aberto"
-                                  ? "bg-amber-500/10 text-amber-600"
-                                  : "bg-slate-500/10 text-slate-600"
-                            }`}
-                          >
-                            {statusFormatado}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {
-                                // Navegar para detalhes do pedido
-                                navigate(`/pedidos/${pedido.pedido_id}`);
-                              }}>
-                                <Eye className="w-4 h-4 mr-2" />
-                                Ver detalhes
-                              </DropdownMenuItem>
-                              {pedido.valor_em_aberto > 0 && (
-                                <DropdownMenuItem onClick={() => {
-                                  // Navegar para página de pagar parcela
-                                  navigate(`/contas-a-receber/pedido/${pedido.pedido_id}`);
-                                }}>
-                                  <DollarSign className="w-4 h-4 mr-2" />
-                                  Pagar
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                })
+                transacoesDisplayReceber.map((transacao) => (
+                  <TableRow key={transacao.id}>
+                    <TableCell>
+                      <span className="font-medium">{transacao.id}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{transacao.cliente}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-medium">{transacao.valor}</span>
+                    </TableCell>
+                    <TableCell>
+                      {transacao.status === "Quitado" || transacao.status === "Cancelado" ? (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">{transacao.data}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(transacao.status)}`}>
+                        {transacao.status}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${transacao.pedidoId}`)}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Ver detalhes
+                          </DropdownMenuItem>
+                          {(linhasPedidos.find((p: ContaReceber) => p.numero_pedido === transacao.id)?.valor_em_aberto ?? 0) > 0 && transacao.pedidoId ? (
+                            <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${transacao.pedidoId}/pagamentos`)}>
+                              <DollarSign className="w-4 h-4 mr-2" />
+                              Pagamentos
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
@@ -1926,172 +1609,6 @@ const ContasAReceber = () => {
         </motion.div>
           </>
         )}
-
-        {/* Dialog Dar Baixa */}
-        <Dialog open={dialogBaixa} onOpenChange={setDialogBaixa}>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Pagar Parcela</DialogTitle>
-              <DialogDescription>
-                {parcelaParaBaixa && (
-                  <>
-                    {parcelaParaBaixa.numero} — Valor aberto:{" "}
-                    {formatCurrency(parcelaParaBaixa.valor_aberto || 0)}
-                  </>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-            {parcelaParaBaixa && (
-              <div className="space-y-4 py-4">
-                <div>
-                  <Label>Forma de Recebimento *</Label>
-                  <Select
-                    value={baixaForm.forma_recebimento}
-                    onValueChange={(v) =>
-                      setBaixaForm({
-                        ...baixaForm,
-                        forma_recebimento: v as FormaRecebimento,
-                        cheques: v === "CHEQUE" ? baixaForm.cheques : [],
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FORMAS_RECEBIMENTO.map((f) => (
-                        <SelectItem key={f.value} value={f.value}>
-                          {f.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Valor Pago *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={baixaForm.valor_pago || ""}
-                    onChange={(e) =>
-                      setBaixaForm({ ...baixaForm, valor_pago: Number(e.target.value) || 0 })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Data da Baixa *</Label>
-                  <Input
-                    type="date"
-                    value={baixaForm.data_baixa}
-                    onChange={(e) => setBaixaForm({ ...baixaForm, data_baixa: e.target.value })}
-                  />
-                </div>
-                {baixaForm.forma_recebimento === "CHEQUE" && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Cheques</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={adicionarChequeBaixa}>
-                        <Plus className="w-4 h-4 mr-1" />
-                        Adicionar
-                      </Button>
-                    </div>
-                    {(baixaForm.cheques || []).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Adicione pelo menos um cheque. A soma dos valores deve ser igual ao valor pago.
-                      </p>
-                    ) : (
-                      <div className="space-y-4 border rounded-lg p-3 max-h-48 overflow-y-auto">
-                        {(baixaForm.cheques || []).map((c, idx) => (
-                          <div key={idx} className="space-y-2 border-b pb-3 last:border-0">
-                            <div className="flex justify-between">
-                              <span className="text-sm font-medium">Cheque {idx + 1}</span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removerChequeBaixa(idx)}
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <Label className="text-xs">Titular</Label>
-                                <Input
-                                  value={c.titular}
-                                  onChange={(e) => atualizarChequeBaixa(idx, "titular", e.target.value)}
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-xs">Valor</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={c.valor || ""}
-                                  onChange={(e) =>
-                                    atualizarChequeBaixa(idx, "valor", Number(e.target.value) || 0)
-                                  }
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-xs">Banco</Label>
-                                <Input
-                                  value={c.banco}
-                                  onChange={(e) => atualizarChequeBaixa(idx, "banco", e.target.value)}
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-xs">Vencimento</Label>
-                                <Input
-                                  type="date"
-                                  value={c.data_vencimento}
-                                  onChange={(e) =>
-                                    atualizarChequeBaixa(idx, "data_vencimento", e.target.value)
-                                  }
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        <p className="text-xs text-muted-foreground">
-                          Soma: {formatCurrency(somaChequesBaixa)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div>
-                  <Label>Observação</Label>
-                  <Textarea
-                    value={baixaForm.observacao || ""}
-                    onChange={(e) => setBaixaForm({ ...baixaForm, observacao: e.target.value })}
-                    rows={2}
-                  />
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogBaixa(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleDarBaixa}
-                disabled={
-                  baixaMutation.isPending ||
-                  (baixaForm.forma_recebimento === "CHEQUE" &&
-                    ((baixaForm.cheques?.length || 0) === 0 ||
-                      Math.abs(somaChequesBaixa - (baixaForm.valor_pago || 0)) > 0.01))
-                }
-              >
-                {baixaMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Registrar Baixa"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* Dialog de Visualização */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
@@ -2116,7 +1633,7 @@ const ContasAReceber = () => {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Descrição</Label>
-                    <p className="text-sm font-medium">{formatarDescricaoComParcela(contaSelecionada)}</p>
+                    <p className="text-sm font-medium">{formatarDescricao(contaSelecionada)}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Valor Original</Label>
@@ -2150,28 +1667,7 @@ const ContasAReceber = () => {
                     <Label className="text-muted-foreground">Método de Pagamento</Label>
                     <p className="text-sm font-medium">{formatarMetodoPagamento(contaSelecionada.forma_pagamento)}</p>
                   </div>
-                  {contaSelecionada.total_parcelas && contaSelecionada.total_parcelas > 1 && (
-                    <>
-                      <div>
-                        <Label className="text-muted-foreground">Parcelado</Label>
-                        <p className="text-sm font-medium">Sim</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Quantidade de Parcelas</Label>
-                        <p className="text-sm font-medium">{contaSelecionada.total_parcelas}</p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground">Parcelas Pagas</Label>
-                        <p className="text-sm font-medium">{parcelasPagas} de {contaSelecionada.total_parcelas}</p>
-                      </div>
-                    </>
-                  )}
-                  {(!contaSelecionada.total_parcelas || contaSelecionada.total_parcelas <= 1) && (
-                    <div>
-                      <Label className="text-muted-foreground">Parcelado</Label>
-                      <p className="text-sm font-medium">Não</p>
-                    </div>
-                  )}
+                  {/* Modelo sem parcelas: não exibir bloco de parcelas */}
                 </div>
               </div>
             ) : (

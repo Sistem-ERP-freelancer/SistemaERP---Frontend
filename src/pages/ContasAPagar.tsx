@@ -39,7 +39,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { formatarFormaPagamento, formatarStatus } from "@/lib/utils";
+import { formatCurrency, formatarFormaPagamento, formatarStatus } from "@/lib/utils";
 import { CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
@@ -56,7 +56,6 @@ import {
     Info,
     Loader2,
     MoreVertical,
-    Receipt,
     Search,
     ShoppingCart
 } from "lucide-react";
@@ -665,9 +664,6 @@ const ContasAPagar = () => {
         pedido_id: contaSelecionada.pedido_id,
         forma_pagamento: contaSelecionada.forma_pagamento,
         data_pagamento: contaSelecionada.data_pagamento ? converterDataParaISO(contaSelecionada.data_pagamento) : undefined,
-        numero_parcela: contaSelecionada.numero_parcela,
-        total_parcelas: contaSelecionada.total_parcelas,
-        parcela_texto: contaSelecionada.parcela_texto,
         observacoes: contaSelecionada.observacoes,
       });
     }
@@ -735,15 +731,6 @@ const ContasAPagar = () => {
     }
     if (editConta.data_pagamento && editConta.data_pagamento.trim()) {
       dadosAtualizacao.data_pagamento = editConta.data_pagamento;
-    }
-    if (editConta.numero_parcela !== undefined && editConta.numero_parcela !== null) {
-      dadosAtualizacao.numero_parcela = editConta.numero_parcela;
-    }
-    if (editConta.total_parcelas !== undefined && editConta.total_parcelas !== null) {
-      dadosAtualizacao.total_parcelas = editConta.total_parcelas;
-    }
-    if (editConta.parcela_texto && editConta.parcela_texto.trim()) {
-      dadosAtualizacao.parcela_texto = editConta.parcela_texto.trim();
     }
     if (editConta.observacoes && editConta.observacoes.trim()) {
       dadosAtualizacao.observacoes = editConta.observacoes.trim();
@@ -851,7 +838,7 @@ const ContasAPagar = () => {
         const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
         const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || pedido.fornecedor_nome || "N/A";
 
-        const valorFormatado = formatarMoeda(pedido.valor_em_aberto || 0);
+        const valorFormatado = formatCurrency(pedido.valor_em_aberto || 0);
 
         const dataFormatada = pedido.data_pedido
           ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR')
@@ -1089,9 +1076,6 @@ const ContasAPagar = () => {
       pedido_id: newTransacao.pedido_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
-      numero_parcela: newTransacao.numero_parcela || undefined,
-      total_parcelas: newTransacao.total_parcelas || undefined,
-      parcela_texto: newTransacao.parcela_texto || undefined,
       observacoes: newTransacao.observacoes || undefined,
     };
 
@@ -1190,11 +1174,13 @@ const ContasAPagar = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
-                          {pedidos.map((pedido) => (
-                            <SelectItem key={pedido.id} value={pedido.id.toString()}>
-                              {pedido.numero_pedido || `PED-${pedido.id}`}
-                            </SelectItem>
-                          ))}
+                          {pedidos
+                            .filter((pedido) => pedido.pedido_id != null)
+                            .map((pedido) => (
+                              <SelectItem key={pedido.pedido_id} value={String(pedido.pedido_id)}>
+                                {pedido.numero_pedido || `PED-${pedido.pedido_id}`}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1265,43 +1251,6 @@ const ContasAPagar = () => {
                         <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                {/* Parcelas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-blue-500" />
-                    Parcelas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Número da Parcela</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 1"
-                        value={newTransacao.numero_parcela || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, numero_parcela: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Total de Parcelas</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 3"
-                        value={newTransacao.total_parcelas || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, total_parcelas: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Texto da Parcela</Label>
-                      <Input 
-                        placeholder="Ex: 1/3"
-                        maxLength={20}
-                        value={newTransacao.parcela_texto || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, parcela_texto: e.target.value || undefined})}
-                      />
-                    </div>
                   </div>
                 </div>
 

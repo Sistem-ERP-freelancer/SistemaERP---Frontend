@@ -1,6 +1,5 @@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -13,11 +12,9 @@ import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
-    SelectGroup,
     SelectItem,
-    SelectSeparator,
     SelectTrigger,
-    SelectValue,
+    SelectValue
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency } from '@/lib/utils';
@@ -28,11 +25,12 @@ import { CondicaoPagamento } from '@/shared/types/condicao-pagamento.types';
 import {
     CreatePedidoDto,
     FormaPagamento,
+    FormaPagamentoEstrutural,
     Pedido,
     TipoPedido,
 } from '@/types/pedido';
 import { useQuery } from '@tanstack/react-query';
-import { Download, Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -62,6 +60,7 @@ interface OrderItemForm {
   quantidade: number | '';
   preco_unitario: number | '';
   desconto: number | '';
+  estoque_disponivel?: number; // Preenchido ao selecionar produto para exibir e validar
 }
 
 export function OrderForm({
@@ -82,14 +81,24 @@ export function OrderForm({
   const [dataPedido, setDataPedido] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [dataEntregaPrevista, setDataEntregaPrevista] = useState<string>('');
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | undefined>(undefined);
+  const [formaPagamentoEstrutural, setFormaPagamentoEstrutural] = useState<FormaPagamentoEstrutural | undefined>(undefined);
+  /** Forma de pagamento exibida no dropdown: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */
+  const [formaPagamentoSelecionada, setFormaPagamentoSelecionada] = useState<
+    'PIX' | 'BOLETO' | 'BOLETO_DESCONTADO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO' | undefined
+  >(undefined);
   const [quantidadeParcelas, setQuantidadeParcelas] = useState<number | ''>('');
   const [queroParcelarDinheiroPix, setQueroParcelarDinheiroPix] = useState(false);
   const [condicaoPagamento, setCondicaoPagamento] = useState<string>('');
   const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
   const [condicaoPagamentoId, setCondicaoPagamentoId] = useState<number | string>('');
   const [dataVencimento, setDataVencimento] = useState<string>('');
+  // Campos para Boleto Descontado (sem parcelas: apenas valor adiantado)
+  const [valorAdiantado, setValorAdiantado] = useState<number | ''>('');
+  const [taxaDesconto, setTaxaDesconto] = useState<number | ''>('');
+  const [taxaDescontoPercentual, setTaxaDescontoPercentual] = useState<boolean>(true);
+  const [dataAntecipacao, setDataAntecipacao] = useState<string>('');
+  const [instituicaoFinanceira, setInstituicaoFinanceira] = useState<string>('');
   const [prazoEntregaDias, setPrazoEntregaDias] = useState<number | undefined>(undefined);
   const [frete, setFrete] = useState<number | ''>('');
   const [outrasTaxas, setOutrasTaxas] = useState<number | ''>('');
@@ -112,36 +121,15 @@ export function OrderForm({
     enabled: !!clienteId && tipo === 'VENDA' && isOpen,
   });
 
-  // Produtos do fornecedor (pedido de COMPRA): exibir apenas produtos vinculados ao fornecedor selecionado
-  const {
-    data: produtosPorFornecedor = [],
-    isLoading: isLoadingProdutosFornecedor,
-  } = useQuery({
-    queryKey: ['produtos', 'fornecedor', fornecedorId],
-    queryFn: () => produtosService.buscarPorFornecedor(fornecedorId!),
-    enabled: tipo === 'COMPRA' && !!fornecedorId && isOpen,
-  });
-
-  const produtosParaExibir =
-    tipo === 'COMPRA' && fornecedorId
-      ? produtosPorFornecedor
-      : produtos;
+  // Conforme GUIA_PRODUTOS_PEDIDO_COMPRA.md: vínculo fornecedor no produto é apenas informativo.
+  // Mostrar TODOS os produtos no pedido de compra - NÃO filtrar pelo fornecedor selecionado.
+  const produtosParaExibir = produtos;
 
   const produtoSelectDesabilitado = tipo === 'COMPRA' && !fornecedorId;
   const produtoSelectPlaceholder =
     tipo === 'COMPRA' && !fornecedorId
       ? 'Selecione o fornecedor primeiro'
       : 'Selecione um produto';
-
-  // Ao trocar o fornecedor em pedido de COMPRA, limpar seleção de produto nos itens
-  const prevFornecedorIdRef = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (tipo !== 'COMPRA') return;
-    if (prevFornecedorIdRef.current !== undefined && prevFornecedorIdRef.current !== fornecedorId) {
-      setItens((prev) => prev.map((item) => ({ ...item, produto_id: 0 })));
-    }
-    prevFornecedorIdRef.current = fornecedorId;
-  }, [tipo, fornecedorId]);
 
   // Preencher condicoesPagamento e, em edição, selecionar condição que corresponda ao pedido
   useEffect(() => {
@@ -214,9 +202,42 @@ export function OrderForm({
   // Evita que, após erro ao salvar, um refetch do mesmo pedido sobrescreva as alterações (ex.: "Quero parcelar" desmarcando).
   const lastSyncedOrderIdRef = useRef<number | null>(null);
 
+  // Função para resetar o formulário completamente
+  const resetForm = () => {
+    setTipo('VENDA');
+    setClienteId(undefined);
+    setFornecedorId(undefined);
+    setTransportadoraId(undefined);
+    setDataPedido(new Date().toISOString().split('T')[0]);
+    setFormaPagamento(undefined);
+    setFormaPagamentoEstrutural(undefined);
+    setFormaPagamentoSelecionada(undefined);
+    setQuantidadeParcelas('');
+    setQueroParcelarDinheiroPix(false);
+    setCondicaoPagamento('');
+    setCondicoesPagamento([]);
+    setCondicaoPagamentoId('');
+    setDataVencimento('');
+    setValorAdiantado('');
+    setTaxaDesconto('');
+    setTaxaDescontoPercentual(true);
+    setDataAntecipacao('');
+    setInstituicaoFinanceira('');
+    setPrazoEntregaDias(undefined);
+    setFrete('');
+    setOutrasTaxas('');
+    setObservacoesInternas('');
+    setObservacoesCliente('');
+    setItens([{ produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' }]);
+  };
+
   useEffect(() => {
     if (!isOpen) {
       lastSyncedOrderIdRef.current = null;
+      // Limpar formulário quando fechar o modal E não houver pedido sendo editado
+      if (!order) {
+        resetForm();
+      }
       return;
     }
     if (order && isOpen) {
@@ -230,12 +251,19 @@ export function OrderForm({
         setTransportadoraId(order.transportadora_id);
 
         const dataPedidoOnly = order.data_pedido.split('T')[0].split(' ')[0];
-        const dataEntregaOnly = order.data_entrega_prevista?.split('T')[0].split(' ')[0] || '';
         const dataVencimentoOnly = order.data_vencimento_base?.split('T')[0].split(' ')[0] || '';
 
         setDataPedido(dataPedidoOnly);
-        setDataEntregaPrevista(dataEntregaOnly);
         setFormaPagamento(order.forma_pagamento);
+        const formaEstruturalOrder = (order as any).forma_pagamento_estrutural;
+        const formaSelecionada =
+          formaEstruturalOrder === 'BOLETO_DESCONTADO'
+            ? 'BOLETO_DESCONTADO'
+            : (order.forma_pagamento as 'PIX' | 'BOLETO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO' | undefined);
+        if (formaSelecionada && ['PIX', 'BOLETO', 'BOLETO_DESCONTADO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'].includes(formaSelecionada)) {
+          setFormaPagamentoSelecionada(formaSelecionada);
+        }
+        setFormaPagamentoEstrutural(formaEstruturalOrder === 'BOLETO_DESCONTADO' ? 'BOLETO_DESCONTADO' : formaEstruturalOrder || 'AVISTA');
         // Guia: derivar de condicao_pagamento quando quantidade_parcelas não vier no GET (nunca abrir sempre "à vista")
         const condicao = (order.condicao_pagamento || '').trim();
         const qtdParBackend = order.quantidade_parcelas ?? null;
@@ -245,6 +273,12 @@ export function OrderForm({
           if (match) qtdPar = Math.min(12, Math.max(1, parseInt(match[1], 10) || 1));
         }
         setQuantidadeParcelas(qtdPar);
+        const valorAdiantadoBackend = (order as any).valor_adiantado;
+        if (formaEstruturalOrder === 'BOLETO_DESCONTADO' && valorAdiantadoBackend != null) {
+          setValorAdiantado(Number(valorAdiantadoBackend));
+        } else {
+          setValorAdiantado('');
+        }
         const forma = order.forma_pagamento;
         const formasComCheckbox = ['DINHEIRO', 'PIX', 'BOLETO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TRANSFERENCIA', 'CHEQUE'];
         const parcelado = typeof qtdPar === 'number' && qtdPar >= 2 && qtdPar <= 12;
@@ -259,36 +293,26 @@ export function OrderForm({
 
         if (order.itens && order.itens.length > 0) {
           setItens(
-            order.itens.map((item) => ({
-              produto_id: item.produto_id,
-              quantidade: item.quantidade,
-              preco_unitario: item.preco_unitario,
-              desconto: item.desconto || '',
-            }))
+            order.itens.map((item) => {
+              const produtoItem = produtos.find((p) => p.id === item.produto_id);
+              const estoque =
+                produtoItem
+                  ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual)
+                  : undefined;
+              return {
+                produto_id: item.produto_id,
+                quantidade: item.quantidade,
+                preco_unitario: item.preco_unitario,
+                desconto: item.desconto || '',
+                estoque_disponivel: estoque,
+              };
+            })
           );
         }
       }
     } else if (!order && prevIsOpen === false) {
-      lastSyncedOrderIdRef.current = null;
-      setTipo('VENDA');
-      setClienteId(undefined);
-      setFornecedorId(undefined);
-      setCondicoesPagamento([]);
-      setCondicaoPagamentoId('');
-      setTransportadoraId(undefined);
-      setDataPedido(new Date().toISOString().split('T')[0]);
-      setDataEntregaPrevista('');
-      setFormaPagamento(undefined);
-      setQuantidadeParcelas('');
-      setQueroParcelarDinheiroPix(false);
-      setCondicaoPagamento('');
-      setDataVencimento('');
-      setPrazoEntregaDias(undefined);
-      setFrete('');
-      setOutrasTaxas('');
-      setObservacoesInternas('');
-      setObservacoesCliente('');
-      setItens([{ produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' }]);
+      // Reset completo quando abrir modal para criar novo pedido
+      resetForm();
     }
   }, [order, isOpen, prevIsOpen]);
 
@@ -306,7 +330,7 @@ export function OrderForm({
     const newItens = [...itens];
     newItens[index] = { ...newItens[index], [field]: value };
 
-    // Ao selecionar produto, chamar GET /produtos/:id e preencher preço (conforme guia)
+    // Ao selecionar produto, chamar GET /produtos/:id e preencher preço + estoque
     if (field === 'produto_id' && value && value !== 0) {
       try {
         const produto = await produtosService.buscarPorId(Number(value));
@@ -314,14 +338,20 @@ export function OrderForm({
           produto.preco_promocional && produto.preco_promocional > 0
             ? produto.preco_promocional
             : produto.preco_venda ?? 0;
+        const estoque = (produto as any).estoque_disponivel ?? produto.estoque_atual ?? 0;
         newItens[index] = {
           ...newItens[index],
           preco_unitario: preco,
           quantidade: newItens[index].quantidade || 1,
+          estoque_disponivel: estoque,
         };
       } catch {
         // Em caso de erro, manter seleção; usuário pode digitar preço manualmente
+        newItens[index].estoque_disponivel = undefined;
       }
+    } else if (field === 'produto_id' && (!value || value === 0)) {
+      // Ao limpar produto, remover estoque
+      newItens[index].estoque_disponivel = undefined;
     }
 
     setItens([...newItens]);
@@ -346,26 +376,26 @@ export function OrderForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validação: forma de pagamento obrigatória (conforme guia - removido "A combinar")
-    if (!formaPagamento) {
-      toast.error('Selecione a forma de pagamento.');
+    // Validação: forma de pagamento é obrigatória
+    if (!formaPagamentoSelecionada) {
+      toast.error('Selecione a Forma de Pagamento.');
       return;
     }
 
-    // Validação: data de vencimento obrigatória e >= hoje (conforme guia)
-    if (!dataVencimento?.trim()) {
-      toast.error('Informe a Data de Vencimento inicial.');
-      return;
-    }
-
+    // Validação: data de vencimento obrigatória e >= hoje (exceto BOLETO_DESCONTADO, que usa data do pedido)
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-    const dataVencimentoDate = new Date(dataVencimento);
-    dataVencimentoDate.setHours(0, 0, 0, 0);
-
-    if (dataVencimentoDate < hoje) {
-      toast.error('A data de vencimento não pode ser anterior ao dia atual.');
-      return;
+    if (formaPagamentoEstrutural !== 'BOLETO_DESCONTADO') {
+      if (!dataVencimento?.trim()) {
+        toast.error('Informe a Data de Vencimento inicial.');
+        return;
+      }
+      const dataVencimentoDate = new Date(dataVencimento);
+      dataVencimentoDate.setHours(0, 0, 0, 0);
+      if (dataVencimentoDate < hoje) {
+        toast.error('A data de vencimento não pode ser anterior ao dia atual.');
+        return;
+      }
     }
 
     // Validação de estoque no frontend (conforme guia)
@@ -376,7 +406,9 @@ export function OrderForm({
         const produto = produtos.find(p => p.id === item.produto_id);
         if (produto) {
           const quantidadeSolicitada = Number(item.quantidade) || 0;
-          const estoqueDisponivel = produto.estoque_disponivel || 0;
+          const estoqueDisponivel =
+            item.estoque_disponivel ??
+            ((produto as any).estoque_disponivel ?? produto.estoque_atual ?? 0);
           
           if (quantidadeSolicitada > estoqueDisponivel) {
             itensComErro.push({
@@ -409,10 +441,32 @@ export function OrderForm({
       }
     }
 
-    const parcelado = queroParcelarDinheiroPix && qtdParcelasNum >= 2;
-    if (parcelado && !dataVencimento?.trim()) {
-      toast.error('Informe a Data de Vencimento para parcelar o pedido.');
+    if (formaPagamentoEstrutural === 'AVISTA' && !dataVencimento?.trim()) {
+      toast.error('Informe a Data de Vencimento para pedido à vista.');
       return;
+    }
+
+    if (formaPagamentoEstrutural === 'PARCELADO') {
+      if (!dataVencimento?.trim()) {
+        toast.error('Informe a Data do Primeiro Vencimento para pedido parcelado.');
+        return;
+      }
+      if (qtdParcelasNum < 2 || qtdParcelasNum > 12) {
+        toast.error('Número de parcelas deve estar entre 2 e 12.');
+        return;
+      }
+    }
+
+    if (formaPagamentoEstrutural === 'BOLETO_DESCONTADO') {
+      const valorAdiantadoNum = valorAdiantado !== '' && valorAdiantado != null ? Number(valorAdiantado) : 0;
+      if (valorAdiantadoNum <= 0) {
+        toast.error('Boleto Descontado exige Valor adiantado maior que zero.');
+        return;
+      }
+      if (valorAdiantadoNum >= valorTotalPedido) {
+        toast.error('Valor adiantado deve ser menor que o valor total do pedido.');
+        return;
+      }
     }
 
     const itensFormatados = itens
@@ -424,12 +478,30 @@ export function OrderForm({
         ...(item.desconto ? { desconto: Number(item.desconto) } : {}),
       }));
     
-    // Guia: backend usa quantidade_parcelas no PATCH para definir condição (2–12 = parcelado, 1 = à vista).
-    // Sempre enviar quantidade_parcelas quando há forma_pagamento para criar/editar corretamente.
-    const quantidadeParcelasPayload: number =
-      formaPagamento && queroParcelarDinheiroPix && qtdParcelasNum >= 2 && qtdParcelasNum <= 12
-        ? qtdParcelasNum
-        : 1;
+    // Determinar quantidade_parcelas: só para AVISTA (1) e PARCELADO (2-12). BOLETO_DESCONTADO não usa parcelas.
+    let quantidadeParcelasPayload: number | undefined = 1;
+    if (formaPagamentoEstrutural === 'AVISTA') {
+      quantidadeParcelasPayload = 1;
+    } else if (formaPagamentoEstrutural === 'PARCELADO') {
+      quantidadeParcelasPayload = qtdParcelasNum >= 2 && qtdParcelasNum <= 12 ? qtdParcelasNum : 2;
+    } else if (formaPagamentoEstrutural === 'BOLETO_DESCONTADO') {
+      quantidadeParcelasPayload = undefined;
+    }
+
+    // Determinar forma_pagamento e forma_pagamento_estrutural a partir da seleção (Pix, Boleto, etc.)
+    let formaEstrutural: FormaPagamentoEstrutural | undefined = formaPagamentoEstrutural;
+    let formaPagamentoPayload: FormaPagamento | undefined = formaPagamento;
+    if (formaPagamentoSelecionada === 'BOLETO_DESCONTADO') {
+      formaEstrutural = 'BOLETO_DESCONTADO';
+      formaPagamentoPayload = 'BOLETO';
+    } else if (formaPagamentoSelecionada) {
+      formaEstrutural = 'AVISTA';
+      formaPagamentoPayload = formaPagamentoSelecionada;
+    }
+    if (!formaEstrutural) {
+      if (qtdParcelasNum === 1) formaEstrutural = 'AVISTA';
+      else if (qtdParcelasNum >= 2) formaEstrutural = 'PARCELADO';
+    }
 
     const pedidoData: CreatePedidoDto = {
       tipo,
@@ -437,15 +509,23 @@ export function OrderForm({
       cliente_id: tipo === 'VENDA' ? clienteId : undefined,
       fornecedor_id: tipo === 'COMPRA' ? fornecedorId : undefined,
       transportadora_id: transportadoraId,
-      data_entrega_prevista: dataEntregaPrevista || undefined,
-      forma_pagamento: formaPagamento,
-      data_vencimento: dataVencimento || undefined,
-      data_vencimento_base: dataVencimento || undefined,
+      forma_pagamento: formaPagamentoPayload ?? formaPagamento,
+      forma_pagamento_estrutural: formaEstrutural,
+      data_vencimento: dataVencimento || (formaPagamentoEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) || undefined,
+      data_vencimento_base: dataVencimento || (formaPagamentoEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) || undefined,
       condicao_pagamento:
-        formaPagamento && qtdParcelasNum >= 2
-          ? (condicaoPagamento || `${qtdParcelasNum}x`)
-          : (condicaoPagamento || 'À vista'),
-      quantidade_parcelas: formaPagamento ? quantidadeParcelasPayload : undefined,
+        formaEstrutural === 'BOLETO_DESCONTADO'
+          ? 'Boleto descontado'
+          : (quantidadeParcelasPayload && quantidadeParcelasPayload >= 2
+              ? (condicaoPagamento || `${quantidadeParcelasPayload}x`)
+              : (condicaoPagamento || 'À vista')),
+      ...(quantidadeParcelasPayload !== undefined ? { quantidade_parcelas: quantidadeParcelasPayload } : {}),
+      // Boleto descontado: valor_adiantado obrigatório; sem parcelas
+      valor_adiantado: formaEstrutural === 'BOLETO_DESCONTADO' && (valorAdiantado !== '' && valorAdiantado != null) ? Number(valorAdiantado) : undefined,
+      taxa_desconto: formaEstrutural === 'BOLETO_DESCONTADO' && taxaDesconto ? Number(taxaDesconto) : undefined,
+      taxa_desconto_percentual: formaEstrutural === 'BOLETO_DESCONTADO' ? taxaDescontoPercentual : undefined,
+      data_antecipacao: formaEstrutural === 'BOLETO_DESCONTADO' && dataAntecipacao ? dataAntecipacao : undefined,
+      instituicao_financeira: formaEstrutural === 'BOLETO_DESCONTADO' && instituicaoFinanceira ? instituicaoFinanceira : undefined,
       prazo_entrega_dias: prazoEntregaDias,
       frete: typeof frete === 'number' ? frete : (frete ? Number(frete) : undefined),
       outras_taxas: typeof outrasTaxas === 'number' ? outrasTaxas : (outrasTaxas ? Number(outrasTaxas) : undefined),
@@ -454,13 +534,28 @@ export function OrderForm({
       itens: itensFormatados,
     };
 
-    if (import.meta.env.DEV && order) {
-      console.log('📤 [OrderForm] PATCH payload (edição)', {
-        quantidade_parcelas: pedidoData.quantidade_parcelas,
-        condicao_pagamento: pedidoData.condicao_pagamento,
+    // Log detalhado do payload sendo enviado
+    if (import.meta.env.DEV) {
+      console.log('📤 [OrderForm] Payload completo sendo enviado:', {
+        tipo: pedidoData.tipo,
+        cliente_id: pedidoData.cliente_id,
+        fornecedor_id: pedidoData.fornecedor_id,
+        data_pedido: pedidoData.data_pedido,
         forma_pagamento: pedidoData.forma_pagamento,
-        queroParcelarDinheiroPix,
-        qtdParcelasNum,
+        forma_pagamento_estrutural: pedidoData.forma_pagamento_estrutural,
+        quantidade_parcelas: pedidoData.quantidade_parcelas,
+        data_vencimento_base: pedidoData.data_vencimento_base,
+        condicao_pagamento: pedidoData.condicao_pagamento,
+        taxa_desconto: pedidoData.taxa_desconto,
+        taxa_desconto_percentual: pedidoData.taxa_desconto_percentual,
+        data_antecipacao: pedidoData.data_antecipacao,
+        instituicao_financeira: pedidoData.instituicao_financeira,
+        frete: pedidoData.frete,
+        outras_taxas: pedidoData.outras_taxas,
+        total_itens: pedidoData.itens.length,
+        itens: pedidoData.itens,
+        payload_completo: pedidoData,
+        payload_json: JSON.stringify(pedidoData, null, 2),
       });
     }
 
@@ -585,24 +680,14 @@ export function OrderForm({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Data do Pedido</Label>
-                  <Input
-                    type="date"
-                    value={dataPedido}
-                    onChange={(e) => setDataPedido(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Data Entrega Prevista</Label>
-                  <Input
-                    type="date"
-                    value={dataEntregaPrevista}
-                    onChange={(e) => setDataEntregaPrevista(e.target.value)}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>Data do Pedido</Label>
+                <Input
+                  type="date"
+                  value={dataPedido}
+                  onChange={(e) => setDataPedido(e.target.value)}
+                  required
+                />
               </div>
             </div>
           </div>
@@ -628,17 +713,13 @@ export function OrderForm({
                     >
                       <SelectTrigger>
                         <SelectValue
-                          placeholder={
-                            isLoadingProdutosFornecedor && tipo === 'COMPRA' && fornecedorId
-                              ? 'Carregando...'
-                              : produtoSelectPlaceholder
-                          }
+                          placeholder={produtoSelectPlaceholder}
                         />
                       </SelectTrigger>
                       <SelectContent>
-                        {tipo === 'COMPRA' && fornecedorId && !isLoadingProdutosFornecedor && produtosParaExibir.length === 0 ? (
+                        {produtosParaExibir.length === 0 ? (
                           <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                            Nenhum produto vinculado a este fornecedor
+                            Nenhum produto cadastrado
                           </div>
                         ) : (
                           produtosParaExibir.map((produto) => (
@@ -659,7 +740,43 @@ export function OrderForm({
                       min="0"
                       value={item.quantidade}
                       onChange={(e) => handleItemChange(index, 'quantidade', e.target.value ? Number(e.target.value) : '')}
+                      className={cn(
+                        (() => {
+                          if (tipo !== 'VENDA' || !item.produto_id) return false;
+                          const produtoItem = produtos.find((p) => p.id === item.produto_id);
+                          const estoque =
+                            item.estoque_disponivel ??
+                            (produtoItem ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual) : undefined);
+                          const qtd = Number(item.quantidade) || 0;
+                          return estoque !== undefined && qtd > estoque;
+                        })() && 'border-destructive'
+                      )}
                     />
+                    {item.produto_id ? (
+                      (() => {
+                        const produtoItem = produtos.find((p) => p.id === item.produto_id);
+                        const estoqueDisponivel =
+                          item.estoque_disponivel ??
+                          (produtoItem ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual) : undefined);
+                        const qtd = Number(item.quantidade) || 0;
+                        const excedeEstoque =
+                          tipo === 'VENDA' &&
+                          estoqueDisponivel !== undefined &&
+                          qtd > estoqueDisponivel;
+                        return (
+                          <div className="flex flex-col gap-0.5 mt-1">
+                            <p className="text-xs text-muted-foreground">
+                              Estoque disponível: <span className="font-medium text-foreground">{estoqueDisponivel ?? '—'}</span>
+                            </p>
+                            {excedeEstoque && (
+                              <p className="text-xs text-destructive font-medium">
+                                Quantidade superior ao estoque
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()
+                    ) : null}
                   </div>
 
                   <div className="col-span-2 space-y-2">
@@ -716,69 +833,52 @@ export function OrderForm({
           <div className="bg-card border rounded-lg p-6 space-y-6">
                 <h3 className="text-lg font-semibold">Pagamento e Entrega</h3>
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Forma de Pagamento</Label>
-                  <Select
-                    value={formaPagamento || ''}
-                    onValueChange={(value) => {
-                      if (value === '__IMPORTAR_CLIENTE__') {
-                        handleImportarDoCliente();
-                        return;
-                      }
-                      const forma = value as FormaPagamento;
+              {/* Forma de Pagamento: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */}
+              <div className="space-y-2">
+                <Label>Forma de Pagamento *</Label>
+                <Select
+                  value={formaPagamentoSelecionada || ''}
+                  onValueChange={(value) => {
+                    const forma = value as 'PIX' | 'BOLETO' | 'BOLETO_DESCONTADO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO';
+                    setFormaPagamentoSelecionada(forma);
+                    if (forma === 'BOLETO_DESCONTADO') {
+                      setFormaPagamentoEstrutural('BOLETO_DESCONTADO');
+                      setFormaPagamento('BOLETO');
+                      setQuantidadeParcelas('');
+                      setQueroParcelarDinheiroPix(false);
+                      setValorAdiantado('');
+                    } else {
+                      setFormaPagamentoEstrutural('AVISTA');
                       setFormaPagamento(forma);
-                      setCondicaoPagamentoId('');
-                      setCondicaoPagamento('');
-                      setPrazoEntregaDias(undefined);
-                      const formasComCheckboxParcelar: FormaPagamento[] = [
-                        'DINHEIRO', 'PIX', 'BOLETO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TRANSFERENCIA', 'CHEQUE',
-                      ];
-                      if (formasComCheckboxParcelar.includes(forma)) {
-                        if (forma === 'CARTAO_CREDITO') {
-                          setQueroParcelarDinheiroPix(true);
-                          setQuantidadeParcelas(3);
-                        } else {
-                          setQueroParcelarDinheiroPix(false);
-                          setQuantidadeParcelas('');
-                        }
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a forma de pagamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem
-                          value="__IMPORTAR_CLIENTE__"
-                          disabled={!clienteId || tipo !== 'VENDA'}
-                          className="text-primary font-medium"
-                        >
-                          <Download className="w-4 h-4 mr-2 inline" />
-                          Importar do cliente
-                        </SelectItem>
-                      </SelectGroup>
-                      <SelectSeparator />
-                      <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
-                      <SelectItem value="PIX">PIX</SelectItem>
-                      <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
-                      <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
-                      <SelectItem value="BOLETO">Boleto</SelectItem>
-                      <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                      <SelectItem value="CHEQUE">Cheque</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>
-                    Data de Vencimento Inicial
-                    {queroParcelarDinheiroPix && qtdParcelasNum >= 2 && (
-                      <span className="text-destructive text-xs font-normal ml-1">(obrigatório ao parcelar)</span>
+                      setQuantidadeParcelas(1);
+                      setQueroParcelarDinheiroPix(false);
+                      setValorAdiantado('');
+                      setTaxaDesconto('');
+                      setDataAntecipacao('');
+                      setInstituicaoFinanceira('');
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a forma de pagamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PIX">Pix</SelectItem>
+                    <SelectItem value="BOLETO">Boleto</SelectItem>
+                    {tipo === 'VENDA' && (
+                      <SelectItem value="BOLETO_DESCONTADO">Boleto Descontado</SelectItem>
                     )}
-                    <span className="text-destructive text-xs font-normal ml-1">*</span>
-                  </Label>
+                    <SelectItem value="CHEQUE">Cheque</SelectItem>
+                    <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
+                    <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Campos condicionais baseados na forma estrutural */}
+              {formaPagamentoEstrutural === 'AVISTA' && (
+                <div className="space-y-2">
+                  <Label>Data de Vencimento *</Label>
                   <Input
                     type="date"
                     value={dataVencimento}
@@ -787,76 +887,92 @@ export function OrderForm({
                     required
                   />
                 </div>
-              </div>
+              )}
 
-              {formaPagamento && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    {/* Guia: Opção A – "Quero parcelar" + N parcelas (1 a 12). Backend prioriza quantidade_parcelas. */}
-                    {['DINHEIRO', 'PIX', 'BOLETO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TRANSFERENCIA', 'CHEQUE'].includes(formaPagamento) && (
-                      <>
-                        <div className="space-y-1">
-                          <Label className="text-muted-foreground">Condição de pagamento</Label>
-                          <div className="text-sm font-medium">
-                            {queroParcelarDinheiroPix && qtdParcelasNum >= 2 && qtdParcelasNum <= 12
-                              ? `${qtdParcelasNum}x`
-                              : 'À vista'}
+              {formaPagamentoEstrutural === 'PARCELADO' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Número de Parcelas *</Label>
+                      <Input
+                        type="number"
+                        min={2}
+                        max={12}
+                        value={quantidadeParcelas === '' ? '' : quantidadeParcelas}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setQuantidadeParcelas('');
+                            return;
+                          }
+                          const v = Math.min(12, Math.max(2, parseInt(raw, 10) || 2));
+                          setQuantidadeParcelas(v);
+                        }}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data do Primeiro Vencimento *</Label>
+                      <Input
+                        type="date"
+                        value={dataVencimento}
+                        onChange={(e) => setDataVencimento(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        required
+                      />
+                    </div>
+                  </div>
+                  {/* Preview das parcelas */}
+                  {qtdParcelasNum >= 2 && dataVencimento && (
+                    <div className="bg-muted p-4 rounded-lg space-y-2">
+                      <Label className="text-sm font-semibold">Preview das Parcelas:</Label>
+                      {Array.from({ length: qtdParcelasNum }).map((_, idx) => {
+                        const dataVenc = new Date(dataVencimento);
+                        dataVenc.setMonth(dataVenc.getMonth() + idx);
+                        return (
+                          <div key={idx} className="text-sm">
+                            Parcela {idx + 1} — Vencimento: {dataVenc.toLocaleDateString('pt-BR')} — Valor: {formatCurrency(valorPorParcela)}
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="quero-parcelar"
-                            checked={queroParcelarDinheiroPix}
-                            onCheckedChange={(checked) => {
-                              setQueroParcelarDinheiroPix(!!checked);
-                              if (!checked) {
-                                setQuantidadeParcelas('');
-                              } else {
-                                setQuantidadeParcelas(formaPagamento === 'CARTAO_CREDITO' ? 3 : 2);
-                              }
-                            }}
-                          />
-                          <Label
-                            htmlFor="quero-parcelar"
-                            className="text-sm font-normal cursor-pointer"
-                          >
-                            Quero parcelar
-                          </Label>
-                        </div>
-                        {queroParcelarDinheiroPix && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <Input
-                              type="number"
-                              min={1}
-                              max={12}
-                              placeholder="1"
-                              value={quantidadeParcelas === '' ? '' : quantidadeParcelas}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                if (raw === '') {
-                                  setQuantidadeParcelas('');
-                                  return;
-                                }
-                                const v = Math.min(12, Math.max(1, parseInt(raw, 10) || 1));
-                                setQuantidadeParcelas(v);
-                                if (v > 1 && !condicaoPagamento) {
-                                  setCondicaoPagamento(`${v}x`);
-                                }
-                              }}
-                            />
-                            <span className="text-sm text-muted-foreground">parcelas (1 a 12)</span>
-                          </div>
-                        )}
-                      </>
-                    )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {formaPagamentoEstrutural === 'BOLETO_DESCONTADO' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Valor adiantado *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={valorAdiantado === '' ? '' : valorAdiantado}
+                        onChange={(e) => setValorAdiantado(e.target.value ? Number(e.target.value) : '')}
+                        placeholder="0,00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data de Antecipação</Label>
+                      <Input
+                        type="date"
+                        value={dataAntecipacao}
+                        onChange={(e) => setDataAntecipacao(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Valor por parcela</Label>
-                    <div className="h-10 flex items-center text-lg font-semibold">
-                      {qtdParcelasNum > 1
-                        ? `${qtdParcelasNum}x de ${formatCurrency(valorPorParcela)}`
-                        : formatCurrency(valorTotalPedido) + ' (à vista)'}
-                    </div>
+                    <Label>Instituição Financeira (opcional)</Label>
+                    <Input
+                      type="text"
+                      value={instituicaoFinanceira}
+                      onChange={(e) => setInstituicaoFinanceira(e.target.value)}
+                      maxLength={200}
+                      placeholder="Nome da instituição financeira"
+                    />
                   </div>
                 </div>
               )}

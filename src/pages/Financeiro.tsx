@@ -123,15 +123,26 @@ const Financeiro = () => {
     ? fornecedoresData 
     : fornecedoresData?.data || [];
 
-  // Buscar resumo financeiro (já considera pagamentos parciais)
-  // NUNCA usar valor_total_receber nos cards; SEMPRE receita_mes, valor_pago_mes, valor_total_recebido, etc.
+  // GET /financeiro/dashboard (unificado) com fallback para GET /contas-financeiras/dashboard/resumo
+  const { data: dashboardUnificado } = useQuery({
+    queryKey: ["dashboard-unificado-financeiro"],
+    queryFn: () => financeiroService.getDashboardUnificado(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
   const { data: resumoFinanceiro, isLoading: isLoadingResumo } = useQuery<ResumoFinanceiro>({
     queryKey: ["dashboard-resumo-financeiro"],
     queryFn: () => financeiroService.getDashboardResumo(),
     refetchInterval: 30000,
     staleTime: 0,
     retry: false,
+    enabled: !dashboardUnificado,
   });
+
+  const resumoParaStats = dashboardUnificado ?? resumoFinanceiro;
+  const contasReceberStats = dashboardUnificado?.contas_receber ?? resumoFinanceiro?.contas_receber;
+  const contasPagarStats = dashboardUnificado?.contas_pagar ?? resumoFinanceiro?.contas_pagar;
 
   // Buscar pedidos apenas para uso na UI (seleção de pedidos em formulários)
   // NÃO usado para cálculos financeiros - os valores vêm do resumoFinanceiro
@@ -225,7 +236,7 @@ const Financeiro = () => {
   // Calcular estatísticas usando valores do backend (já consideram pagamentos parciais)
   // Conforme GUIA_FRONTEND_DASHBOARD_FINANCEIRO_VALOR_PAGO.md:
   // - Receita do Mês = receita_mes (valor total a receber do mês atual)
-  // - Valor Pago do Mês = valor_pago_mes (valor pago no mês atual via baixas de duplicatas)
+  // - Valor Pago do Mês = valor_pago_mes (valor pago no mês atual via pagamentos)
   // - Despesas do Mês = despesa_mes (valor total a pagar do mês atual)
   // - Saldo Atual = Receita Total Recebida - Despesa Total Paga
   const stats = useMemo(() => {
@@ -236,21 +247,12 @@ const Financeiro = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    // ✅ NOVO: Usar receita_mes (valor total a receber do mês atual)
-    // receita_mes = soma de valor_original das contas criadas no mês atual
-    const receitaMes = parseValor(resumoFinanceiro?.contas_receber?.receita_mes) || 0;
-    
-    // ✅ NOVO: Usar valor_pago_mes (valor pago no mês atual)
-    // valor_pago_mes = soma de baixas de duplicatas + pagamentos diretos realizados no mês atual
-    const valorPagoMes = parseValor(resumoFinanceiro?.contas_receber?.valor_pago_mes) || 0;
-    
-    // ✅ NOVO: Usar despesa_mes (valor total a pagar do mês atual)
-    const despesaMes = parseValor(resumoFinanceiro?.contas_pagar?.despesa_mes) || 0;
-    
-    // Guia: Saldo Atual = valores já recebidos − valores já pagos (caixa). NUNCA "valor a receber" ou "em aberto".
-    const valorTotalRecebido = parseValor(resumoFinanceiro?.contas_receber?.valor_total_recebido) ?? 0;
-    const valorTotalPago = parseValor(resumoFinanceiro?.contas_pagar?.valor_total_pago) ?? 0;
-    const saldoAtual = valorTotalRecebido - valorTotalPago;
+    const receitaMes = parseValor(contasReceberStats?.receita_mes) || 0;
+    const valorPagoMes = parseValor(contasReceberStats?.valor_pago_mes) || 0;
+    const despesaMes = parseValor(contasPagarStats?.despesa_mes) || 0;
+    const valorTotalRecebido = parseValor(contasReceberStats?.valor_total_recebido) ?? 0;
+    const valorTotalPago = parseValor(contasPagarStats?.valor_total_pago) ?? 0;
+    const saldoAtual = dashboardUnificado?.saldo_atual ?? (valorTotalRecebido - valorTotalPago);
 
     return [
       { 
@@ -271,7 +273,7 @@ const Financeiro = () => {
         trendUp: true, 
         color: "text-green-600", 
         bgColor: "bg-green-100",
-        description: "Valor pago no mês atual (via baixas de duplicatas)"
+        description: "Valor pago no mês atual"
       },
       { 
         label: "Despesas do Mês", 
@@ -292,7 +294,7 @@ const Financeiro = () => {
         bgColor: "bg-azure/10",
       },
     ];
-  }, [resumoFinanceiro]);
+  }, [resumoParaStats, dashboardUnificado, contasReceberStats, contasPagarStats]);
 
   // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -378,9 +380,6 @@ const Financeiro = () => {
         pedido_id: contaSelecionada.pedido_id,
         forma_pagamento: contaSelecionada.forma_pagamento,
         data_pagamento: contaSelecionada.data_pagamento,
-        numero_parcela: contaSelecionada.numero_parcela,
-        total_parcelas: contaSelecionada.total_parcelas,
-        parcela_texto: contaSelecionada.parcela_texto,
         observacoes: contaSelecionada.observacoes,
       });
     }
@@ -489,9 +488,6 @@ const Financeiro = () => {
       pedido_id: newTransacao.pedido_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
-      numero_parcela: newTransacao.numero_parcela || undefined,
-      total_parcelas: newTransacao.total_parcelas || undefined,
-      parcela_texto: newTransacao.parcela_texto || undefined,
       observacoes: newTransacao.observacoes || undefined,
     };
 
@@ -651,11 +647,19 @@ const Financeiro = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
-                          {(pedidos || []).map((pedido) => (
-                            <SelectItem key={pedido.id} value={pedido.id.toString()}>
-                              {pedido.numero_pedido || `PED-${pedido.id}`}
-                            </SelectItem>
-                          ))}
+                          {(pedidos || [])
+                            .filter((pedido) => {
+                              const pedidoId = (pedido as any).pedido_id ?? pedido.id;
+                              return pedidoId != null;
+                            })
+                            .map((pedido) => {
+                              const pedidoId = (pedido as any).pedido_id ?? pedido.id;
+                              return (
+                                <SelectItem key={pedidoId} value={pedidoId.toString()}>
+                                  {pedido.numero_pedido || `PED-${pedidoId}`}
+                                </SelectItem>
+                              );
+                            })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -726,43 +730,6 @@ const Financeiro = () => {
                         <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                {/* Parcelas */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-blue-500" />
-                    Parcelas
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Número da Parcela</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 1"
-                        value={newTransacao.numero_parcela || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, numero_parcela: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Total de Parcelas</Label>
-                      <Input 
-                        type="number"
-                        placeholder="Ex: 3"
-                        value={newTransacao.total_parcelas || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, total_parcelas: e.target.value ? Number(e.target.value) : undefined})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Texto da Parcela</Label>
-                      <Input 
-                        placeholder="Ex: 1/3"
-                        maxLength={20}
-                        value={newTransacao.parcela_texto || ""}
-                        onChange={(e) => setNewTransacao({...newTransacao, parcela_texto: e.target.value || undefined})}
-                      />
-                    </div>
                   </div>
                 </div>
 
@@ -1197,42 +1164,6 @@ const Financeiro = () => {
                   </div>
                 </div>
 
-                {/* Parcelas: numero_parcela_atual, total_parcelas, texto_parcelas_quitadas */}
-                {(contaDetalhe.parcelas?.numero_parcela_atual != null || contaDetalhe.parcelas?.total_parcelas != null || contaDetalhe.parcelas?.texto_parcelas_quitadas) && (
-                  <div className="bg-card border rounded-lg p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg">
-                        <Receipt className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-foreground">Parcelas</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Parcela em aberto e parcelas quitadas
-                        </p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {contaDetalhe.parcelas?.numero_parcela_atual != null && (
-                        <div className="space-y-2">
-                          <Label className="text-muted-foreground">Número da parcela (em aberto)</Label>
-                          <div className="text-sm font-medium">{contaDetalhe.parcelas.numero_parcela_atual}</div>
-                        </div>
-                      )}
-                      {contaDetalhe.parcelas?.total_parcelas != null && (
-                        <div className="space-y-2">
-                          <Label className="text-muted-foreground">Total de parcelas</Label>
-                          <div className="text-sm font-medium">{contaDetalhe.parcelas.total_parcelas}</div>
-                        </div>
-                      )}
-                      {contaDetalhe.parcelas?.texto_parcelas_quitadas && (
-                        <div className="space-y-2">
-                          <Label className="text-muted-foreground">Parcelas quitadas</Label>
-                          <div className="text-sm font-medium">{contaDetalhe.parcelas.texto_parcelas_quitadas}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="py-8 text-center text-muted-foreground">
@@ -1273,9 +1204,6 @@ const Financeiro = () => {
                           pedido_id: contaSelecionada.pedido_id,
                           forma_pagamento: contaSelecionada.forma_pagamento,
                           data_pagamento: contaSelecionada.data_pagamento,
-                          numero_parcela: contaSelecionada.numero_parcela,
-                          total_parcelas: contaSelecionada.total_parcelas,
-                          parcela_texto: contaSelecionada.parcela_texto,
                           observacoes: contaSelecionada.observacoes,
                         });
                       }}
@@ -1433,11 +1361,19 @@ const Financeiro = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhum</SelectItem>
-                          {(pedidos || []).map((pedido) => (
-                            <SelectItem key={pedido.id} value={pedido.id.toString()}>
-                              {pedido.numero_pedido || `PED-${pedido.id}`}
-                            </SelectItem>
-                          ))}
+                          {(pedidos || [])
+                            .filter((pedido) => {
+                              const pedidoId = (pedido as any).pedido_id ?? pedido.id;
+                              return pedidoId != null;
+                            })
+                            .map((pedido) => {
+                              const pedidoId = (pedido as any).pedido_id ?? pedido.id;
+                              return (
+                                <SelectItem key={pedidoId} value={pedidoId.toString()}>
+                                  {pedido.numero_pedido || `PED-${pedidoId}`}
+                                </SelectItem>
+                              );
+                            })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1526,52 +1462,6 @@ const Financeiro = () => {
                         <SelectItem value="CHEQUE">Cheque</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                {/* Seção: Parcelas */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-indigo-500/10">
-                      <Receipt className="w-5 h-5 text-indigo-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Parcelas
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Número e total de parcelas
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Número da Parcela</Label>
-                      <Input
-                        type="number"
-                        placeholder="Ex: 1"
-                        value={editConta.numero_parcela || ""}
-                        onChange={(e) => setEditConta({ ...editConta, numero_parcela: e.target.value ? Number(e.target.value) : undefined })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Total de Parcelas</Label>
-                      <Input
-                        type="number"
-                        placeholder="Ex: 3"
-                        value={editConta.total_parcelas || ""}
-                        onChange={(e) => setEditConta({ ...editConta, total_parcelas: e.target.value ? Number(e.target.value) : undefined })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Texto da Parcela</Label>
-                      <Input
-                        placeholder="Ex: 1/3"
-                        maxLength={20}
-                        value={editConta.parcela_texto || ""}
-                        onChange={(e) => setEditConta({ ...editConta, parcela_texto: e.target.value || undefined })}
-                      />
-                    </div>
                   </div>
                 </div>
 

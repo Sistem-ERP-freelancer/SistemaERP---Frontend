@@ -36,7 +36,7 @@ import {
 import { useState } from 'react';
 import { AlterarCondicaoPagamento } from './AlterarCondicaoPagamento';
 import { AtualizarDataVencimento } from './AtualizarDataVencimento';
-import { ParcelasPedido } from './ParcelasPedido';
+import { PedidoFinanceiroResumo } from './PedidoFinanceiroResumo';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 
@@ -338,7 +338,7 @@ export function OrderViewDialog({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-muted-foreground">Condição de Pagamento</Label>
-                  {order.status !== 'CANCELADO' && order.status !== 'CONCLUIDO' && (
+                  {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -358,7 +358,7 @@ export function OrderViewDialog({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-muted-foreground">Data de Vencimento Base</Label>
-                    {order.status !== 'CANCELADO' && order.status !== 'CONCLUIDO' && (
+                    {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -500,9 +500,9 @@ export function OrderViewDialog({
             </div>
           </div>
 
-          {/* Parcelas do Pedido – key para recarregar ao alterar condição */}
-          <ParcelasPedido
-            key={`parcelas-${order.id}-${order.condicao_pagamento ?? ''}-${(order as any).updated_at ?? ''}`}
+          {/* Resumo Financeiro do Pedido */}
+          <PedidoFinanceiroResumo
+            key={`financeiro-${order.id}-${(order as any).updated_at ?? ''}`}
             pedidoId={order.id}
           />
 

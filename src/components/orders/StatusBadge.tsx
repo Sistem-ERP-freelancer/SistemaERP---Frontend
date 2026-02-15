@@ -1,5 +1,13 @@
-import { StatusPedido } from '@/types/pedido';
 import { cn } from '@/lib/utils';
+import { StatusPedido } from '@/types/pedido';
+
+/** Rótulos exibidos para o usuário (apenas 4 statuses). */
+export const STATUS_PEDIDO_LABELS: Record<StatusPedido, string> = {
+  ABERTO: 'Pendente',
+  PARCIAL: 'Aberto',
+  QUITADO: 'Quitado',
+  CANCELADO: 'Cancelado',
+};
 
 interface StatusBadgeProps {
   status: StatusPedido;
@@ -8,20 +16,16 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   const statusConfig: Record<StatusPedido, { label: string; className: string }> = {
-    PENDENTE: {
+    ABERTO: {
       label: 'Pendente',
       className: 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400',
     },
-    APROVADO: {
-      label: 'Aprovado',
+    PARCIAL: {
+      label: 'Aberto',
       className: 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400',
     },
-    EM_PROCESSAMENTO: {
-      label: 'Em Processamento',
-      className: 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400',
-    },
-    CONCLUIDO: {
-      label: 'Concluído',
+    QUITADO: {
+      label: 'Quitado',
       className: 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400',
     },
     CANCELADO: {
@@ -30,7 +34,10 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
     },
   };
 
-  const config = statusConfig[status];
+  const config = statusConfig[status] ?? {
+    label: status,
+    className: 'bg-muted text-muted-foreground',
+  };
 
   return (
     <span

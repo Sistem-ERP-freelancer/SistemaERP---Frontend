@@ -14,8 +14,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { formatCurrency } from '@/lib/utils';
-import { Baixa, duplicatasService } from '@/services/duplicatas.service';
-import { Pagamento, pagamentosService } from '@/services/pagamentos.service';
+import { pagamentosService } from '@/services/pagamentos.service';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -32,17 +31,6 @@ const FORMAS_LABEL: Record<string, string> = {
   CHEQUE: 'Cheque',
 };
 
-/** Item unificado para exibição (pagamento direto ou baixa de duplicata) */
-interface ItemHistorico {
-  id: number;
-  data_lancamento: string;
-  forma_pagamento: string;
-  valor_pago: number;
-  estornado: boolean;
-  origem: 'pagamento' | 'baixa';
-  cheques?: Pagamento['cheques'] | Baixa['cheques'];
-}
-
 interface HistoricoPagamentosParcelaProps {
   parcelaId: number;
   parcelaLabel: string;
@@ -56,66 +44,18 @@ export function HistoricoPagamentosParcela({
 }: HistoricoPagamentosParcelaProps) {
   const [aberto, setAberto] = useState(false);
 
-  const { data: pagamentos, isLoading: loadingPagamentos } = useQuery({
+  const { data: pagamentos, isLoading } = useQuery({
     queryKey: ['pagamentos', 'parcela', parcelaId],
     queryFn: () => pagamentosService.listarPorParcela(parcelaId),
     enabled: aberto,
   });
 
-  const { data: duplicatas, isLoading: loadingDuplicatas } = useQuery({
-    queryKey: ['duplicatas', 'parcela-pedido', parcelaId],
-    queryFn: () => duplicatasService.listar({ parcela_pedido_id: parcelaId }),
-    enabled: aberto,
-  });
-
-  const idsDuplicatas = useMemo(
-    () => (duplicatas?.length ? duplicatas.map((d) => d.id).join(',') : ''),
-    [duplicatas]
-  );
-
-  const { data: baixasPorDuplicata, isLoading: loadingBaixas } = useQuery({
-    queryKey: ['duplicatas', 'historico-parcela', parcelaId, idsDuplicatas],
-    queryFn: async () => {
-      if (!duplicatas?.length) return [];
-      const listas = await Promise.all(
-        duplicatas.map((d) => duplicatasService.obterHistorico(d.id))
-      );
-      return listas.flat();
-    },
-    enabled: aberto && (duplicatas?.length ?? 0) > 0,
-  });
-
-  const listaUnificada = useMemo((): ItemHistorico[] => {
-    const itens: ItemHistorico[] = [];
-    (pagamentos || []).forEach((p) => {
-      itens.push({
-        id: p.id,
-        data_lancamento: p.data_lancamento,
-        forma_pagamento: p.forma_pagamento,
-        valor_pago: p.valor_pago,
-        estornado: !!p.estornado,
-        origem: 'pagamento',
-        cheques: p.cheques,
-      });
-    });
-    (baixasPorDuplicata || []).forEach((b) => {
-      itens.push({
-        id: b.id,
-        data_lancamento: b.data_baixa,
-        forma_pagamento: b.forma_recebimento,
-        valor_pago: b.valor_pago,
-        estornado: !!b.estornado,
-        origem: 'baixa',
-        cheques: b.cheques,
-      });
-    });
-    itens.sort(
+  const listaOrdenada = useMemo(() => {
+    if (!pagamentos?.length) return [];
+    return [...pagamentos].sort(
       (a, b) => new Date(b.data_lancamento).getTime() - new Date(a.data_lancamento).getTime()
     );
-    return itens;
-  }, [pagamentos, baixasPorDuplicata]);
-
-  const isLoading = loadingPagamentos || loadingDuplicatas || loadingBaixas;
+  }, [pagamentos]);
 
   const formatarData = (data: string) => {
     try {
@@ -141,7 +81,7 @@ export function HistoricoPagamentosParcela({
               <div className="flex justify-center py-6">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
-            ) : listaUnificada.length === 0 ? (
+            ) : listaOrdenada.length === 0 ? (
               <p className="py-4 px-4 text-sm text-muted-foreground text-center">
                 Nenhum pagamento registrado
               </p>
@@ -156,8 +96,8 @@ export function HistoricoPagamentosParcela({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {listaUnificada.map((p) => (
-                    <React.Fragment key={`${p.origem}-${p.id}`}>
+                  {listaOrdenada.map((p) => (
+                    <React.Fragment key={p.id}>
                       <TableRow>
                         <TableCell className="text-sm">{formatarData(p.data_lancamento)}</TableCell>
                         <TableCell className="text-sm">

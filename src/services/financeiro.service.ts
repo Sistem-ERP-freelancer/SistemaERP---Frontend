@@ -16,9 +16,6 @@ export interface ContaFinanceira {
   data_pagamento?: string;
   status: 'PENDENTE' | 'PAGO_PARCIAL' | 'PAGO_TOTAL' | 'VENCIDO' | 'CANCELADO';
   forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
-  numero_parcela?: number;
-  total_parcelas?: number;
-  parcela_texto?: string;
   observacoes?: string;
   created_at?: string;
   updated_at?: string;
@@ -39,9 +36,6 @@ export interface CreateContaFinanceiraDto {
   data_vencimento: string;
   data_pagamento?: string;
   forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
-  numero_parcela?: number;
-  total_parcelas?: number;
-  parcela_texto?: string;
   observacoes?: string;
 }
 
@@ -132,7 +126,7 @@ export interface ResumoFinanceiro {
     valor_total_recebido: number;   // ✅ Valor realmente recebido (via baixas) - total geral
     valor_total_pendente: number;  // ✅ Valor realmente em aberto
     receita_mes: number;           // ⭐ NOVO: Receita do mês atual (valor total a receber do mês)
-    valor_pago_mes: number;        // ⭐ NOVO: Valor pago no mês atual (via baixas de duplicatas e parcelas)
+    valor_pago_mes: number;        // Valor pago no mês atual (via pagamentos)
   };
   contas_pagar: {
     total: number;
@@ -145,6 +139,33 @@ export interface ResumoFinanceiro {
     despesa_mes: number;            // ⭐ NOVO: Despesa do mês atual (valor total a pagar do mês)
     valor_pago_mes: number;        // ⭐ NOVO: Valor pago no mês atual
   };
+}
+
+/** Resposta GET /financeiro/dashboard — contrato unificado (GUIA_IMPLEMENTACAO_FRONTEND_FINANCEIRO) */
+export interface DashboardUnificado {
+  contas_receber: {
+    total: number;
+    pendentes: number;
+    pagas: number;
+    vencidas: number;
+    valor_total_receber: number;
+    valor_total_recebido: number;
+    valor_total_pendente: number;
+    receita_mes: number;
+    valor_pago_mes: number;
+  };
+  contas_pagar: {
+    total: number;
+    pendentes: number;
+    pagas: number;
+    vencidas: number;
+    valor_total_pagar: number;
+    valor_total_pago: number;
+    valor_total_pendente: number;
+    despesa_mes?: number;
+    valor_pago_mes?: number;
+  };
+  saldo_atual: number;
 }
 
 class FinanceiroService {
@@ -264,9 +285,6 @@ class FinanceiroService {
     if (shouldInclude(data.cliente_id)) payload.cliente_id = Number(data.cliente_id);
     if (shouldInclude(data.fornecedor_id)) payload.fornecedor_id = Number(data.fornecedor_id);
     if (shouldInclude(data.pedido_id)) payload.pedido_id = Number(data.pedido_id);
-    if (shouldInclude(data.numero_parcela)) payload.numero_parcela = Number(data.numero_parcela);
-    if (shouldInclude(data.total_parcelas)) payload.total_parcelas = Number(data.total_parcelas);
-    if (shouldInclude(data.parcela_texto)) payload.parcela_texto = typeof data.parcela_texto === 'string' ? data.parcela_texto.trim() : data.parcela_texto;
     if (shouldInclude(data.observacoes)) payload.observacoes = typeof data.observacoes === 'string' ? data.observacoes.trim() : data.observacoes;
 
     // Log detalhado em desenvolvimento
@@ -341,20 +359,39 @@ class FinanceiroService {
     return apiClient.patch<ContaFinanceira>(`/contas-financeiras/${id}/cancelar`, {});
   }
 
-  async getDashboardReceber(): Promise<DashboardFinanceiro> {
-    return apiClient.get<DashboardFinanceiro>('/contas-financeiras/dashboard/receber');
+  async getDashboardReceber(params?: { mes?: number; ano?: number; mes_ano?: string }): Promise<DashboardFinanceiro> {
+    const q = new URLSearchParams();
+    if (params?.mes) q.append('mes', params.mes.toString());
+    if (params?.ano) q.append('ano', params.ano.toString());
+    if (params?.mes_ano) q.append('mes_ano', params.mes_ano);
+    const query = q.toString();
+    return apiClient.get<DashboardFinanceiro>(`/contas-financeiras/dashboard/receber${query ? `?${query}` : ''}`);
   }
 
-  async getDashboardPagar(): Promise<DashboardFinanceiro> {
-    return apiClient.get<DashboardFinanceiro>('/contas-financeiras/dashboard/pagar');
+  async getDashboardPagar(params?: { mes?: number; ano?: number; mes_ano?: string }): Promise<DashboardFinanceiro> {
+    const q = new URLSearchParams();
+    if (params?.mes) q.append('mes', params.mes.toString());
+    if (params?.ano) q.append('ano', params.ano.toString());
+    if (params?.mes_ano) q.append('mes_ano', params.mes_ano);
+    const query = q.toString();
+    return apiClient.get<DashboardFinanceiro>(`/contas-financeiras/dashboard/pagar${query ? `?${query}` : ''}`);
   }
 
-  async getDashboardResumo(): Promise<ResumoFinanceiro> {
-    return apiClient.get<ResumoFinanceiro>('/contas-financeiras/dashboard/resumo');
+  async getDashboardResumo(params?: { mes?: number; ano?: number; mes_ano?: string }): Promise<ResumoFinanceiro> {
+    const q = new URLSearchParams();
+    if (params?.mes) q.append('mes', params.mes.toString());
+    if (params?.ano) q.append('ano', params.ano.toString());
+    if (params?.mes_ano) q.append('mes_ano', params.mes_ano);
+    const query = q.toString();
+    return apiClient.get<ResumoFinanceiro>(`/contas-financeiras/dashboard/resumo${query ? `?${query}` : ''}`);
   }
 
-  async getTotalRecebido(): Promise<{ totalRecebido: number }> {
-    const response = await apiClient.get<{ totalRecebido: number }>('/contas-financeiras/dashboard/total-recebido');
+  async getTotalRecebido(params?: { data_inicial?: string; data_final?: string }): Promise<{ totalRecebido: number }> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
+    if (params?.data_final) q.append('data_final', params.data_final);
+    const query = q.toString();
+    const response = await apiClient.get<{ totalRecebido: number }>(`/contas-financeiras/dashboard/total-recebido${query ? `?${query}` : ''}`);
     
     // Debug: log para verificar resposta do backend
     if (import.meta.env.DEV) {
@@ -363,7 +400,7 @@ class FinanceiroService {
         totalRecebido: response?.totalRecebido,
         tipo: typeof response?.totalRecebido,
         aviso: response?.totalRecebido === 0 
-          ? '⚠️ Backend retornou 0. Verificar se há baixas de duplicatas registradas.' 
+          ? '⚠️ Backend retornou 0. Verificar se há pagamentos registrados.' 
           : response?.totalRecebido === undefined
           ? '⚠️ Campo totalRecebido não encontrado na resposta'
           : '✅ Valor recebido corretamente',
@@ -371,6 +408,42 @@ class FinanceiroService {
     }
     
     return response;
+  }
+
+  /**
+   * Dashboard unificado — GET /financeiro/dashboard (GUIA_IMPLEMENTACAO_FRONTEND_FINANCEIRO).
+   * Usar para exibir cards sem recalcular no front.
+   */
+  async getDashboardUnificado(): Promise<DashboardUnificado> {
+    return apiClient.get<DashboardUnificado>('/financeiro/dashboard');
+  }
+
+  /**
+   * Listagem contas a receber do módulo financeiro — GET /financeiro/contas-receber.
+   * 1 linha por pedido; mesmo formato de GET /pedidos/contas-receber.
+   */
+  async listarContasReceberFinanceiro(params?: Record<string, string | number | undefined>): Promise<Array<{
+    pedido_id: number;
+    numero_pedido: string;
+    cliente_id?: number;
+    cliente_nome?: string | null;
+    valor_total: number;
+    valor_pago: number;
+    valor_em_aberto: number;
+    status: string;
+    data_vencimento: string | null;
+    data_pedido: string;
+    forma_pagamento: string;
+  }>> {
+    const q = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== '') q.append(k, String(v));
+      });
+    }
+    const query = q.toString();
+    const list = await apiClient.get<any[]>(`/financeiro/contas-receber${query ? `?${query}` : ''}`);
+    return Array.isArray(list) ? list : [];
   }
 }
 

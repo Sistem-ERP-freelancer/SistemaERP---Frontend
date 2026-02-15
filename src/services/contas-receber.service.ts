@@ -1,21 +1,14 @@
 import { apiClient } from './api';
 import { pedidosService } from './pedidos.service';
 
-/** Status: pendente = aberto, parcial = pagamento parcial, quitado = pago, vencida = em atraso */
-export type StatusParcela = 'pendente' | 'parcial' | 'quitado' | 'vencida';
-
-/** Cliente com pedidos (agrupado por cliente_id); inclui em aberto e quitados (total_aberto 0) */
+/** Cliente com pedidos em aberto (agrupado por cliente_id) */
 export interface ClienteComPedidos {
   cliente_id: number;
   cliente_nome: string;
   total_aberto: number;
-  /** Total já pago por este cliente (soma dos pedidos) */
-  total_pago: number;
   parcelas_aberto: number;
   maior_atraso_dias: number;
-  /** pendente = não pagou nada, parcial = começou a pagar, quitado = pagou, vencida = em atraso */
-  status_parcela: StatusParcela;
-  /** Primeiro pedido - para botão Registrar Pagamento / Ver detalhes */
+  /** Primeiro pedido com valor em aberto - para botão Registrar Pagamento */
   primeiro_pedido_id?: number;
 }
 

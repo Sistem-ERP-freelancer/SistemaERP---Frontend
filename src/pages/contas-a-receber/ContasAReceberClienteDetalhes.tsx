@@ -1,28 +1,22 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
 import { formatCurrency, normalizarStatusParcela } from '@/lib/utils';
 import { clientesService } from '@/services/clientes.service';
 import {
-  contasReceberService,
-  type ParcelaDetalhe,
+    contasReceberService,
+    type ParcelaDetalhe,
 } from '@/services/contas-receber.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, DollarSign, FileText, Loader2, MoreVertical } from 'lucide-react';
+import { ArrowLeft, DollarSign, FileText, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -76,7 +70,7 @@ const ContasAReceberClienteDetalhes = () => {
   });
 
   // Usar novo endpoint /pedidos/contas-receber ao invés de /duplicatas/agrupadas-por-pedido
-  const { data: pedidosContasReceber, isLoading: loadingPedidosContasReceber } = useQuery({
+  const { data: pedidosContasReceber, isLoading: loadingPedidosContasReceber, error: errorPedidosContasReceber } = useQuery({
     queryKey: ['pedidos', 'contas-receber', 'cliente', clienteId],
     queryFn: () =>
       pedidosService.listarContasReceber({
@@ -110,7 +104,7 @@ const ContasAReceberClienteDetalhes = () => {
         console.log('[ContasAReceberClienteDetalhes] Usando parcelas do endpoint detalhe:', detalheApi.parcelas.length);
       }
       
-      // Remover duplicatas baseado em uma chave única: pedido_id + numero_parcela + total_parcelas
+      // Remover itens duplicados baseado em uma chave única: pedido_id + numero_parcela + total_parcelas
       const seen = new Set<string>();
       const parcelasUnicas = detalheApi.parcelas.filter((p) => {
         const key = `${p.pedido_id}-${p.numero_parcela}-${p.total_parcelas}`;
@@ -125,7 +119,7 @@ const ContasAReceberClienteDetalhes = () => {
       });
       
       if (import.meta.env.DEV && parcelasUnicas.length !== detalheApi.parcelas.length) {
-        console.log(`[ContasAReceberClienteDetalhes] Removidas ${detalheApi.parcelas.length - parcelasUnicas.length} duplicatas`);
+        console.log(`[ContasAReceberClienteDetalhes] Removidos ${detalheApi.parcelas.length - parcelasUnicas.length} itens duplicados`);
       }
       
       return parcelasUnicas;
@@ -223,15 +217,14 @@ const ContasAReceberClienteDetalhes = () => {
 
             <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
               <p className="text-sm text-muted-foreground px-6 pt-4 pb-2">
-                Parcelas = prestações do pedido. Cada parcela pode ser paga com uma ou mais duplicatas.
+                Parcelas = prestações do pedido. Pague via botão Pagamentos.
               </p>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Pedido</TableHead>
-                    <TableHead className="w-[80px]">Parcela (X/Y)</TableHead>
                     <TableHead className="w-[120px] text-right">
-                      Valor Parcela
+                      Valor Total do Pedido
                     </TableHead>
                     <TableHead className="w-[100px] text-right">Pago</TableHead>
                     <TableHead className="w-[100px] text-right">Aberto</TableHead>
@@ -242,14 +235,14 @@ const ContasAReceberClienteDetalhes = () => {
                 <TableBody>
                   {isLoadingParcelas ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-16 text-center">
+                      <TableCell colSpan={6} className="py-16 text-center">
                         <Loader2 className="w-8 h-8 mx-auto animate-spin text-muted-foreground" />
                         <p className="mt-2 text-muted-foreground">Carregando parcelas...</p>
                       </TableCell>
                     </TableRow>
-                  ) : (errorDetalhe || errorAgrupadas) ? (
+                  ) : (errorDetalhe || errorPedidosContasReceber) ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-16 text-center">
+                      <TableCell colSpan={6} className="py-16 text-center">
                         <FileText className="w-12 h-12 mx-auto text-muted-foreground/50" />
                         <p className="mt-2 text-destructive">Erro ao carregar parcelas</p>
                         {import.meta.env.DEV && (
@@ -261,7 +254,7 @@ const ContasAReceberClienteDetalhes = () => {
                     </TableRow>
                   ) : parcelas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-16 text-center">
+                      <TableCell colSpan={6} className="py-16 text-center">
                         <FileText className="w-12 h-12 mx-auto text-muted-foreground/50" />
                         <p className="mt-2">Nenhuma parcela encontrada</p>
                         {import.meta.env.DEV && (
@@ -288,9 +281,6 @@ const ContasAReceberClienteDetalhes = () => {
                         <TableCell className="font-medium">
                           {p.numero_pedido}
                         </TableCell>
-                        <TableCell>
-                          {p.numero_parcela}/{p.total_parcelas}
-                        </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {formatCurrency(p.valor)}
                         </TableCell>
@@ -316,76 +306,15 @@ const ContasAReceberClienteDetalhes = () => {
                           })()}
                         </TableCell>
                         <TableCell className="text-center">
-                          <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="sm" variant="outline">
-                                  <MoreVertical className="w-4 h-4 mr-1" />
-                                  Ações
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  disabled={(p.valor_aberto ?? 0) <= 0}
-                                  onClick={() => {
-                                    const parcelaIdParaUrl = p.parcela_id ?? p.id;
-                                    navigate(
-                                      `/contas-a-receber/clientes/${clienteId}/pagar/${p.pedido_id}/${parcelaIdParaUrl}`,
-                                      {
-                                        state: {
-                                          parcela: p,
-                                          parcela_pedido_id: p.parcela_id ?? p.id,
-                                          cliente: nomeCliente,
-                                          numeroPedido: p.numero_pedido,
-                                        },
-                                      }
-                                    );
-                                  }}
-                                >
-                                  <DollarSign className="w-4 h-4 mr-2" />
-                                  Criar duplicatas (para esta parcela)
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={async () => {
-                                    let parcelaPedidoId = p.parcela_id;
-                                    if (parcelaPedidoId == null && !!pedidosContasReceber?.length) {
-                                      try {
-                                        const { pedidosService } = await import('@/services/pedidos.service');
-                                        const res = await pedidosService.listarParcelas(p.pedido_id);
-                                        const pp = (res?.parcelas ?? []).find(
-                                          (x) =>
-                                            x.numero_parcela === p.numero_parcela &&
-                                            x.total_parcelas === p.total_parcelas
-                                        );
-                                        parcelaPedidoId = pp?.id;
-                                      } catch {
-                                        parcelaPedidoId = undefined;
-                                      }
-                                    }
-                                    const parcelaIdParaUrl = parcelaPedidoId ?? p.id;
-                                    navigate(
-                                      `/contas-a-receber/clientes/${clienteId}/duplicatas/${p.pedido_id}/${parcelaIdParaUrl}`,
-                                      {
-                                        state: {
-                                          parcela: {
-                                            numero_parcela: p.numero_parcela,
-                                            total_parcelas: p.total_parcelas,
-                                            valor: p.valor,
-                                            valor_aberto: p.valor_aberto ?? 0,
-                                          },
-                                          pedido_id: p.pedido_id,
-                                          parcela_pedido_id: parcelaPedidoId,
-                                          numeroPedido: p.numero_pedido,
-                                          cliente: nomeCliente,
-                                        },
-                                      }
-                                    );
-                                  }}
-                                >
-                                  <FileText className="w-4 h-4 mr-2" />
-                                  Ver duplicatas desta parcela
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={(p.valor_aberto ?? 0) <= 0}
+                            onClick={() => navigate(`/financeiro/contas-receber/${p.pedido_id}/pagamentos`)}
+                          >
+                            <DollarSign className="w-4 h-4 mr-2" />
+                            Pagamentos
+                          </Button>
                         </TableCell>
                       </TableRow>
                       );

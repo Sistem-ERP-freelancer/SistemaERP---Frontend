@@ -13,10 +13,12 @@ export type FormaPagamento =
 export type { ChequeDto } from '@/shared/types/cheque.types';
 
 export interface CreatePagamentoDto {
-  parcela_id: number;
+  pedido_id: number;
+  conta_financeira_id?: number; // Opcional se backend inferir do pedido (1 conta por pedido)
   forma_pagamento: FormaPagamento;
   valor_pago: number;
   data_lancamento: string;
+  data_pagamento?: string; // Data real do pagamento (guia: usado no dashboard)
   observacoes?: string;
   cheques?: ChequeDto[];
 }
@@ -43,7 +45,8 @@ export interface ChequePagamento {
 
 export interface Pagamento {
   id: number;
-  parcela_id: number;
+  pedido_id: number;
+  conta_financeira_id?: number;
   forma_pagamento: FormaPagamento;
   valor_pago: number;
   data_lancamento: string;
@@ -59,9 +62,9 @@ class PagamentosService {
     return apiClient.post<Pagamento>('/pagamentos', data);
   }
 
-  async listarPorParcela(parcelaId: number): Promise<Pagamento[]> {
+  async listarPorPedido(pedidoId: number): Promise<Pagamento[]> {
     const response = await apiClient.get<Pagamento[] | { pagamentos: Pagamento[] }>(
-      `/pagamentos/parcela/${parcelaId}`
+      `/pagamentos?pedido_id=${pedidoId}`
     );
     return Array.isArray(response) ? response : response?.pagamentos || [];
   }
@@ -83,10 +86,6 @@ class PagamentosService {
       `/pagamentos/periodo?${query}`
     );
     return Array.isArray(response) ? response : response?.pagamentos || [];
-  }
-
-  async recalcularParcela(parcelaId: number): Promise<void> {
-    return apiClient.patch(`/pagamentos/parcela/${parcelaId}/recalcular`, {});
   }
 }
 

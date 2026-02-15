@@ -297,10 +297,9 @@ export default function Pedidos() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="PENDENTE">Pendente</SelectItem>
-                  <SelectItem value="APROVADO">Aprovado</SelectItem>
-                  <SelectItem value="EM_PROCESSAMENTO">Em Processamento</SelectItem>
-                  <SelectItem value="CONCLUIDO">Concluído</SelectItem>
+                  <SelectItem value="ABERTO">Pendente</SelectItem>
+                  <SelectItem value="PARCIAL">Aberto</SelectItem>
+                  <SelectItem value="QUITADO">Quitado</SelectItem>
                   <SelectItem value="CANCELADO">Cancelado</SelectItem>
                 </SelectContent>
               </Select>

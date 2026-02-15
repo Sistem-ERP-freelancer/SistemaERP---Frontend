@@ -1,11 +1,11 @@
 export type TipoPedido = 'VENDA' | 'COMPRA';
 
-export type StatusPedido = 
-  | 'PENDENTE'
-  | 'APROVADO'
-  | 'EM_PROCESSAMENTO'
-  | 'CONCLUIDO'
-  | 'CANCELADO';
+/** Status do pedido (valores da API). Exibição: Pendente, Aberto, Quitado, Cancelado. */
+export type StatusPedido =
+  | 'ABERTO'     // exibe "Pendente" — acabou de criar, nada pago
+  | 'PARCIAL'    // exibe "Aberto" — pedido em aberto (parte paga)
+  | 'QUITADO'    // exibe "Quitado" — concluído
+  | 'CANCELADO'; // exibe "Cancelado"
 
 export type FormaPagamento = 
   | 'DINHEIRO'
@@ -15,6 +15,11 @@ export type FormaPagamento =
   | 'BOLETO'
   | 'TRANSFERENCIA'
   | 'CHEQUE';
+
+export type FormaPagamentoEstrutural = 
+  | 'AVISTA'
+  | 'PARCELADO'
+  | 'BOLETO_DESCONTADO';
 
 export interface PedidoItem {
   id?: number;
@@ -67,7 +72,9 @@ export interface Pedido {
   data_vencimento_base?: string | null; // Data de vencimento base para cálculo de parcelas
   condicao_pagamento?: string;
   forma_pagamento?: FormaPagamento;
+  forma_pagamento_estrutural?: FormaPagamentoEstrutural;
   quantidade_parcelas?: number;
+  valor_adiantado?: number | null;
   prazo_entrega_dias?: number;
   subtotal: number;
   desconto_valor: number;
@@ -93,8 +100,14 @@ export interface CreatePedidoDto {
   condicao_pagamento?: string;
   data_vencimento?: string; // Data de vencimento para as contas financeiras do pedido
   data_vencimento_base?: string; // Data base para primeiro vencimento (parcelas mensais)
-  forma_pagamento?: FormaPagamento;
-  quantidade_parcelas?: number; // 1 a 12, usado quando forma = CARTAO_CREDITO
+  forma_pagamento?: FormaPagamento; // Opcional - forma real será informada no pagamento
+  forma_pagamento_estrutural?: FormaPagamentoEstrutural; // AVISTA, PARCELADO, BOLETO_DESCONTADO
+  quantidade_parcelas?: number; // 1 a 12 para PARCELADO; BOLETO_DESCONTADO não usa parcelas
+  valor_adiantado?: number; // Obrigatório se BOLETO_DESCONTADO (0 < valor < valor_total)
+  taxa_desconto?: number; // Opcional (antecipação bancária)
+  taxa_desconto_percentual?: boolean; // true = %, false = valor fixo. Default true
+  data_antecipacao?: string; // Opcional (YYYY-MM-DD)
+  instituicao_financeira?: string; // Opcional, até 200 caracteres
   prazo_entrega_dias?: number;
   subtotal?: number;
   desconto_valor?: number;
@@ -163,11 +176,10 @@ export interface DashboardPedidos {
   
   // 🔹 BLOCO 2 — Operacional (quantidade)
   pedidos_em_andamento: {
-    quantidade: number;  // Total de pedidos em andamento (VENDA + COMPRA)
+    quantidade: number;  // Total de pedidos em andamento (ABERTO + PARCIAL)
     detalhes: {
-      pendente: number;           // Status: PENDENTE
-      aprovado: number;          // Status: APROVADO
-      em_processamento: number;  // Status: EM_PROCESSAMENTO
+      pendente: number;   // Status: ABERTO
+      parcial: number;    // Status: PARCIAL
     };
   };
   pedidos_concluidos: {

@@ -39,7 +39,7 @@ interface ContasAReceberListaClientesProps {
 }
 
 const ContasAReceberListaClientes = ({
-  filtroStatus = 'aberto',
+  filtroStatus = 'todos',
   onTotalAReceber,
 }: ContasAReceberListaClientesProps) => {
   const navigate = useNavigate();
@@ -63,16 +63,15 @@ const ContasAReceberListaClientes = ({
     : clientesData?.data || [];
 
   // Usar endpoint /pedidos/contas-receber (sem duplicatas)
-  // Conforme GUIA_CORRECAO_CONTAS_PAGAR.md - não passar undefined como propriedade
-  const { data: pedidosEmAberto } = useQuery({
-    queryKey: ['pedidos', 'contas-receber', 'em_aberto'],
-    queryFn: () => pedidosService.listarContasReceber({ situacao: 'em_aberto' }),
-    enabled: status === 'aberto' || status === 'todos',
-  });
-  const { data: pedidosConcluidos } = useQuery({
-    queryKey: ['pedidos', 'contas-receber', 'concluido'],
-    queryFn: () => pedidosService.listarContasReceber({ situacao: 'concluido' }),
-    enabled: status === 'aberto' || status === 'todos',
+  // todos = todos os status; aberto = só em aberto; concluido = só quitados
+  const { data: pedidosContasReceber, isLoading: isLoadingPedidos } = useQuery({
+    queryKey: ['pedidos', 'contas-receber', status],
+    queryFn: () => {
+      if (status === 'aberto') return pedidosService.listarContasReceber({ situacao: 'em_aberto' });
+      if (status === 'concluido') return pedidosService.listarContasReceber({ situacao: 'concluido' });
+      return pedidosService.listarContasReceber({ situacao: 'todos' });
+    },
+    enabled: true,
   });
 
   // Fallback: usar contas financeiras (RECEBER) quando pedidos retornam vazio
@@ -94,8 +93,7 @@ const ContasAReceberListaClientes = ({
     retry: 1,
   });
 
-  const pedidos = pedidosEmAberto ?? [];
-  const concluidos = pedidosConcluidos ?? [];
+  const pedidos = pedidosContasReceber ?? [];
   const contasReceber = contasReceberData ?? [];
 
   // Fallback extra: contas agrupadas (quando pedidos e listar contas retornam vazio)
@@ -116,17 +114,24 @@ const ContasAReceberListaClientes = ({
   const itensAgrupado = agrupadoData?.itens ?? [];
 
   const clientesComPedidos = useMemo((): ClienteComPedidos[] => {
-    const map = new Map<number, ClienteComPedidos & { total_pago_cliente?: number }>();
+    const map = new Map<number, ClienteComPedidos>();
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
-    // 1) Pedidos em aberto: ignorar quitados (backend deve excluir; defesa contra cache)
-    pedidos.forEach((pedido) => {
-      if (pedido.status === 'CANCELADO' || pedido.status === 'QUITADO') return;
-      const valorAberto = pedido.valor_em_aberto ?? 0;
-      if (valorAberto <= 0) return;
-      const valorPago = Number((pedido as any).valor_pago ?? 0);
+    const soEmAberto = status === 'aberto';
+    const soConcluido = status === 'concluido';
 
+    // Agrupar pedidos por cliente (novo formato)
+    pedidos.forEach((pedido) => {
+      if (pedido.status === 'CANCELADO') return;
+      if (soEmAberto && (pedido.status === 'QUITADO' || (pedido.valor_em_aberto ?? 0) <= 0)) return;
+      if (soConcluido && pedido.status !== 'QUITADO') return;
+
+      const valorAberto = pedido.valor_em_aberto ?? 0;
+      if (soEmAberto && valorAberto <= 0) return;
+      
+      // Calcular maior atraso baseado na data do pedido (aproximação)
+      // Nota: Para cálculo preciso de atraso, seria necessário buscar as parcelas do pedido
       let maiorAtraso = 0;
       try {
         const dataPedido = new Date(pedido.data_pedido);
@@ -140,8 +145,7 @@ const ContasAReceberListaClientes = ({
       const existing = map.get(pedido.cliente_id);
       if (existing) {
         existing.total_aberto += valorAberto;
-        existing.parcelas_aberto += 1;
-        existing.total_pago_cliente = (existing.total_pago_cliente ?? 0) + valorPago;
+        existing.parcelas_aberto += 1; // Cada pedido conta como 1 "parcela" para agrupamento
         if (maiorAtraso > existing.maior_atraso_dias)
           existing.maior_atraso_dias = maiorAtraso;
       } else {
@@ -151,44 +155,13 @@ const ContasAReceberListaClientes = ({
           total_aberto: valorAberto,
           parcelas_aberto: 1,
           maior_atraso_dias: maiorAtraso,
-          total_pago_cliente: valorPago,
           primeiro_pedido_id: (pedido as any).pedido_id,
-          status_parcela: valorAberto <= 0 ? 'quitado' : valorPago > 0 ? 'parcial' : 'pendente',
         });
       }
     });
 
-    // 2) Pedidos quitados: Total em Aberto 0 e Status Quitado (sobrescreve se já estava no mapa por cache)
-    concluidos.forEach((pedido) => {
-      if (pedido.status !== 'QUITADO' || pedido.cliente_id == null) return;
-      const valorPago = Number((pedido as any).valor_pago ?? 0);
-      const existing = map.get(pedido.cliente_id);
-      const totalPagoCliente = existing ? (existing.total_pago_cliente ?? 0) + valorPago : valorPago;
-      map.set(pedido.cliente_id, {
-        cliente_id: pedido.cliente_id,
-        cliente_nome: pedido.cliente_nome || '—',
-        total_aberto: 0,
-        parcelas_aberto: existing ? existing.parcelas_aberto : 0,
-        maior_atraso_dias: existing?.maior_atraso_dias ?? 0,
-        total_pago_cliente: totalPagoCliente,
-        primeiro_pedido_id: (pedido as any).pedido_id ?? existing?.primeiro_pedido_id,
-        status_parcela: 'quitado',
-      });
-    });
-
-    const withStatus = (c: typeof map extends Map<number, infer V> ? V : never): ClienteComPedidos => {
-      const totalPago = c.total_pago_cliente ?? 0;
-      let status: ClienteComPedidos['status_parcela'] =
-        c.total_aberto <= 0 ? 'quitado' : (totalPago > 0 ? 'parcial' : 'pendente');
-      if (status !== 'quitado' && c.maior_atraso_dias > 0) status = 'vencida';
-      return {
-        ...c,
-        total_pago: totalPago,
-        status_parcela: status,
-      };
-    };
-
-    let result = Array.from(map.values()).map(withStatus);
+    let result = Array.from(map.values());
+    if (soEmAberto) result = result.filter((c) => c.total_aberto > 0);
     if (result.length > 0) return result;
 
     // Fallback: listar por contas financeiras (RECEBER) quando duplicatas/API de clientes retornam vazio
@@ -200,7 +173,6 @@ const ContasAReceberListaClientes = ({
       const cidNum = cid(conta)!;
       const cliente = clientes.find((c) => c.id === cidNum);
       const valorAberto = conta.valor_restante ?? (conta as any).valor_em_aberto ?? 0;
-      const valorPagoConta = Number((conta as any).valor_pago ?? 0);
       let maiorAtraso = 0;
       try {
         const venc = new Date(conta.data_vencimento);
@@ -214,7 +186,6 @@ const ContasAReceberListaClientes = ({
       if (existing) {
         existing.total_aberto += valorAberto;
         existing.parcelas_aberto += 1;
-        existing.total_pago_cliente = (existing.total_pago_cliente ?? 0) + valorPagoConta;
         if (maiorAtraso > existing.maior_atraso_dias)
           existing.maior_atraso_dias = maiorAtraso;
       } else {
@@ -228,13 +199,12 @@ const ContasAReceberListaClientes = ({
           total_aberto: valorAberto,
           parcelas_aberto: 1,
           maior_atraso_dias: maiorAtraso,
-          total_pago_cliente: valorPagoConta,
           primeiro_pedido_id: (conta as any).pedido_id,
-          status_parcela: valorAberto <= 0 ? 'quitado' : valorPagoConta > 0 ? 'parcial' : 'pendente',
         });
       }
     });
-    result = Array.from(map.values()).map(withStatus).filter((c) => c.total_aberto > 0);
+    result = Array.from(map.values());
+    if (soEmAberto) result = result.filter((c) => c.total_aberto > 0);
     if (result.length > 0) return result;
 
     // Fallback final: contas agrupadas (GET /contas-financeiras/agrupado) – agrupar por cliente_nome
@@ -262,11 +232,9 @@ const ContasAReceberListaClientes = ({
           cliente_id: cliente?.id ?? 0,
           cliente_nome: nome,
           total_aberto: valor,
-          total_pago: 0,
           parcelas_aberto: 1,
           maior_atraso_dias: 0,
           primeiro_pedido_id: (item as any).pedido_id ?? undefined,
-          status_parcela: 'pendente',
         });
       }
     });
@@ -274,7 +242,7 @@ const ContasAReceberListaClientes = ({
       (c) => c.total_aberto > 0 && c.cliente_nome !== '—'
     );
     return result;
-  }, [pedidos, concluidos, clientes, contasReceber, itensAgrupado]);
+  }, [pedidos, clientes, contasReceber, itensAgrupado, status]);
 
   const totalAReceberLista = useMemo(
     () => clientesComPedidos.reduce((s, c) => s + (c.total_aberto ?? 0), 0),
@@ -285,19 +253,17 @@ const ContasAReceberListaClientes = ({
     onTotalAReceber?.(totalAReceberLista, clientesComPedidos.length);
   }, [onTotalAReceber, totalAReceberLista, clientesComPedidos.length]);
 
-  const emptyPedidos =
-    pedidos.length === 0;
+  const emptyPedidos = pedidos.length === 0;
+  const usaFallback = status === 'aberto' || status === 'todos';
   const esperandoFallbackAgrupado =
-    emptyPedidos && contasReceber.length === 0 && (status === 'aberto' || status === 'todos');
+    emptyPedidos && contasReceber.length === 0 && usaFallback;
   const isLoadingList =
-    (emptyPedidos && (status === 'aberto' || status === 'todos') && isLoadingContasReceber) ||
+    isLoadingPedidos ||
+    (emptyPedidos && usaFallback && isLoadingContasReceber) ||
     (esperandoFallbackAgrupado && isLoadingAgrupado);
 
   const filtrados = useMemo(() => {
     let list = clientesComPedidos;
-    if (status === 'aberto') {
-      list = list.filter((c) => (c.total_aberto ?? 0) > 0);
-    }
     if (filtroCliente !== 'todos') {
       list = list.filter((c) => c.cliente_id.toString() === filtroCliente);
     }
@@ -308,7 +274,7 @@ const ContasAReceberListaClientes = ({
       );
     }
     return list;
-  }, [clientesComPedidos, status, filtroCliente, searchTerm]);
+  }, [clientesComPedidos, filtroCliente, searchTerm]);
 
   return (
     <div className="space-y-6">
@@ -338,11 +304,12 @@ const ContasAReceberListaClientes = ({
             </Label>
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder="Em aberto" />
+                <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="aberto">Em aberto</SelectItem>
                 <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="aberto">Em aberto</SelectItem>
+                <SelectItem value="concluido">Concluído</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -368,33 +335,39 @@ const ContasAReceberListaClientes = ({
 
       <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
         <p className="text-xs text-muted-foreground px-4 py-2 border-b bg-muted/30">
-          Totais por cliente (todos os pedidos em aberto).
+          {status === 'aberto'
+            ? 'Totais por cliente (pedidos em aberto).'
+            : status === 'concluido'
+              ? 'Totais por cliente (pedidos quitados).'
+              : 'Totais por cliente (todos os pedidos).'}
         </p>
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead>Cliente</TableHead>
-              <TableHead className="w-[120px] text-right">Total em Aberto</TableHead>
-              <TableHead className="w-[120px] text-right">Total Pago</TableHead>
-              <TableHead className="w-[100px] text-center">Status</TableHead>
-              <TableHead className="w-[100px] text-center">Cobranças em aberto</TableHead>
-              <TableHead className="w-[100px] text-center">Maior Atraso</TableHead>
+              <TableHead className="w-[140px] text-right">Total em Aberto</TableHead>
+              <TableHead className="w-[140px] text-center">Parcelas em Aberto</TableHead>
+              <TableHead className="w-[120px] text-center">Maior Atraso</TableHead>
               <TableHead className="w-[70px] text-center"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoadingList ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-16 text-center">
+                <TableCell colSpan={5} className="py-16 text-center">
                   <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : filtrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-16 text-center">
+                <TableCell colSpan={5} className="py-16 text-center">
                   <FileText className="w-12 h-12 mx-auto text-muted-foreground/50" />
                   <p className="mt-2 font-medium">
-                    Nenhum cliente com pedidos em aberto
+                    {status === 'aberto'
+                      ? 'Nenhum cliente com pedidos em aberto'
+                      : status === 'concluido'
+                        ? 'Nenhum cliente com pedidos quitados'
+                        : 'Nenhum cliente com pedidos'}
                   </p>
                 </TableCell>
               </TableRow>
@@ -404,22 +377,6 @@ const ContasAReceberListaClientes = ({
                   <TableCell className="font-medium">{row.cliente_nome}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatCurrency(row.total_aberto)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatCurrency(row.total_pago ?? 0)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span
-                      className={[
-                        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-                        row.status_parcela === 'quitado' && 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-                        row.status_parcela === 'parcial' && 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-                        row.status_parcela === 'pendente' && 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-                        row.status_parcela === 'vencida' && 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-                      ].filter(Boolean).join(' ')}
-                    >
-                      {row.status_parcela === 'pendente' ? 'Pendente' : row.status_parcela === 'parcial' ? 'Parcial' : row.status_parcela === 'vencida' ? 'Vencida' : 'Quitado'}
-                    </span>
                   </TableCell>
                   <TableCell className="text-center">
                     {row.parcelas_aberto}

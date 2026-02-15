@@ -497,7 +497,7 @@ export function useOrders() {
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] }),
-        queryClient.invalidateQueries({ queryKey: ['duplicatas'] }),
+        queryClient.invalidateQueries({ queryKey: ['pedidos', 'contas-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['contas-receber'] }),
       ]);
       await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });

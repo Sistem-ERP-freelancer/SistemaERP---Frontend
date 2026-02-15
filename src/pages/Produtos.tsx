@@ -1277,6 +1277,31 @@ const Produtos = () => {
               onOpenChange={(open) => {
                 setDialogOpen(open);
                 if (!open) {
+                  // Limpar formulário ao sair da tela de criar produto
+                  setNewProduto({
+                    nome: "",
+                    descricao: "",
+                    sku: "",
+                    preco_custo: 0,
+                    preco_venda: 0,
+                    preco_promocional: undefined,
+                    estoque_atual: 0,
+                    estoque_minimo: 0,
+                    estoque_maximo: undefined,
+                    localizacao: undefined,
+                    unidade_medida: "UN",
+                    statusProduto: "ATIVO",
+                    categoriaId: undefined,
+                    fornecedorId: undefined,
+                    data_validade: undefined,
+                    ncm: "",
+                    cest: "",
+                    cfop: "",
+                    observacoes: "",
+                    peso: undefined,
+                    altura: undefined,
+                    largura: undefined,
+                  });
                   setFornecedorPopoverOpen(false);
                   setFornecedorSearchTerm("");
                 }
@@ -1385,11 +1410,19 @@ const Produtos = () => {
                             <SelectValue placeholder="Selecione uma categoria" />
                           </SelectTrigger>
                           <SelectContent>
-                            {categorias.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id.toString()}>
-                                {cat.nome}
-                              </SelectItem>
-                            ))}
+                            {categorias.length === 0 ? (
+                              <div className="py-6 px-4 text-center text-sm text-muted-foreground">
+                                <LayoutGrid className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                                <p className="font-medium text-foreground">Nenhuma categoria cadastrada</p>
+                                <p className="mt-1 text-xs">Cadastre uma categoria antes de criar o produto.</p>
+                              </div>
+                            ) : (
+                              categorias.map((cat) => (
+                                <SelectItem key={cat.id} value={cat.id.toString()}>
+                                  {cat.nome}
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1422,7 +1455,17 @@ const Produtos = () => {
                                 onValueChange={setFornecedorSearchTerm}
                               />
                               <CommandList>
-                                <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
+                                <CommandEmpty>
+                                  {fornecedores.length === 0 ? (
+                                    <div className="py-6 px-4 text-center text-sm text-muted-foreground">
+                                      <Truck className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                                      <p className="font-medium text-foreground">Nenhum fornecedor cadastrado</p>
+                                      <p className="mt-1 text-xs">Cadastre um fornecedor antes de criar o produto.</p>
+                                    </div>
+                                  ) : (
+                                    "Nenhum fornecedor encontrado."
+                                  )}
+                                </CommandEmpty>
                                 <CommandGroup>
                                   {(() => {
                                     const filteredFornecedores = fornecedores.filter((forn) => {
@@ -2859,11 +2902,19 @@ const Produtos = () => {
                           <SelectValue placeholder="Selecione uma categoria" />
                         </SelectTrigger>
                         <SelectContent>
-                          {categorias.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id.toString()}>
-                              {cat.nome}
-                            </SelectItem>
-                          ))}
+                          {categorias.length === 0 ? (
+                            <div className="py-6 px-4 text-center text-sm text-muted-foreground">
+                              <LayoutGrid className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                              <p className="font-medium text-foreground">Nenhuma categoria cadastrada</p>
+                              <p className="mt-1 text-xs">Cadastre uma categoria antes de editar o produto.</p>
+                            </div>
+                          ) : (
+                            categorias.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id.toString()}>
+                                {cat.nome}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -2885,11 +2936,19 @@ const Produtos = () => {
                           <SelectValue placeholder="Selecione um fornecedor" />
                         </SelectTrigger>
                         <SelectContent>
-                          {fornecedores.map((forn) => (
-                            <SelectItem key={forn.id} value={forn.id.toString()}>
-                              {forn.nome_fantasia}
-                            </SelectItem>
-                          ))}
+                          {fornecedores.length === 0 ? (
+                            <div className="py-6 px-4 text-center text-sm text-muted-foreground">
+                              <Truck className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                              <p className="font-medium text-foreground">Nenhum fornecedor cadastrado</p>
+                              <p className="mt-1 text-xs">Cadastre um fornecedor antes de editar o produto.</p>
+                            </div>
+                          ) : (
+                            fornecedores.map((forn) => (
+                              <SelectItem key={forn.id} value={forn.id.toString()}>
+                                {forn.nome_fantasia}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

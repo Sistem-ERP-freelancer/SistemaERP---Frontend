@@ -8,6 +8,7 @@ import {
     Pedido,
     PedidosResponse,
 } from '@/types/pedido';
+import type { ItemHistoricoPagamento, RegistrarPagamentoBody, ResumoFinanceiroPedido } from '@/types/pedido-financeiro.types';
 import { apiClient } from './api';
 import type { ConfirmarPagamentoPayload } from './contas-receber.service';
 
@@ -60,6 +61,90 @@ class PedidosService {
   }
 
   /**
+   * Resumo financeiro do pedido (contrato novo — modelo sem parcelas).
+   * GET /pedidos/:id/financeiro — resposta esperada: { valor_total, valor_pago, valor_em_aberto, status, data_vencimento }.
+   * Se o backend retornar estrutura antiga (com parcelas), normaliza para ResumoFinanceiroPedido.
+   */
+  async getResumoFinanceiro(id: number): Promise<ResumoFinanceiroPedido> {
+    const res = await apiClient.get<any>(`/pedidos/${id}/financeiro`);
+    if (res?.valor_total !== undefined && res?.valor_em_aberto !== undefined) {
+      return res as ResumoFinanceiroPedido;
+    }
+    if (res?.resumo_financeiro) {
+      const r = res.resumo_financeiro;
+      return {
+        valor_total: r.valor_total ?? 0,
+        valor_pago: r.valor_pago ?? 0,
+        valor_em_aberto: r.valor_em_aberto ?? 0,
+        status: (r.status as ResumoFinanceiroPedido['status']) ?? 'ABERTO',
+        data_vencimento: r.data_vencimento ?? null,
+      };
+    }
+    throw new Error('Resposta inválida de GET /pedidos/:id/financeiro');
+  }
+
+  /**
+   * Histórico de pagamentos do pedido (contrato novo).
+   * GET /pedidos/:id/pagamentos — array de { id, valor, forma_pagamento, data_pagamento }.
+   */
+  async listarPagamentosPedido(pedidoId: number): Promise<ItemHistoricoPagamento[]> {
+    try {
+      const list = await apiClient.get<ItemHistoricoPagamento[]>(`/pedidos/${pedidoId}/pagamentos`);
+      if (Array.isArray(list)) return list;
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Registra pagamento no pedido (contrato novo — modelo sem parcelas).
+   * POST /pedidos/:id/pagamentos com body { valor, forma_pagamento, data_pagamento? }.
+   */
+  async registrarPagamentoPedido(pedidoId: number, body: RegistrarPagamentoBody): Promise<unknown> {
+    return apiClient.post(`/pedidos/${pedidoId}/pagamentos`, body);
+  }
+
+  /**
+   * Busca pedido com dados financeiros agregados (pedido + parcelas + pagamentos)
+   * GET /pedidos/:id/financeiro
+   * Retorna tudo em 1 única requisição, evitando N+1 queries
+   * @deprecated Preferir getResumoFinanceiro + listarPagamentosPedido para novo contrato
+   */
+  async buscarPorIdComFinanceiro(id: number): Promise<{
+    pedido: Pedido;
+    parcelas: Array<{
+      id: number;
+      numero_parcela: number;
+      total_parcelas: number;
+      valor: number;
+      valor_pago: number;
+      status: string;
+      data_vencimento: string;
+      data_pagamento: string | null;
+      pagamentos: Array<{
+        id: number;
+        valor_pago: number;
+        forma_pagamento: string;
+        data_lancamento: string;
+        observacoes?: string;
+        estornado: boolean;
+      }>;
+    }>;
+    resumo_financeiro: {
+      valor_total: number;
+      valor_pago: number;
+      valor_em_aberto: number;
+      total_parcelas: number;
+      parcelas_pagas: number;
+      parcelas_pendentes: number;
+      percentual_pago: number;
+    };
+  }> {
+    return apiClient.get(`/pedidos/${id}/financeiro`);
+  }
+
+  /**
    * Confirma pagamento da parcela com múltiplas duplicatas
    * POST /pedidos/:pedidoId/parcelas/:parcelaId/confirmar-pagamento
    * @param parcelaId - ID da parcela (tb_parcela_pedido), nunca numero_parcela
@@ -102,13 +187,27 @@ class PedidosService {
   async criar(data: CreatePedidoDto): Promise<Pedido> {
     // Log detalhado dos dados sendo enviados
     if (import.meta.env.DEV) {
-      console.log('📤 [PedidosService] Criando pedido:', {
+      console.log('📤 [PedidosService] POST /pedidos - Payload completo:', {
         tipo: data.tipo,
         cliente_id: data.cliente_id,
         fornecedor_id: data.fornecedor_id,
+        data_pedido: data.data_pedido,
+        forma_pagamento: data.forma_pagamento,
+        forma_pagamento_estrutural: data.forma_pagamento_estrutural,
+        quantidade_parcelas: data.quantidade_parcelas,
+        valor_adiantado: data.valor_adiantado,
+        data_vencimento_base: data.data_vencimento_base,
+        condicao_pagamento: data.condicao_pagamento,
+        taxa_desconto: data.taxa_desconto,
+        taxa_desconto_percentual: data.taxa_desconto_percentual,
+        data_antecipacao: data.data_antecipacao,
+        instituicao_financeira: data.instituicao_financeira,
+        frete: data.frete,
+        outras_taxas: data.outras_taxas,
         totalItens: data.itens?.length || 0,
         itens: data.itens,
-        dadosCompletos: data,
+        payload_completo: data,
+        payload_json: JSON.stringify(data, null, 2),
       });
     }
     return apiClient.post<Pedido>('/pedidos', data);
@@ -267,6 +366,9 @@ class PedidosService {
     if (formaPagamentoNormalizado) {
       queryParams.append('forma_pagamento', formaPagamentoNormalizado);
     }
+    if (params?.forma_pagamento_estrutural) {
+      queryParams.append('forma_pagamento_estrutural', params.forma_pagamento_estrutural);
+    }
     if (situacaoNormalizado) {
       queryParams.append('situacao', situacaoNormalizado);
     }
@@ -422,6 +524,67 @@ class PedidosService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Lista receitas antecipadas (pedidos com boleto descontado)
+   * GET /pedidos/receitas-antecipadas
+   */
+  async listarReceitasAntecipadas(params?: {
+    data_inicial?: string;
+    data_final?: string;
+    cliente_id?: number;
+  }): Promise<{ receitas: Array<{
+    pedido_id: number;
+    numero_pedido: string;
+    cliente_id: number;
+    cliente_nome: string;
+    valor_total: number;
+    valor_desconto: number;
+    valor_antecipado: number;
+    data_antecipacao: string;
+    instituicao_financeira?: string;
+    data_pedido: string;
+    status: string;
+  }> }> {
+    const queryParams = new URLSearchParams();
+    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
+    if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+    const query = queryParams.toString();
+    const url = `/pedidos/receitas-antecipadas${query ? `?${query}` : ''}`;
+    const res = await apiClient.get<any>(url);
+    return Array.isArray(res) ? { receitas: res } : res;
+  }
+
+  /**
+   * Lista despesas de desconto de boleto
+   * GET /pedidos/despesas-desconto-boleto
+   */
+  async listarDespesasDescontoBoleto(params?: {
+    data_inicial?: string;
+    data_final?: string;
+    mes_ano?: string;
+  }): Promise<{ despesas: Array<{
+    pedido_id: number;
+    numero_pedido: string;
+    cliente_id: number;
+    cliente_nome: string;
+    valor_desconto: number;
+    valor_total: number;
+    percentual_desconto: number;
+    data_antecipacao: string;
+    instituicao_financeira?: string;
+    data_pedido: string;
+  }> }> {
+    const queryParams = new URLSearchParams();
+    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
+    if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.mes_ano) queryParams.append('mes_ano', params.mes_ano);
+    const query = queryParams.toString();
+    const url = `/pedidos/despesas-desconto-boleto${query ? `?${query}` : ''}`;
+    const res = await apiClient.get<any>(url);
+    return Array.isArray(res) ? { despesas: res } : res;
   }
 }
 

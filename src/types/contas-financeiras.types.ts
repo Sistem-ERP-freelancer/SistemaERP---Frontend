@@ -21,16 +21,22 @@ export enum StatusPedido {
   CANCELADO = 'CANCELADO'
 }
 
+/** Item da listagem contas a receber — GET /financeiro/contas-receber ou GET /pedidos/contas-receber (1 linha = 1 pedido) */
 export interface ContaReceber {
   pedido_id: number;
   numero_pedido: string;
   cliente_id?: number | null;
   cliente_nome?: string | null;
   valor_total: number;
+  /** Valor já pago (usar do backend; não calcular no front) */
+  valor_pago?: number;
   valor_em_aberto: number;
   forma_pagamento: string; // FormaPagamento enum value
-  status: string; // StatusPedido enum value
+  forma_pagamento_estrutural?: string; // AVISTA, PARCELADO, BOLETO_DESCONTADO
+  status: string; // ABERTO | PARCIAL | QUITADO | VENCIDO | CANCELADO
   data_pedido: string; // ISO date: "2026-02-10"
+  /** Data de vencimento (única por pedido no modelo sem parcelas) */
+  data_vencimento?: string | null;
 }
 
 export interface ContaPagar {
@@ -52,7 +58,8 @@ export interface FiltrosContasReceber {
   valor_inicial?: number;
   valor_final?: number;
   forma_pagamento?: string;
-  situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
+  forma_pagamento_estrutural?: 'AVISTA' | 'PARCELADO' | 'BOLETO_DESCONTADO';
+  situacao?: 'todos' | 'em_aberto' | 'em_atraso' | 'concluido';
   data_inicial?: string; // YYYY-MM-DD
   data_final?: string; // YYYY-MM-DD
 }

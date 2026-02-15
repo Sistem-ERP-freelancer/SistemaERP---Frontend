@@ -47,19 +47,26 @@ export function formatDate(date: string | Date): string {
 }
 
 /**
- * Formata status do pedido para exibição
- * Conforme GUIA_MIGRACAO_FRONTEND_PRATICO.md
+ * Formata data para formato brasileiro (DD/MM/YYYY)
+ * Alias para formatDate para manter compatibilidade
+ */
+export function formatarDataBR(date: string | Date): string {
+  return formatDate(date);
+}
+
+/**
+ * Formata status do pedido para exibição (apenas 4 statuses).
+ * Backend: ABERTO | PARCIAL | QUITADO | CANCELADO.
  */
 export function formatarStatus(status: string): string {
   const statusMap: Record<string, string> = {
-    'PENDENTE': 'Em aberto',
-    'APROVADO': 'Em aberto',
-    'EM_PROCESSAMENTO': 'Em aberto',
-    'CONCLUIDO': 'Concluído',
-    'CANCELADO': 'Cancelado'
+    ABERTO: 'Pendente',
+    PARCIAL: 'Aberto',
+    QUITADO: 'Quitado',
+    VENCIDO: 'Vencido',
+    CANCELADO: 'Cancelado',
   };
-  
-  return statusMap[status] || status;
+  return statusMap[status] ?? status;
 }
 
 /**

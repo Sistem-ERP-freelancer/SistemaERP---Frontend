@@ -1,4 +1,7 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
     Table,
     TableBody,
@@ -21,23 +24,49 @@ import {
     ShoppingCart,
     TrendingDown
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
-  // Buscar dados financeiros
+  const navigate = useNavigate();
+  const hoje = useMemo(() => new Date(), []);
+  const [mesAno, setMesAno] = useState<string>(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`);
+  const periodoDashboard = useMemo(() => {
+    const [ano, mes] = mesAno.split('-').map(Number);
+    return { mes, ano, mes_ano: mesAno };
+  }, [mesAno]);
+
+  const periodoTotalRecebido = useMemo(() => {
+    const [ano, mes] = mesAno.split('-').map(Number);
+    const primeiro = new Date(ano, mes - 1, 1).toISOString().slice(0, 10);
+    const ultimo = new Date(ano, mes, 0).toISOString().slice(0, 10);
+    return { data_inicial: primeiro, data_final: ultimo };
+  }, [mesAno]);
+
+  // GET /financeiro/dashboard (contrato unificado — GUIA_IMPLEMENTACAO_FRONTEND_FINANCEIRO)
+  const { data: dashboardUnificado, isLoading: loadingUnificado } = useQuery({
+    queryKey: ['dashboard', 'unificado'],
+    queryFn: () => financeiroService.getDashboardUnificado(),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  // Fallback: dados financeiros por endpoint antigo (quando /financeiro/dashboard não existir)
   const { data: dashboardReceber, isLoading: loadingReceber } = useQuery({
-    queryKey: ['dashboard', 'receber'],
-    queryFn: () => financeiroService.getDashboardReceber(),
-    refetchInterval: 30000, // Atualiza a cada 30 segundos
+    queryKey: ['dashboard', 'receber', periodoDashboard],
+    queryFn: () => financeiroService.getDashboardReceber(periodoDashboard),
+    refetchInterval: 30000,
+    enabled: !dashboardUnificado,
   });
 
   const { data: dashboardPagar, isLoading: loadingPagar } = useQuery({
-    queryKey: ['dashboard', 'pagar'],
-    queryFn: () => financeiroService.getDashboardPagar(),
+    queryKey: ['dashboard', 'pagar', periodoDashboard],
+    queryFn: () => financeiroService.getDashboardPagar(periodoDashboard),
     refetchInterval: 30000,
+    enabled: !dashboardUnificado,
   });
 
-  // ✅ Buscar dashboard de pedidos para obter valor_em_aberto_venda (Total a Receber correto)
+  // ✅ Buscar dashboard de pedidos para obter valor_em_aberto_venda (Total a Receber correto) — fallback
   // Conforme CORRECAO_DASHBOARD_PRINCIPAL_TOTAL_RECEBER.md:
   // - Usar valor_em_aberto_venda.valor do endpoint /pedidos/dashboard/resumo
   // - Este campo considera todos os pedidos pendentes e calcula valor_total - valor_pago corretamente
@@ -45,21 +74,18 @@ const Dashboard = () => {
     queryKey: ['dashboard', 'pedidos'],
     queryFn: () => pedidosService.obterDashboard(),
     refetchInterval: 30000,
+    enabled: !dashboardUnificado,
   });
 
   // ✅ Buscar total recebido (valores efetivamente pagos/baixados)
   // Conforme GUIA_FRONTEND_TOTAL_RECEBIDO.md:
   // - Endpoint: /contas-financeiras/dashboard/total-recebido
-  // - Retorna apenas valores realmente pagos, considerando:
-  //   * Baixas de duplicatas confirmadas (não estornadas)
-  //   * Parcelas quitadas/parcialmente pagas SEM duplicatas vinculadas (pagamento direto)
-  //   * Duplicatas quitadas SEM baixas registradas (caso raro)
-  //   * Pagamentos diretos de contas financeiras sem pedido
-  // - Evita duplicação: se parcela foi paga via duplicatas, conta apenas nas baixas
+  // - Retorna apenas valores realmente pagos (pagamentos registrados)
+  // - Parcelas quitadas e pagamentos parciais (à vista)
   // - Estornos são subtraídos automaticamente
   const { data: totalRecebidoData, isLoading: loadingTotalRecebido, isError: isErrorTotalRecebido, refetch: refetchTotalRecebido } = useQuery({
-    queryKey: ['dashboard', 'total-recebido'],
-    queryFn: () => financeiroService.getTotalRecebido(),
+    queryKey: ['dashboard', 'total-recebido', periodoTotalRecebido],
+    queryFn: () => financeiroService.getTotalRecebido(periodoTotalRecebido),
     refetchInterval: 30000,
     retry: (failureCount, error: any) => {
       if (error?.response?.status === 500) return false;
@@ -83,7 +109,7 @@ const Dashboard = () => {
     queryFn: () => pedidosService.listar({ 
       page: 1, 
       limit: 100,
-      status: 'PENDENTE' // Busca apenas pendentes
+      status: 'ABERTO' // Busca apenas pendentes (acabou de criar)
     }),
     refetchInterval: 30000,
   });
@@ -141,25 +167,38 @@ const Dashboard = () => {
 
   // Contas vencidas
   const contasVencidas = contasVencidasData || [];
-  const totalVencidas = (parseValor(dashboardReceber?.vencidas) || 0) + (parseValor(dashboardPagar?.vencidas) || 0);
+  // Preferir GET /financeiro/dashboard quando disponível (não calcular no front)
+  const totalVencidas = dashboardUnificado
+    ? (dashboardUnificado.contas_receber?.vencidas ?? 0) + (dashboardUnificado.contas_pagar?.vencidas ?? 0)
+    : (parseValor(dashboardReceber?.vencidas) || 0) + (parseValor(dashboardPagar?.vencidas) || 0);
   const valorTotalVencidas = (parseValor(dashboardReceber?.valor_total_vencidas) || 0) + (parseValor(dashboardPagar?.valor_total_vencidas) || 0);
 
-  // ✅ Total a Receber: usar valor_em_aberto_venda.valor do dashboard de pedidos
-  // Conforme CORRECAO_DASHBOARD_PRINCIPAL_TOTAL_RECEBER.md:
-  // - valor_em_aberto_venda.valor considera todos os pedidos pendentes
-  // - Calcula valor_total - valor_pago corretamente
-  // - Inclui pedidos mesmo sem contas financeiras criadas
-  // NÃO usar valor_total_pendente do dashboardReceber (retorna R$ 4,00 - incorreto)
-  const totalReceber = parseValor(dashboardPedidos?.valor_em_aberto_venda?.valor) || 0;
-  
-  // Total a Pagar: usar valor_total_pendente do dashboard de contas a pagar
-  const totalPagar = parseValor(dashboardPagar?.valor_total_pendente) || parseValor(dashboardPagar?.total) || 0;
+  const totalReceber = dashboardUnificado
+    ? parseValor(dashboardUnificado.contas_receber?.valor_total_pendente) || 0
+    : (parseValor(dashboardPedidos?.valor_em_aberto_venda?.valor) || 0);
 
-  // ✅ Total Recebido: somente GET /dashboard/total-recebido; em erro exibir 0 e mensagem amigável
-  const totalRecebido = isErrorTotalRecebido ? 0 : (parseValor(totalRecebidoData?.totalRecebido) ?? 0);
+  const totalPagar = dashboardUnificado
+    ? parseValor(dashboardUnificado.contas_pagar?.valor_total_pendente) || 0
+    : (parseValor(dashboardPagar?.valor_total_pendente) || parseValor(dashboardPagar?.total) || 0);
 
-  // Preparar estatísticas
+  const totalRecebido = dashboardUnificado
+    ? parseValor(dashboardUnificado.contas_receber?.valor_total_recebido) ?? 0
+    : (isErrorTotalRecebido ? 0 : (parseValor(totalRecebidoData?.totalRecebido) ?? 0));
+
+  // Preparar estatísticas (cards clicáveis conforme guia)
   const stats = [
+    { 
+      label: "Total a Receber", 
+      value: formatCurrency(totalReceber), 
+      icon: DollarSign,
+      trend: null,
+      trendUp: true,
+      color: "text-royal",
+      bgColor: "bg-royal/10",
+      isLoading: dashboardUnificado ? loadingUnificado : loadingDashboardPedidos,
+      onClick: () => navigate('/contas-a-receber'),
+      hint: "Ver contas a receber"
+    },
     { 
       label: "Contas Vencidas", 
       value: totalVencidas.toString(), 
@@ -168,7 +207,9 @@ const Dashboard = () => {
       trendUp: false,
       color: "text-red-600",
       bgColor: "bg-red-100",
-      isLoading: loadingContasVencidas
+      isLoading: loadingContasVencidas,
+      onClick: () => navigate('/contas-a-receber?tab=VENCIDO'),
+      hint: "Ver contas vencidas"
     },
     { 
       label: "Produtos com Estoque Baixo", 
@@ -177,17 +218,21 @@ const Dashboard = () => {
       trend: null,
       color: "text-destructive",
       bgColor: "bg-destructive/10",
-      isLoading: loadingProdutos
+      isLoading: loadingProdutos,
+      onClick: () => navigate('/estoque'),
+      hint: "Ver estoque"
     },
       {
-        label: "Total Recebido",
+        label: "Total Pago",
         value: formatCurrency(totalRecebido),
         icon: DollarSign,
         trend: isErrorTotalRecebido ? "Não foi possível carregar. Tente novamente." : null,
         trendUp: !isErrorTotalRecebido,
         color: "text-green-600",
         bgColor: "bg-green-100",
-        isLoading: loadingTotalRecebido
+        isLoading: loadingTotalRecebido,
+        onClick: () => navigate('/financeiro'),
+        hint: "Ver financeiro"
       },
     { 
       label: "Total a Pagar", 
@@ -197,7 +242,9 @@ const Dashboard = () => {
       trendUp: false,
       color: "text-azure",
       bgColor: "bg-azure/10",
-      isLoading: loadingPagar
+      isLoading: dashboardUnificado ? loadingUnificado : loadingPagar,
+      onClick: () => navigate('/contas-a-pagar'),
+      hint: "Ver contas a pagar"
     },
     { 
       label: "Pedidos Pendentes", 
@@ -207,7 +254,9 @@ const Dashboard = () => {
       trendUp: true,
       color: "text-royal",
       bgColor: "bg-royal/10",
-      isLoading: loadingPedidos
+      isLoading: loadingPedidos,
+      onClick: () => navigate('/pedidos'),
+      hint: "Ver pedidos"
     },
   ];
 
@@ -259,10 +308,46 @@ const Dashboard = () => {
   return (
     <AppLayout>
       <div className="p-6">
-        {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">Visão geral do seu negócio</p>
+        {/* Page Title e Filtros de Período */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground">Visão geral do seu negócio</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground whitespace-nowrap">Período:</Label>
+              <Input
+                type="month"
+                value={mesAno}
+                onChange={(e) => setMesAno(e.target.value)}
+                className="w-[140px]"
+              />
+            </div>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const d = new Date();
+                  setMesAno(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                }}
+              >
+                Este Mês
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const d = new Date();
+                  d.setMonth(d.getMonth() - 3);
+                  setMesAno(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                }}
+              >
+                Últimos 3 Meses
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Stats Grid */}
@@ -273,7 +358,10 @@ const Dashboard = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
+              className={`bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow ${stat.onClick ? 'cursor-pointer hover:border-primary/50' : ''}`}
+              onClick={stat.onClick}
+              role={stat.onClick ? 'button' : undefined}
+              title={stat.hint}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className={`p-2 rounded-lg ${stat.bgColor}`}>
@@ -344,30 +432,8 @@ const Dashboard = () => {
                       ? `Vencida há ${Math.abs(diasVencida)} ${Math.abs(diasVencida) === 1 ? 'dia' : 'dias'}`
                       : conta.status_vencimento || 'Vencida';
                     
-                    // Formatar descrição com informação de parcela
-                    const formatarDescricao = () => {
-                      let descricao = conta.descricao || '';
-                      
-                      // Sempre usar total_parcelas e numero_parcela quando disponíveis
-                      if (conta.total_parcelas !== undefined && conta.total_parcelas !== null) {
-                        const parcelaInfo = conta.parcela_texto 
-                          ? conta.parcela_texto 
-                          : conta.numero_parcela !== undefined && conta.numero_parcela !== null
-                            ? `Parcela ${conta.numero_parcela}/${conta.total_parcelas}`
-                            : `Parcela 1/${conta.total_parcelas}`;
-                        
-                        // Substituir qualquer informação de parcela existente
-                        const regexParcela = /Parcela\s+\d+\/\d+/gi;
-                        if (regexParcela.test(descricao)) {
-                          descricao = descricao.replace(regexParcela, parcelaInfo);
-                        } else {
-                          // Se não tiver informação de parcela, adicionar
-                          descricao = `${descricao} - ${parcelaInfo}`;
-                        }
-                      }
-                      
-                      return descricao;
-                    };
+                    // Modelo sem parcelas: exibir apenas descrição (GUIA_MIGRACAO_SEM_PARCELAS)
+                    const formatarDescricao = () => conta.descricao || '';
                     
                     return (
                       <TableRow key={conta.id}>
@@ -461,13 +527,13 @@ const Dashboard = () => {
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap inline-block ${
-                            sale.status === "CONCLUIDO" || sale.status === "Concluído"
-                              ? "bg-cyan/10 text-cyan" 
-                              : sale.status === "PENDENTE" || sale.status === "Pendente"
+                            sale.status === "QUITADO" || sale.status === "Quitado"
+                              ? "bg-cyan/10 text-cyan"
+                              : sale.status === "ABERTO" || sale.status === "Pendente"
                                 ? "bg-amber-500/10 text-amber-500"
                                 : "bg-azure/10 text-azure"
                           }`}>
-                            {sale.status}
+                            {sale.status === "ABERTO" ? "Pendente" : sale.status === "PARCIAL" ? "Aberto" : sale.status === "QUITADO" ? "Quitado" : sale.status === "CANCELADO" ? "Cancelado" : sale.status}
                           </span>
                         </TableCell>
                       </TableRow>

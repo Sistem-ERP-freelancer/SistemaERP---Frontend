@@ -126,14 +126,12 @@ export function OrderList({
                     disabled={updatingStatusId === order.id}
                   >
                     <SelectTrigger
-                      className={`h-7 w-[140px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
-                        order.status === 'PENDENTE'
+                      className={`h-7 w-[130px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
+                        order.status === 'ABERTO'
                           ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
-                          : order.status === 'APROVADO'
+                          : order.status === 'PARCIAL'
                           ? 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
-                          : order.status === 'EM_PROCESSAMENTO'
-                          ? 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800'
-                          : order.status === 'CONCLUIDO'
+                          : order.status === 'QUITADO'
                           ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
                           : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
                       }`}
@@ -146,42 +144,34 @@ export function OrderList({
                           </div>
                         ) : (
                           <span>
-                            {order.status === 'PENDENTE'
+                            {order.status === 'ABERTO'
                               ? 'Pendente'
-                              : order.status === 'APROVADO'
-                              ? 'Aprovado'
-                              : order.status === 'EM_PROCESSAMENTO'
-                              ? 'Em Processamento'
-                              : order.status === 'CONCLUIDO'
-                              ? 'Concluído'
+                              : order.status === 'PARCIAL'
+                              ? 'Aberto'
+                              : order.status === 'QUITADO'
+                              ? 'Quitado'
                               : 'Cancelado'}
                           </span>
                         )}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="PENDENTE">
+                      <SelectItem value="ABERTO">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
                           Pendente
                         </div>
                       </SelectItem>
-                      <SelectItem value="APROVADO">
+                      <SelectItem value="PARCIAL">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                          Aprovado
+                          Aberto
                         </div>
                       </SelectItem>
-                      <SelectItem value="EM_PROCESSAMENTO">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                          Em Processamento
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="CONCLUIDO">
+                      <SelectItem value="QUITADO">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                          Concluído
+                          Quitado
                         </div>
                       </SelectItem>
                       <SelectItem value="CANCELADO">
@@ -213,7 +203,7 @@ export function OrderList({
                   >
                     <Eye className="w-4 h-4 text-muted-foreground" />
                   </Button>
-                  {order.status !== 'CANCELADO' && order.status !== 'CONCLUIDO' && (
+                  {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
                     <>
                       <Button
                         variant="ghost"
