@@ -15,7 +15,7 @@ import { pagamentosService } from '@/services/pagamentos.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, DollarSign, Loader2, User } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -74,13 +74,16 @@ const ContasAReceberPedidoPagamentos = () => {
   const valorAdiantadoResumo = (resumo as any)?.valor_adiantado ?? null;
   const mensagemAdiantamento = (resumo as any)?.mensagem_adiantamento ?? null;
 
+  const autoFilledRef = useRef(false);
   useEffect(() => {
+    if (autoFilledRef.current) return;
     if (valorEmAberto > 0 && valorPago === '') {
       if (ehPagamentoAdiantamento && valorAdiantadoResumo != null && Number(valorAdiantadoResumo) > 0) {
         setValorPago(Number(valorAdiantadoResumo));
       } else {
         setValorPago(valorEmAberto);
       }
+      autoFilledRef.current = true;
     }
   }, [valorEmAberto, valorPago, ehPagamentoAdiantamento, valorAdiantadoResumo]);
 
