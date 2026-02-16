@@ -1,7 +1,4 @@
 import AppLayout from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
     Table,
     TableBody,
@@ -43,10 +40,10 @@ const Dashboard = () => {
     return { data_inicial: primeiro, data_final: ultimo };
   }, [mesAno]);
 
-  // GET /financeiro/dashboard (contrato unificado — GUIA_IMPLEMENTACAO_FRONTEND_FINANCEIRO)
+  // GET /financeiro/dashboard — enviar período selecionado para dados corretos do mês
   const { data: dashboardUnificado, isLoading: loadingUnificado } = useQuery({
-    queryKey: ['dashboard', 'unificado'],
-    queryFn: () => financeiroService.getDashboardUnificado(),
+    queryKey: ['dashboard', 'unificado', periodoTotalRecebido],
+    queryFn: () => financeiroService.getDashboardUnificado(periodoTotalRecebido),
     refetchInterval: 30000,
     retry: false,
   });
@@ -152,7 +149,13 @@ const Dashboard = () => {
     refetchInterval: 30000,
   });
 
-  const isLoading = loadingReceber || loadingPagar || loadingPedidos || loadingProdutos || loadingContasVencidas;
+  const isLoading =
+    loadingUnificado ||
+    loadingReceber ||
+    loadingPagar ||
+    loadingPedidos ||
+    loadingProdutos ||
+    loadingContasVencidas;
 
   // Função auxiliar para converter valor para número seguro
   const parseValor = (valor: any): number => {
@@ -181,8 +184,9 @@ const Dashboard = () => {
     ? parseValor(dashboardUnificado.contas_pagar?.valor_total_pendente) || 0
     : (parseValor(dashboardPagar?.valor_total_pendente) || parseValor(dashboardPagar?.total) || 0);
 
+  // Total Pago: no período selecionado usar valor_pago_mes; senão valor_total_recebido (fallback)
   const totalRecebido = dashboardUnificado
-    ? parseValor(dashboardUnificado.contas_receber?.valor_total_recebido) ?? 0
+    ? (parseValor(dashboardUnificado.contas_receber?.valor_pago_mes) ?? parseValor(dashboardUnificado.contas_receber?.valor_total_recebido) ?? 0)
     : (isErrorTotalRecebido ? 0 : (parseValor(totalRecebidoData?.totalRecebido) ?? 0));
 
   // Preparar estatísticas (cards clicáveis conforme guia)
@@ -308,46 +312,10 @@ const Dashboard = () => {
   return (
     <AppLayout>
       <div className="p-6">
-        {/* Page Title e Filtros de Período */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground">Visão geral do seu negócio</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground whitespace-nowrap">Período:</Label>
-              <Input
-                type="month"
-                value={mesAno}
-                onChange={(e) => setMesAno(e.target.value)}
-                className="w-[140px]"
-              />
-            </div>
-            <div className="flex gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const d = new Date();
-                  setMesAno(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                }}
-              >
-                Este Mês
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const d = new Date();
-                  d.setMonth(d.getMonth() - 3);
-                  setMesAno(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                }}
-              >
-                Últimos 3 Meses
-              </Button>
-            </div>
-          </div>
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground">Visão geral do seu negócio</p>
         </div>
 
         {/* Stats Grid */}
