@@ -59,14 +59,15 @@ import {
     ShoppingCart
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const ContasAReceber = () => {
   const [viewMode, setViewMode] = useState<"clientes" | "pedidos">("pedidos");
   /** Guia: card Total a Receber preferir soma da lista de clientes (bate com a tabela). */
   const [totalAReceberFromLista, setTotalAReceberFromLista] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState("Todos");
+  /** Filtro por card clicável: todos | valor_pago | vencidas | vencendo_hoje | vencendo_este_mes */
+  const [activeCardFilter, setActiveCardFilter] = useState<"todos" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes">("todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
@@ -87,15 +88,7 @@ const ContasAReceber = () => {
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabFromUrl = searchParams.get('tab');
 
-  // Sincronizar tab da URL (ex: /contas-a-receber?tab=VENCIDO)
-  useEffect(() => {
-    if (tabFromUrl && ['PENDENTE', 'PAGO_PARCIAL', 'PAGO_TOTAL', 'VENCIDO', 'VENCE_HOJE', 'CANCELADO'].includes(tabFromUrl)) {
-      setActiveTab(tabFromUrl);
-    }
-  }, [tabFromUrl]);
 
   const handleTotalAReceberFromLista = useCallback((total: number) => {
     setTotalAReceberFromLista(total);
@@ -125,25 +118,15 @@ const ContasAReceber = () => {
 
   // Removido: pedidos agora vem de pedidosContasReceber (linha 209)
 
-  // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido)
+  // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido) — busca todos; filtro por card é client-side
   const { data: pedidosContasReceber, isLoading: isLoadingPedidosContasReceber } = useQuery({
-    queryKey: ["pedidos", "contas-receber", activeTab],
+    queryKey: ["pedidos", "contas-receber"],
     queryFn: async () => {
       try {
         const params: {
           situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
         } = {};
-        
-        // Mapear status da tab para situacao
-        if (activeTab === "Todos") {
-          // Não filtrar por situação
-        } else if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE") {
-          params.situacao = 'em_aberto';
-        } else if (activeTab === "VENCIDO") {
-          params.situacao = 'em_atraso';
-        } else if (activeTab === "PAGO_TOTAL") {
-          params.situacao = 'concluido';
-        }
+        // Buscar todos em aberto (filtro por card é client-side)
         
         // Só passar objeto de filtros se tiver algum filtro válido
         // Evita enviar objeto vazio que pode causar erro 400
@@ -194,9 +177,9 @@ const ContasAReceber = () => {
     return true;
   };
 
-  // Buscar contas a receber filtradas para exibir na tabela com paginação
+  // Buscar contas a receber filtradas para exibir na tabela com paginação (fallback contas-financeiras)
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "receber", "tabela", activeTab, currentPage],
+    queryKey: ["contas-financeiras", "receber", "tabela", activeCardFilter, currentPage],
     queryFn: async () => {
       if (!validarParametrosPaginação(currentPage, pageSize)) {
         throw new Error('Parâmetros de paginação inválidos');
@@ -206,21 +189,10 @@ const ContasAReceber = () => {
         let status: string | undefined;
         let proximidadeVencimento: string | undefined;
 
-        const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
-        const proximidadeTabs = ["VENCE_HOJE"];
-        
-        if (statusTabs.includes(activeTab)) {
-          // Se for filtro de vencidas, usar proximidade_vencimento ao invés de status
-          // pois contas vencidas podem ter status PENDENTE ou PAGO_PARCIAL
-          if (activeTab === "VENCIDO") {
-            proximidadeVencimento = "VENCIDA";
-          } else {
-          status = activeTab;
-          }
-        } else if (proximidadeTabs.includes(activeTab)) {
-          // Filtro por proximidade de vencimento
-          proximidadeVencimento = activeTab;
-        }
+        if (activeCardFilter === "vencidas") proximidadeVencimento = "VENCIDA";
+        else if (activeCardFilter === "vencendo_hoje") proximidadeVencimento = "VENCE_HOJE";
+        else if (activeCardFilter === "valor_pago") status = "PAGO_PARCIAL";
+        // todos e vencendo_este_mes: filtro client-side em filteredGruposContas
 
         const response = await financeiroService.listar({
           tipo: "RECEBER",
@@ -272,10 +244,10 @@ const ContasAReceber = () => {
   const totalContas = contasResponse?.total || 0;
   const totalPages = Math.ceil(totalContas / pageSize);
 
-  // Resetar página quando tab ou busca mudar
+  // Resetar página quando filtro ou busca mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm]);
+  }, [activeCardFilter, searchTerm]);
 
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
@@ -380,43 +352,15 @@ const ContasAReceber = () => {
     const totalVencidas = Number(dashboardReceber?.vencidas) ?? 0;
     const totalVencendoHoje = Number(dashboardReceber?.vencendo_hoje) ?? 0;
     const totalVencendoEsteMes = Number(dashboardReceber?.vencendo_este_mes) ?? 0;
+    const valorPago = parseValor(dashboardReceber?.valor_total_recebido) ?? 0;
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
-      {
-        label: "Total a Receber",
-        value: formatarMoedaCard(totalReceber),
-        icon: CreditCard,
-        trend: null,
-        trendUp: true,
-        color: "text-royal",
-        bgColor: "bg-royal/10"
-      },
-      {
-        label: "Vencidas",
-        value: totalVencidas.toString(),
-        icon: Calendar,
-        trend: null,
-        trendUp: false,
-        color: "text-red-600",
-        bgColor: "bg-red-100"
-      },
-      {
-        label: "Vencendo Hoje",
-        value: totalVencendoHoje.toString(),
-        icon: Calendar,
-        trend: null,
-        color: "text-amber-600",
-        bgColor: "bg-amber-100"
-      },
-      {
-        label: "Vencendo Este Mês",
-        value: totalVencendoEsteMes.toString(),
-        icon: Calendar,
-        trend: null,
-        color: "text-blue-600",
-        bgColor: "bg-blue-100"
-      },
+      { label: "Total a Receber", value: formatarMoedaCard(totalReceber), icon: CreditCard, trend: null, trendUp: true, color: "text-royal", bgColor: "bg-royal/10", filterKey: "todos" as const },
+      { label: "Valor Pago", value: formatarMoedaCard(valorPago), icon: DollarSign, trend: null, trendUp: true, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
+      { label: "Vencidas", value: totalVencidas.toString(), icon: Calendar, trend: null, trendUp: false, color: "text-red-600", bgColor: "bg-red-100", filterKey: "vencidas" as const },
+      { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
+      { label: "Vencendo Este Mês", value: totalVencendoEsteMes.toString(), icon: Calendar, trend: null, color: "text-blue-600", bgColor: "bg-blue-100", filterKey: "vencendo_este_mes" as const },
     ];
   }, [dashboardReceber, viewMode, totalAReceberFromLista]);
 
@@ -617,7 +561,8 @@ const ContasAReceber = () => {
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
-    if (s === "pendente" || s === "em aberto" || s === "aberto") return "bg-amber-500/10 text-amber-500";
+    if (s === "pendente") return "bg-amber-500/10 text-amber-500";
+    if (s === "em aberto" || s === "aberto") return "bg-blue-500/10 text-blue-500";
     if (s === "pago parcial" || s.includes("parcial")) return "bg-blue-500/10 text-blue-500";
     if (s === "quitado" || s === "concluído" || s === "pago total") return "bg-green-500/10 text-green-500";
     if (s === "vencido") return "bg-red-500/10 text-red-500";
@@ -986,9 +931,50 @@ const ContasAReceber = () => {
     );
   }, [contas, clientes, searchTerm]);
 
+  // Filtrar linhas e grupos pelo card clicado
+  const filteredLinhasPedidos = useMemo(() => {
+    if (activeCardFilter === "todos") return linhasPedidos;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    fimDoMes.setHours(23, 59, 59, 999);
+
+    return linhasPedidos.filter((p: ContaReceber) => {
+      const dataVenc = p.data_vencimento ? new Date(p.data_vencimento) : new Date(p.data_pedido);
+      dataVenc.setHours(0, 0, 0, 0);
+
+      if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
+      if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
+      if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
+      if (activeCardFilter === "valor_pago") return p.status === "PARCIAL";
+      return true;
+    });
+  }, [linhasPedidos, activeCardFilter]);
+
+  const filteredGruposContas = useMemo(() => {
+    if (activeCardFilter === "todos") return gruposContas;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    fimDoMes.setHours(23, 59, 59, 999);
+
+    return gruposContas.filter((g) => {
+      if (activeCardFilter === "valor_pago") return g.statusConsolidado === "Pago Parcial";
+      if (!g.primeira_vencimento) return false;
+
+      const dataVenc = new Date(g.primeira_vencimento);
+      dataVenc.setHours(0, 0, 0, 0);
+
+      if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
+      if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
+      if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
+      return true;
+    });
+  }, [gruposContas, activeCardFilter]);
+
   // Transações para exibição (mesma estrutura de Contas a Pagar)
   const transacoesDisplayReceber = useMemo(() => {
-    return linhasPedidos.map((p: ContaReceber) => {
+    return filteredLinhasPedidos.map((p: ContaReceber) => {
       const diasAteVencimento = calcularDiasAteVencimento(p.data_vencimento ?? p.data_pedido);
       const vencimentoStatus = getVencimentoStatus(diasAteVencimento, p.status);
       const statusFormatado = formatarStatus(p.status);
@@ -1004,10 +990,10 @@ const ContasAReceber = () => {
         pedidoId: p.pedido_id,
       };
     });
-  }, [linhasPedidos]);
+  }, [filteredLinhasPedidos]);
 
   const transacoesDisplayGrupos = useMemo(() => {
-    return gruposContas.map((g) => {
+    return filteredGruposContas.map((g) => {
       const diasAteVencimento = calcularDiasAteVencimento(g.primeira_vencimento ?? undefined);
       const vencimentoStatus = getVencimentoStatus(diasAteVencimento, g.statusConsolidado === "Pago Total" ? "QUITADO" : "ABERTO");
       return {
@@ -1023,21 +1009,21 @@ const ContasAReceber = () => {
         grupoKey: g.key,
       };
     });
-  }, [gruposContas]);
+  }, [filteredGruposContas]);
 
-  // Filtrar por busca e por tab ativa (mantido para fallback contas-financeiras)
+  // Filtrar por busca e por card ativo (mantido para fallback contas-financeiras)
   const filteredTransacoes = useMemo(() => {
     let filtered = transacoesDisplay;
 
-    // Filtrar por tab ativa (especialmente para Vencidas e Vencendo Hoje)
-    if (activeTab === "VENCIDO") {
+    // Filtrar por card ativo (especialmente para Vencidas e Vencendo Hoje)
+    if (activeCardFilter === "vencidas") {
       // Filtrar apenas contas vencidas (por status ou por data)
       filtered = filtered.filter(t => {
         const conta = contas.find(c => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencida(conta);
       });
-    } else if (activeTab === "VENCE_HOJE") {
+    } else if (activeCardFilter === "vencendo_hoje") {
       // Filtrar apenas contas vencendo hoje
       filtered = filtered.filter(t => {
         const conta = contas.find(c => c.id === t.contaId);
@@ -1112,7 +1098,7 @@ const ContasAReceber = () => {
     }
 
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, clientes, activeTab]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contas, clientes, activeCardFilter]);
 
   // Debug: verificar se as contas estão sendo carregadas (após transacoesDisplay ser definido)
   useEffect(() => {
@@ -1350,11 +1336,12 @@ const ContasAReceber = () => {
           </Dialog>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Stats Grid - 5 cards na mesma linha, adaptável ao tamanho da tela */}
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2">
+          <div className="grid grid-cols-5 gap-2 sm:gap-4 mb-4 min-w-[520px] sm:min-w-0">
           {isLoadingReceber ? (
             <>
-              {[1, 2, 3, 4].map((i) => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 20 }}
@@ -1371,10 +1358,14 @@ const ContasAReceber = () => {
             stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveCardFilter(stat.filterKey)}
+                onKeyDown={(e) => e.key === "Enter" && setActiveCardFilter(stat.filterKey)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
+                className="bg-card rounded-xl p-3 sm:p-5 border border-border cursor-pointer hover:shadow-md transition-shadow min-w-0"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className={`p-2 rounded-lg ${stat.bgColor}`}>
@@ -1407,45 +1398,28 @@ const ContasAReceber = () => {
                     )}
                   </div>
                 </div>
-                <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-foreground mb-1 truncate">{stat.value}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{stat.label}</p>
               </motion.div>
             ))
           )}
+          </div>
         </div>
 
         {viewMode === "clientes" ? (
           <ContasAReceberListaClientes onTotalAReceber={handleTotalAReceberFromLista} />
         ) : (
           <>
-        {/* Filters */}
+        {/* Busca */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="sm:w-[200px]">
-              <Select value={activeTab} onValueChange={setActiveTab}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Todos">Todos os status</SelectItem>
-                  <SelectItem value="PENDENTE">Pendente</SelectItem>
-                  <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
-                  <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
-                  <SelectItem value="VENCE_HOJE">Vencendo Hoje</SelectItem>
-                  <SelectItem value="VENCIDO">Vencido</SelectItem>
-                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="relative flex-1">
+          <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar conta a receber..." 
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+            <Input 
+              placeholder="Buscar conta a receber..." 
+              className="pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
         </div>
 
@@ -1596,13 +1570,13 @@ const ContasAReceber = () => {
           </Table>
           
           {/* Contador */}
-          {((!usarFallbackContasFinanceiras && linhasPedidos.length > 0) ||
-            (usarFallbackContasFinanceiras && gruposContas.length > 0)) && (
+          {((!usarFallbackContasFinanceiras && transacoesDisplayReceber.length > 0) ||
+            (usarFallbackContasFinanceiras && transacoesDisplayGrupos.length > 0)) && (
             <div className="border-t border-border p-4">
               <div className="text-center text-sm text-muted-foreground">
                 {usarFallbackContasFinanceiras
-                  ? `${gruposContas.length} pedido(s)`
-                  : `${linhasPedidos.length} pedido(s)`}
+                  ? `${transacoesDisplayGrupos.length} pedido(s)`
+                  : `${transacoesDisplayReceber.length} pedido(s)`}
               </div>
             </div>
           )}
