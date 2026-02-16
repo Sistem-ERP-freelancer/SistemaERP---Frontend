@@ -178,6 +178,8 @@ class FinanceiroService {
     status?: string;
     cliente_id?: number;
     fornecedor_id?: number;
+    data_inicial?: string;
+    data_final?: string;
   }): Promise<ContasAgrupadasResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -186,6 +188,8 @@ class FinanceiroService {
     if (params?.status) queryParams.append('status', params.status);
     if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
     if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
+    if (params?.data_final) queryParams.append('data_final', params.data_final);
 
     const query = queryParams.toString();
     return apiClient.get<ContasAgrupadasResponse>(`/contas-financeiras/agrupado${query ? `?${query}` : ''}`);
@@ -379,11 +383,25 @@ class FinanceiroService {
     return apiClient.get<DashboardFinanceiro>(`/contas-financeiras/dashboard/pagar${query ? `?${query}` : ''}`);
   }
 
-  async getDashboardResumo(params?: { mes?: number; ano?: number; mes_ano?: string }): Promise<ResumoFinanceiro> {
+  async getDashboardResumo(params?: {
+    mes?: number;
+    ano?: number;
+    mes_ano?: string;
+    data_inicial?: string;
+    data_final?: string;
+    tipo?: string;
+    cliente_id?: number;
+    fornecedor_id?: number;
+  }): Promise<ResumoFinanceiro> {
     const q = new URLSearchParams();
     if (params?.mes) q.append('mes', params.mes.toString());
     if (params?.ano) q.append('ano', params.ano.toString());
     if (params?.mes_ano) q.append('mes_ano', params.mes_ano);
+    if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
+    if (params?.data_final) q.append('data_final', params.data_final);
+    if (params?.tipo) q.append('tipo', params.tipo);
+    if (params?.cliente_id != null) q.append('cliente_id', params.cliente_id.toString());
+    if (params?.fornecedor_id != null) q.append('fornecedor_id', params.fornecedor_id.toString());
     const query = q.toString();
     return apiClient.get<ResumoFinanceiro>(`/contas-financeiras/dashboard/resumo${query ? `?${query}` : ''}`);
   }
@@ -414,10 +432,23 @@ class FinanceiroService {
 
   /**
    * Dashboard unificado — GET /financeiro/dashboard (GUIA_IMPLEMENTACAO_FRONTEND_FINANCEIRO).
-   * Usar para exibir cards sem recalcular no front.
+   * Aceita filtros opcionais para cards filtráveis.
    */
-  async getDashboardUnificado(): Promise<DashboardUnificado> {
-    return apiClient.get<DashboardUnificado>('/financeiro/dashboard');
+  async getDashboardUnificado(params?: {
+    data_inicial?: string;
+    data_final?: string;
+    tipo?: string;
+    cliente_id?: number;
+    fornecedor_id?: number;
+  }): Promise<DashboardUnificado> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
+    if (params?.data_final) q.append('data_final', params.data_final);
+    if (params?.tipo) q.append('tipo', params.tipo);
+    if (params?.cliente_id != null) q.append('cliente_id', params.cliente_id.toString());
+    if (params?.fornecedor_id != null) q.append('fornecedor_id', params.fornecedor_id.toString());
+    const query = q.toString();
+    return apiClient.get<DashboardUnificado>(`/financeiro/dashboard${query ? `?${query}` : ''}`);
   }
 
   /**

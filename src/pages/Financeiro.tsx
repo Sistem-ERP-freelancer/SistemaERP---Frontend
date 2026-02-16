@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
     Select,
     SelectContent,
@@ -22,6 +23,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
 import {
     Table,
     TableBody,
@@ -39,16 +48,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     Calendar,
+    Circle,
     CreditCard,
     DollarSign,
     Edit,
     Eye,
     FileText,
+    Filter,
     Info,
     Loader2,
     MoreVertical,
     Plus,
-    Receipt,
     RotateCcw,
     Search,
     ShoppingCart,
@@ -76,6 +86,16 @@ const Financeiro = () => {
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: "",
   });
+
+  const [page, setPage] = useState(1);
+  const limit = 15;
+  const [clienteFilterId, setClienteFilterId] = useState<number | undefined>();
+  const [fornecedorFilterId, setFornecedorFilterId] = useState<number | undefined>();
+  const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
+  const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
+  const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
+  /** Filtro por card clicável: Receita do Mês / Despesas do Mês (como em Contas a Receber) */
+  const [cardTipoFilter, setCardTipoFilter] = useState<"todos" | "RECEBER" | "PAGAR">("todos");
 
   const queryClient = useQueryClient();
 
@@ -123,17 +143,28 @@ const Financeiro = () => {
     ? fornecedoresData 
     : fornecedoresData?.data || [];
 
+  // Parâmetros de filtro para dashboard (tipo vem dos cards clicáveis; demais do painel)
+  const dashboardFiltros = useMemo(() => {
+    const f: { data_inicial?: string; data_final?: string; tipo?: string; cliente_id?: number; fornecedor_id?: number } = {};
+    if (dataInicialFilter) f.data_inicial = dataInicialFilter;
+    if (dataFinalFilter) f.data_final = dataFinalFilter;
+    if (cardTipoFilter !== "todos") f.tipo = cardTipoFilter;
+    if (clienteFilterId != null) f.cliente_id = clienteFilterId;
+    if (fornecedorFilterId != null) f.fornecedor_id = fornecedorFilterId;
+    return Object.keys(f).length ? f : undefined;
+  }, [dataInicialFilter, dataFinalFilter, cardTipoFilter, clienteFilterId, fornecedorFilterId]);
+
   // GET /financeiro/dashboard (unificado) com fallback para GET /contas-financeiras/dashboard/resumo
   const { data: dashboardUnificado } = useQuery({
-    queryKey: ["dashboard-unificado-financeiro"],
-    queryFn: () => financeiroService.getDashboardUnificado(),
+    queryKey: ["dashboard-unificado-financeiro", dashboardFiltros],
+    queryFn: () => financeiroService.getDashboardUnificado(dashboardFiltros),
     refetchInterval: 30000,
     retry: false,
   });
 
   const { data: resumoFinanceiro, isLoading: isLoadingResumo } = useQuery<ResumoFinanceiro>({
-    queryKey: ["dashboard-resumo-financeiro"],
-    queryFn: () => financeiroService.getDashboardResumo(),
+    queryKey: ["dashboard-resumo-financeiro", dashboardFiltros],
+    queryFn: () => financeiroService.getDashboardResumo(dashboardFiltros),
     refetchInterval: 30000,
     staleTime: 0,
     retry: false,
@@ -175,27 +206,33 @@ const Financeiro = () => {
 
   const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
-  const [page, setPage] = useState(1);
-  const limit = 15;
-  const [clienteFilterId, setClienteFilterId] = useState<number | undefined>();
-  const [fornecedorFilterId, setFornecedorFilterId] = useState<number | undefined>();
+  const temFiltrosAtivos =
+    cardTipoFilter !== "todos" ||
+    clienteFilterId != null ||
+    fornecedorFilterId != null ||
+    !!dataInicialFilter ||
+    !!dataFinalFilter ||
+    (activeTab !== "Todos");
+  const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
+  const handleLimparFiltros = () => {
+    setCardTipoFilter("todos");
+    setClienteFilterId(undefined);
+    setFornecedorFilterId(undefined);
+    setDataInicialFilter("");
+    setDataFinalFilter("");
+    setActiveTab("Todos");
+    setPage(1);
+    setFiltrosDialogOpen(false);
+  };
 
   // Buscar contas agrupadas (uma linha por cliente/pedido) - visão resumida
   const { data: contasAgrupadasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "agrupado", activeTab, page, limit, clienteFilterId, fornecedorFilterId],
+    queryKey: ["contas-financeiras", "agrupado", activeTab, cardTipoFilter, page, limit, clienteFilterId, fornecedorFilterId, dataInicialFilter, dataFinalFilter],
     queryFn: async () => {
       try {
-        let tipo: string | undefined;
-        let status: string | undefined;
-
+        const tipo = cardTipoFilter !== "todos" ? cardTipoFilter : undefined;
         const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
-        if (activeTab === "Receita") {
-          tipo = "RECEBER";
-        } else if (activeTab === "Despesa") {
-          tipo = "PAGAR";
-        } else if (statusTabs.includes(activeTab)) {
-          status = activeTab;
-        }
+        const status = statusTabs.includes(activeTab) ? activeTab : undefined;
 
         const response = await financeiroService.listarAgrupado({
           page,
@@ -204,6 +241,8 @@ const Financeiro = () => {
           status,
           cliente_id: clienteFilterId,
           fornecedor_id: fornecedorFilterId,
+          data_inicial: dataInicialFilter || undefined,
+          data_final: dataFinalFilter || undefined,
         });
         
         return {
@@ -263,7 +302,8 @@ const Financeiro = () => {
         trendUp: true, 
         color: "text-cyan", 
         bgColor: "bg-cyan/10",
-        description: "Valor total a receber do mês atual"
+        description: "Valor total a receber do mês atual",
+        cardFilter: "RECEBER" as const,
       },
       { 
         label: "Valor Pago do Mês", 
@@ -273,7 +313,8 @@ const Financeiro = () => {
         trendUp: true, 
         color: "text-green-600", 
         bgColor: "bg-green-100",
-        description: "Valor pago no mês atual"
+        description: "Valor pago no mês atual",
+        cardFilter: "todos" as const,
       },
       { 
         label: "Despesas do Mês", 
@@ -283,7 +324,8 @@ const Financeiro = () => {
         trendUp: false, 
         color: "text-destructive", 
         bgColor: "bg-destructive/10",
-        description: "Valor total a pagar do mês atual"
+        description: "Valor total a pagar do mês atual",
+        cardFilter: "PAGAR" as const,
       },
       { 
         label: "Saldo Atual", 
@@ -292,6 +334,7 @@ const Financeiro = () => {
         trend: null, 
         color: "text-azure", 
         bgColor: "bg-azure/10",
+        cardFilter: "todos" as const,
       },
     ];
   }, [resumoParaStats, dashboardUnificado, contasReceberStats, contasPagarStats]);
@@ -770,15 +813,30 @@ const Financeiro = () => {
           </Dialog>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Grid — cards clicáveis para filtrar por tipo (Receita/Despesa), como Contas a Receber */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {stats.map((stat, index) => (
+          {stats.map((stat, index) => {
+            const cardFilter = (stat as { cardFilter?: "todos" | "RECEBER" | "PAGAR" }).cardFilter ?? "todos";
+            return (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setCardTipoFilter(cardFilter);
+                  setPage(1);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setCardTipoFilter(cardFilter);
+                    setPage(1);
+                  }
+                }}
+                className="bg-transparent rounded-xl p-5 border border-border transition-all cursor-pointer hover:shadow-md"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className={`p-2 rounded-lg ${stat.bgColor}`}>
@@ -793,65 +851,215 @@ const Financeiro = () => {
                 <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
               </motion.div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Filters */}
+        {/* Filtros e busca — mesmo design de Contas a Receber */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-4">
-            <div className="sm:w-[200px]">
-              <Select value={activeTab} onValueChange={(v) => { setActiveTab(v); setPage(1); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Todos">Todos os status</SelectItem>
-                  <SelectItem value="Receita">Receitas</SelectItem>
-                  <SelectItem value="Despesa">Despesas</SelectItem>
-                  <SelectItem value="PENDENTE">Pendente</SelectItem>
-                  <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
-                  <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
-                  <SelectItem value="VENCIDO">Vencido</SelectItem>
-                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:w-[200px]">
-              <Select 
-                value={clienteFilterId?.toString() || "all"} 
-                onValueChange={(v) => { setClienteFilterId(v === "all" ? undefined : Number(v)); setPage(1); }}
+          <div className="flex gap-4">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setFiltrosDialogOpen(true)}
+              style={
+                temFiltrosAtivos
+                  ? { borderColor: "var(--primary)", borderWidth: "2px" }
+                  : {}
+              }
+            >
+              <Filter className="w-4 h-4" />
+              Filtros
+              {temFiltrosAtivos && (
+                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                  {(cardTipoFilter !== "todos" ? 1 : 0) +
+                    (clienteFilterId != null ? 1 : 0) +
+                    (fornecedorFilterId != null ? 1 : 0) +
+                    (dataInicialFilter ? 1 : 0) +
+                    (dataFinalFilter ? 1 : 0) +
+                    (activeTab !== "Todos" ? 1 : 0)}
+                </span>
+              )}
+            </Button>
+            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+              <SheetContent
+                side="right"
+                className="w-[400px] sm:w-[540px] overflow-y-auto"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os clientes</SelectItem>
-                  {clientes.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:w-[200px]">
-              <Select 
-                value={fornecedorFilterId?.toString() || "all"} 
-                onValueChange={(v) => { setFornecedorFilterId(v === "all" ? undefined : Number(v)); setPage(1); }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Fornecedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os fornecedores</SelectItem>
-                  {fornecedores.map((f) => (
-                    <SelectItem key={f.id} value={f.id.toString()}>{f.nome_fantasia}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="relative flex-1 min-w-[200px]">
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">
+                      Filtros Avançados
+                    </SheetTitle>
+                  </div>
+                  <SheetDescription>Refine sua busca</SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  {/* Cliente */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Cliente</Label>
+                    <Select
+                      value={clienteFilterId == null ? "todos" : String(clienteFilterId)}
+                      onValueChange={(v) => {
+                        setClienteFilterId(v === "todos" ? undefined : parseInt(v, 10));
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os clientes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os clientes</SelectItem>
+                        {clientes.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Fornecedor */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Fornecedor</Label>
+                    <Select
+                      value={fornecedorFilterId == null ? "todos" : String(fornecedorFilterId)}
+                      onValueChange={(v) => {
+                        setFornecedorFilterId(v === "todos" ? undefined : parseInt(v, 10));
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os fornecedores" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os fornecedores</SelectItem>
+                        {fornecedores.map((f) => (
+                          <SelectItem key={f.id} value={String(f.id)}>{f.nome_fantasia}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Período */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Período</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            type="date"
+                            className="pl-10"
+                            value={dataInicialFilter}
+                            onChange={(e) => {
+                              setDataInicialFilter(e.target.value || "");
+                              setPage(1);
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Data Final</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            type="date"
+                            className="pl-10"
+                            value={dataFinalFilter}
+                            onChange={(e) => {
+                              setDataFinalFilter(e.target.value || "");
+                              setPage(1);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Status — apenas: Todos, Pendente, Pago Parcial, Quitada, Vencido, Cancelado */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <RadioGroup
+                      value={["Todos", "PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].includes(activeTab) ? activeTab : "Todos"}
+                      onValueChange={(v) => {
+                        setActiveTab(v);
+                        setPage(1);
+                      }}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Todos" id="status-todos" />
+                        <Label htmlFor="status-todos" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-primary" />
+                          <span>Todos</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PENDENTE" id="status-pendente" />
+                        <Label htmlFor="status-pendente" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-amber-500" />
+                          <span>Pendente</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PAGO_PARCIAL" id="status-parcial" />
+                        <Label htmlFor="status-parcial" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-blue-500" />
+                          <span>Pago Parcial</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PAGO_TOTAL" id="status-quitado" />
+                        <Label htmlFor="status-quitado" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-green-500" />
+                          <span>Quitada</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="VENCIDO" id="status-vencido" />
+                        <Label htmlFor="status-vencido" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-red-500" />
+                          <span>Vencido</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="CANCELADO" id="status-cancelado" />
+                        <Label htmlFor="status-cancelado" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-slate-500" />
+                          <span>Cancelado</span>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleAplicarFiltros} className="flex-1">
+                      Aplicar Filtros
+                    </Button>
+                    <Button onClick={handleLimparFiltros} variant="outline" className="flex-1">
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar por cliente ou descrição..." 
+              <Input
+                placeholder="Buscar por cliente ou descrição..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
