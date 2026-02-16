@@ -84,6 +84,9 @@ const ContasAReceber = () => {
   const [clienteFilterId, setClienteFilterId] = useState<number | null>(null);
   /** Filtro por status do pedido: '' = todos; ABERTO | PARCIAL | QUITADO | VENCIDO */
   const [statusFilter, setStatusFilter] = useState<string>("");
+  /** Filtro por período: data_inicial e data_final (YYYY-MM-DD) */
+  const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
+  const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
@@ -136,14 +139,23 @@ const ContasAReceber = () => {
 
   // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido) — filtro por cliente e card é enviado à API / client-side
   const { data: pedidosContasReceber, isLoading: isLoadingPedidosContasReceber } = useQuery({
-    queryKey: ["pedidos", "contas-receber", clienteFilterId],
+    queryKey: ["pedidos", "contas-receber", clienteFilterId, statusFilter, dataInicialFilter, dataFinalFilter],
     queryFn: async () => {
       try {
         const params: import('@/types/contas-financeiras.types').FiltrosContasReceber = {};
         if (clienteFilterId != null && clienteFilterId > 0) {
           params.cliente_id = clienteFilterId;
         }
-        const hasFilters = params.cliente_id != null && params.cliente_id > 0;
+        if (dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)) {
+          params.data_inicial = dataInicialFilter;
+        }
+        if (dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)) {
+          params.data_final = dataFinalFilter;
+        }
+        const hasFilters =
+          (params.cliente_id != null && params.cliente_id > 0) ||
+          !!params.data_inicial ||
+          !!params.data_final;
         return await pedidosService.listarContasReceber(hasFilters ? params : undefined);
       } catch (error: any) {
         if (error?.response?.status === 400) {
@@ -253,13 +265,19 @@ const ContasAReceber = () => {
   // Resetar página quando filtro ou busca mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeCardFilter, searchTerm, clienteFilterId, statusFilter]);
+  }, [activeCardFilter, searchTerm, clienteFilterId, statusFilter, dataInicialFilter, dataFinalFilter]);
 
-  const temFiltrosAtivos = (clienteFilterId != null && clienteFilterId > 0) || !!statusFilter;
+  const temFiltrosAtivos =
+    (clienteFilterId != null && clienteFilterId > 0) ||
+    !!statusFilter ||
+    !!dataInicialFilter ||
+    !!dataFinalFilter;
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     setClienteFilterId(null);
     setStatusFilter("");
+    setDataInicialFilter("");
+    setDataFinalFilter("");
     setFiltrosDialogOpen(false);
   };
 
@@ -1466,7 +1484,10 @@ const ContasAReceber = () => {
               Filtros
               {temFiltrosAtivos && (
                 <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
-                  {(clienteFilterId != null && clienteFilterId > 0 ? 1 : 0) + (statusFilter ? 1 : 0)}
+                  {(clienteFilterId != null && clienteFilterId > 0 ? 1 : 0) +
+                    (statusFilter ? 1 : 0) +
+                    (dataInicialFilter ? 1 : 0) +
+                    (dataFinalFilter ? 1 : 0)}
                 </span>
               )}
             </Button>
@@ -1505,6 +1526,39 @@ const ContasAReceber = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Período */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Período</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            type="date"
+                            className="pl-10"
+                            value={dataInicialFilter}
+                            onChange={(e) => setDataInicialFilter(e.target.value || "")}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Data Final</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            type="date"
+                            className="pl-10"
+                            value={dataFinalFilter}
+                            onChange={(e) => setDataFinalFilter(e.target.value || "")}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <Separator />
@@ -1615,6 +1669,15 @@ const ContasAReceber = () => {
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">Não há pedidos ou contas desse determinado cliente.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (dataInicialFilter || dataFinalFilter) && !isLoadingPedidosContasReceber && pedidos.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <DollarSign className="w-12 h-12 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">Não há contas no período selecionado.</p>
                     </div>
                   </TableCell>
                 </TableRow>
