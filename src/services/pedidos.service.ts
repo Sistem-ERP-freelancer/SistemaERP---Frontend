@@ -528,6 +528,37 @@ class PedidosService {
   }
 
   /**
+   * Resumo contas a pagar (cards filtráveis)
+   * GET /pedidos/contas-pagar/resumo
+   * Mesmos parâmetros da listagem; retorna totais para os cards.
+   */
+  async getResumoContasPagar(params?: FiltrosContasPagar): Promise<{
+    valor_total_pendente: number;
+    valor_total_pago_contabilizado: number;
+    vencidas: number;
+    vencendo_hoje: number;
+    vencendo_este_mes: number;
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.fornecedor_id != null && params.fornecedor_id > 0) {
+      queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    }
+    if (params?.data_inicial && /^\d{4}-\d{2}-\d{2}$/.test(params.data_inicial)) {
+      queryParams.append('data_inicial', params.data_inicial);
+    }
+    if (params?.data_final && /^\d{4}-\d{2}-\d{2}$/.test(params.data_final)) {
+      queryParams.append('data_final', params.data_final);
+    }
+    if (params?.situacao) {
+      queryParams.append('situacao', params.situacao);
+    }
+    const query = queryParams.toString();
+    const url = `/pedidos/contas-pagar/resumo${query ? `?${query}` : ''}`;
+    return apiClient.get(url);
+  }
+
+  /**
    * Lista receitas antecipadas (pedidos com boleto descontado)
    * GET /pedidos/receitas-antecipadas
    */

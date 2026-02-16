@@ -114,6 +114,8 @@ export interface DashboardFinanceiro {
   valor_total_recebido?: number;
   valor_total_pagar?: number;
   valor_total_pago?: number;
+  /** Soma de valor_pago de todas as contas a pagar (contabilizado) */
+  valor_total_pago_contabilizado?: number;
 }
 
 export interface ResumoFinanceiro {

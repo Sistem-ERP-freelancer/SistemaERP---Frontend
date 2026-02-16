@@ -45,10 +45,12 @@ export interface ContaPagar {
   fornecedor_id?: number | null;
   fornecedor_nome?: string | null;
   valor_total: number;
+  valor_pago?: number; // valor já pago (retornado pela API)
   valor_em_aberto: number;
   forma_pagamento: string; // FormaPagamento enum value
-  status: string; // StatusPedido enum value
+  status: string; // ABERTO | PARCIAL | QUITADO | VENCIDO | CANCELADO
   data_pedido: string; // ISO date: "2026-02-10"
+  data_vencimento?: string | null; // data de vencimento (retornada pela API)
 }
 
 export interface FiltrosContasReceber {

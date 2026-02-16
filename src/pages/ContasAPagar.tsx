@@ -23,6 +23,7 @@ import {
     PaginationNext,
     PaginationPrevious
 } from "@/components/ui/pagination";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
     Select,
     SelectContent,
@@ -30,6 +31,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
 import {
     Table,
     TableBody,
@@ -48,11 +57,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     Calendar,
+    CheckCircle,
+    Circle,
     CreditCard,
     DollarSign,
     Edit,
     Eye,
     FileText,
+    Filter,
     Info,
     Loader2,
     MoreVertical,
@@ -60,13 +72,21 @@ import {
     ShoppingCart
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-const ContasAPagar = () => {
+function ContasAPagar() {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
+  const [fornecedorFilterId, setFornecedorFilterId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
+  const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
+  /** Filtro por card clicável (como Contas a Receber): ao clicar no card, filtra a tabela */
+  const [activeCardFilter, setActiveCardFilter] = useState<"todos" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes">("todos");
+  const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -83,6 +103,7 @@ const ContasAPagar = () => {
   });
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Buscar fornecedores
   const { data: fornecedoresData } = useQuery({
@@ -136,11 +157,40 @@ const ContasAPagar = () => {
 
   const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
-  // Buscar dados do dashboard de contas a pagar
+  // Buscar dados do dashboard de contas a pagar (sem filtros)
   const { data: dashboardPagar, isLoading: isLoadingPagar } = useQuery({
     queryKey: ["dashboard-pagar"],
     queryFn: () => financeiroService.getDashboardPagar(),
     refetchInterval: 30000,
+    retry: false,
+  });
+
+  // Parâmetros de filtro para resumo (mesmos da listagem) — cards filtráveis
+  const resumoFilterParams = useMemo((): import('@/types/contas-financeiras.types').FiltrosContasPagar | undefined => {
+    const params: import('@/types/contas-financeiras.types').FiltrosContasPagar = {};
+    if (fornecedorFilterId != null && fornecedorFilterId > 0) params.fornecedor_id = fornecedorFilterId;
+    if (dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)) params.data_inicial = dataInicialFilter;
+    if (dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)) params.data_final = dataFinalFilter;
+    let situacao: 'em_aberto' | 'em_atraso' | 'concluido' | undefined = undefined;
+    if (statusFilter) {
+      if (statusFilter === 'ABERTO' || statusFilter === 'PARCIAL') situacao = 'em_aberto';
+      else if (statusFilter === 'QUITADO') situacao = 'concluido';
+      else if (statusFilter === 'VENCIDO') situacao = 'em_atraso';
+    } else if (activeTab !== "Todos") {
+      if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE" || activeTab === "PAGO_PARCIAL") situacao = 'em_aberto';
+      else if (activeTab === "VENCIDO") situacao = 'em_atraso';
+      else if (activeTab === "PAGO_TOTAL") situacao = 'concluido';
+    }
+    if (situacao) params.situacao = situacao;
+    const hasAny = (params.fornecedor_id != null && params.fornecedor_id > 0) || !!params.data_inicial || !!params.data_final || !!params.situacao;
+    return hasAny ? params : undefined;
+  }, [fornecedorFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeTab]);
+
+  // Resumo filtrado para os cards (quando há filtros ativos)
+  const { data: resumoContasPagar } = useQuery({
+    queryKey: ["resumo-contas-pagar", resumoFilterParams],
+    queryFn: () => pedidosService.getResumoContasPagar(resumoFilterParams!),
+    enabled: !!resumoFilterParams,
     retry: false,
   });
 
@@ -159,31 +209,74 @@ const ContasAPagar = () => {
 
   // Buscar contas a pagar usando novo endpoint /pedidos/contas-pagar (cada linha = 1 pedido)
   const { data: pedidosContasPagarResponse, isLoading: isLoadingPedidosContasPagar } = useQuery({
-    queryKey: ["pedidos", "contas-pagar", activeTab, currentPage],
+    queryKey: ["pedidos", "contas-pagar", activeTab, currentPage, fornecedorFilterId, statusFilter, dataInicialFilter, dataFinalFilter],
     queryFn: async () => {
       if (!validarParametrosPaginação(currentPage, pageSize)) {
         throw new Error('Parâmetros de paginação inválidos');
       }
 
       try {
-        // Mapear status da tab para situacao do endpoint
-        let situacao: 'em_aberto' | 'em_atraso' | 'concluido' | undefined = undefined;
-        
-        if (activeTab === "Todos") {
-          // Não filtrar por situação
-        } else if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE") {
-          situacao = 'em_aberto';
-        } else if (activeTab === "VENCIDO") {
-          situacao = 'em_atraso';
-        } else if (activeTab === "PAGO_TOTAL") {
-          situacao = 'concluido';
+        const params: import('@/types/contas-financeiras.types').FiltrosContasPagar = {};
+        if (fornecedorFilterId != null && fornecedorFilterId > 0) {
+          params.fornecedor_id = fornecedorFilterId;
         }
+        if (dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)) {
+          params.data_inicial = dataInicialFilter;
+        }
+        if (dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)) {
+          params.data_final = dataFinalFilter;
+        }
+        // Situação: prioridade do filtro avançado (statusFilter), senão tab (activeTab)
+        let situacao: 'em_aberto' | 'em_atraso' | 'concluido' | undefined = undefined;
+        if (statusFilter) {
+          if (statusFilter === 'ABERTO' || statusFilter === 'PARCIAL') situacao = 'em_aberto';
+          else if (statusFilter === 'QUITADO') situacao = 'concluido';
+          else if (statusFilter === 'VENCIDO') situacao = 'em_atraso';
+        } else {
+          if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE" || activeTab === "PAGO_PARCIAL") situacao = 'em_aberto';
+          else if (activeTab === "VENCIDO") situacao = 'em_atraso';
+          else if (activeTab === "PAGO_TOTAL") situacao = 'concluido';
+          else if (activeTab === "CANCELADO") situacao = undefined; // backend pode não ter; filtro client-side
+        }
+        if (situacao) params.situacao = situacao;
 
-        // Só passar objeto de filtros se tiver algum filtro válido
-        // Evita enviar { situacao: undefined } que pode causar erro 400
-        const pedidos = await pedidosService.listarContasPagar(
-          situacao ? { situacao } : undefined
-        );
+        const hasFilters =
+          (params.fornecedor_id != null && params.fornecedor_id > 0) ||
+          !!params.data_inicial ||
+          !!params.data_final ||
+          !!params.situacao;
+        let pedidos = await pedidosService.listarContasPagar(hasFilters ? params : undefined);
+
+        // Refinar por status: quando há status ativo, mostrar SOMENTE pedidos daquele status (nunca "todos")
+        const statusAtivo = statusFilter || (activeTab !== "Todos" ? activeTab : null);
+        const norm = (s: string) => (s || "").toUpperCase().trim();
+        if (statusAtivo) {
+          if (statusAtivo === 'ABERTO' || statusAtivo === 'PENDENTE') {
+            // Apenas pendente (nada pago): status ABERTO ou valor_pago === 0
+            pedidos = pedidos.filter((p: ContaPagar) => {
+              const st = norm(p.status);
+              const vp = Number(p.valor_pago ?? 0);
+              return st === 'ABERTO' || (vp <= 0 && st !== 'QUITADO' && st !== 'CANCELADO');
+            });
+          } else if (statusAtivo === 'PARCIAL' || statusAtivo === 'PAGO_PARCIAL') {
+            // Apenas parcialmente pagos: 0 < valor_pago < valor_total
+            const total = (p: ContaPagar) => Number(p.valor_total) || 0;
+            const pago = (p: ContaPagar) => Number(p.valor_pago ?? 0);
+            pedidos = pedidos.filter((p: ContaPagar) => {
+              const st = norm(p.status);
+              if (st === 'QUITADO' || st === 'CANCELADO') return false;
+              const vp = pago(p);
+              const vt = total(p);
+              return st === 'PARCIAL' || (vp > 0 && vp < vt - 0.01);
+            });
+          } else if (statusAtivo === 'QUITADO' || statusAtivo === 'PAGO_TOTAL') {
+            pedidos = pedidos.filter((p: ContaPagar) => norm(p.status) === 'QUITADO');
+          } else if (statusAtivo === 'VENCIDO') {
+            pedidos = pedidos.filter((p: ContaPagar) => norm(p.status) === 'VENCIDO');
+          } else if (statusAtivo === 'CANCELADO') {
+            pedidos = pedidos.filter((p: ContaPagar) => norm(p.status) === 'CANCELADO');
+          }
+        }
         
         // Aplicar paginação manualmente (o endpoint não tem paginação ainda)
         const startIndex = (currentPage - 1) * pageSize;
@@ -356,10 +449,24 @@ const ContasAPagar = () => {
   
   const contasFallback = contasResponseFallback?.data || [];
 
-  // Resetar página quando tab ou busca mudar
+  const temFiltrosAtivos =
+    (fornecedorFilterId != null && fornecedorFilterId > 0) ||
+    !!statusFilter ||
+    !!dataInicialFilter ||
+    !!dataFinalFilter;
+  const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
+  const handleLimparFiltros = () => {
+    setFornecedorFilterId(null);
+    setStatusFilter("");
+    setDataInicialFilter("");
+    setDataFinalFilter("");
+    setFiltrosDialogOpen(false);
+  };
+
+  // Resetar página quando tab, busca ou filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm]);
+  }, [activeTab, searchTerm, fornecedorFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeCardFilter]);
 
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
@@ -450,57 +557,33 @@ const ContasAPagar = () => {
 
   // Calcular estatísticas
   const stats = useMemo(() => {
-    // Função auxiliar para converter valor para número seguro
     const parseValor = (valor: any): number => {
       if (valor === null || valor === undefined || valor === '') return 0;
       const num = typeof valor === 'string' ? parseFloat(valor) : Number(valor);
       return isNaN(num) ? 0 : num;
     };
 
-    // Conforme guia: usar somente GET /dashboard/pagar; quando total === 0, exibir 0 em todos os cards
-    const totalPagar = parseValor(dashboardPagar?.valor_total_pendente) ?? 0;
-    const totalVencidas = Number(dashboardPagar?.vencidas) ?? 0;
-    const totalVencendoHoje = Number(dashboardPagar?.vencendo_hoje) ?? 0;
-    const totalVencendoEsteMes = Number(dashboardPagar?.vencendo_este_mes) ?? 0;
+    // Cards filtráveis: quando há filtros ativos, usar resumo do mesmo filtro; senão dashboard global
+    const source = resumoContasPagar ?? dashboardPagar;
+    const totalPagar = resumoContasPagar
+      ? Number(resumoContasPagar.valor_total_pendente ?? 0)
+      : (parseValor(dashboardPagar?.valor_total_pendente) ?? 0);
+    const totalPago = resumoContasPagar
+      ? Number(resumoContasPagar.valor_total_pago_contabilizado ?? 0)
+      : (parseValor(dashboardPagar?.valor_total_pago_contabilizado ?? dashboardPagar?.valor_total_pago) ?? 0);
+    const totalVencidas = Number(source?.vencidas ?? 0);
+    const totalVencendoHoje = Number(source?.vencendo_hoje ?? 0);
+    const totalVencendoEsteMes = Number(source?.vencendo_este_mes ?? 0);
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
-      {
-        label: "Total a Pagar",
-        value: formatarMoedaCard(totalPagar),
-        icon: DollarSign,
-        trend: null,
-        trendUp: false,
-        color: "text-orange-600",
-        bgColor: "bg-orange-100"
-      },
-      {
-        label: "Vencidas",
-        value: totalVencidas.toString(),
-        icon: Calendar,
-        trend: null,
-        trendUp: false,
-        color: "text-red-600",
-        bgColor: "bg-red-100"
-      },
-      {
-        label: "Vencendo Hoje",
-        value: totalVencendoHoje.toString(),
-        icon: Calendar,
-        trend: null,
-        color: "text-amber-600",
-        bgColor: "bg-amber-100"
-      },
-      {
-        label: "Vencendo Este Mês",
-        value: totalVencendoEsteMes.toString(),
-        icon: Calendar,
-        trend: null,
-        color: "text-blue-600",
-        bgColor: "bg-blue-100"
-      },
+      { label: "Total a Pagar", value: formatarMoedaCard(totalPagar), icon: DollarSign, trend: null, trendUp: false, color: "text-orange-600", bgColor: "bg-orange-100", filterKey: "todos" as const },
+      { label: "Total Pago", value: formatarMoedaCard(totalPago), icon: CheckCircle, trend: null, trendUp: false, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
+      { label: "Vencidas", value: totalVencidas.toString(), icon: Calendar, trend: null, trendUp: false, color: "text-red-600", bgColor: "bg-red-100", filterKey: "vencidas" as const },
+      { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
+      { label: "Vencendo Este Mês", value: totalVencendoEsteMes.toString(), icon: Calendar, trend: null, color: "text-blue-600", bgColor: "bg-blue-100", filterKey: "vencendo_este_mes" as const },
     ];
-  }, [dashboardPagar]);
+  }, [dashboardPagar, resumoContasPagar]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -770,15 +853,16 @@ const ContasAPagar = () => {
     }
   };
 
+  // Mesmas cores de status de Contas a Receber
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "pendente": return "bg-amber-500/10 text-amber-500";
-      case "pago parcial": return "bg-blue-500/10 text-blue-500";
-      case "pago total": return "bg-green-500/10 text-green-500";
-      case "vencido": return "bg-red-500/10 text-red-500";
-      case "cancelado": return "bg-slate-600/10 text-slate-600";
-      default: return "bg-muted text-muted-foreground";
-    }
+    const s = status.toLowerCase();
+    if (s === "pendente") return "bg-amber-500/10 text-amber-500";
+    if (s === "em aberto" || s === "aberto") return "bg-blue-500/10 text-blue-500";
+    if (s === "pago parcial" || s.includes("parcial")) return "bg-blue-500/10 text-blue-500";
+    if (s === "quitado" || s === "concluído" || s === "concluido" || s === "pago total") return "bg-green-500/10 text-green-500";
+    if (s === "vencido") return "bg-red-500/10 text-red-500";
+    if (s === "cancelado") return "bg-slate-600/10 text-slate-600";
+    return "bg-muted text-muted-foreground";
   };
 
   // Função para calcular dias até vencimento
@@ -838,7 +922,11 @@ const ContasAPagar = () => {
         const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
         const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || pedido.fornecedor_nome || "N/A";
 
-        const valorFormatado = formatCurrency(pedido.valor_em_aberto || 0);
+        const valorTotal = Number(pedido.valor_total) || 0;
+        const valorEmAbertoPedido = Number(pedido.valor_em_aberto) || 0;
+        const valorPagoPedido = (pedido as any).valor_pago ?? (valorTotal - valorEmAbertoPedido);
+        const valorFormatado = formatCurrency(valorTotal);
+        const valorPagoFormatado = formatCurrency(valorPagoPedido);
 
         const dataFormatada = pedido.data_pedido
           ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR')
@@ -847,8 +935,9 @@ const ContasAPagar = () => {
         const statusFormatado = formatarStatus(pedido.status);
         const formaPagamentoFormatada = formatarFormaPagamento(pedido.forma_pagamento);
 
-        // Calcular dias até vencimento baseado na data do pedido (aproximação)
-        const diasAteVencimento = calcularDiasAteVencimento(pedido.data_pedido);
+        // Calcular dias até vencimento: preferir data_vencimento quando existir
+        const dataParaVencimento = pedido.data_vencimento || pedido.data_pedido;
+        const diasAteVencimento = calcularDiasAteVencimento(dataParaVencimento);
         const vencimentoStatus = getVencimentoStatus(diasAteVencimento, pedido.status);
 
         return {
@@ -856,6 +945,7 @@ const ContasAPagar = () => {
           descricao: `Pedido ${pedido.numero_pedido}`,
           categoria: "Compras",
           valor: valorFormatado,
+          valorPago: valorPagoFormatado,
           data: dataFormatada,
           status: statusFormatado,
           statusOriginal: pedido.status,
@@ -865,6 +955,7 @@ const ContasAPagar = () => {
           diasAteVencimento,
           vencimentoStatus,
           pedidoId: pedido.pedido_id,
+          valorEmAberto: pedido.valor_em_aberto ?? 0,
         };
       });
     }
@@ -880,10 +971,17 @@ const ContasAPagar = () => {
         categoria = "Fornecedores";
       }
 
+      const valorTotalConta = Number(conta.valor_original) || 0;
+      const valorRestante = Number((conta as any).valor_restante) ?? Number((conta as any).valor_em_aberto) ?? 0;
+      const valorPagoConta = (conta as any).valor_pago != null ? Number((conta as any).valor_pago) : Math.max(0, valorTotalConta - valorRestante);
       const valorFormatado = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
-      }).format(conta.valor_original || 0);
+      }).format(valorTotalConta);
+      const valorPagoFormatado = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(valorPagoConta);
 
       const dataFormatada = conta.data_vencimento
         ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
@@ -942,6 +1040,7 @@ const ContasAPagar = () => {
         descricao: conta.descricao,
         categoria: categoria,
         valor: valorFormatado,
+        valorPago: valorPagoFormatado,
         data: dataFormatada,
         status: statusFormatado,
         statusOriginal: conta.status,
@@ -949,13 +1048,16 @@ const ContasAPagar = () => {
         fornecedor: nomeFornecedor,
         diasAteVencimento,
         vencimentoStatus,
+        valorEmAberto: 0,
       };
     });
   }, [pedidosContasPagarList, contasFallback, fornecedores]);
 
-  // Query para buscar conta por ID quando o termo de busca for numérico
+  // Busca: em Contas a Pagar a lista vem de PEDIDOS (COMP-2026-00001, etc.), não de contas.
+  // Só buscar conta por ID quando estivermos no fallback (lista de contas); senão filtrar por texto no número do pedido.
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
   const searchId = isNumericSearch ? Number(searchTerm) : null;
+  const usaListaPedidos = pedidosContasPagarList.length > 0;
 
   const { data: contaPorId } = useQuery({
     queryKey: ["conta-financeira", "busca", searchId],
@@ -967,24 +1069,35 @@ const ContasAPagar = () => {
         return null;
       }
     },
-    enabled: !!searchId && isNumericSearch,
+    enabled: !!searchId && isNumericSearch && !usaListaPedidos,
     retry: false,
   });
 
-  // Filtrar por busca e por tab ativa
+  // Filtrar por busca, tab ativa e card clicável (como Contas a Receber)
   const filteredTransacoes = useMemo(() => {
     let filtered = transacoesDisplay;
 
+    // Filtro por card clicável
+    if (activeCardFilter !== "todos") {
+      filtered = filtered.filter((t: any) => {
+        const dias = t.diasAteVencimento;
+        const status = (t.statusOriginal || "").toUpperCase();
+        if (activeCardFilter === "vencidas") return dias != null && dias < 0;
+        if (activeCardFilter === "vencendo_hoje") return dias === 0;
+        if (activeCardFilter === "vencendo_este_mes") return dias != null && dias >= 1 && dias <= 30;
+        if (activeCardFilter === "valor_pago") return status === "PARCIAL" || status === "QUITADO";
+        return true;
+      });
+    }
+
     // Filtrar por tab ativa (especialmente para Vencidas e Vencendo Hoje)
     if (activeTab === "VENCIDO") {
-      // Filtrar apenas contas vencidas (por status ou por data)
       filtered = filtered.filter(t => {
         const conta = contas.find(c => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencida(conta);
       });
     } else if (activeTab === "VENCE_HOJE") {
-      // Filtrar apenas contas vencendo hoje
       filtered = filtered.filter(t => {
         const conta = contas.find(c => c.id === t.contaId);
         if (!conta) return false;
@@ -1006,10 +1119,11 @@ const ContasAPagar = () => {
           categoria = "Fornecedores";
         }
 
-        const valorFormatado = new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: 'BRL'
-        }).format(conta.valor_original || 0);
+        const valorTotalConta = Number(conta.valor_original) || 0;
+        const valorRestante = Number((conta as any).valor_restante) ?? Number((conta as any).valor_em_aberto) ?? 0;
+        const valorPagoConta = (conta as any).valor_pago != null ? Number((conta as any).valor_pago) : Math.max(0, valorTotalConta - valorRestante);
+        const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotalConta);
+        const valorPagoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorPagoConta);
 
         const dataFormatada = conta.data_vencimento
           ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
@@ -1035,6 +1149,7 @@ const ContasAPagar = () => {
           descricao: conta.descricao,
           categoria: categoria,
           valor: valorFormatado,
+          valorPago: valorPagoFormatado,
           data: dataFormatada,
           status: statusFormatado,
           statusOriginal: conta.status,
@@ -1058,7 +1173,7 @@ const ContasAPagar = () => {
     }
 
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, pedidosContasPagarList, contasFallback, fornecedores, activeTab]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, pedidosContasPagarList, contasFallback, fornecedores, activeTab, activeCardFilter]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -1292,10 +1407,10 @@ const ContasAPagar = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           {isLoadingPagar ? (
             <>
-              {[1, 2, 3, 4].map((i) => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 20 }}
@@ -1312,10 +1427,18 @@ const ContasAPagar = () => {
             stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveCardFilter(stat.filterKey)}
+                onKeyDown={(e) => e.key === "Enter" && setActiveCardFilter(stat.filterKey)}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
+                className={`bg-card rounded-xl p-5 border transition-shadow min-w-0 cursor-pointer hover:shadow-md ${
+                  activeCardFilter === stat.filterKey
+                    ? "border-primary border-2 shadow-md ring-2 ring-primary/20"
+                    : "border-border"
+                }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className={`p-2 rounded-lg ${stat.bgColor}`}>
@@ -1334,29 +1457,168 @@ const ContasAPagar = () => {
           )}
         </div>
 
-        {/* Filters */}
+        {/* Search and Filters (mesmo design de Contas a Receber) */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="sm:w-[200px]">
-              <Select value={activeTab} onValueChange={setActiveTab}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Todos">Todos os status</SelectItem>
-                  <SelectItem value="PENDENTE">Pendente</SelectItem>
-                  <SelectItem value="PAGO_PARCIAL">Pago Parcial</SelectItem>
-                  <SelectItem value="PAGO_TOTAL">Pago Total</SelectItem>
-                  <SelectItem value="VENCE_HOJE">Vencendo Hoje</SelectItem>
-                  <SelectItem value="VENCIDO">Vencido</SelectItem>
-                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="flex gap-4">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setFiltrosDialogOpen(true)}
+              style={
+                temFiltrosAtivos
+                  ? { borderColor: "var(--primary)", borderWidth: "2px" }
+                  : {}
+              }
+            >
+              <Filter className="w-4 h-4" />
+              Filtros
+              {temFiltrosAtivos && (
+                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                  {(fornecedorFilterId != null && fornecedorFilterId > 0 ? 1 : 0) +
+                    (statusFilter ? 1 : 0) +
+                    (dataInicialFilter ? 1 : 0) +
+                    (dataFinalFilter ? 1 : 0)}
+                </span>
+              )}
+            </Button>
+            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+              <SheetContent
+                side="right"
+                className="w-[400px] sm:w-[540px] overflow-y-auto"
+              >
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">
+                      Filtros Avançados
+                    </SheetTitle>
+                  </div>
+                  <SheetDescription>Refine sua busca</SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  {/* Fornecedor */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Fornecedor</Label>
+                    <Select
+                      value={fornecedorFilterId == null ? "todos" : String(fornecedorFilterId)}
+                      onValueChange={(v) => setFornecedorFilterId(v === "todos" ? null : parseInt(v, 10))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os fornecedores" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os fornecedores</SelectItem>
+                        {fornecedores.map((f) => (
+                          <SelectItem key={f.id} value={String(f.id)}>
+                            {f.nome_fantasia || f.nome_razao}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Período */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Período</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            type="date"
+                            className="pl-10"
+                            value={dataInicialFilter}
+                            onChange={(e) => setDataInicialFilter(e.target.value || "")}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Data Final</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <Input
+                            type="date"
+                            className="pl-10"
+                            value={dataFinalFilter}
+                            onChange={(e) => setDataFinalFilter(e.target.value || "")}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Status */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <RadioGroup
+                      value={statusFilter || "todos"}
+                      onValueChange={(v) => setStatusFilter(v === "todos" ? "" : v)}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="todos" id="status-todos-pagar" />
+                        <Label htmlFor="status-todos-pagar" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-primary" />
+                          <span>Todos</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ABERTO" id="status-aberto-pagar" />
+                        <Label htmlFor="status-aberto-pagar" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-amber-500" />
+                          <span>Pendente</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PARCIAL" id="status-parcial-pagar" />
+                        <Label htmlFor="status-parcial-pagar" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-blue-500" />
+                          <span>Aberto</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="QUITADO" id="status-quitado-pagar" />
+                        <Label htmlFor="status-quitado-pagar" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-green-500" />
+                          <span>Quitado</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="VENCIDO" id="status-vencido-pagar" />
+                        <Label htmlFor="status-vencido-pagar" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-red-500" />
+                          <span>Vencido</span>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleAplicarFiltros} className="flex-1">
+                      Aplicar Filtros
+                    </Button>
+                    <Button onClick={handleLimparFiltros} variant="outline" className="flex-1">
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar conta a pagar..." 
+              <Input
+                placeholder="Buscar por número do pedido, fornecedor..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1375,12 +1637,10 @@ const ContasAPagar = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
-                <TableHead>Descrição</TableHead>
                 <TableHead>Fornecedor</TableHead>
-                <TableHead>Categoria</TableHead>
                 <TableHead>Valor</TableHead>
+                <TableHead>Valor Pago</TableHead>
                 <TableHead>Data Vencimento</TableHead>
-                <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -1388,20 +1648,48 @@ const ContasAPagar = () => {
             <TableBody>
               {(isLoadingPedidosContasPagar || isLoadingContasFallback) ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas...
                     </div>
                   </TableCell>
                 </TableRow>
+              ) : (dataInicialFilter || dataFinalFilter) && !isLoadingPedidosContasPagar && pedidosContasPagarList.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <DollarSign className="w-12 h-12 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">Não há contas no período selecionado.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ) : filteredTransacoes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">
-                        {transacoesDisplay.length === 0 && !isLoadingPedidosContasPagar
+                        {(statusFilter || (activeTab && activeTab !== "Todos"))
+                          ? (() => {
+                              const labelPorStatus: Record<string, string> = {
+                                ABERTO: "Pendente",
+                                PARCIAL: "Aberto",
+                                QUITADO: "Quitado",
+                                VENCIDO: "Vencido",
+                                PENDENTE: "Pendente",
+                                PAGO_PARCIAL: "Pago Parcial",
+                                PAGO_TOTAL: "Pago Total",
+                                VENCE_HOJE: "Vencendo Hoje",
+                                CANCELADO: "Cancelado",
+                              };
+                              const statusAtivo = statusFilter || activeTab;
+                              const label = labelPorStatus[statusAtivo] || statusAtivo;
+                              return `Não há pedidos com o status "${label}".`;
+                            })()
+                          : fornecedorFilterId != null && fornecedorFilterId > 0
+                          ? "Não há pedidos ou contas desse fornecedor."
+                          : transacoesDisplay.length === 0 && !isLoadingPedidosContasPagar
                           ? "Não há contas a pagar no momento"
                           : dashboardPagar?.total === 0
                           ? "Nenhuma conta a pagar em aberto"
@@ -1417,29 +1705,19 @@ const ContasAPagar = () => {
                       <span className="font-medium">{transacao.id}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{transacao.descricao}</span>
-                    </TableCell>
-                    <TableCell>
                       <span className="text-sm text-muted-foreground">{transacao.fornecedor}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">{transacao.categoria}</span>
+                      <span className="font-medium">{transacao.valor}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{transacao.valor}</span>
+                      <span className="text-sm text-muted-foreground">{(transacao as any).valorPago ?? '—'}</span>
                     </TableCell>
                     <TableCell>
                       {transacao.status === "Concluído" || transacao.status === "Cancelado" ? (
                         <span className="text-sm text-muted-foreground">--</span>
                       ) : (
                         <span className="text-sm text-muted-foreground">{transacao.data}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {transacao.vencimentoStatus?.texto && (
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${transacao.vencimentoStatus.cor} ${transacao.vencimentoStatus.bgColor}`}>
-                          {transacao.vencimentoStatus.texto}
-                        </span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -1457,10 +1735,8 @@ const ContasAPagar = () => {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
-                            // Se for pedido, navegar para detalhes do pedido
                             if ((transacao as any).pedidoId) {
-                              // TODO: Implementar navegação para detalhes do pedido
-                              console.log('Ver detalhes do pedido:', (transacao as any).pedidoId);
+                              navigate(`/financeiro/contas-pagar/${(transacao as any).pedidoId}`);
                             } else {
                               setSelectedContaId(transacao.contaId);
                               setViewDialogOpen(true);
@@ -1469,6 +1745,12 @@ const ContasAPagar = () => {
                             <Eye className="w-4 h-4 mr-2" />
                             Ver detalhes
                           </DropdownMenuItem>
+                          {(transacao as any).pedidoId && ((transacao as any).valorEmAberto ?? 0) > 0 && (
+                            <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-pagar/${(transacao as any).pedidoId}/pagamentos`)}>
+                              <DollarSign className="w-4 h-4 mr-2" />
+                              Pagamentos
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -1682,7 +1964,6 @@ const ContasAPagar = () => {
       </div>
     </AppLayout>
   );
-};
+}
 
 export default ContasAPagar;
-
