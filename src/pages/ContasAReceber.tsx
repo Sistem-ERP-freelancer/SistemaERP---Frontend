@@ -69,6 +69,8 @@ const ContasAReceber = () => {
   /** Filtro por card clicável: todos | valor_pago | vencidas | vencendo_hoje | vencendo_este_mes */
   const [activeCardFilter, setActiveCardFilter] = useState<"todos" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes">("todos");
   const [searchTerm, setSearchTerm] = useState("");
+  /** Filtro por cliente: null = todos; number = ID do cliente */
+  const [clienteFilterId, setClienteFilterId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -118,28 +120,18 @@ const ContasAReceber = () => {
 
   // Removido: pedidos agora vem de pedidosContasReceber (linha 209)
 
-  // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido) — busca todos; filtro por card é client-side
+  // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido) — filtro por cliente e card é enviado à API / client-side
   const { data: pedidosContasReceber, isLoading: isLoadingPedidosContasReceber } = useQuery({
-    queryKey: ["pedidos", "contas-receber"],
+    queryKey: ["pedidos", "contas-receber", clienteFilterId],
     queryFn: async () => {
       try {
-        const params: {
-          situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
-        } = {};
-        // Buscar todos em aberto (filtro por card é client-side)
-        
-        // Só passar objeto de filtros se tiver algum filtro válido
-        // Evita enviar objeto vazio que pode causar erro 400
-        const hasFilters = params.situacao || params.cliente_id || params.cliente_nome || 
-                          params.valor_inicial || params.valor_final || params.forma_pagamento ||
-                          params.data_inicial || params.data_final || params.codigo;
-        
-        return await pedidosService.listarContasReceber(
-          hasFilters ? params : undefined
-        );
+        const params: import('@/types/contas-financeiras.types').FiltrosContasReceber = {};
+        if (clienteFilterId != null && clienteFilterId > 0) {
+          params.cliente_id = clienteFilterId;
+        }
+        const hasFilters = params.cliente_id != null && params.cliente_id > 0;
+        return await pedidosService.listarContasReceber(hasFilters ? params : undefined);
       } catch (error: any) {
-        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
-        // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
         if (error?.response?.status === 400) {
           console.warn("Backend retornou 400 - tratando como banco vazio:", error);
           return [];
@@ -247,7 +239,7 @@ const ContasAReceber = () => {
   // Resetar página quando filtro ou busca mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeCardFilter, searchTerm]);
+  }, [activeCardFilter, searchTerm, clienteFilterId]);
 
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
@@ -823,7 +815,7 @@ const ContasAReceber = () => {
     });
   }, [contas, clientes]);
 
-  // Query para buscar conta por ID quando o termo de busca for numérico
+  // Query para buscar conta por ID quando o termo de busca for numérico (apenas no fallback de contas financeiras)
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
   const searchId = isNumericSearch ? Number(searchTerm) : null;
 
@@ -837,7 +829,7 @@ const ContasAReceber = () => {
         return null;
       }
     },
-    enabled: !!searchId && isNumericSearch,
+    enabled: !!searchId && isNumericSearch && usarFallbackContasFinanceiras,
     retry: false,
   });
 
@@ -977,25 +969,30 @@ const ContasAReceber = () => {
     });
   }, [gruposContas, activeCardFilter]);
 
-  // Transações para exibição: Valor = total da conta; Valor Pago = valor já recebido
+  // Transações para exibição: Valor = total da conta; Valor Pago = valor já recebido. Ignora linhas com numero_pedido inválido (ex: "Pedido").
   const transacoesDisplayReceber = useMemo(() => {
-    return filteredLinhasPedidos.map((p: ContaReceber) => {
-      const diasAteVencimento = calcularDiasAteVencimento(p.data_vencimento ?? p.data_pedido);
-      const vencimentoStatus = getVencimentoStatus(diasAteVencimento, p.status);
-      const statusFormatado = formatarStatus(p.status);
-      return {
-        id: p.numero_pedido,
-        descricao: `Pedido ${p.numero_pedido}`,
-        cliente: p.cliente_nome || "—",
-        categoria: "Vendas",
-        valor: formatarMoeda(p.valor_total),
-        valorPago: formatarMoeda(p.valor_pago ?? 0),
-        data: p.data_vencimento ? formatarDataBR(p.data_vencimento) : formatarDataBR(p.data_pedido),
-        vencimentoStatus,
-        status: statusFormatado,
-        pedidoId: p.pedido_id,
-      };
-    });
+    return filteredLinhasPedidos
+      .filter((p: ContaReceber) => {
+        const num = (p.numero_pedido || "").trim();
+        return num.length > 0 && num.toLowerCase() !== "pedido";
+      })
+      .map((p: ContaReceber) => {
+        const diasAteVencimento = calcularDiasAteVencimento(p.data_vencimento ?? p.data_pedido);
+        const vencimentoStatus = getVencimentoStatus(diasAteVencimento, p.status);
+        const statusFormatado = formatarStatus(p.status);
+        return {
+          id: p.numero_pedido,
+          descricao: `Pedido ${p.numero_pedido}`,
+          cliente: p.cliente_nome || "—",
+          categoria: "Vendas",
+          valor: formatarMoeda(p.valor_total),
+          valorPago: formatarMoeda(p.valor_pago ?? 0),
+          data: p.data_vencimento ? formatarDataBR(p.data_vencimento) : formatarDataBR(p.data_pedido),
+          vencimentoStatus,
+          status: statusFormatado,
+          pedidoId: p.pedido_id,
+        };
+      });
   }, [filteredLinhasPedidos]);
 
   const transacoesDisplayGrupos = useMemo(() => {
@@ -1004,8 +1001,10 @@ const ContasAReceber = () => {
       const vencimentoStatus = getVencimentoStatus(diasAteVencimento, g.statusConsolidado === "Pago Total" ? "QUITADO" : "ABERTO");
       const totalGrupo = g.parcelas.reduce((s, p) => s + (p.valor_original ?? 0), 0);
       const valorPagoGrupo = Math.max(0, totalGrupo - g.valor_aberto);
+      const primeiraParcela = g.parcelas[0];
+      const idExibicao = primeiraParcela?.numero_conta || g.descricaoBase?.split(" ")[0] || g.key;
       return {
-        id: g.descricaoBase.split(" ")[0] || g.key,
+        id: idExibicao,
         descricao: g.descricaoBase,
         cliente: g.cliente_nome,
         categoria: g.categoria,
@@ -1419,16 +1418,38 @@ const ContasAReceber = () => {
           <ContasAReceberListaClientes onTotalAReceber={handleTotalAReceberFromLista} />
         ) : (
           <>
-        {/* Busca */}
+        {/* Filtro por cliente e busca */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar conta a receber..." 
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-shrink-0 w-full sm:w-[220px] space-y-1.5">
+              <Label className="text-muted-foreground text-xs block">Cliente</Label>
+              <Select
+                value={clienteFilterId == null ? "todos" : String(clienteFilterId)}
+                onValueChange={(v) => setClienteFilterId(v === "todos" ? null : parseInt(v, 10))}
+              >
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue placeholder="Todos os clientes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os clientes</SelectItem>
+                  {clientes.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="relative flex-1 min-w-0 space-y-1.5">
+              <Label className="text-muted-foreground text-xs block">Buscar</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Buscar conta a receber..."
+                  className="pl-10 h-10"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1460,6 +1481,15 @@ const ContasAReceber = () => {
                     </div>
                   </TableCell>
                 </TableRow>
+              ) : (clienteFilterId != null && clienteFilterId > 0 && !isLoadingPedidosContasReceber && pedidos.length === 0) ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <DollarSign className="w-12 h-12 text-muted-foreground/50" />
+                      <p className="text-muted-foreground">Não há pedidos ou contas desse determinado cliente.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ) : (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
@@ -1479,7 +1509,7 @@ const ContasAReceber = () => {
                 transacoesDisplayGrupos.map((transacao) => {
                   const grupo = gruposContas.find((g) => g.key === (transacao as any).grupoKey);
                   return (
-                    <TableRow key={transacao.id}>
+                    <TableRow key={(transacao as any).grupoKey}>
                       <TableCell>
                         <span className="font-medium">{transacao.id}</span>
                       </TableCell>
@@ -1533,7 +1563,7 @@ const ContasAReceber = () => {
                 })
               ) : (
                 transacoesDisplayReceber.map((transacao) => (
-                  <TableRow key={transacao.id}>
+                  <TableRow key={String(transacao.pedidoId)}>
                     <TableCell>
                       <span className="font-medium">{transacao.id}</span>
                     </TableCell>
