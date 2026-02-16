@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
     Select,
     SelectContent,
@@ -22,6 +23,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
 import {
     Table,
     TableBody,
@@ -47,11 +56,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     Calendar,
+    Circle,
     CreditCard,
     DollarSign,
     Edit,
     Eye,
     FileText,
+    Filter,
     Info,
     Loader2,
     MoreVertical,
@@ -71,6 +82,9 @@ const ContasAReceber = () => {
   const [searchTerm, setSearchTerm] = useState("");
   /** Filtro por cliente: null = todos; number = ID do cliente */
   const [clienteFilterId, setClienteFilterId] = useState<number | null>(null);
+  /** Filtro por status do pedido: '' = todos; ABERTO | PARCIAL | QUITADO | VENCIDO */
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -239,7 +253,15 @@ const ContasAReceber = () => {
   // Resetar página quando filtro ou busca mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeCardFilter, searchTerm, clienteFilterId]);
+  }, [activeCardFilter, searchTerm, clienteFilterId, statusFilter]);
+
+  const temFiltrosAtivos = (clienteFilterId != null && clienteFilterId > 0) || !!statusFilter;
+  const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
+  const handleLimparFiltros = () => {
+    setClienteFilterId(null);
+    setStatusFilter("");
+    setFiltrosDialogOpen(false);
+  };
 
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
@@ -944,9 +966,10 @@ const ContasAReceber = () => {
       if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
       if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
       if (activeCardFilter === "valor_pago") return p.status === "PARCIAL" || p.status === "QUITADO";
+      if (statusFilter) return p.status === statusFilter;
       return true;
     });
-  }, [linhasPedidos, activeCardFilter]);
+  }, [linhasPedidos, activeCardFilter, statusFilter]);
 
   const filteredGruposContas = useMemo(() => {
     if (activeCardFilter === "todos") return gruposContas;
@@ -957,6 +980,14 @@ const ContasAReceber = () => {
 
     return gruposContas.filter((g) => {
       if (activeCardFilter === "valor_pago") return g.statusConsolidado === "Pago Parcial" || g.statusConsolidado === "Pago Total";
+      if (statusFilter) {
+        const match =
+          (statusFilter === "ABERTO" && g.statusConsolidado === "Pendente") ||
+          (statusFilter === "PARCIAL" && g.statusConsolidado === "Pago Parcial") ||
+          (statusFilter === "QUITADO" && g.statusConsolidado === "Pago Total");
+        if (!match) return false;
+      }
+      if (!g.primeira_vencimento && activeCardFilter === "todos") return true;
       if (!g.primeira_vencimento) return false;
 
       const dataVenc = new Date(g.primeira_vencimento);
@@ -967,7 +998,7 @@ const ContasAReceber = () => {
       if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
       return true;
     });
-  }, [gruposContas, activeCardFilter]);
+  }, [gruposContas, activeCardFilter, statusFilter]);
 
   // Transações para exibição: Valor = total da conta; Valor Pago = valor já recebido. Ignora linhas com numero_pedido inválido (ex: "Pedido").
   const transacoesDisplayReceber = useMemo(() => {
@@ -1418,37 +1449,134 @@ const ContasAReceber = () => {
           <ContasAReceberListaClientes onTotalAReceber={handleTotalAReceberFromLista} />
         ) : (
           <>
-        {/* Filtro por cliente e busca */}
+        {/* Search and Filters (mesmo design da página Fornecedores) */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-            <div className="flex-shrink-0 w-full sm:w-[220px] space-y-1.5">
-              <Label className="text-muted-foreground text-xs block">Cliente</Label>
-              <Select
-                value={clienteFilterId == null ? "todos" : String(clienteFilterId)}
-                onValueChange={(v) => setClienteFilterId(v === "todos" ? null : parseInt(v, 10))}
+          <div className="flex gap-4">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setFiltrosDialogOpen(true)}
+              style={
+                temFiltrosAtivos
+                  ? { borderColor: "var(--primary)", borderWidth: "2px" }
+                  : {}
+              }
+            >
+              <Filter className="w-4 h-4" />
+              Filtros
+              {temFiltrosAtivos && (
+                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                  {(clienteFilterId != null && clienteFilterId > 0 ? 1 : 0) + (statusFilter ? 1 : 0)}
+                </span>
+              )}
+            </Button>
+            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+              <SheetContent
+                side="right"
+                className="w-[400px] sm:w-[540px] overflow-y-auto"
               >
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue placeholder="Todos os clientes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os clientes</SelectItem>
-                  {clientes.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="relative flex-1 min-w-0 space-y-1.5">
-              <Label className="text-muted-foreground text-xs block">Buscar</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  placeholder="Buscar conta a receber..."
-                  className="pl-10 h-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">
+                      Filtros Avançados
+                    </SheetTitle>
+                  </div>
+                  <SheetDescription>Refine sua busca</SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  {/* Cliente */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Cliente</Label>
+                    <Select
+                      value={clienteFilterId == null ? "todos" : String(clienteFilterId)}
+                      onValueChange={(v) => setClienteFilterId(v === "todos" ? null : parseInt(v, 10))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os clientes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os clientes</SelectItem>
+                        {clientes.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Status */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <RadioGroup
+                      value={statusFilter || "todos"}
+                      onValueChange={(v) => setStatusFilter(v === "todos" ? "" : v)}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="todos" id="status-todos" />
+                        <Label htmlFor="status-todos" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-primary" />
+                          <span>Todos</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ABERTO" id="status-aberto" />
+                        <Label htmlFor="status-aberto" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-amber-500" />
+                          <span>Pendente</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PARCIAL" id="status-parcial" />
+                        <Label htmlFor="status-parcial" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-blue-500" />
+                          <span>Aberto</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="QUITADO" id="status-quitado" />
+                        <Label htmlFor="status-quitado" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-green-500" />
+                          <span>Quitado</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="VENCIDO" id="status-vencido" />
+                        <Label htmlFor="status-vencido" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-red-500" />
+                          <span>Vencido</span>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleAplicarFiltros} className="flex-1">
+                      Aplicar Filtros
+                    </Button>
+                    <Button onClick={handleLimparFiltros} variant="outline" className="flex-1">
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por número do pedido, cliente..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
         </div>

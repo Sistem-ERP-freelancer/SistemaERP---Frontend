@@ -21,12 +21,21 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { useOrders } from '@/hooks/useOrders';
 import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
-import { Calendar, Download, Loader2, Plus, Search, XCircle } from 'lucide-react';
+import { Calendar, Circle, Download, Filter, Loader2, Plus, Search, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Pedidos() {
@@ -71,29 +80,29 @@ export default function Pedidos() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromFiltersRef = useRef(false);
 
+  const temFiltrosAtivos = !!(filters.data_inicial || filters.data_final || filters.tipo || filters.status);
+  const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
+  const handleLimparFiltros = () => {
+    updateFilters({
+      data_inicial: undefined,
+      data_final: undefined,
+      tipo: undefined,
+      status: undefined,
+    });
+    setFiltrosDialogOpen(false);
+  };
+
   // Sincronizar searchTerm com os filtros quando os filtros mudarem externamente
   useEffect(() => {
-    // Evitar atualização se estamos atualizando os filtros a partir do searchTerm
-    if (isUpdatingFromFiltersRef.current) {
-      return;
-    }
-
-    const numeroPedido = filters.numero_pedido;
-    const clienteNome = filters.cliente_nome;
-    
-    // Só atualizar se o valor for diferente do atual para evitar loops
-    if (numeroPedido && searchTerm !== numeroPedido) {
-      setSearchTerm(numeroPedido);
-    } else if (clienteNome && searchTerm !== clienteNome) {
-      setSearchTerm(clienteNome);
-    } else if (!numeroPedido && !clienteNome && searchTerm) {
-      // Se os filtros foram limpos externamente, limpar o searchTerm também
-      setSearchTerm('');
-    }
-  }, [filters.numero_pedido, filters.cliente_nome]);
+    if (isUpdatingFromFiltersRef.current) return;
+    const valor = filters.busca ?? filters.numero_pedido ?? filters.cliente_nome ?? '';
+    if (valor && searchTerm !== valor) setSearchTerm(valor);
+    else if (!valor && searchTerm) setSearchTerm('');
+  }, [filters.busca, filters.numero_pedido, filters.cliente_nome]);
 
   // Fechar o diálogo de exclusão quando o cancelamento for bem-sucedido
   useEffect(() => {
@@ -113,35 +122,20 @@ export default function Pedidos() {
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
-    
-    // Limpar timeout anterior
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
-    // Debounce: aguardar 300ms antes de atualizar os filtros
     searchTimeoutRef.current = setTimeout(() => {
       isUpdatingFromFiltersRef.current = true;
-      
       if (value.trim()) {
-        // Tenta buscar por número de pedido primeiro, depois por nome do cliente
-        // Se o valor parece ser um número, busca por numero_pedido
-        const isNumber = /^\d+$/.test(value.trim());
-        if (isNumber) {
-          updateFilters({ numero_pedido: value.trim(), cliente_nome: undefined });
-        } else {
-          updateFilters({ cliente_nome: value.trim(), numero_pedido: undefined });
-        }
+        updateFilters({
+          busca: value.trim(),
+          numero_pedido: undefined,
+          cliente_nome: undefined,
+        });
       } else {
-        // Quando o campo é limpo, remover apenas os filtros de pesquisa
-        // Mantém outros filtros como tipo, status, datas, etc.
-        updateFilters({ numero_pedido: undefined, cliente_nome: undefined });
+        updateFilters({ busca: undefined, numero_pedido: undefined, cliente_nome: undefined });
       }
-      
-      // Resetar flag após um pequeno delay
-      setTimeout(() => {
-        isUpdatingFromFiltersRef.current = false;
-      }, 100);
+      setTimeout(() => { isUpdatingFromFiltersRef.current = false; }, 100);
     }, 300);
   };
 
@@ -210,99 +204,166 @@ export default function Pedidos() {
         {/* Estatísticas */}
         <OrderStats tipoFiltro={filters.tipo} />
 
-        {/* Filtros */}
-        <div className="bg-card border rounded-xl p-4 mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4">Filtros</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Buscar</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por número ou cliente..."
-                  className="pl-10"
-                  value={searchTerm}
-                  onChange={(e) => handleSearch(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  placeholder="Data Inicial"
-                  className="pl-10"
-                  value={filters.data_inicial || ''}
-                  onChange={(e) => {
-                    const value = e.target.value || undefined;
-                    updateFilters({ data_inicial: value });
-                  }}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Data Final</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  placeholder="Data Final"
-                  className="pl-10"
-                  value={filters.data_final || ''}
-                  onChange={(e) => {
-                    const value = e.target.value || undefined;
-                    updateFilters({ data_final: value });
-                  }}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Tipo</Label>
-              <Select
-                value={filters.tipo || 'all'}
-                onValueChange={(value) => {
-                  if (value === 'all') {
-                    updateFilters({ tipo: undefined });
-                  } else {
-                    updateFilters({ tipo: value as TipoPedido });
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os tipos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="VENDA">Venda</SelectItem>
-                  <SelectItem value="COMPRA">Compra</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select
-                value={filters.status || 'all'}
-                onValueChange={(value) => {
-                  if (value === 'all') {
-                    updateFilters({ status: undefined });
-                  } else {
-                    updateFilters({ status: value as StatusPedido });
-                  }
-                }}
-              >
-                <SelectTrigger className="border-2 border-primary">
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="ABERTO">Pendente</SelectItem>
-                  <SelectItem value="PARCIAL">Aberto</SelectItem>
-                  <SelectItem value="QUITADO">Quitado</SelectItem>
-                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
+        {/* Search and Filters (mesmo design da página Fornecedores) */}
+        <div className="bg-card rounded-xl border border-border p-4 mb-6">
+          <div className="flex gap-4">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setFiltrosDialogOpen(true)}
+              style={
+                temFiltrosAtivos
+                  ? { borderColor: 'var(--primary)', borderWidth: '2px' }
+                  : {}
+              }
+            >
+              <Filter className="w-4 h-4" />
+              Filtros
+              {temFiltrosAtivos && (
+                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                  {[filters.data_inicial, filters.data_final, filters.tipo, filters.status].filter(Boolean).length}
+                </span>
+              )}
+            </Button>
+            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+              <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">Filtros Avançados</SheetTitle>
+                  </div>
+                  <SheetDescription>Refine sua busca</SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Data Inicial</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        className="pl-10"
+                        value={filters.data_inicial || ''}
+                        onChange={(e) =>
+                          updateFilters({ data_inicial: e.target.value || undefined })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Data Final</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        className="pl-10"
+                        value={filters.data_final || ''}
+                        onChange={(e) =>
+                          updateFilters({ data_final: e.target.value || undefined })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Tipo</Label>
+                    <Select
+                      value={filters.tipo || 'all'}
+                      onValueChange={(value) =>
+                        updateFilters({
+                          tipo: value === 'all' ? undefined : (value as TipoPedido),
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os tipos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os tipos</SelectItem>
+                        <SelectItem value="VENDA">Venda</SelectItem>
+                        <SelectItem value="COMPRA">Compra</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <RadioGroup
+                      value={filters.status || 'all'}
+                      onValueChange={(value) =>
+                        updateFilters({
+                          status: value === 'all' ? undefined : (value as StatusPedido),
+                        })
+                      }
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="all" id="status-all" />
+                        <Label htmlFor="status-all" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-primary" />
+                          <span>Todos</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ABERTO" id="status-aberto" />
+                        <Label htmlFor="status-aberto" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-amber-500" />
+                          <span>Pendente</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PARCIAL" id="status-parcial" />
+                        <Label htmlFor="status-parcial" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-blue-500" />
+                          <span>Aberto</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="QUITADO" id="status-quitado" />
+                        <Label htmlFor="status-quitado" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-green-500" />
+                          <span>Quitado</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="CANCELADO" id="status-cancelado" />
+                        <Label htmlFor="status-cancelado" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-red-500" />
+                          <span>Cancelado</span>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={handleAplicarFiltros} className="flex-1">
+                      Aplicar Filtros
+                    </Button>
+                    <Button onClick={handleLimparFiltros} variant="outline" className="flex-1">
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por número, cliente ou fornecedor..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
             </div>
           </div>
         </div>
@@ -320,8 +381,8 @@ export default function Pedidos() {
           />
 
           {/* Paginação */}
-          {/* Não mostrar paginação quando há busca por numero_pedido (busca busca todos os resultados) */}
-          {totalPages > 1 && !filters.numero_pedido && (
+          {/* Não mostrar paginação quando há busca (todos os resultados vêm na primeira página) */}
+          {totalPages > 1 && !filters.busca && !filters.numero_pedido && (
             <div className="border-t border-border p-4 mt-4">
               <Pagination>
                 <PaginationContent>

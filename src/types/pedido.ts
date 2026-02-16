@@ -134,6 +134,8 @@ export interface AtualizarCondicaoPagamentoPayload {
 export interface FiltrosPedidos {
   id?: number;
   numero_pedido?: string;
+  /** Busca por número do pedido, cliente ou fornecedor (enviado como param único no backend) */
+  busca?: string;
   tipo?: TipoPedido;
   status?: StatusPedido;
   cliente_id?: number;

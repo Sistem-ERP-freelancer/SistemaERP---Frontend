@@ -39,11 +39,12 @@ export function useOrders() {
       try {
         // Se há busca por numero_pedido, aumentar o limite para garantir que encontre o pedido
         // mesmo se estiver em outra página (busca parcial no frontend)
-        const limit = filters.numero_pedido ? 1000 : ITEMS_PER_PAGE;
+        const hasBusca = !!(filters.numero_pedido || filters.busca);
+        const limit = hasBusca ? 1000 : ITEMS_PER_PAGE;
         
         const params = {
           ...filters,
-          page: filters.numero_pedido ? 1 : currentPage, // Sempre página 1 quando há busca
+          page: hasBusca ? 1 : currentPage, // Sempre página 1 quando há busca
           limit,
         };
         
@@ -51,7 +52,7 @@ export function useOrders() {
         console.log('🔍 [Pedidos] Filtros sendo enviados:', {
           ...params,
           filters_completos: filters,
-          motivo_limit_aumentado: filters.numero_pedido ? 'Busca parcial por numero_pedido' : undefined,
+          motivo_limit_aumentado: hasBusca ? 'Busca por numero_pedido ou busca' : undefined,
         });
         
         const response = await pedidosService.listar(params);
@@ -126,22 +127,30 @@ export function useOrders() {
       return [];
     }
     
-    // Filtro adicional no frontend para busca parcial por numero_pedido
-    // Isso garante que mesmo se o backend não fizer busca parcial, funcionará
-    if (filters.numero_pedido) {
+    // Filtro adicional no frontend: numero_pedido (busca parcial) ou busca (número, cliente, fornecedor)
+    if (filters.numero_pedido && !filters.busca) {
       const searchTerm = filters.numero_pedido.toLowerCase();
       ordersList = ordersList.filter((order) =>
         order.numero_pedido?.toLowerCase().includes(searchTerm)
       );
+    } else if (filters.busca && filters.busca.trim()) {
+      const termo = filters.busca.trim().toLowerCase();
+      ordersList = ordersList.filter((order) => {
+        const matchNumero = order.numero_pedido?.toLowerCase().includes(termo);
+        const matchCliente = order.cliente?.nome?.toLowerCase().includes(termo);
+        const matchFornecedor =
+          order.fornecedor?.nome_fantasia?.toLowerCase().includes(termo) ||
+          order.fornecedor?.nome_razao?.toLowerCase().includes(termo);
+        return !!(matchNumero || matchCliente || matchFornecedor);
+      });
     }
     
     return ordersList;
-  }, [ordersResponse, filters.numero_pedido]);
+  }, [ordersResponse, filters.numero_pedido, filters.busca]);
 
   const totalOrders = useMemo(() => {
-    // Se há filtro de numero_pedido, usar o tamanho da lista filtrada
-    // porque o backend pode não estar fazendo busca parcial corretamente
-    if (filters.numero_pedido && orders.length > 0) {
+    // Se há filtro de busca/numero_pedido, usar o tamanho da lista filtrada
+    if ((filters.numero_pedido || filters.busca) && orders.length > 0) {
       return orders.length;
     }
     
@@ -162,7 +171,7 @@ export function useOrders() {
     }
     
     return 0;
-  }, [ordersResponse, orders.length, filters.numero_pedido]);
+  }, [ordersResponse, orders.length, filters.numero_pedido, filters.busca]);
 
   const totalPages = Math.ceil(totalOrders / ITEMS_PER_PAGE);
 
