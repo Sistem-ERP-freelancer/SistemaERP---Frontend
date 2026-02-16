@@ -352,17 +352,22 @@ const ContasAReceber = () => {
     const totalVencidas = Number(dashboardReceber?.vencidas) ?? 0;
     const totalVencendoHoje = Number(dashboardReceber?.vencendo_hoje) ?? 0;
     const totalVencendoEsteMes = Number(dashboardReceber?.vencendo_este_mes) ?? 0;
-    const valorPago = parseValor(dashboardReceber?.valor_total_recebido) ?? 0;
+    // Valor Pago: quando temos lista de pedidos (incl. quitados), somar valor_pago de cada um; senão usar dashboard
+    const valorPagoFromPedidos =
+      !usarFallbackContasFinanceiras && pedidos.length > 0
+        ? pedidos.reduce((s, p) => s + (Number((p as ContaReceber).valor_pago) || 0), 0)
+        : null;
+    const valorPago = valorPagoFromPedidos !== null ? valorPagoFromPedidos : (parseValor(dashboardReceber?.valor_total_recebido) ?? 0);
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
       { label: "Total a Receber", value: formatarMoedaCard(totalReceber), icon: CreditCard, trend: null, trendUp: true, color: "text-royal", bgColor: "bg-royal/10", filterKey: "todos" as const },
-      { label: "Valor Pago", value: formatarMoedaCard(valorPago), icon: DollarSign, trend: null, trendUp: true, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
+      { label: "Valor Recebido", value: formatarMoedaCard(valorPago), icon: DollarSign, trend: null, trendUp: true, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
       { label: "Vencidas", value: totalVencidas.toString(), icon: Calendar, trend: null, trendUp: false, color: "text-red-600", bgColor: "bg-red-100", filterKey: "vencidas" as const },
       { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
       { label: "Vencendo Este Mês", value: totalVencendoEsteMes.toString(), icon: Calendar, trend: null, color: "text-blue-600", bgColor: "bg-blue-100", filterKey: "vencendo_este_mes" as const },
     ];
-  }, [dashboardReceber, viewMode, totalAReceberFromLista]);
+  }, [dashboardReceber, viewMode, totalAReceberFromLista, usarFallbackContasFinanceiras, pedidos]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -946,7 +951,7 @@ const ContasAReceber = () => {
       if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
       if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
       if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
-      if (activeCardFilter === "valor_pago") return p.status === "PARCIAL";
+      if (activeCardFilter === "valor_pago") return p.status === "PARCIAL" || p.status === "QUITADO";
       return true;
     });
   }, [linhasPedidos, activeCardFilter]);
@@ -959,7 +964,7 @@ const ContasAReceber = () => {
     fimDoMes.setHours(23, 59, 59, 999);
 
     return gruposContas.filter((g) => {
-      if (activeCardFilter === "valor_pago") return g.statusConsolidado === "Pago Parcial";
+      if (activeCardFilter === "valor_pago") return g.statusConsolidado === "Pago Parcial" || g.statusConsolidado === "Pago Total";
       if (!g.primeira_vencimento) return false;
 
       const dataVenc = new Date(g.primeira_vencimento);
@@ -972,7 +977,7 @@ const ContasAReceber = () => {
     });
   }, [gruposContas, activeCardFilter]);
 
-  // Transações para exibição (mesma estrutura de Contas a Pagar)
+  // Transações para exibição: Valor = total da conta; Valor Pago = valor já recebido
   const transacoesDisplayReceber = useMemo(() => {
     return filteredLinhasPedidos.map((p: ContaReceber) => {
       const diasAteVencimento = calcularDiasAteVencimento(p.data_vencimento ?? p.data_pedido);
@@ -983,7 +988,8 @@ const ContasAReceber = () => {
         descricao: `Pedido ${p.numero_pedido}`,
         cliente: p.cliente_nome || "—",
         categoria: "Vendas",
-        valor: formatarMoeda(p.valor_em_aberto),
+        valor: formatarMoeda(p.valor_total),
+        valorPago: formatarMoeda(p.valor_pago ?? 0),
         data: p.data_vencimento ? formatarDataBR(p.data_vencimento) : formatarDataBR(p.data_pedido),
         vencimentoStatus,
         status: statusFormatado,
@@ -996,12 +1002,15 @@ const ContasAReceber = () => {
     return filteredGruposContas.map((g) => {
       const diasAteVencimento = calcularDiasAteVencimento(g.primeira_vencimento ?? undefined);
       const vencimentoStatus = getVencimentoStatus(diasAteVencimento, g.statusConsolidado === "Pago Total" ? "QUITADO" : "ABERTO");
+      const totalGrupo = g.parcelas.reduce((s, p) => s + (p.valor_original ?? 0), 0);
+      const valorPagoGrupo = Math.max(0, totalGrupo - g.valor_aberto);
       return {
         id: g.descricaoBase.split(" ")[0] || g.key,
         descricao: g.descricaoBase,
         cliente: g.cliente_nome,
         categoria: g.categoria,
-        valor: formatarMoeda(g.valor_aberto),
+        valor: formatarMoeda(totalGrupo),
+        valorPago: formatarMoeda(valorPagoGrupo),
         data: g.primeira_vencimento ? formatarDataBR(g.primeira_vencimento) : "—",
         vencimentoStatus,
         status: g.statusConsolidado,
@@ -1435,6 +1444,7 @@ const ContasAReceber = () => {
                 <TableHead>ID</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Valor</TableHead>
+                <TableHead>Valor Pago</TableHead>
                 <TableHead>Data Vencimento</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
@@ -1443,7 +1453,7 @@ const ContasAReceber = () => {
             <TableBody>
               {(isLoadingPedidosContasReceber || (usarFallbackContasFinanceiras && isLoadingContas)) ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas a receber...
@@ -1452,7 +1462,7 @@ const ContasAReceber = () => {
                 </TableRow>
               ) : (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">
@@ -1478,6 +1488,9 @@ const ContasAReceber = () => {
                       </TableCell>
                       <TableCell>
                         <span className="font-medium">{transacao.valor}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">{transacao.valorPago}</span>
                       </TableCell>
                       <TableCell>
                         {transacao.status === "Pago Total" || transacao.status === "Cancelado" ? (
@@ -1529,6 +1542,9 @@ const ContasAReceber = () => {
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{transacao.valor}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{transacao.valorPago}</span>
                     </TableCell>
                     <TableCell>
                       {transacao.status === "Quitado" || transacao.status === "Cancelado" ? (
