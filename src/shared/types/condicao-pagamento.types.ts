@@ -21,7 +21,7 @@ export interface ParcelaPagamento {
 
 export interface CondicaoPagamento {
   id?: number;
-  descricao: string;
+  descricao?: string;
   forma_pagamento: FormaPagamento;
   prazo_dias?: number;
   parcelado: boolean;

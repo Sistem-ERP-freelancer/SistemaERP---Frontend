@@ -1141,9 +1141,9 @@ export function OrderForm({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 pt-2">
-          {condicoesParaEscolha.map((cond) => (
+          {condicoesParaEscolha.map((cond, idx) => (
             <Button
-              key={cond.id ?? cond.descricao}
+              key={cond.id ?? cond.descricao ?? `cond-${idx}`}
               type="button"
               variant="outline"
               className="w-full justify-start text-left h-auto py-3"
@@ -1153,7 +1153,7 @@ export function OrderForm({
                 toast.success('Condição de pagamento importada do cliente.');
               }}
             >
-              <span className="font-medium">{cond.descricao}</span>
+              <span className="font-medium">{cond.descricao || '—'}</span>
               {cond.forma_pagamento && (
                 <span className="text-muted-foreground ml-2">({cond.forma_pagamento})</span>
               )}

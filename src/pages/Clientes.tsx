@@ -1622,31 +1622,32 @@ const Clientes = () => {
                   ? {
                       condicoes_pagamento: condicoesPagamento.map((cp) => {
                         // Validação prévia
+                        const descricaoLabel = cp.descricao?.trim() || '(sem descrição)';
                         if (cp.parcelado) {
                           if (!cp.numero_parcelas || cp.numero_parcelas < 1) {
-                            toast.error(`Condição "${cp.descricao}": Número de parcelas inválido. Por favor, informe um número válido de parcelas.`);
-                            throw new Error(`Número de parcelas inválido para condição: ${cp.descricao}`);
+                            toast.error(`Condição "${descricaoLabel}": Número de parcelas inválido. Por favor, informe um número válido de parcelas.`);
+                            throw new Error(`Número de parcelas inválido para condição: ${descricaoLabel}`);
                           }
                           
                           if (!cp.parcelas || cp.parcelas.length === 0) {
-                            toast.error(`Condição "${cp.descricao}": Parcelas não foram criadas. Por favor, verifique o número de parcelas.`);
-                            throw new Error(`Parcelas não criadas para condição: ${cp.descricao}`);
+                            toast.error(`Condição "${descricaoLabel}": Parcelas não foram criadas. Por favor, verifique o número de parcelas.`);
+                            throw new Error(`Parcelas não criadas para condição: ${descricaoLabel}`);
                           }
 
                           if (cp.parcelas.length !== cp.numero_parcelas) {
-                            toast.error(`Condição "${cp.descricao}": O número de parcelas (${cp.parcelas.length}) não corresponde ao informado (${cp.numero_parcelas}).`);
-                            throw new Error(`Número de parcelas inconsistente para condição: ${cp.descricao}`);
+                            toast.error(`Condição "${descricaoLabel}": O número de parcelas (${cp.parcelas.length}) não corresponde ao informado (${cp.numero_parcelas}).`);
+                            throw new Error(`Número de parcelas inconsistente para condição: ${descricaoLabel}`);
                           }
                         } else {
                           if (!cp.prazo_dias && cp.prazo_dias !== 0) {
-                            toast.error(`Condição "${cp.descricao}": Prazo em dias é obrigatório para pagamento à vista.`);
-                            throw new Error(`Prazo em dias obrigatório para condição: ${cp.descricao}`);
+                            toast.error(`Condição "${descricaoLabel}": Prazo em dias é obrigatório para pagamento à vista.`);
+                            throw new Error(`Prazo em dias obrigatório para condição: ${descricaoLabel}`);
                           }
                         }
 
-                        // Construir objeto sem campos undefined
+                        // Construir objeto (descricao opcional)
                         const condicaoPagamento: any = {
-                          descricao: cp.descricao,
+                          ...(cp.descricao != null && cp.descricao !== '' ? { descricao: cp.descricao.trim() } : {}),
                           forma_pagamento: cp.forma_pagamento,
                           parcelado: cp.parcelado,
                           padrao: cp.padrao,

@@ -117,18 +117,17 @@ export const CondicaoPagamentoForm: React.FC<CondicaoPagamentoFormProps> = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Descrição */}
+        {/* Descrição (opcional) */}
         <div className="space-y-2">
           <Label htmlFor={`descricao-${index}`}>
-            Prazo de Pagamento <span className="text-destructive">*</span>
+            Prazo de Pagamento
           </Label>
           <Input
             id={`descricao-${index}`}
             type="text"
-            value={condicao.descricao}
+            value={condicao.descricao ?? ''}
             onChange={(e) => handleChange("descricao", e.target.value)}
-            placeholder="Ex: Pagamento em 30 dias ou 12x sem juros"
-            required
+            placeholder="Ex: 30 dias, À vista em 30 dias (opcional)"
           />
           <p className="text-xs text-muted-foreground">
             Descreva o prazo e condições de pagamento (ex: "À vista em 30 dias", "12x no cartão", "Entrada + 6x")
