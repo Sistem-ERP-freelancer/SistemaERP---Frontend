@@ -28,12 +28,33 @@ export interface ResumoFinanceiroPedido {
   mensagem_adiantamento?: string | null;
 }
 
+/** Dados do cheque no histórico de pagamento */
+export interface DadosCheque {
+  banco: string;
+  numero_cheque: string;
+  agencia: string;
+  conta: string;
+  titular: string;
+}
+
 /** Item do histórico — GET /pedidos/:id/pagamentos */
 export interface ItemHistoricoPagamento {
   id: number;
   valor: number;
   forma_pagamento: string;
   data_pagamento: string;
+  cheque?: DadosCheque;
+}
+
+/** Dados do cheque ao registrar pagamento (quando forma = CHEQUE) */
+export interface ChequeRegistro {
+  banco: string;
+  numero_cheque: string;
+  agencia: string;
+  conta: string;
+  titular: string;
+  data_vencimento?: string;
+  cpf_cnpj_titular?: string;
 }
 
 /** Body ao registrar pagamento — POST /pedidos/:id/pagamentos */
@@ -44,4 +65,6 @@ export interface RegistrarPagamentoBody {
   observacoes?: string;
   /** ADIANTAMENTO = pagamento do adiantamento (boleto descontado). Backend pode preencher automaticamente. */
   tipo_lancamento?: string;
+  /** Dados do cheque (obrigatório quando forma_pagamento = CHEQUE) */
+  cheque?: ChequeRegistro;
 }

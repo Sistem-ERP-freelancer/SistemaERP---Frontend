@@ -39,6 +39,11 @@ const ContasAReceberPedidoPagamentos = () => {
   const [dataPagamento, setDataPagamento] = useState<string>(new Date().toISOString().split('T')[0]);
   const [formaPagamento, setFormaPagamento] = useState<string>('');
   const [observacoes, setObservacoes] = useState<string>('');
+  const [chequeBanco, setChequeBanco] = useState<string>('');
+  const [chequeNumero, setChequeNumero] = useState<string>('');
+  const [chequeAgencia, setChequeAgencia] = useState<string>('');
+  const [chequeConta, setChequeConta] = useState<string>('');
+  const [chequeTitular, setChequeTitular] = useState<string>('');
 
   const [pedidoQuery, resumoQuery] = useQueries({
     queries: [
@@ -100,6 +105,16 @@ const ContasAReceberPedidoPagamentos = () => {
         data_pagamento: dataPagamento,
         ...(observacoes?.trim() ? { observacoes: observacoes.trim() } : {}),
         ...(ehPagamentoAdiantamento ? { tipo_lancamento: 'ADIANTAMENTO' } : {}),
+        ...(formaPagamento === 'CHEQUE' ? {
+          cheque: {
+            ...(chequeBanco?.trim() && { banco: chequeBanco.trim() }),
+            ...(chequeNumero?.trim() && { numero_cheque: chequeNumero.trim() }),
+            ...(chequeAgencia?.trim() && { agencia: chequeAgencia.trim() }),
+            ...(chequeConta?.trim() && { conta: chequeConta.trim() }),
+            ...(chequeTitular?.trim() && { titular: chequeTitular.trim() }),
+            data_vencimento: dataPagamento,
+          },
+        } : {}),
       });
     },
     onSuccess: () => {
@@ -264,6 +279,33 @@ const ContasAReceberPedidoPagamentos = () => {
                 </Select>
               </div>
             </div>
+            {formaPagamento === 'CHEQUE' && (
+              <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                <h3 className="text-sm font-semibold">Dados do Cheque (opcional)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <Label>Banco</Label>
+                    <Input value={chequeBanco} onChange={(e) => setChequeBanco(e.target.value)} placeholder="Ex: Banco do Brasil" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nº do Cheque</Label>
+                    <Input value={chequeNumero} onChange={(e) => setChequeNumero(e.target.value)} placeholder="Ex: 000123456" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Agência</Label>
+                    <Input value={chequeAgencia} onChange={(e) => setChequeAgencia(e.target.value)} placeholder="Ex: 1234-5" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Conta</Label>
+                    <Input value={chequeConta} onChange={(e) => setChequeConta(e.target.value)} placeholder="Ex: 12345-6" />
+                  </div>
+                  <div className="space-y-2 md:col-span-1">
+                    <Label>Titular</Label>
+                    <Input value={chequeTitular} onChange={(e) => setChequeTitular(e.target.value)} placeholder="Nome do titular" />
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Observações</Label>
               <Textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={3} placeholder="Opcional" />
