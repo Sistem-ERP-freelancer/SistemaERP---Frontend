@@ -130,6 +130,12 @@ const ContasAPagarPedidoDetalhes = () => {
   }
 
   const formaEstrutural = (pedido as any)?.forma_pagamento_estrutural || 'AVISTA';
+  const formaPagamentoPedido = (pedido as any)?.forma_pagamento;
+  const formaDisplay = formaEstrutural === 'BOLETO_DESCONTADO'
+    ? 'Boleto Descontado'
+    : formaPagamentoPedido
+      ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
+      : (FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural);
 
   return (
     <AppLayout>
@@ -170,8 +176,8 @@ const ContasAPagarPedidoDetalhes = () => {
               <div className="font-medium">{pedido!.numero_pedido}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Forma</div>
-              <div className="font-medium">{FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural}</div>
+              <div className="text-sm text-muted-foreground">Forma de Pagamento</div>
+              <div className="font-medium">{formaDisplay}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Status financeiro</div>

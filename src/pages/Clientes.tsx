@@ -1638,11 +1638,6 @@ const Clientes = () => {
                             toast.error(`Condição "${descricaoLabel}": O número de parcelas (${cp.parcelas.length}) não corresponde ao informado (${cp.numero_parcelas}).`);
                             throw new Error(`Número de parcelas inconsistente para condição: ${descricaoLabel}`);
                           }
-                        } else {
-                          if (!cp.prazo_dias && cp.prazo_dias !== 0) {
-                            toast.error(`Condição "${descricaoLabel}": Prazo em dias é obrigatório para pagamento à vista.`);
-                            throw new Error(`Prazo em dias obrigatório para condição: ${descricaoLabel}`);
-                          }
                         }
 
                         // Construir objeto (descricao opcional)
@@ -1653,10 +1648,8 @@ const Clientes = () => {
                           padrao: cp.padrao,
                         };
 
-                        // Se não parcelado, enviar apenas prazo_dias
-                        if (!cp.parcelado) {
-                          condicaoPagamento.prazo_dias = cp.prazo_dias;
-                        } else {
+                        // Se parcelado, enviar numero_parcelas e parcelas
+                        if (cp.parcelado) {
                           // Se parcelado, enviar numero_parcelas e parcelas (garantir que são números válidos)
                           condicaoPagamento.numero_parcelas = Number(cp.numero_parcelas);
                           condicaoPagamento.parcelas = cp.parcelas.map(p => ({
@@ -1664,6 +1657,9 @@ const Clientes = () => {
                             dias_vencimento: Number(p.dias_vencimento),
                             percentual: Number(p.percentual),
                           }));
+                        } else {
+                          // Se não parcelado, enviar prazo_dias como 0 (campo removido do formulário)
+                          condicaoPagamento.prazo_dias = cp.prazo_dias ?? 0;
                         }
 
                         if (import.meta.env.DEV) {
@@ -2401,7 +2397,7 @@ const Clientes = () => {
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div>
                             <Label className="text-xs text-muted-foreground">
-                              Prazo de Pagamento
+                              Descrição
                             </Label>
                             <p className="font-medium">{condicao.descricao || "-"}</p>
                           </div>
@@ -2469,14 +2465,7 @@ const Clientes = () => {
                                 </div>
                               )}
                             </>
-                          ) : (
-                            <div>
-                              <Label className="text-xs text-muted-foreground">
-                                Prazo
-                              </Label>
-                              <p>{condicao.prazo_dias || "-"} dias</p>
-                            </div>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     ))}

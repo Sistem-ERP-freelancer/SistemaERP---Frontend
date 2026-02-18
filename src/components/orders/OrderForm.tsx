@@ -131,16 +131,23 @@ export function OrderForm({
       ? 'Selecione o fornecedor primeiro'
       : 'Selecione um produto';
 
-  // Preencher condicoesPagamento e, em edição, selecionar condição que corresponda ao pedido
+  // Preencher condicoesPagamento e aplicar condição padrão ao selecionar cliente
   useEffect(() => {
     if (!dadosClientePedido || tipo !== 'VENDA' || !clienteId) return;
-    const { condicoes_pagamento } = dadosClientePedido;
+    const { condicoes_pagamento, condicao_pagamento_padrao } = dadosClientePedido;
     setCondicoesPagamento(condicoes_pagamento || []);
     if (order) {
+      // Edição: buscar condição que corresponda ao pedido
       const match = (condicoes_pagamento || []).find(
         (c: CondicaoPagamento) => c.descricao === order.condicao_pagamento
       );
       if (match) setCondicaoPagamentoId(match.id?.toString() ?? match.descricao ?? '');
+    } else if (condicoes_pagamento && condicoes_pagamento.length > 0) {
+      // Novo pedido: aplicar condição padrão automaticamente
+      const condicao = condicao_pagamento_padrao ?? (condicoes_pagamento.length === 1 ? condicoes_pagamento[0] : null);
+      if (condicao) {
+        aplicarCondicao(condicao);
+      }
     }
   }, [dadosClientePedido, tipo, clienteId, order]);
 
@@ -153,12 +160,32 @@ export function OrderForm({
     setFormaPagamento(cond.forma_pagamento as FormaPagamento);
     setCondicaoPagamento(cond.descricao || '');
     setPrazoEntregaDias(cond.prazo_dias ?? undefined);
+
+    // Forma de pagamento exibida no dropdown (deve ser definida para aparecer corretamente)
+    const formasNoSelect = ['PIX', 'BOLETO', 'BOLETO_DESCONTADO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'];
+    const formaParaSelect = formasNoSelect.includes(cond.forma_pagamento)
+      ? (cond.forma_pagamento as 'PIX' | 'BOLETO' | 'BOLETO_DESCONTADO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO')
+      : cond.forma_pagamento === 'CARTAO_CREDITO'
+        ? 'CARTAO_DEBITO' // Fallback: Cartão Crédito não está no select, usar Débito
+        : cond.forma_pagamento === 'TRANSFERENCIA'
+          ? 'PIX' // Fallback: Transferência mapeia para PIX
+          : undefined;
+    setFormaPagamentoSelecionada(formaParaSelect);
+
+    // Forma estrutural: à vista para condições não parceladas
+    if (!cond.parcelado || (cond.forma_pagamento !== 'CARTAO_CREDITO' && cond.forma_pagamento !== 'DINHEIRO' && cond.forma_pagamento !== 'PIX')) {
+      setFormaPagamentoEstrutural('AVISTA');
+      setQueroParcelarDinheiroPix(false);
+    }
+
     if (cond.parcelado && cond.forma_pagamento === 'CARTAO_CREDITO' && cond.numero_parcelas) {
+      setFormaPagamentoEstrutural('PARCELADO');
       setQuantidadeParcelas(Math.min(12, Math.max(1, cond.numero_parcelas)));
     } else if (cond.forma_pagamento === 'DINHEIRO' || cond.forma_pagamento === 'PIX') {
       const numPar = cond.numero_parcelas ? Math.min(12, Math.max(1, cond.numero_parcelas)) : 0;
       setQueroParcelarDinheiroPix(numPar > 1);
       setQuantidadeParcelas(numPar > 1 ? numPar : '');
+      setFormaPagamentoEstrutural(numPar > 1 ? 'PARCELADO' : 'AVISTA');
     } else if (cond.forma_pagamento !== 'CARTAO_CREDITO') {
       setQuantidadeParcelas('');
     }

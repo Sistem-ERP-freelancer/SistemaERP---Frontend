@@ -1,14 +1,14 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
-import { formatCurrency, formatarDataBR, formatarFormaPagamento, formatarStatus } from '@/lib/utils';
+import { formatCurrency, formatarDataBR, formatarFormaPagamento } from '@/lib/utils';
 import { pedidosService } from '@/services/pedidos.service';
 import type { ItemHistoricoPagamento } from '@/types/pedido-financeiro.types';
 import { useQueries } from '@tanstack/react-query';
@@ -128,6 +128,12 @@ const ContasAReceberPedidoDetalhes = () => {
   }
 
   const formaEstrutural = (pedido as any)?.forma_pagamento_estrutural || 'AVISTA';
+  const formaPagamentoPedido = (pedido as any)?.forma_pagamento;
+  const formaDisplay = formaEstrutural === 'BOLETO_DESCONTADO'
+    ? 'Boleto Descontado'
+    : formaPagamentoPedido
+      ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
+      : (FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural);
 
   return (
     <AppLayout>
@@ -168,8 +174,8 @@ const ContasAReceberPedidoDetalhes = () => {
               <div className="font-medium">{pedido!.numero_pedido}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Forma</div>
-              <div className="font-medium">{FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural}</div>
+              <div className="text-sm text-muted-foreground">Forma de Pagamento</div>
+              <div className="font-medium">{formaDisplay}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Status financeiro</div>
