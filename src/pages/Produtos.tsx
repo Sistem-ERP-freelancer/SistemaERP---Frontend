@@ -460,7 +460,7 @@ const Produtos = () => {
   // Mutation para criar produto
   const createProdutoMutation = useMutation({
     mutationFn: (data: CreateProdutoDto) => produtosService.criar(data),
-    onSuccess: () => {
+    onSuccess: (data: Produto) => {
       queryClient.invalidateQueries({ queryKey: ["produtos"] });
       setNewProduto({
         nome: "",
@@ -489,7 +489,7 @@ const Produtos = () => {
       setDialogOpen(false);
       setFornecedorPopoverOpen(false);
       setFornecedorSearchTerm("");
-      const skuMsg = (data as Produto)?.sku ? ` SKU: ${(data as Produto).sku}` : "";
+      const skuMsg = data?.sku ? ` SKU: ${data.sku}` : "";
       toast.success(`Produto cadastrado com sucesso!${skuMsg}`);
     },
     onError: (error: any) => {
