@@ -148,7 +148,7 @@ const Produtos = () => {
   const [fornecedorPopoverOpen, setFornecedorPopoverOpen] = useState(false);
   const [fornecedorSearchTerm, setFornecedorSearchTerm] = useState("");
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
-  const [editingProduto, setEditingProduto] = useState<Partial<CreateProdutoDto> & { estoque_maximo?: number; localizacao?: string }>({
+  const [editingProduto, setEditingProduto] = useState<Partial<CreateProdutoDto> & { estoque_maximo?: number; localizacao?: string; fornecedorId?: number | null }>({
     nome: "",
     descricao: "",
     sku: "",
@@ -513,11 +513,6 @@ const Produtos = () => {
       return;
     }
 
-    if (!newProduto.fornecedorId) {
-      toast.error("Selecione um fornecedor");
-      return;
-    }
-
     // Validação de preço promocional conforme GUIA_FRONTEND_CORRECOES_BACKEND.md
     const precoVenda = Number(newProduto.preco_venda);
     const precoPromocional = newProduto.preco_promocional ? Number(newProduto.preco_promocional) : null;
@@ -703,11 +698,6 @@ const Produtos = () => {
       return;
     }
 
-    if (!editingProduto.fornecedorId) {
-      toast.error("Selecione um fornecedor");
-      return;
-    }
-
     // Conforme GUIA_FRONTEND_ESTOQUE_SECAO_PRODUTO: o backend cria a movimentação
     // automaticamente ao processar o PATCH com estoque_atual diferente do atual
     const produtoData: Partial<CreateProdutoDto> = {
@@ -720,7 +710,7 @@ const Produtos = () => {
       unidade_medida: editingProduto.unidade_medida || "UN",
       statusProduto: editingProduto.statusProduto || "ATIVO",
       categoriaId: editingProduto.categoriaId,
-      fornecedorId: editingProduto.fornecedorId,
+      fornecedorId: editingProduto.fornecedorId === null ? null : editingProduto.fornecedorId,
     };
 
     // ⭐ Lógica de detecção de remoção de campos opcionais
@@ -1429,7 +1419,7 @@ const Produtos = () => {
                       <div className="space-y-2">
                         <Label className="flex items-center gap-2">
                           <Truck className="w-4 h-4 text-muted-foreground" />
-                          Fornecedor *
+                          Fornecedor (opcional)
                         </Label>
                         <Popover open={fornecedorPopoverOpen} onOpenChange={setFornecedorPopoverOpen}>
                           <PopoverTrigger asChild>
@@ -1443,7 +1433,7 @@ const Produtos = () => {
                                 ? fornecedores.find((forn) => forn.id === newProduto.fornecedorId)?.nome_fantasia ||
                                   fornecedores.find((forn) => forn.id === newProduto.fornecedorId)?.nome_razao ||
                                   "Selecione um fornecedor"
-                                : "Selecione um fornecedor"}
+                                : "Nenhum (opcional)"}
                               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                           </PopoverTrigger>
@@ -1460,13 +1450,24 @@ const Produtos = () => {
                                     <div className="py-6 px-4 text-center text-sm text-muted-foreground">
                                       <Truck className="w-10 h-10 mx-auto mb-2 opacity-50" />
                                       <p className="font-medium text-foreground">Nenhum fornecedor cadastrado</p>
-                                      <p className="mt-1 text-xs">Cadastre um fornecedor antes de criar o produto.</p>
+                                      <p className="mt-1 text-xs">Você pode criar o produto sem fornecedor.</p>
                                     </div>
                                   ) : (
                                     "Nenhum fornecedor encontrado."
                                   )}
                                 </CommandEmpty>
                                 <CommandGroup>
+                                  <CommandItem
+                                    value="__nenhum__"
+                                    onSelect={() => {
+                                      setNewProduto({ ...newProduto, fornecedorId: undefined });
+                                      setFornecedorPopoverOpen(false);
+                                      setFornecedorSearchTerm("");
+                                    }}
+                                  >
+                                    <Check className={cn("mr-2 h-4 w-4", !newProduto.fornecedorId ? "opacity-100" : "opacity-0")} />
+                                    <span className="text-muted-foreground">Nenhum (criar sem fornecedor)</span>
+                                  </CommandItem>
                                   {(() => {
                                     const filteredFornecedores = fornecedores.filter((forn) => {
                                       if (!fornecedorSearchTerm) return true;
@@ -2921,14 +2922,14 @@ const Produtos = () => {
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Truck className="w-4 h-4 text-muted-foreground" />
-                        Fornecedor *
+                        Fornecedor (opcional)
                       </Label>
                       <Select
-                        value={editingProduto.fornecedorId?.toString() || undefined}
+                        value={editingProduto.fornecedorId != null ? editingProduto.fornecedorId.toString() : "none"}
                         onValueChange={(value) =>
                           setEditingProduto({
                             ...editingProduto,
-                            fornecedorId: Number(value),
+                            fornecedorId: value === "none" ? null : Number(value),
                           })
                         }
                       >
@@ -2936,19 +2937,12 @@ const Produtos = () => {
                           <SelectValue placeholder="Selecione um fornecedor" />
                         </SelectTrigger>
                         <SelectContent>
-                          {fornecedores.length === 0 ? (
-                            <div className="py-6 px-4 text-center text-sm text-muted-foreground">
-                              <Truck className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                              <p className="font-medium text-foreground">Nenhum fornecedor cadastrado</p>
-                              <p className="mt-1 text-xs">Cadastre um fornecedor antes de editar o produto.</p>
-                            </div>
-                          ) : (
-                            fornecedores.map((forn) => (
-                              <SelectItem key={forn.id} value={forn.id.toString()}>
-                                {forn.nome_fantasia}
-                              </SelectItem>
-                            ))
-                          )}
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {fornecedores.map((forn) => (
+                            <SelectItem key={forn.id} value={forn.id.toString()}>
+                              {forn.nome_fantasia}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
