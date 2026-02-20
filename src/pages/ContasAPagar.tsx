@@ -949,7 +949,7 @@ function ContasAPagar() {
           data: dataFormatada,
           status: statusFormatado,
           statusOriginal: pedido.status,
-          contaId: pedido.pedido_id,
+          contaId: undefined as number | undefined,
           fornecedor: nomeFornecedor,
           formaPagamento: formaPagamentoFormatada,
           diasAteVencimento,
@@ -1754,9 +1754,12 @@ function ContasAPagar() {
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
-                                let contaId = transacao.contaId ?? null;
-                                if (contaId == null && (transacao as any).pedidoId != null) {
+                                // Lista por pedidos: sempre obter conta pelo pedidoId (contaId na linha é pedido_id, não conta financeira)
+                                let contaId: number | null = null;
+                                if ((transacao as any).pedidoId != null) {
                                   contaId = await financeiroService.getContaIdPorPedidoId((transacao as any).pedidoId, 'PAGAR');
+                                } else {
+                                  contaId = transacao.contaId ?? null;
                                 }
                                 if (contaId == null) {
                                   toast.error('Conta financeira não encontrada para este item.');

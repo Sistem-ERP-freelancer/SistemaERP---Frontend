@@ -1769,7 +1769,7 @@ const ContasAReceber = () => {
                 })
               ) : (
                 transacoesDisplayReceber.map((transacao) => (
-                  <TableRow key={String(transacao.pedidoId)}>
+                  <TableRow key={`${transacao.id}-${transacao.pedidoId}`}>
                     <TableCell>
                       <span className="font-medium">{transacao.id}</span>
                     </TableCell>
@@ -1815,12 +1815,12 @@ const ContasAReceber = () => {
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
-                                const pedidoId = transacao.pedidoId ?? linhasPedidos.find((p: ContaReceber) => p.numero_pedido === transacao.id)?.pedido_id;
+                                const pedidoId = transacao.pedidoId;
                                 if (pedidoId == null) {
                                   toast.error('Conta financeira não encontrada para este pedido.');
                                   return;
                                 }
-                                const contaId = await financeiroService.getContaIdPorPedidoId(pedidoId);
+                                const contaId = await financeiroService.getContaIdPorPedidoId(pedidoId, 'RECEBER');
                                 if (contaId == null) {
                                   toast.error('Conta financeira não encontrada para este pedido.');
                                   return;
