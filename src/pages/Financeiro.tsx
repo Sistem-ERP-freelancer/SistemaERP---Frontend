@@ -1157,6 +1157,19 @@ const Financeiro = () => {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                await financeiroService.downloadReciboPagamento(transacao.contaId);
+                                toast.success('Recibo de pagamento baixado.');
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                              }
+                            }}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Recibo de pagamento
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => handleDelete(String(transacao.contaId))}
                             className="text-destructive focus:text-destructive"
                           >

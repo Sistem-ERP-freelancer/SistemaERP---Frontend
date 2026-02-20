@@ -372,6 +372,25 @@ class ApiClient {
     return this.request<T>(endpoint, { ...options, method: 'GET' });
   }
 
+  /**
+   * GET que retorna o corpo da resposta como Blob (ex.: PDF).
+   * Não envia Content-Type: application/json para não alterar o Accept.
+   */
+  async getBlob(endpoint: string): Promise<Blob> {
+    const url = `${this.baseURL}${endpoint}`;
+    const token = localStorage.getItem('access_token');
+    const headers: HeadersInit = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const error = new Error(response.statusText || 'Erro ao baixar arquivo') as any;
+      error.response = { status: response.status };
+      throw error;
+    }
+    return response.blob();
+  }
+
   post<T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> {
     // Log detalhado em desenvolvimento para pedidos
     if (import.meta.env.DEV && endpoint.includes('/pedidos') && data) {

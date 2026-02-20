@@ -1746,6 +1746,21 @@ const ContasAReceber = () => {
                                 Pagamentos
                               </DropdownMenuItem>
                             )}
+                            {(grupo?.parcelas?.[0]?.id != null) && (
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    await financeiroService.downloadReciboPagamento(grupo!.parcelas![0].id);
+                                    toast.success('Recibo de pagamento baixado.');
+                                  } catch (e) {
+                                    toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                                  }
+                                }}
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Recibo de pagamento
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1797,6 +1812,29 @@ const ContasAReceber = () => {
                               Pagamentos
                             </DropdownMenuItem>
                           ) : null}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                const pedidoId = transacao.pedidoId ?? linhasPedidos.find((p: ContaReceber) => p.numero_pedido === transacao.id)?.pedido_id;
+                                if (pedidoId == null) {
+                                  toast.error('Conta financeira não encontrada para este pedido.');
+                                  return;
+                                }
+                                const contaId = await financeiroService.getContaIdPorPedidoId(pedidoId);
+                                if (contaId == null) {
+                                  toast.error('Conta financeira não encontrada para este pedido.');
+                                  return;
+                                }
+                                await financeiroService.downloadReciboPagamento(contaId);
+                                toast.success('Recibo de pagamento baixado.');
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                              }
+                            }}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Recibo de pagamento
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

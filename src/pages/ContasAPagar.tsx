@@ -1751,6 +1751,27 @@ function ContasAPagar() {
                               Pagamentos
                             </DropdownMenuItem>
                           )}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                let contaId = transacao.contaId ?? null;
+                                if (contaId == null && (transacao as any).pedidoId != null) {
+                                  contaId = await financeiroService.getContaIdPorPedidoId((transacao as any).pedidoId, 'PAGAR');
+                                }
+                                if (contaId == null) {
+                                  toast.error('Conta financeira não encontrada para este item.');
+                                  return;
+                                }
+                                await financeiroService.downloadReciboPagamento(contaId);
+                                toast.success('Recibo de pagamento baixado.');
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                              }
+                            }}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Recibo de pagamento
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

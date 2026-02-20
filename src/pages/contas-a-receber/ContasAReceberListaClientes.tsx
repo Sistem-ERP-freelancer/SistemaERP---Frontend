@@ -31,6 +31,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DollarSign, FileText, Loader2, MoreVertical, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface ContasAReceberListaClientesProps {
   filtroStatus?: string;
@@ -414,6 +415,26 @@ const ContasAReceberListaClientes = ({
                           <FileText className="w-4 h-4 mr-2" />
                           Ver detalhes
                         </DropdownMenuItem>
+                        {row.primeiro_pedido_id && (
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                const contaId = await financeiroService.getContaIdPorPedidoId(row.primeiro_pedido_id!, 'RECEBER');
+                                if (contaId == null) {
+                                  toast.error('Conta financeira não encontrada para este pedido.');
+                                  return;
+                                }
+                                await financeiroService.downloadReciboPagamento(contaId);
+                                toast.success('Recibo de pagamento baixado.');
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                              }
+                            }}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Recibo de pagamento
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

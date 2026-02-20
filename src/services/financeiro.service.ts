@@ -452,6 +452,33 @@ class FinanceiroService {
   }
 
   /**
+   * Baixa o PDF do Recibo de Pagamento (Fechamento de Fatura) da conta financeira.
+   * GET /contas-financeiras/:id/recibo/pdf
+   */
+  async downloadReciboPagamento(contaId: number): Promise<void> {
+    const blob = await apiClient.getBlob(`/contas-financeiras/${contaId}/recibo/pdf`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recibo-pagamento-${contaId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Retorna o ID da primeira conta financeira vinculada ao pedido (para gerar recibo).
+   * @param tipo Opcional: 'RECEBER' | 'PAGAR' para filtrar (ex.: Contas a Pagar usa 'PAGAR').
+   */
+  async getContaIdPorPedidoId(pedidoId: number, tipo?: 'RECEBER' | 'PAGAR'): Promise<number | null> {
+    const contas = await this.buscarPorPedido(pedidoId);
+    if (!contas?.length) return null;
+    const primeira = tipo ? contas.find((c) => c.tipo === tipo) ?? contas[0] : contas[0];
+    return primeira?.id ?? null;
+  }
+
+  /**
    * Listagem contas a receber do módulo financeiro — GET /financeiro/contas-receber.
    * 1 linha por pedido; mesmo formato de GET /pedidos/contas-receber.
    */
