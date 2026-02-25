@@ -1469,7 +1469,7 @@ const ContasAReceber = () => {
           <>
         {/* Search and Filters (mesmo design da página Fornecedores) */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <Button
               variant="outline"
               className="gap-2"
@@ -1490,6 +1490,21 @@ const ContasAReceber = () => {
                     (dataFinalFilter ? 1 : 0)}
                 </span>
               )}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={async () => {
+                try {
+                  await pedidosService.downloadRelatorioPedidosEmAberto(dataInicialFilter || undefined, dataFinalFilter || undefined);
+                  toast.success('Relatório de pedidos em aberto baixado.');
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Erro ao gerar relatório.');
+                }
+              }}
+            >
+              <FileText className="w-4 h-4" />
+              Relatório em aberto (PDF)
             </Button>
             <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
               <SheetContent

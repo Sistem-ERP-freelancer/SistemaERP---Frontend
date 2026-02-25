@@ -234,6 +234,26 @@ class PedidosService {
   }
 
   /**
+   * Baixa o PDF do Relatório de Pedidos em Aberto (Contas a Receber).
+   * GET /pedidos/relatorio/em-aberto?data_inicial=YYYY-MM-DD&data_final=YYYY-MM-DD
+   */
+  async downloadRelatorioPedidosEmAberto(dataInicial?: string, dataFinal?: string): Promise<void> {
+    const params = new URLSearchParams();
+    if (dataInicial?.trim()) params.append('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) params.append('data_final', dataFinal.trim());
+    const q = params.toString();
+    const blob = await apiClient.getBlob(`/pedidos/relatorio/em-aberto${q ? `?${q}` : ''}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-pedidos-em-aberto-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
    * Atualiza apenas a data de vencimento base do pedido
    * O backend recalcula automaticamente todas as parcelas pendentes
    */
