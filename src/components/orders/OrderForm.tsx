@@ -34,6 +34,16 @@ import { Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+/** Interpreta string YYYY-MM-DD como data local (evita dia anterior em UTC). */
+function parseDataLocal(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (match) {
+    const [, y, m, d] = match;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  return new Date(value);
+}
+
 /** Evita reset do form quando order vira undefined ao fechar após salvar (edição). */
 function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T>();
@@ -417,9 +427,9 @@ export function OrderForm({
         toast.error('Informe a Data de Vencimento inicial.');
         return;
       }
-      const dataVencimentoDate = new Date(dataVencimento);
+      const dataVencimentoDate = parseDataLocal(dataVencimento);
       dataVencimentoDate.setHours(0, 0, 0, 0);
-      if (dataVencimentoDate < hoje) {
+      if (dataVencimentoDate.getTime() < hoje.getTime()) {
         toast.error('A data de vencimento não pode ser anterior ao dia atual.');
         return;
       }
