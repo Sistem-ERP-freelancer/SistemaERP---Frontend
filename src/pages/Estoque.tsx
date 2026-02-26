@@ -49,6 +49,7 @@ import {
     ArrowDownCircle,
     ArrowUpCircle,
     Calendar,
+    FileText,
     Filter,
     Info,
     Loader2,
@@ -76,6 +77,8 @@ const Estoque = () => {
     motivo: "",
     documento_referencia: "",
   });
+  const [dataInicialRelatorio, setDataInicialRelatorio] = useState<string>("");
+  const [dataFinalRelatorio, setDataFinalRelatorio] = useState<string>("");
 
   // Buscar produtos para seleção
   const { data: produtosData } = useQuery({
@@ -589,6 +592,40 @@ const Estoque = () => {
                 <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              className="gap-2 shrink-0"
+              onClick={async () => {
+                try {
+                  await estoqueService.downloadRelatorioAcompanhamentoPdf(
+                    dataInicialRelatorio || undefined,
+                    dataFinalRelatorio || undefined
+                  );
+                  toast.success("Relatório de acompanhamento baixado.");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Erro ao gerar relatório.");
+                }
+              }}
+            >
+              <FileText className="w-4 h-4" />
+              Relatório de acompanhamento (PDF)
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center text-sm">
+            <Label className="text-muted-foreground shrink-0">Período do relatório:</Label>
+            <Input
+              type="date"
+              className="w-[140px]"
+              value={dataInicialRelatorio}
+              onChange={(e) => setDataInicialRelatorio(e.target.value || "")}
+            />
+            <span className="text-muted-foreground">até</span>
+            <Input
+              type="date"
+              className="w-[140px]"
+              value={dataFinalRelatorio}
+              onChange={(e) => setDataFinalRelatorio(e.target.value || "")}
+            />
           </div>
           <div className="mt-4">
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">

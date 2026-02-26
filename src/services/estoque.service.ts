@@ -144,6 +144,56 @@ class EstoqueService {
       `/estoque/movimentacoes${query ? `?${query}` : ''}`
     );
   }
+
+  /**
+   * Dados do Relatório de Acompanhamento do Estoque (por período)
+   */
+  async getRelatorioAcompanhamento(params?: {
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<RelatorioAcompanhamentoLinha[]> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
+    if (params?.data_final) q.append('data_final', params.data_final);
+    const query = q.toString();
+    return apiClient.get<RelatorioAcompanhamentoLinha[]>(
+      `/estoque/relatorio/acompanhamento${query ? `?${query}` : ''}`
+    );
+  }
+
+  /**
+   * Download do PDF do Relatório de Acompanhamento do Estoque
+   */
+  async downloadRelatorioAcompanhamentoPdf(
+    dataInicial?: string,
+    dataFinal?: string
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.append('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.append('data_final', dataFinal.trim());
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `/estoque/relatorio/acompanhamento/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-acompanhamento-estoque-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+}
+
+export interface RelatorioAcompanhamentoLinha {
+  produto_id: number;
+  codigo: string;
+  nome: string;
+  estoque_inicial: number;
+  total_compra: number;
+  total_venda: number;
+  estoque_atual: number;
 }
 
 export const estoqueService = new EstoqueService();
