@@ -59,6 +59,7 @@ import {
     Circle,
     CreditCard,
     DollarSign,
+    Download,
     Edit,
     Eye,
     FileText,
@@ -66,6 +67,7 @@ import {
     Info,
     Loader2,
     MoreVertical,
+    Printer,
     Search,
     ShoppingCart
 } from "lucide-react";
@@ -88,6 +90,16 @@ const ContasAReceber = () => {
   const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
   const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
+  // Dialog do relatório em aberto (PDF / imprimir)
+  const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
+  const [relatorioDataInicial, setRelatorioDataInicial] = useState<string>("");
+  const [relatorioDataFinal, setRelatorioDataFinal] = useState<string>("");
+  const [relatorioPeriodoRapido, setRelatorioPeriodoRapido] = useState<
+    "custom" | "hoje" | "ontem" | "7d" | "mes_atual" | "mes_anterior"
+  >("custom");
+  const [relatorioLoadingAction, setRelatorioLoadingAction] = useState<
+    "download" | "print" | null
+  >(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -107,6 +119,70 @@ const ContasAReceber = () => {
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  // Helpers de data para períodos rápidos (usados apenas no relatório em aberto)
+  const toYMD = (d: Date) => d.toISOString().slice(0, 10);
+  const hoje = toYMD(new Date());
+  const ontem = toYMD(
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d;
+    })(),
+  );
+  const ultimos7 = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return toYMD(d);
+  })();
+  const mesAtualInicio = (() => {
+    const d = new Date();
+    d.setDate(1);
+    return toYMD(d);
+  })();
+  const mesAnteriorInicio = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    d.setDate(1);
+    return toYMD(d);
+  })();
+  const mesAnteriorFim = (() => {
+    const d = new Date();
+    d.setDate(0);
+    return toYMD(d);
+  })();
+
+  const aplicarPeriodoRapidoRelatorio = (
+    tipo: "hoje" | "ontem" | "7d" | "mes_atual" | "mes_anterior",
+  ) => {
+    let inicial: string;
+    let final: string;
+    switch (tipo) {
+      case "hoje":
+        inicial = hoje;
+        final = hoje;
+        break;
+      case "ontem":
+        inicial = ontem;
+        final = ontem;
+        break;
+      case "7d":
+        inicial = ultimos7;
+        final = hoje;
+        break;
+      case "mes_atual":
+        inicial = mesAtualInicio;
+        final = hoje;
+        break;
+      case "mes_anterior":
+        inicial = mesAnteriorInicio;
+        final = mesAnteriorFim;
+        break;
+    }
+    setRelatorioDataInicial(inicial);
+    setRelatorioDataFinal(final);
+    setRelatorioPeriodoRapido(tipo);
+  };
 
 
   const handleTotalAReceberFromLista = useCallback((total: number) => {
@@ -1494,17 +1570,16 @@ const ContasAReceber = () => {
             <Button
               variant="outline"
               className="gap-2"
-              onClick={async () => {
-                try {
-                  await pedidosService.downloadRelatorioPedidosEmAberto(dataInicialFilter || undefined, dataFinalFilter || undefined);
-                  toast.success('Relatório de pedidos em aberto baixado.');
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Erro ao gerar relatório.');
-                }
+              onClick={() => {
+                // Ao abrir o diálogo, inicializar datas com os filtros atuais (se existirem)
+                setRelatorioDataInicial(dataInicialFilter || "");
+                setRelatorioDataFinal(dataFinalFilter || "");
+                setRelatorioPeriodoRapido("custom");
+                setRelatorioDialogOpen(true);
               }}
             >
               <FileText className="w-4 h-4" />
-              Relatório em aberto (PDF)
+              Relatório em aberto
             </Button>
             <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
               <SheetContent
@@ -1649,6 +1724,157 @@ const ContasAReceber = () => {
             </div>
           </div>
         </div>
+        <Dialog open={relatorioDialogOpen} onOpenChange={setRelatorioDialogOpen}>
+          <DialogContent className="max-w-lg p-0 overflow-hidden">
+            <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
+              <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                <FileText className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <DialogTitle className="text-base font-semibold text-foreground">
+                  Relatório de Pedidos em Aberto
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Defina o período e escolha baixar o relatório em PDF ou abrir para impressão.
+                </DialogDescription>
+              </div>
+            </DialogHeader>
+
+            <div className="px-6 py-5 space-y-5">
+              {/* Filtros de período do relatório */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-foreground">Período</Label>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Data inicial</span>
+                    <Input
+                      type="date"
+                      className="w-[140px]"
+                      value={relatorioDataInicial}
+                      onChange={(e) => {
+                        setRelatorioDataInicial(e.target.value);
+                        setRelatorioPeriodoRapido("custom");
+                      }}
+                    />
+                  </div>
+                  <span className="text-muted-foreground pb-2">até</span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Data final</span>
+                    <Input
+                      type="date"
+                      className="w-[140px]"
+                      value={relatorioDataFinal}
+                      onChange={(e) => {
+                        setRelatorioDataFinal(e.target.value);
+                        setRelatorioPeriodoRapido("custom");
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    variant={relatorioPeriodoRapido === "hoje" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapidoRelatorio("hoje")}
+                  >
+                    Hoje
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={relatorioPeriodoRapido === "ontem" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapidoRelatorio("ontem")}
+                  >
+                    Ontem
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={relatorioPeriodoRapido === "7d" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapidoRelatorio("7d")}
+                  >
+                    Últimos 7 dias
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={relatorioPeriodoRapido === "mes_atual" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapidoRelatorio("mes_atual")}
+                  >
+                    Mês atual
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={relatorioPeriodoRapido === "mes_anterior" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapidoRelatorio("mes_anterior")}
+                  >
+                    Mês anterior
+                  </Button>
+                </div>
+              </div>
+
+              {/* Ações do relatório */}
+              <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-start gap-2 bg-background hover:bg-accent"
+                    disabled={relatorioLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelatorioLoadingAction("download");
+                        await pedidosService.downloadRelatorioPedidosEmAberto(
+                          relatorioDataInicial || undefined,
+                          relatorioDataFinal || undefined,
+                        );
+                        toast.success("Relatório de pedidos em aberto baixado.");
+                        setRelatorioDialogOpen(false);
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : "Erro ao gerar relatório.");
+                      } finally {
+                        setRelatorioLoadingAction(null);
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4" />
+                    <span className="text-sm">
+                      {relatorioLoadingAction === "download" ? "Baixando..." : "Baixar PDF"}
+                    </span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-start gap-2 bg-background hover:bg-accent"
+                    disabled={relatorioLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelatorioLoadingAction("print");
+                        await pedidosService.printRelatorioPedidosEmAberto(
+                          relatorioDataInicial || undefined,
+                          relatorioDataFinal || undefined,
+                        );
+                        setRelatorioDialogOpen(false);
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : "Erro ao abrir relatório.");
+                      } finally {
+                        setRelatorioLoadingAction(null);
+                      }
+                    }}
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span className="text-sm">
+                      {relatorioLoadingAction === "print" ? "Abrindo..." : "Imprimir"}
+                    </span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Table */}
         <motion.div

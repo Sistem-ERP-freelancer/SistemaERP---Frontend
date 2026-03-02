@@ -387,6 +387,10 @@ export function useOrders() {
       queryClient.invalidateQueries({ queryKey: ['pedidos'] });
       queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      // Resumo financeiro do pedido (valor_total, valor_pago, valor_em_aberto) precisa ser recalculado
+      queryClient.invalidateQueries({
+        queryKey: ['pedidos', variables.id, 'resumo-financeiro'],
+      });
       
       // Atualizar o cache do pedido específico com os dados retornados (incl. 'edit' para o form não receber dado desatualizado)
       queryClient.setQueryData(['pedidos', variables.id], updatedOrder);
@@ -425,6 +429,9 @@ export function useOrders() {
         queryClient.refetchQueries({ queryKey: ['pedidos'], type: 'active' }),
         queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] }),
         queryClient.refetchQueries({ queryKey: ['contas-financeiras'] }),
+        queryClient.refetchQueries({
+          queryKey: ['pedidos', variables.id, 'resumo-financeiro'],
+        }),
       ]);
 
       // Garantir que o pedido atualizado (resposta do PATCH) permaneça no cache da lista após o refetch.

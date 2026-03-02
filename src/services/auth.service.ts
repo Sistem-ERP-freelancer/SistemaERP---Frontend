@@ -1,3 +1,4 @@
+import { isTokenExpired } from '@/lib/token-utils';
 import { apiClient } from './api';
 
 export interface LoginRequest {
@@ -86,8 +87,27 @@ class AuthService {
     return localStorage.getItem('access_token');
   }
 
+  /**
+   * Remove token e dados do usuário do storage (ex.: token expirado).
+   */
+  private clearSession(): void {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+  }
+
+  /**
+   * Verifica se há token válido (existente e não expirado).
+   * Se o token estiver expirado, limpa o storage e retorna false.
+   */
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    const token = this.getToken();
+    if (!token) return false;
+    if (isTokenExpired(token)) {
+      this.clearSession();
+      return false;
+    }
+    return true;
   }
 }
 

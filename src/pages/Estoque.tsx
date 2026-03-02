@@ -49,11 +49,13 @@ import {
     ArrowDownCircle,
     ArrowUpCircle,
     Calendar,
+    Download,
     FileText,
     Filter,
     Info,
     Loader2,
     Package,
+    Printer,
     RotateCcw,
     Search,
     Settings,
@@ -79,6 +81,8 @@ const Estoque = () => {
   });
   const [dataInicialRelatorio, setDataInicialRelatorio] = useState<string>("");
   const [dataFinalRelatorio, setDataFinalRelatorio] = useState<string>("");
+  const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
+  const [relatorioLoading, setRelatorioLoading] = useState<'download' | 'print' | null>(null);
 
   // Buscar produtos para seleção
   const { data: produtosData } = useQuery({
@@ -595,21 +599,90 @@ const Estoque = () => {
             <Button
               variant="outline"
               className="gap-2 shrink-0"
-              onClick={async () => {
-                try {
-                  await estoqueService.downloadRelatorioAcompanhamentoPdf(
-                    dataInicialRelatorio || undefined,
-                    dataFinalRelatorio || undefined
-                  );
-                  toast.success("Relatório de acompanhamento baixado.");
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Erro ao gerar relatório.");
-                }
-              }}
+              onClick={() => setRelatorioDialogOpen(true)}
             >
               <FileText className="w-4 h-4" />
-              Relatório de acompanhamento (PDF)
+              Relatório de acompanhamento
             </Button>
+
+            <Dialog open={relatorioDialogOpen} onOpenChange={setRelatorioDialogOpen}>
+              <DialogContent className="max-w-md p-0 overflow-hidden">
+                <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
+                  <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                    <FileText className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <DialogTitle className="text-base font-semibold text-foreground">
+                      Relatório de Acompanhamento de Estoque
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground">
+                      Baixe o PDF ou abra em uma nova aba para impressão.
+                    </DialogDescription>
+                  </div>
+                </DialogHeader>
+
+                <div className="px-6 py-5 space-y-4">
+                  <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Ações do relatório
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="justify-start gap-2 bg-background hover:bg-accent"
+                        disabled={relatorioLoading !== null}
+                        onClick={async () => {
+                          try {
+                            setRelatorioLoading('download');
+                            await estoqueService.downloadRelatorioAcompanhamentoPdf(
+                              dataInicialRelatorio || undefined,
+                              dataFinalRelatorio || undefined
+                            );
+                            toast.success("Relatório de acompanhamento baixado.");
+                            setRelatorioDialogOpen(false);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Erro ao gerar relatório.");
+                          } finally {
+                            setRelatorioLoading(null);
+                          }
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="text-sm">
+                          {relatorioLoading === 'download' ? 'Baixando...' : 'Baixar PDF'}
+                        </span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="justify-start gap-2 bg-background hover:bg-accent"
+                        disabled={relatorioLoading !== null}
+                        onClick={async () => {
+                          try {
+                            setRelatorioLoading('print');
+                            await estoqueService.printRelatorioAcompanhamentoPdf(
+                              dataInicialRelatorio || undefined,
+                              dataFinalRelatorio || undefined
+                            );
+                            setRelatorioDialogOpen(false);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Erro ao abrir relatório.");
+                          } finally {
+                            setRelatorioLoading(null);
+                          }
+                        }}
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span className="text-sm">
+                          {relatorioLoading === 'print' ? 'Abrindo...' : 'Imprimir'}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
           <div className="mt-3 space-y-2">
             <Label className="text-sm font-medium text-muted-foreground">

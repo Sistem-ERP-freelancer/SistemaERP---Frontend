@@ -184,6 +184,27 @@ class EstoqueService {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+
+  /**
+   * Abre o PDF do Relatório de Acompanhamento do Estoque em uma nova aba para impressão.
+   */
+  async printRelatorioAcompanhamentoPdf(
+    dataInicial?: string,
+    dataFinal?: string
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.append('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.append('data_final', dataFinal.trim());
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `/estoque/relatorio/acompanhamento/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
 }
 
 export interface RelatorioAcompanhamentoLinha {

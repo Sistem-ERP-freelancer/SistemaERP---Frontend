@@ -18,9 +18,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Verifica se há um usuário salvo no localStorage
+    // Primeiro valida o token (se expirado, isAuthenticated() limpa o storage e retorna false)
+    if (!authService.isAuthenticated()) {
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
     const savedUser = authService.getCurrentUser();
-    if (savedUser && authService.isAuthenticated()) {
+    if (savedUser) {
       setUser(savedUser);
     }
     setIsLoading(false);

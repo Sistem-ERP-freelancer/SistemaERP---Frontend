@@ -254,6 +254,22 @@ class PedidosService {
   }
 
   /**
+   * Abre o PDF do Relatório de Pedidos em Aberto em nova aba para impressão.
+   */
+  async printRelatorioPedidosEmAberto(dataInicial?: string, dataFinal?: string): Promise<void> {
+    const params = new URLSearchParams();
+    if (dataInicial?.trim()) params.append('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) params.append('data_final', dataFinal.trim());
+    const q = params.toString();
+    const blob = await apiClient.getBlob(`/pedidos/relatorio/em-aberto${q ? `?${q}` : ''}`);
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
+
+  /**
    * Dados do Relatório de Margem de Contribuição (vendas no período, agrupadas por produto).
    * GET /pedidos/relatorio/margem-contribuicao?data_inicial=YYYY-MM-DD&data_final=YYYY-MM-DD
    */
@@ -293,6 +309,27 @@ class PedidosService {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Abre o PDF do Relatório de Margem de Contribuição em nova aba para impressão.
+   */
+  async printRelatorioMargemContribuicaoPdf(
+    dataInicial?: string,
+    dataFinal?: string
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    if (dataInicial?.trim()) params.append('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) params.append('data_final', dataFinal.trim());
+    const q = params.toString();
+    const blob = await apiClient.getBlob(
+      `/pedidos/relatorio/margem-contribuicao/pdf${q ? `?${q}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
   }
 
   /**
