@@ -336,22 +336,7 @@ export function OrderViewDialog({
                 </div>
               )}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-muted-foreground">Condição de Pagamento</Label>
-                  {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDialogCondicaoAberto(true)}
-                      className="h-7 text-xs"
-                    >
-                      <Edit className="w-3 h-3 mr-1" />
-                      {order.condicao_pagamento?.toLowerCase().includes('vista') || !order.condicao_pagamento
-                        ? 'Parcelar'
-                        : 'Alterar condição'}
-                    </Button>
-                  )}
-                </div>
+                <Label className="text-muted-foreground">Condição de Pagamento</Label>
                 <div className="text-sm">{order.condicao_pagamento || '—'}</div>
               </div>
               {(order.data_vencimento_base || (order as any).data_vencimento) && (

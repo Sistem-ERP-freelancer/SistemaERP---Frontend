@@ -16,6 +16,14 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
@@ -30,7 +38,7 @@ import {
     TipoPedido,
 } from '@/types/pedido';
 import { useQuery } from '@tanstack/react-query';
-import { Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { ChevronDown, FileDown, Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -71,6 +79,7 @@ interface OrderItemForm {
   preco_unitario: number | '';
   desconto: number | '';
   estoque_disponivel?: number; // Preenchido ao selecionar produto para exibir e validar
+  nome_produto?: string; // Nome do produto para exibir no resumo (preenchido ao selecionar)
 }
 
 export function OrderForm({
@@ -117,6 +126,10 @@ export function OrderForm({
   const [itens, setItens] = useState<OrderItemForm[]>([
     { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' },
   ]);
+
+  const itensSectionRef = useRef<HTMLDivElement>(null);
+  const resumoItensRef = useRef<HTMLDivElement>(null);
+  const addItemButtonRef = useRef<HTMLDivElement>(null);
 
   // Buscar dados do cliente para pedido (GET /clientes/:id/dados-pedido) conforme guia
   const { data: dadosClientePedido, refetch: refetchDadosPedido, isLoading: isLoadingDadosPedido } = useQuery({
@@ -336,12 +349,14 @@ export function OrderForm({
                 produtoItem
                   ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual)
                   : undefined;
+              const nomeProduto = (item as { produto?: { nome?: string } }).produto?.nome ?? produtoItem?.nome;
               return {
                 produto_id: item.produto_id,
                 quantidade: item.quantidade,
                 preco_unitario: item.preco_unitario,
                 desconto: item.desconto || '',
                 estoque_disponivel: estoque,
+                nome_produto: nomeProduto,
               };
             })
           );
@@ -354,7 +369,13 @@ export function OrderForm({
   }, [order, isOpen, prevIsOpen]);
 
   const handleAddItem = () => {
+    const hadTwoOrMore = itens.length >= 2;
     setItens([...itens, { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' }]);
+    if (hadTwoOrMore) {
+      setTimeout(() => {
+        addItemButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 80);
+    }
   };
 
   const handleRemoveItem = (index: number) => {
@@ -367,7 +388,7 @@ export function OrderForm({
     const newItens = [...itens];
     newItens[index] = { ...newItens[index], [field]: value };
 
-    // Ao selecionar produto, chamar GET /produtos/:id e preencher preço + estoque
+    // Ao selecionar produto, chamar GET /produtos/:id e preencher preço + estoque + nome
     if (field === 'produto_id' && value && value !== 0) {
       try {
         const produto = await produtosService.buscarPorId(Number(value));
@@ -381,14 +402,16 @@ export function OrderForm({
           preco_unitario: preco,
           quantidade: newItens[index].quantidade || 1,
           estoque_disponivel: estoque,
+          nome_produto: produto.nome ?? newItens[index].nome_produto,
         };
       } catch {
         // Em caso de erro, manter seleção; usuário pode digitar preço manualmente
         newItens[index].estoque_disponivel = undefined;
       }
     } else if (field === 'produto_id' && (!value || value === 0)) {
-      // Ao limpar produto, remover estoque
+      // Ao limpar produto, remover estoque e nome
       newItens[index].estoque_disponivel = undefined;
+      newItens[index].nome_produto = undefined;
     }
 
     setItens([...newItens]);
@@ -729,13 +752,29 @@ export function OrderForm({
             </div>
           </div>
 
-          <div className="bg-card border rounded-lg p-6 space-y-6">
+          <div ref={itensSectionRef} className="bg-card border rounded-lg p-6 space-y-6">
             <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Itens do Pedido</h3>
-              <Button type="button" onClick={handleAddItem} variant="outline" size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Adicionar Item
-              </Button>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">Itens do Pedido</h3>
+                {itens.length <= 2 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    title="Ir para resumo dos itens"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              {itens.length <= 2 && (
+                <Button type="button" onClick={handleAddItem} variant="outline" size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Item
+                </Button>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -864,6 +903,24 @@ export function OrderForm({
                   </div>
                 </div>
               ))}
+              {itens.length > 2 && (
+                <div ref={addItemButtonRef} className="pt-2 flex items-center gap-2">
+                  <Button type="button" onClick={handleAddItem} variant="outline" size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Item
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    title="Ir para resumo dos itens"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -872,7 +929,22 @@ export function OrderForm({
             <div className="space-y-6">
               {/* Forma de Pagamento: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */}
               <div className="space-y-2">
-                <Label>Forma de Pagamento *</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Forma de Pagamento *</Label>
+                  {tipo === 'VENDA' && clienteId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleImportarDoCliente}
+                      disabled={isLoadingDadosPedido}
+                      className="shrink-0"
+                    >
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Importar condição de pagamento
+                    </Button>
+                  )}
+                </div>
                 <Select
                   value={formaPagamentoSelecionada || ''}
                   onValueChange={(value) => {
@@ -1148,6 +1220,49 @@ export function OrderForm({
                 />
               </div>
             </div>
+          </div>
+
+          <div ref={resumoItensRef} className="bg-card border rounded-lg p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Resumo dos itens</h3>
+            {itens.filter((i) => i.produto_id && i.produto_id !== 0).length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum produto adicionado.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead className="text-right w-24">Quantidade</TableHead>
+                    <TableHead className="text-right w-28">Preço</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {itens
+                    .filter((item) => item.produto_id && item.produto_id !== 0)
+                    .map((item, index) => {
+                      const produto = produtos.find((p) => Number(p.id) === Number(item.produto_id));
+                      const nomeProduto = item.nome_produto ?? produto?.nome ?? '—';
+                      const qtd = typeof item.quantidade === 'number' ? item.quantidade : 0;
+                      const preco = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
+                      return (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{nomeProduto}</TableCell>
+                          <TableCell className="text-right">{qtd}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(preco)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => itensSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Adicionar mais produtos
+            </Button>
           </div>
 
           <Button
