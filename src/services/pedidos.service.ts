@@ -254,6 +254,48 @@ class PedidosService {
   }
 
   /**
+   * Dados do Relatório de Margem de Contribuição (vendas no período, agrupadas por produto).
+   * GET /pedidos/relatorio/margem-contribuicao?data_inicial=YYYY-MM-DD&data_final=YYYY-MM-DD
+   */
+  async getRelatorioMargemContribuicao(params?: {
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<RelatorioMargemContribuicaoResponse> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    const query = q.toString();
+    return apiClient.get<RelatorioMargemContribuicaoResponse>(
+      `/pedidos/relatorio/margem-contribuicao${query ? `?${query}` : ''}`
+    );
+  }
+
+  /**
+   * Download do PDF do Relatório de Margem de Contribuição.
+   * Data única: envie data_inicial = data_final (ex.: dia). Período: data_inicial e data_final diferentes.
+   */
+  async downloadRelatorioMargemContribuicaoPdf(
+    dataInicial?: string,
+    dataFinal?: string
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    if (dataInicial?.trim()) params.append('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) params.append('data_final', dataFinal.trim());
+    const q = params.toString();
+    const blob = await apiClient.getBlob(
+      `/pedidos/relatorio/margem-contribuicao/pdf${q ? `?${q}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-margem-contribuicao-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
    * Atualiza apenas a data de vencimento base do pedido
    * O backend recalcula automaticamente todas as parcelas pendentes
    */
@@ -638,6 +680,27 @@ class PedidosService {
     const res = await apiClient.get<any>(url);
     return Array.isArray(res) ? { despesas: res } : res;
   }
+}
+
+export interface RelatorioMargemContribuicaoLinha {
+  produto_id: number;
+  codigo: string;
+  nome: string;
+  quantidade_vendida: number;
+  receita: number;
+  custo_variavel: number;
+  margem_reais: number;
+  margem_percentual: number;
+}
+
+export interface RelatorioMargemContribuicaoResponse {
+  linhas: RelatorioMargemContribuicaoLinha[];
+  totais: {
+    quantidade_vendida: number;
+    receita: number;
+    custo_variavel: number;
+    margem_reais: number;
+  };
 }
 
 export const pedidosService = new PedidosService();

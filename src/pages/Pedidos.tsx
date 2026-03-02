@@ -34,9 +34,11 @@ import {
 import { useOrders } from '@/hooks/useOrders';
 import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
+import { pedidosService } from '@/services/pedidos.service';
 import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
-import { Calendar, Circle, Download, Filter, Loader2, Plus, Search, XCircle } from 'lucide-react';
+import { Calendar, Circle, Download, FileText, Filter, Loader2, Plus, Search, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 export default function Pedidos() {
   const {
@@ -81,8 +83,71 @@ export default function Pedidos() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
+  const [dataInicialMargem, setDataInicialMargem] = useState('');
+  const [dataFinalMargem, setDataFinalMargem] = useState('');
+  const [periodoRapidoAtivo, setPeriodoRapidoAtivo] = useState<
+    'custom' | 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior'
+  >('custom');
+  const [loadingMargemPdf, setLoadingMargemPdf] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromFiltersRef = useRef(false);
+
+  const toYMD = (d: Date) => d.toISOString().slice(0, 10);
+  const hoje = toYMD(new Date());
+  const ontem = toYMD((() => { const d = new Date(); d.setDate(d.getDate() - 1); return d; })());
+  const ultimos7 = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return toYMD(d); })();
+  const mesAtualInicio = (() => { const d = new Date(); d.setDate(1); return toYMD(d); })();
+  const mesAnteriorInicio = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); return toYMD(d); })();
+  const mesAnteriorFim = (() => { const d = new Date(); d.setDate(0); return toYMD(d); })();
+
+  const aplicarPeriodoRapido = (tipo: 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior') => {
+    let inicial: string;
+    let final: string;
+    switch (tipo) {
+      case 'hoje':
+        inicial = hoje;
+        final = hoje;
+        break;
+      case 'ontem':
+        inicial = ontem;
+        final = ontem;
+        break;
+      case '7d':
+        inicial = ultimos7;
+        final = hoje;
+        break;
+      case 'mes_atual':
+        inicial = mesAtualInicio;
+        final = hoje;
+        break;
+      case 'mes_anterior':
+        inicial = mesAnteriorInicio;
+        final = mesAnteriorFim;
+        break;
+    }
+    setDataInicialMargem(inicial);
+    setDataFinalMargem(final);
+    setPeriodoRapidoAtivo(tipo);
+    // Período usado apenas para o relatório de margem (PDF); não altera os filtros da lista de pedidos.
+  };
+
+  const handleDownloadMargemPdf = async () => {
+    setLoadingMargemPdf(true);
+    try {
+      // Período do relatório vem apenas do bloco (datas + botões); não usa filtros da lista de pedidos.
+      const dataInicial = dataInicialMargem?.trim() || undefined;
+      const dataFinal = dataFinalMargem?.trim() || undefined;
+      await pedidosService.downloadRelatorioMargemContribuicaoPdf(
+        dataInicial,
+        dataFinal
+      );
+      toast.success('Relatório de Margem de Contribuição baixado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao gerar relatório.');
+    } finally {
+      setLoadingMargemPdf(false);
+    }
+  };
 
   const temFiltrosAtivos = !!(filters.data_inicial || filters.data_final || filters.tipo || filters.status);
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
@@ -203,6 +268,106 @@ export default function Pedidos() {
 
         {/* Estatísticas */}
         <OrderStats tipoFiltro={filters.tipo} />
+
+        {/* Relatório de Margem de Contribuição */}
+        <div className="bg-card rounded-xl border border-border p-4 mb-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Relatório de Margem de Contribuição</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Receita, custo e margem por produto (vendas do período, exceto canceladas). Use data única para o dia ou período para intervalo.
+            </p>
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-sm text-muted-foreground">Data inicial</Label>
+                  <Input
+                    type="date"
+                    className="w-[150px]"
+                    value={dataInicialMargem}
+                    onChange={(e) => {
+                      setDataInicialMargem(e.target.value);
+                      setPeriodoRapidoAtivo('custom');
+                    }}
+                  />
+                </div>
+                <span className="text-muted-foreground pb-1 md:pb-2">até</span>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-sm text-muted-foreground">Data final</Label>
+                  <Input
+                    type="date"
+                    className="w-[150px]"
+                    value={dataFinalMargem}
+                    onChange={(e) => {
+                      setDataFinalMargem(e.target.value);
+                      setPeriodoRapidoAtivo('custom');
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center justify-start md:justify-end">
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    variant={periodoRapidoAtivo === 'hoje' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapido('hoje')}
+                  >
+                    Hoje
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={periodoRapidoAtivo === 'ontem' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapido('ontem')}
+                  >
+                    Ontem
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={periodoRapidoAtivo === '7d' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapido('7d')}
+                  >
+                    Últimos 7 dias
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={periodoRapidoAtivo === 'mes_atual' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapido('mes_atual')}
+                  >
+                    Mês atual
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={periodoRapidoAtivo === 'mes_anterior' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => aplicarPeriodoRapido('mes_anterior')}
+                  >
+                    Mês anterior
+                  </Button>
+                </div>
+                <Button
+                  variant="outline"
+                  className="gap-2 shrink-0"
+                  onClick={handleDownloadMargemPdf}
+                  disabled={loadingMargemPdf}
+                >
+                  {loadingMargemPdf ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Gerar relatório (PDF)
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Search and Filters (mesmo design da página Fornecedores) */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">

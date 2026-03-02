@@ -611,21 +611,25 @@ const Estoque = () => {
               Relatório de acompanhamento (PDF)
             </Button>
           </div>
-          <div className="flex flex-wrap gap-3 items-center text-sm">
-            <Label className="text-muted-foreground shrink-0">Período do relatório:</Label>
-            <Input
-              type="date"
-              className="w-[140px]"
-              value={dataInicialRelatorio}
-              onChange={(e) => setDataInicialRelatorio(e.target.value || "")}
-            />
-            <span className="text-muted-foreground">até</span>
-            <Input
-              type="date"
-              className="w-[140px]"
-              value={dataFinalRelatorio}
-              onChange={(e) => setDataFinalRelatorio(e.target.value || "")}
-            />
+          <div className="mt-3 space-y-2">
+            <Label className="text-sm font-medium text-muted-foreground">
+              Período do relatório
+            </Label>
+            <div className="flex flex-wrap gap-3 items-center text-sm">
+              <Input
+                type="date"
+                className="w-[140px]"
+                value={dataInicialRelatorio}
+                onChange={(e) => setDataInicialRelatorio(e.target.value || "")}
+              />
+              <span className="text-muted-foreground">até</span>
+              <Input
+                type="date"
+                className="w-[140px]"
+                value={dataFinalRelatorio}
+                onChange={(e) => setDataFinalRelatorio(e.target.value || "")}
+              />
+            </div>
           </div>
           <div className="mt-4">
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
