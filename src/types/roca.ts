@@ -41,6 +41,7 @@ export interface Roca {
   nome: string;
   localizacao?: string;
   produtorId: number;
+  ativo?: boolean;
   criadoEm?: string;
   atualizadoEm?: string;
 }
@@ -65,6 +66,8 @@ export interface UpdateRocaDto {
   /** Envie null para limpar a localização. */
   localizacao?: string | null;
   produtorId?: number;
+  /** Se false, desativa a roça (não aparece na listagem). */
+  ativo?: boolean;
 }
 
 export interface MeeiroRoca {

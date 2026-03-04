@@ -1,5 +1,15 @@
 import { CampoCnpjComConsulta } from '@/components/CampoCnpjComConsulta';
 import AppLayout from '@/components/layout/AppLayout';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -24,6 +34,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
     Table,
     TableBody,
@@ -48,6 +59,7 @@ import type {
     ProdutoRoca,
     ProdutorRoca,
     RelatorioMeeiroResponse,
+    Roca,
     RocaDetalhes,
     UpdateMeeiroRocaDto,
     UpdateProdutorRocaDto,
@@ -55,6 +67,7 @@ import type {
 } from '@/types/roca';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+    Archive,
     Building2,
     Calendar,
     Check,
@@ -70,7 +83,6 @@ import {
     Phone,
     Plus,
     Sprout,
-    Trash2,
     User,
     UserX,
     Users,
@@ -157,11 +169,13 @@ export default function ControleRoca() {
 
   // Roças
   const [produtorIdRocas, setProdutorIdRocas] = useState<number | ''>('');
+  const [incluirRocasInativas, setIncluirRocasInativas] = useState(false);
   const { data: rocas = [], isLoading: loadingRocas } = useQuery({
-    queryKey: ['controle-roca', 'rocas', produtorIdRocas],
+    queryKey: ['controle-roca', 'rocas', produtorIdRocas, incluirRocasInativas],
     queryFn: () =>
       controleRocaService.listarRocas(
-        produtorIdRocas === '' ? undefined : Number(produtorIdRocas)
+        produtorIdRocas === '' ? undefined : Number(produtorIdRocas),
+        incluirRocasInativas,
       ),
   });
   const [openRoca, setOpenRoca] = useState(false);
@@ -201,6 +215,7 @@ export default function ControleRoca() {
     nome: '',
     localizacao: '',
     produtorId: 0,
+    ativo: true,
   });
 
   const updateRoca = useMutation({
@@ -211,6 +226,8 @@ export default function ControleRoca() {
       toast.success('Roça atualizada com sucesso');
       setOpenEditRoca(false);
       setEditRoca(null);
+      setOpenDeleteRoca(false);
+      setRocaToDelete(null);
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao atualizar roça');
@@ -224,6 +241,8 @@ export default function ControleRoca() {
       toast.success('Roça excluída com sucesso');
       setOpenDetailRoca(false);
       setDetailRocaId(null);
+      setRocaToDelete(null);
+      setOpenDeleteRoca(false);
     },
     onError: (err: any) => {
       const msg =
@@ -233,6 +252,9 @@ export default function ControleRoca() {
       toast.error(msg);
     },
   });
+
+  const [rocaToDelete, setRocaToDelete] = useState<Roca | null>(null);
+  const [openDeleteRoca, setOpenDeleteRoca] = useState(false);
 
   // Meeiros
   const [produtorIdMeeiros, setProdutorIdMeeiros] = useState<number | ''>('');
@@ -676,6 +698,16 @@ export default function ControleRoca() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="incluir-rocas-inativas"
+                  checked={incluirRocasInativas}
+                  onCheckedChange={setIncluirRocasInativas}
+                />
+                <Label htmlFor="incluir-rocas-inativas" className="cursor-pointer text-sm">
+                  Exibir desativadas
+                </Label>
+              </div>
               <Button onClick={() => setOpenRoca(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Roça
@@ -708,8 +740,18 @@ export default function ControleRoca() {
                       rocas.map((r) => {
                         const prod = produtores.find((p) => p.id === r.produtorId);
                         return (
-                          <TableRow key={r.id}>
-                            <TableCell className="font-medium">{r.codigo}</TableCell>
+                          <TableRow
+                            key={r.id}
+                            className={r.ativo === false ? 'opacity-60 bg-muted/30' : ''}
+                          >
+                            <TableCell className="font-medium">
+                              {r.codigo}
+                              {r.ativo === false && (
+                                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-normal text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                  Desativada
+                                </span>
+                              )}
+                            </TableCell>
                             <TableCell>{r.nome}</TableCell>
                             <TableCell className="max-w-[200px] truncate">
                               {r.localizacao || '—'}
@@ -740,6 +782,7 @@ export default function ControleRoca() {
                                         nome: r.nome,
                                         localizacao: r.localizacao ?? '',
                                         produtorId: r.produtorId,
+                                        ativo: r.ativo ?? true,
                                       });
                                       setOpenEditRoca(true);
                                     }}
@@ -747,21 +790,30 @@ export default function ControleRoca() {
                                     <Pencil className="w-4 h-4 mr-2" />
                                     Editar
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => {
-                                      if (
-                                        window.confirm(
-                                          'Tem certeza que deseja excluir esta roça? Não será possível excluir se houver lançamentos vinculados.',
-                                        )
-                                      ) {
-                                        deleteRoca.mutate(r.id);
-                                      }
-                                    }}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Excluir
-                                  </DropdownMenuItem>
+                                  {r.ativo === false ? (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        updateRoca.mutate({
+                                          id: r.id,
+                                          data: { ativo: true },
+                                        });
+                                      }}
+                                      disabled={updateRoca.isPending}
+                                    >
+                                      <Check className="w-4 h-4 mr-2" />
+                                      Ativar
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setRocaToDelete(r);
+                                        setOpenDeleteRoca(true);
+                                      }}
+                                    >
+                                      <UserX className="w-4 h-4 mr-2" />
+                                      Desativar
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -2026,6 +2078,7 @@ export default function ControleRoca() {
                           nome: detailRoca.nome,
                           localizacao: detailRoca.localizacao ?? '',
                           produtorId: detailRoca.produtorId,
+                          ativo: detailRoca.ativo ?? true,
                         });
                         setOpenEditRoca(true);
                       }}
@@ -2133,6 +2186,20 @@ export default function ControleRoca() {
                       rows={2}
                     />
                   </div>
+                  <div className="flex items-center justify-between rounded-lg border p-4">
+                    <div>
+                      <Label className="text-base">Roça ativa</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Roças desativadas não aparecem na listagem. Ative para exibir novamente.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formEditRoca.ativo ?? true}
+                      onCheckedChange={(checked) =>
+                        setFormEditRoca((p) => ({ ...p, ativo: checked }))
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -2160,6 +2227,7 @@ export default function ControleRoca() {
                           ? null
                           : localizacaoVal || undefined,
                       produtorId: formEditRoca.produtorId || undefined,
+                      ativo: formEditRoca.ativo,
                     },
                   });
                 }}
@@ -2173,6 +2241,74 @@ export default function ControleRoca() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Modal de confirmação para desativar roça */}
+        <AlertDialog
+          open={openDeleteRoca}
+          onOpenChange={(open) => {
+            setOpenDeleteRoca(open);
+            if (!open) setRocaToDelete(null);
+          }}
+        >
+          <AlertDialogContent className="max-w-md rounded-2xl border shadow-xl">
+            <AlertDialogHeader>
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+                  <Archive className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1 space-y-2 text-center sm:text-left">
+                  <AlertDialogTitle className="text-xl">
+                    Desativar roça?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      {rocaToDelete && (
+                        <p>
+                          A roça <strong className="font-semibold text-foreground">{rocaToDelete.nome}</strong>{' '}
+                          (<span className="font-mono">{rocaToDelete.codigo}</span>) será desativada e não aparecerá mais na listagem.
+                        </p>
+                      )}
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                        Você pode reativá-la depois pela opção Editar, marcando a roça como ativa novamente.
+                      </p>
+                      <p>Tem certeza que deseja desativar?</p>
+                    </div>
+                  </AlertDialogDescription>
+                </div>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex gap-2 sm:gap-2">
+              <AlertDialogCancel className="mt-4 sm:mt-0">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (rocaToDelete) {
+                    updateRoca.mutate({
+                      id: rocaToDelete.id,
+                      data: { ativo: false },
+                    });
+                  }
+                }}
+                disabled={updateRoca.isPending || !rocaToDelete}
+                className="bg-amber-600 text-white hover:bg-amber-700"
+              >
+                {updateRoca.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Desativando...
+                  </>
+                ) : (
+                  <>
+                    <Archive className="mr-2 h-4 w-4" />
+                    Desativar roça
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Dialog Novo Meeiro - mesmo design de criar cliente */}
         <Dialog open={openMeeiro} onOpenChange={setOpenMeeiro}>

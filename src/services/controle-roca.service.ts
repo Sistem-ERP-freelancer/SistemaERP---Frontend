@@ -41,8 +41,14 @@ class ControleRocaService {
   }
 
   // Roças
-  async listarRocas(produtorId?: number): Promise<Roca[]> {
-    const q = produtorId != null ? `?produtorId=${produtorId}` : '';
+  async listarRocas(
+    produtorId?: number,
+    incluirInativos?: boolean,
+  ): Promise<Roca[]> {
+    const params = new URLSearchParams();
+    if (produtorId != null) params.set('produtorId', String(produtorId));
+    if (incluirInativos) params.set('incluirInativos', 'true');
+    const q = params.toString() ? `?${params.toString()}` : '';
     return apiClient.get<Roca[]>(`${BASE}/rocas${q}`);
   }
 
