@@ -2562,207 +2562,264 @@ const Produtos = () => {
           )}
         </motion.div>
 
-        {/* Dialog de Visualização de Produto */}
+        {/* Dialog de Visualização de Produto - mesmo design de Visualizar Cliente */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Detalhes do Produto</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-primary" />
+                Visualizar Produto
+              </DialogTitle>
+              <DialogDescription>
+                Informações completas do produto
+              </DialogDescription>
             </DialogHeader>
             {selectedProduto && (
-              <div className="space-y-6 pt-4">
+              <div className="space-y-8 mt-6">
                 {/* Informações Básicas */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Informações Básicas</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Nome</Label>
-                      <p className="font-medium">{selectedProduto.nome || "--"}</p>
+                <div className="space-y-6">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary" />
+                    Informações Básicas
+                  </h3>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Nome</Label>
+                      <p className="font-medium text-base">{selectedProduto.nome || "--"}</p>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">SKU</Label>
-                      <p className="font-medium">{selectedProduto.sku || "--"}</p>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">SKU</Label>
+                      <p className="font-medium text-base font-mono">{selectedProduto.sku || "--"}</p>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Descrição</Label>
-                      <p className="font-medium">{selectedProduto.descricao || "--"}</p>
+                    <div className="space-y-3 col-span-2">
+                      <Label className="text-sm text-muted-foreground">Descrição</Label>
+                      <p className="font-medium text-base">{selectedProduto.descricao || "--"}</p>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Status</Label>
-                      <p className="font-medium">{selectedProduto.statusProduto || "--"}</p>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Unidade de Medida</Label>
+                      <p className="font-medium text-base">{selectedProduto.unidade_medida || "--"}</p>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Unidade de Medida</Label>
-                      <p className="font-medium">{selectedProduto.unidade_medida || "--"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Categoria</Label>
-                      <p className="font-medium">
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Categoria</Label>
+                      <p className="font-medium text-base">
                         {selectedProduto.categoria?.nome || categorias.find(c => c.id === selectedProduto.categoriaId)?.nome || "--"}
                       </p>
                     </div>
-                    <div>
-                      <Label className="text-muted-foreground">Fornecedor</Label>
-                      <p className="font-medium">
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Fornecedor</Label>
+                      <p className="font-medium text-base">
                         {selectedProduto.fornecedor?.nome_fantasia || fornecedores.find(f => f.id === selectedProduto.fornecedorId)?.nome_fantasia || "--"}
                       </p>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm text-muted-foreground">Status</Label>
+                        <span
+                          className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${
+                            selectedProduto.statusProduto === "ATIVO"
+                              ? "bg-green-500/10 text-green-500"
+                              : selectedProduto.statusProduto === "INATIVO"
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-orange-500/10 text-orange-500"
+                          }`}
+                        >
+                          {selectedProduto.statusProduto || "--"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Preços */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Preços</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Preço de Custo</Label>
-                      <p className="font-medium">
-                        {selectedProduto.preco_custo !== undefined && selectedProduto.preco_custo !== null
-                          ? `R$ ${selectedProduto.preco_custo.toFixed(2).replace(".", ",")}`
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Preço de Venda</Label>
-                      <p className="font-medium">
-                        {selectedProduto.preco_venda !== undefined && selectedProduto.preco_venda !== null
-                          ? `R$ ${selectedProduto.preco_venda.toFixed(2).replace(".", ",")}`
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Preço Promocional</Label>
-                      <p className="font-medium">
-                        {selectedProduto.preco_promocional !== undefined && selectedProduto.preco_promocional !== null
-                          ? `R$ ${selectedProduto.preco_promocional.toFixed(2).replace(".", ",")}`
-                          : "--"}
-                      </p>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-primary" />
+                    Preços
+                  </h3>
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Preço de Custo</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.preco_custo !== undefined && selectedProduto.preco_custo !== null
+                            ? `R$ ${selectedProduto.preco_custo.toFixed(2).replace(".", ",")}`
+                            : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Preço de Venda</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.preco_venda !== undefined && selectedProduto.preco_venda !== null
+                            ? `R$ ${selectedProduto.preco_venda.toFixed(2).replace(".", ",")}`
+                            : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Preço Promocional</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.preco_promocional !== undefined && selectedProduto.preco_promocional !== null
+                            ? `R$ ${selectedProduto.preco_promocional.toFixed(2).replace(".", ",")}`
+                            : "--"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Estoque */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Estoque</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Estoque Atual</Label>
-                      <p className="font-medium" style={{ color: getEstoqueColor(selectedProduto.estoque_atual, selectedProduto.estoque_minimo) }}>
-                        {selectedProduto.estoque_atual !== undefined && selectedProduto.estoque_atual !== null
-                          ? selectedProduto.estoque_atual
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Estoque Mínimo</Label>
-                      <p className="font-medium">
-                        {selectedProduto.estoque_minimo !== undefined && selectedProduto.estoque_minimo !== null
-                          ? selectedProduto.estoque_minimo
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Estoque Máximo</Label>
-                      <p className="font-medium">
-                        {selectedProduto.estoque_maximo !== undefined && selectedProduto.estoque_maximo !== null
-                          ? selectedProduto.estoque_maximo
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Localização</Label>
-                      <p className="font-medium">{selectedProduto.localizacao || "--"}</p>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <LayoutGrid className="w-5 h-5 text-primary" />
+                    Estoque
+                  </h3>
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Estoque Atual</Label>
+                        <p className="font-medium text-base" style={{ color: getEstoqueColor(selectedProduto.estoque_atual, selectedProduto.estoque_minimo) }}>
+                          {selectedProduto.estoque_atual !== undefined && selectedProduto.estoque_atual !== null ? selectedProduto.estoque_atual : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Estoque Mínimo</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.estoque_minimo !== undefined && selectedProduto.estoque_minimo !== null ? selectedProduto.estoque_minimo : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Estoque Máximo</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.estoque_maximo !== undefined && selectedProduto.estoque_maximo !== null ? selectedProduto.estoque_maximo : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Localização</Label>
+                        <p className="font-medium text-base">{selectedProduto.localizacao || "--"}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Dimensões e Peso */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Dimensões e Peso</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Peso (kg)</Label>
-                      <p className="font-medium">
-                        {selectedProduto.peso !== undefined && selectedProduto.peso !== null
-                          ? `${selectedProduto.peso} kg`
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Altura (cm)</Label>
-                      <p className="font-medium">
-                        {selectedProduto.altura !== undefined && selectedProduto.altura !== null
-                          ? `${selectedProduto.altura} cm`
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Largura (cm)</Label>
-                      <p className="font-medium">
-                        {selectedProduto.largura !== undefined && selectedProduto.largura !== null
-                          ? `${selectedProduto.largura} cm`
-                          : "--"}
-                      </p>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Ruler className="w-5 h-5 text-primary" />
+                    Dimensões e Peso
+                  </h3>
+                  <div className="p-4 border rounded-lg">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Peso (kg)</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.peso !== undefined && selectedProduto.peso !== null ? `${selectedProduto.peso} kg` : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Altura (cm)</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.altura !== undefined && selectedProduto.altura !== null ? `${selectedProduto.altura} cm` : "--"}
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Largura (cm)</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.largura !== undefined && selectedProduto.largura !== null ? `${selectedProduto.largura} cm` : "--"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Informações Fiscais */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Informações Fiscais</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">NCM</Label>
-                      <p className="font-medium">{selectedProduto.ncm || "--"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">CEST</Label>
-                      <p className="font-medium">{selectedProduto.cest || "--"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">CFOP</Label>
-                      <p className="font-medium">{selectedProduto.cfop || "--"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Data de Validade</Label>
-                      <p className="font-medium">
-                        {selectedProduto.data_validade
-                          ? new Date(selectedProduto.data_validade).toLocaleDateString("pt-BR")
-                          : "--"}
-                      </p>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />
+                    Informações Fiscais
+                  </h3>
+                  <div className="p-4 border rounded-lg">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">NCM</Label>
+                        <p className="font-medium text-base font-mono">{selectedProduto.ncm || "--"}</p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">CEST</Label>
+                        <p className="font-medium text-base font-mono">{selectedProduto.cest || "--"}</p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">CFOP</Label>
+                        <p className="font-medium text-base">{selectedProduto.cfop || "--"}</p>
+                      </div>
+                      <div className="space-y-3">
+                        <Label className="text-sm text-muted-foreground">Data de Validade</Label>
+                        <p className="font-medium text-base">
+                          {selectedProduto.data_validade ? new Date(selectedProduto.data_validade).toLocaleDateString("pt-BR") : "--"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Observações */}
                 {selectedProduto.observacoes && (
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-foreground border-b pb-2">Observações</h3>
-                    <p className="text-sm text-muted-foreground">{selectedProduto.observacoes}</p>
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-primary" />
+                      Observações
+                    </h3>
+                    <div className="p-4 border rounded-lg">
+                      <p className="text-sm text-muted-foreground">{selectedProduto.observacoes}</p>
+                    </div>
                   </div>
                 )}
 
-                {/* Datas */}
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">Datas</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-muted-foreground">Criado em</Label>
-                      <p className="font-medium">
-                        {selectedProduto.criadoEm
-                          ? new Date(selectedProduto.criadoEm).toLocaleString("pt-BR")
-                          : "--"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Atualizado em</Label>
-                      <p className="font-medium">
-                        {selectedProduto.atualizadoEm
-                          ? new Date(selectedProduto.atualizadoEm).toLocaleString("pt-BR")
-                          : "--"}
-                      </p>
+                {/* Informações do Sistema */}
+                {(selectedProduto.criadoEm || selectedProduto.atualizadoEm) && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-primary" />
+                      Informações do Sistema
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      {selectedProduto.criadoEm && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Criado em</Label>
+                          <p>{new Date(selectedProduto.criadoEm).toLocaleString("pt-BR")}</p>
+                        </div>
+                      )}
+                      {selectedProduto.atualizadoEm && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Atualizado em</Label>
+                          <p>{new Date(selectedProduto.atualizadoEm).toLocaleString("pt-BR")}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
+              </div>
+            )}
+            {selectedProduto && (
+              <div className="flex justify-end gap-2 mt-6 pt-6 border-t">
+                <Button
+                  onClick={() => {
+                    setViewDialogOpen(false);
+                    // Relatórios do produto - pode ser implementado depois
+                  }}
+                  variant="outline"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Relatórios
+                </Button>
+                <Button
+                  onClick={() => {
+                    setViewDialogOpen(false);
+                    handleEdit(selectedProduto);
+                  }}
+                  variant="default"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar
+                </Button>
               </div>
             )}
           </DialogContent>

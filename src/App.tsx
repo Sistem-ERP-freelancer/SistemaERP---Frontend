@@ -16,6 +16,7 @@ import ContasAReceberPedidoDetalhes from "./pages/contas-a-receber/ContasARecebe
 import ContasAReceberPedidoPagamentos from "./pages/contas-a-receber/ContasAReceberPedidoPagamentos";
 import ContasAPagar from "./pages/ContasAPagar";
 import ContasAReceber from "./pages/ContasAReceber";
+import ControleRoca from "./pages/ControleRoca";
 import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
 import Financeiro from "./pages/Financeiro";
@@ -211,6 +212,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Transportadoras />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/controle-roca" 
+              element={
+                <ProtectedRoute>
+                  <ControleRoca />
                 </ProtectedRoute>
               } 
             />

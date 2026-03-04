@@ -21,6 +21,7 @@ import {
     Settings,
     Shield,
     ShoppingCart,
+    Sprout,
     Truck,
     TruckIcon,
     User,
@@ -43,6 +44,7 @@ const getMenuItems = (isSuperAdmin: boolean) => {
     { icon: Package, label: "Produtos", href: "/produtos" },
     { icon: Boxes, label: "Movimentações", href: "/estoque" },
     { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
+    { icon: Sprout, label: "Controle de Roça", href: "/controle-roca" },
     { icon: Settings, label: "Configurações", href: "/settings" },
   ];
 

@@ -458,37 +458,6 @@ export function OrderForm({
       }
     }
 
-    // Validação de estoque no frontend (conforme guia)
-    const itensComErro: Array<{ produto: string; disponivel: number; solicitado: number }> = [];
-    
-    for (const item of itens) {
-      if (item.produto_id && item.produto_id !== 0 && tipo === 'VENDA') {
-        const produto = produtos.find(p => p.id === item.produto_id);
-        if (produto) {
-          const quantidadeSolicitada = Number(item.quantidade) || 0;
-          const estoqueDisponivel =
-            item.estoque_disponivel ??
-            ((produto as any).estoque_disponivel ?? produto.estoque_atual ?? 0);
-          
-          if (quantidadeSolicitada > estoqueDisponivel) {
-            itensComErro.push({
-              produto: produto.nome,
-              disponivel: estoqueDisponivel,
-              solicitado: quantidadeSolicitada,
-            });
-          }
-        }
-      }
-    }
-
-    if (itensComErro.length > 0) {
-      const mensagemErro = itensComErro.map(erro => 
-        `Estoque insuficiente para o produto ${erro.produto}\nDisponível: ${erro.disponivel} | Solicitado: ${erro.solicitado}`
-      ).join('\n\n');
-      toast.error(mensagemErro);
-      return;
-    }
-
     // Validação de limite de crédito do cliente (conforme guia)
     if (tipo === 'VENDA' && clienteId && limiteCredito) {
       const valorDoPedido = valorTotalPedido;
