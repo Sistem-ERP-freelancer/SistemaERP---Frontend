@@ -4,6 +4,7 @@ import type {
     CreateProdutoRocaDto,
     CreateProdutorRocaDto,
     CreateRocaDto,
+    LancamentoDetalhesRoca,
     LancamentoProducaoRoca,
     MeeiroRoca,
     ProdutoRoca,
@@ -11,6 +12,7 @@ import type {
     RelatorioMeeiroResponse,
     Roca,
     RocaDetalhes,
+    UpdateLancamentoProducaoRocaDto,
     UpdateMeeiroRocaDto,
     UpdateProdutorRocaDto,
     UpdateRocaDto,
@@ -115,14 +117,27 @@ class ControleRocaService {
     rocaId?: number;
     dataInicial?: string;
     dataFinal?: string;
+    incluirInativos?: boolean;
   }): Promise<LancamentoProducaoRoca[]> {
     const search = new URLSearchParams();
     if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
     if (params?.rocaId != null) search.set('rocaId', String(params.rocaId));
     if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
     if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
+    if (params?.incluirInativos === true) search.set('incluirInativos', 'true');
     const q = search.toString() ? `?${search.toString()}` : '';
     return apiClient.get<LancamentoProducaoRoca[]>(`${BASE}/lancamentos${q}`);
+  }
+
+  async obterLancamento(id: number): Promise<LancamentoDetalhesRoca | null> {
+    return apiClient.get<LancamentoDetalhesRoca | null>(`${BASE}/lancamentos/${id}`);
+  }
+
+  async atualizarLancamento(
+    id: number,
+    data: UpdateLancamentoProducaoRocaDto
+  ): Promise<LancamentoProducaoRoca> {
+    return apiClient.patch<LancamentoProducaoRoca>(`${BASE}/lancamentos/${id}`, data);
   }
 
   async criarLancamento(

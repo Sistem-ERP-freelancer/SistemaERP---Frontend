@@ -12,6 +12,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command';
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -27,6 +35,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
     Select,
     SelectContent,
@@ -45,10 +61,11 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { cleanDocument, formatCPF, formatTelefone } from '@/lib/validators';
 import { ConsultaCnpjResponse } from '@/services/cnpj.service';
 import { controleRocaService } from '@/services/controle-roca.service';
+import { produtosService } from '@/services/produtos.service';
 import type {
     CreateLancamentoProducaoRocaDto,
     CreateMeeiroRocaDto,
@@ -56,14 +73,13 @@ import type {
     CreateProdutorRocaDto,
     CreateRocaDto,
     MeeiroRoca,
-    ProdutoRoca,
     ProdutorRoca,
     RelatorioMeeiroResponse,
     Roca,
     RocaDetalhes,
     UpdateMeeiroRocaDto,
     UpdateProdutorRocaDto,
-    UpdateRocaDto,
+    UpdateRocaDto
 } from '@/types/roca';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -71,6 +87,7 @@ import {
     Building2,
     Calendar,
     Check,
+    ChevronsUpDown,
     ClipboardList,
     Eye,
     FileText,
@@ -86,8 +103,9 @@ import {
     User,
     UserX,
     Users,
+    X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
@@ -339,15 +357,22 @@ export default function ControleRoca() {
     },
   });
 
-  // Produtos da roça
-  const [produtorIdProdutos, setProdutorIdProdutos] = useState<number | ''>('');
-  const { data: produtosRoca = [], isLoading: loadingProdutos } = useQuery({
-    queryKey: ['controle-roca', 'produtos', produtorIdProdutos],
-    queryFn: () =>
-      controleRocaService.listarProdutosRoca(
-        produtorIdProdutos === '' ? undefined : Number(produtorIdProdutos)
-      ),
+  // Catálogo unificado de produtos (todos do sistema, incluindo os do Controle de Roça)
+  const { data: produtosCatalogo = [], isLoading: loadingProdutosCatalogo } = useQuery({
+    queryKey: ['controle-roca', 'produtos-catalogo'],
+    queryFn: async () => {
+      const resp = await produtosService.listar({ page: 1, limit: 1000, statusProduto: 'ATIVO' });
+      return resp.data ?? resp.produtos ?? [];
+    },
   });
+  const [catalogPage, setCatalogPage] = useState(1);
+  const CATALOG_PAGE_SIZE = 10;
+  const totalCatalogPages =
+    produtosCatalogo.length > 0 ? Math.ceil(produtosCatalogo.length / CATALOG_PAGE_SIZE) : 1;
+  const produtosCatalogoPagina = produtosCatalogo.slice(
+    (catalogPage - 1) * CATALOG_PAGE_SIZE,
+    catalogPage * CATALOG_PAGE_SIZE,
+  );
   const [openProduto, setOpenProduto] = useState(false);
   const [formProduto, setFormProduto] = useState<CreateProdutoRocaDto>({
     codigo: '',
@@ -356,8 +381,10 @@ export default function ControleRoca() {
     produtorId: 0,
   });
   const createProduto = useMutation({
-    mutationFn: (data: CreateProdutoRocaDto) =>
-      controleRocaService.criarProdutoRoca(data),
+    mutationFn: async (data: CreateProdutoRocaDto) => {
+      // Backend cria na roça e no módulo Produtos (catálogo geral) em uma única chamada
+      return controleRocaService.criarProdutoRoca(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
       toast.success('Produto cadastrado com sucesso');
@@ -376,6 +403,8 @@ export default function ControleRoca() {
 
   // Lançamentos
   const [produtorIdLanc, setProdutorIdLanc] = useState<number | ''>('');
+  const [produtorLancPopoverOpen, setProdutorLancPopoverOpen] = useState(false);
+  const [produtorLancSearchTerm, setProdutorLancSearchTerm] = useState('');
   const { data: rocasParaLancamento = [] } = useQuery({
     queryKey: ['controle-roca', 'rocas', produtorIdLanc],
     queryFn: () =>
@@ -383,30 +412,163 @@ export default function ControleRoca() {
         produtorIdLanc === '' ? undefined : Number(produtorIdLanc)
       ),
   });
+  const [incluirInativosLancamentos, setIncluirInativosLancamentos] = useState(false);
   const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
-    queryKey: ['controle-roca', 'lancamentos', produtorIdLanc],
+    queryKey: ['controle-roca', 'lancamentos', produtorIdLanc, incluirInativosLancamentos],
     queryFn: () =>
-      controleRocaService.listarLancamentos(
-        produtorIdLanc === '' ? undefined : { produtorId: Number(produtorIdLanc) }
-      ),
+      controleRocaService.listarLancamentos({
+        ...(produtorIdLanc === '' ? {} : { produtorId: Number(produtorIdLanc) }),
+        incluirInativos: incluirInativosLancamentos,
+      }),
   });
+  const [detalheLancamentoId, setDetalheLancamentoId] = useState<number | null>(null);
+  const { data: detalheLancamento } = useQuery({
+    queryKey: ['controle-roca', 'lancamento', detalheLancamentoId],
+    queryFn: () =>
+      detalheLancamentoId != null
+        ? controleRocaService.obterLancamento(detalheLancamentoId)
+        : Promise.resolve(null),
+    enabled: detalheLancamentoId != null,
+  });
+  const updateLancamento = useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: import('@/types/roca').UpdateLancamentoProducaoRocaDto;
+    }) => controleRocaService.atualizarLancamento(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Lançamento atualizado');
+      setEditLancamentoId(null);
+      setLancamentoToDesativar(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Erro ao atualizar');
+    },
+  });
+  const [lancamentoToDesativar, setLancamentoToDesativar] = useState<{
+    id: number;
+    data: string;
+    rocaNome: string;
+    totalGeral: string;
+  } | null>(null);
+  const [editLancamentoId, setEditLancamentoId] = useState<number | null>(null);
+  const { data: editLancamento } = useQuery({
+    queryKey: ['controle-roca', 'lancamento-edit', editLancamentoId],
+    queryFn: () =>
+      editLancamentoId != null
+        ? controleRocaService.obterLancamento(editLancamentoId)
+        : Promise.resolve(null),
+    enabled: editLancamentoId != null,
+  });
+  const { data: rocasParaEdit = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas', editLancamento?.produtorId],
+    queryFn: () =>
+      controleRocaService.listarRocas(
+        editLancamento!.produtorId,
+        true
+      ),
+    enabled: !!editLancamento?.produtorId,
+  });
+  const { data: meeirosParaEdit = [] } = useQuery({
+    queryKey: ['controle-roca', 'meeiros-edit', editLancamento?.produtorId],
+    queryFn: () =>
+      controleRocaService.listarMeeiros(editLancamento!.produtorId),
+    enabled: !!editLancamento?.produtorId,
+  });
+  const { data: produtosParaEdit = [] } = useQuery({
+    queryKey: ['controle-roca', 'produtos-edit', editLancamento?.produtorId],
+    queryFn: () =>
+      controleRocaService.listarProdutosRoca(editLancamento!.produtorId),
+    enabled: !!editLancamento?.produtorId,
+  });
+  const produtosDisponiveisEdit =
+    produtosParaEdit.length > 0 ? produtosParaEdit : produtosCatalogo;
+  const [editLancData, setEditLancData] = useState('');
+  const [editLancRocaId, setEditLancRocaId] = useState<number | ''>('');
+  const [editLancMeeiros, setEditLancMeeiros] = useState<
+    { meeiroId: number; porcentagem?: number; nome?: string }[]
+  >([]);
+  const [editLancMeeiroSelecionado, setEditLancMeeiroSelecionado] = useState('');
+  const [editLancProdutos, setEditLancProdutos] = useState<
+    {
+      produtoId: number;
+      quantidade: number;
+      preco_unitario: number;
+      nome?: string;
+      meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
+    }[]
+  >([]);
+  useEffect(() => {
+    if (!editLancamento || editLancamentoId == null) return;
+    const dataStr =
+      typeof editLancamento.data === 'string'
+        ? editLancamento.data
+        : (editLancamento.data as string).slice(0, 10);
+    setEditLancData(dataStr);
+    setEditLancRocaId(editLancamento.rocaId);
+    const itens = editLancamento.itens ?? [];
+    const meeirosUnicos = itens.flatMap((item) => item.meeiros ?? []);
+    const seen = new Set<number>();
+    const listaMeeiros = meeirosUnicos.filter((m) => {
+      if (seen.has(m.meeiroId)) return false;
+      seen.add(m.meeiroId);
+      return true;
+    });
+    setEditLancMeeiros(
+      listaMeeiros.map((m) => ({
+        meeiroId: m.meeiroId,
+        porcentagem: m.porcentagem,
+        nome: m.meeiroNome,
+      }))
+    );
+    setEditLancProdutos(
+      itens.map((item) => ({
+        produtoId: item.produtoId ?? 0,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario ?? 0,
+        nome: item.produto,
+        meeiros: (item.meeiros ?? []).map((m) => ({
+          meeiroId: m.meeiroId,
+          nome: m.meeiroNome,
+          porcentagem: m.porcentagem,
+        })),
+      }))
+    );
+  }, [editLancamento, editLancamentoId]);
   const [openLancamento, setOpenLancamento] = useState(false);
+  const [produtoPreselecionadoLancamento, setProdutoPreselecionadoLancamento] = useState<{
+    id: number;
+    nome: string;
+  } | null>(null);
   const [lancData, setLancData] = useState('');
   const [lancRocaId, setLancRocaId] = useState<number | ''>('');
   const [lancMeeiros, setLancMeeiros] = useState<
-    { meeiroId: number; porcentagem?: number; nome?: string }[]
+    { meeiroId: number; nome?: string; porcentagem_padrao: number }[]
   >([]);
-  const [lancMeeiroCodigo, setLancMeeiroCodigo] = useState('');
+  const [lancMeeiroSelecionado, setLancMeeiroSelecionado] = useState('');
   const [lancProdutos, setLancProdutos] = useState<
-    { produtoId: number; quantidade: number; preco_unitario: number; nome?: string }[]
+    {
+      produtoId: number;
+      quantidade: number;
+      preco_unitario: number;
+      nome?: string;
+      meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
+    }[]
   >([]);
-  const { data: produtosParaLancamento = [] } = useQuery({
-    queryKey: ['controle-roca', 'produtos', produtorIdLanc],
-    queryFn: () =>
-      controleRocaService.listarProdutosRoca(
-        produtorIdLanc === '' ? undefined : Number(produtorIdLanc)
-      ),
-  });
+  // Lista unificada: todos os produtos do sistema (roça + módulo Produtos) para usar no lançamento
+  const produtosDisponiveisLancamento = produtosCatalogo;
+
+  // Sempre que o modal de novo lançamento abrir, preencher a data com hoje (onOpenChange nem sempre é chamado ao abrir por código)
+  useEffect(() => {
+    if (openLancamento) {
+      setLancData(new Date().toISOString().slice(0, 10));
+    }
+  }, [openLancamento]);
+
+  // Produto pré-selecionado é passado ao AddProdutoLanc para preencher o Select; o pai limpa quando o filho avisa que consumiu
   const { data: meeirosParaLancamento = [] } = useQuery({
     queryKey: ['controle-roca', 'meeiros', produtorIdLanc],
     queryFn: () =>
@@ -421,7 +583,7 @@ export default function ControleRoca() {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
       toast.success('Lançamento registrado com sucesso');
       setOpenLancamento(false);
-      setLancData('');
+      setLancData(new Date().toISOString().slice(0, 10));
       setLancRocaId('');
       setLancMeeiros([]);
       setLancProdutos([]);
@@ -431,40 +593,63 @@ export default function ControleRoca() {
     },
   });
 
-  const handleAddMeeiroByCodigo = () => {
-    if (!lancMeeiroCodigo.trim()) return;
-    controleRocaService
-      .buscarMeeiroPorCodigo(lancMeeiroCodigo.trim())
-      .then((m) => {
-        if (lancMeeiros.some((x) => x.meeiroId === m.id)) {
-          toast.error('Meeiro já adicionado');
-          return;
-        }
-        setLancMeeiros((prev) => [
-          ...prev,
-          {
-            meeiroId: m.id,
-            porcentagem: m.porcentagem_padrao,
-            nome: m.nome,
-          },
-        ]);
-        setLancMeeiroCodigo('');
-      })
-      .catch(() => toast.error('Meeiro não encontrado'));
+  const handleAddMeeiro = (meeiroId: number | string) => {
+    const idNum = Number(meeiroId);
+    const m = meeirosParaLancamento.find((x) => Number(x.id) === idNum);
+    if (!m) return;
+    if (lancMeeiros.some((x) => Number(x.meeiroId) === idNum)) {
+      toast.error('Meeiro já adicionado');
+      return;
+    }
+    const novo = {
+      meeiroId: Number(m.id),
+      nome: m.nome,
+      porcentagem_padrao: Number(m.porcentagem_padrao ?? 0),
+    };
+    setLancMeeiros((prev) => [...prev, novo]);
+    setLancProdutos((prev) =>
+      prev.map((p) => ({
+        ...p,
+        meeiros: [...p.meeiros, { meeiroId: novo.meeiroId, nome: novo.nome, porcentagem: novo.porcentagem_padrao }],
+      }))
+    );
+    setLancMeeiroSelecionado('');
+  };
+
+  const handleRemoveMeeiroLanc = (meeiroId: number) => {
+    setLancMeeiros((prev) => prev.filter((x) => x.meeiroId !== meeiroId));
+    setLancProdutos((prev) =>
+      prev.map((p) => ({
+        ...p,
+        meeiros: p.meeiros.filter((m) => m.meeiroId !== meeiroId),
+      }))
+    );
   };
 
   const handleAddProdutoLanc = (produtoId: number, qtd: number, preco: number) => {
-    const p = produtosParaLancamento.find((x) => x.id === produtoId);
-    if (!p) return;
+    const p = produtosDisponiveisLancamento.find(
+      (x) => Number(x.id) === Number(produtoId)
+    ) as { id: number; nome?: string; unidade_medida?: string } | undefined;
+    if (!p) {
+      toast.error('Produto não encontrado na lista');
+      return;
+    }
+    const meeirosDoProduto = lancMeeiros.map((m) => ({
+      meeiroId: m.meeiroId,
+      nome: m.nome,
+      porcentagem: m.porcentagem_padrao,
+    }));
     setLancProdutos((prev) => [
       ...prev,
       {
-        produtoId,
+        produtoId: Number(p.id),
         quantidade: qtd,
         preco_unitario: preco,
-        nome: p.nome,
+        nome: p.nome ?? '—',
+        meeiros: meeirosDoProduto,
       },
     ]);
+    toast.success('Produto adicionado');
   };
 
   const totalGeralLanc =
@@ -477,22 +662,22 @@ export default function ControleRoca() {
       toast.error('Preencha data, roça, ao menos um meeiro e ao menos um produto');
       return;
     }
-    const somaPct = lancMeeiros.reduce((s, m) => s + (m.porcentagem ?? 0), 0);
-    if (somaPct > 100) {
-      toast.error('Soma das porcentagens dos meeiros não pode ser maior que 100%');
+    const produtosComMeeiros = lancProdutos.filter((p) => p.meeiros.length > 0);
+    if (produtosComMeeiros.length !== lancProdutos.length) {
+      toast.error('Cada produto deve ter ao menos um meeiro (adicione meeiros antes dos produtos)');
       return;
     }
     createLancamento.mutate({
       data: lancData,
       rocaId: Number(lancRocaId),
-      meeiros: lancMeeiros.map((m) => ({
-        meeiroId: m.meeiroId,
-        porcentagem: m.porcentagem,
-      })),
       produtos: lancProdutos.map((p) => ({
         produtoId: p.produtoId,
         quantidade: p.quantidade,
         preco_unitario: p.preco_unitario,
+        meeiros: p.meeiros.map((m) => ({
+          meeiroId: m.meeiroId,
+          porcentagem: Number(m.porcentagem ?? 0),
+        })),
       })),
     });
   };
@@ -950,19 +1135,142 @@ export default function ControleRoca() {
             </div>
           </TabsContent>
 
-          {/* Tab Produtos */}
-          <TabsContent value="produtos" className="space-y-4">
+          {/* Tab Produtos — lista unificada (todos os produtos do sistema) */}
+          <TabsContent value="produtos" className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">
+                Todos os produtos do sistema em uma única lista (incluindo os cadastrados no Controle de Roça).
+              </p>
+              <Button onClick={() => setOpenProduto(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Produto
+              </Button>
+            </div>
+
+            <div className="bg-card border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+                <div>
+                  <h3 className="text-sm font-semibold">Catálogo de produtos</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Lista unificada — todos os produtos, independente de produtor.
+                  </p>
+                </div>
+              </div>
+              {loadingProdutosCatalogo ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Código / SKU</TableHead>
+                        <TableHead>Unidade</TableHead>
+                        <TableHead>Estoque</TableHead>
+                        <TableHead className="text-right w-[140px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {produtosCatalogo.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                            Nenhum produto cadastrado. Use &quot;Novo Produto&quot; para cadastrar.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        produtosCatalogoPagina.map((p) => (
+                          <TableRow key={p.id}>
+                            <TableCell className="font-medium">{p.nome}</TableCell>
+                            <TableCell className="font-mono text-xs">{p.sku}</TableCell>
+                            <TableCell>{p.unidade_medida || '—'}</TableCell>
+                            <TableCell>{p.estoque_atual ?? 0}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => {
+                                  setProdutoPreselecionadoLancamento({
+                                    id: p.id,
+                                    nome: p.nome,
+                                  });
+                                  setTab('lancamentos');
+                                  setOpenLancamento(true);
+                                }}
+                              >
+                                <ClipboardList className="w-4 h-4" />
+                                Fazer lançamento
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  {produtosCatalogo.length > CATALOG_PAGE_SIZE && (
+                    <div className="border-t px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-xs text-muted-foreground">
+                        Mostrando{' '}
+                        {produtosCatalogo.length > 0
+                          ? (catalogPage - 1) * CATALOG_PAGE_SIZE + 1
+                          : 0}{' '}
+                        a{' '}
+                        {Math.min(catalogPage * CATALOG_PAGE_SIZE, produtosCatalogo.length)} de{' '}
+                        {produtosCatalogo.length}{' '}
+                        produtos
+                      </div>
+                      <Pagination className="justify-end">
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCatalogPage((prev) => Math.max(1, prev - 1));
+                              }}
+                              className={catalogPage === 1 ? 'pointer-events-none opacity-50' : ''}
+                            />
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationNext
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCatalogPage((prev) =>
+                                  Math.min(totalCatalogPages, prev + 1),
+                                );
+                              }}
+                              className={
+                                catalogPage === totalCatalogPages
+                                  ? 'pointer-events-none opacity-50'
+                                  : ''
+                              }
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Tab Lançamentos */}
+          <TabsContent value="lancamentos" className="space-y-4">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
                 <Label>Produtor</Label>
                 <Select
-                  value={produtorIdProdutos === '' ? 'todos' : String(produtorIdProdutos)}
+                  value={produtorIdLanc === '' ? 'todos' : String(produtorIdLanc)}
                   onValueChange={(v) =>
-                    setProdutorIdProdutos(v === 'todos' ? '' : Number(v))
+                    setProdutorIdLanc(v === 'todos' ? '' : Number(v))
                   }
                 >
                   <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="Todos" />
+                    <SelectValue placeholder="Todos os lançamentos" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos os produtores</SelectItem>
@@ -974,80 +1282,26 @@ export default function ControleRoca() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => setOpenProduto(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Produto
-              </Button>
-            </div>
-            <div className="bg-card border rounded-xl overflow-hidden">
-              {loadingProdutos ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Produtor</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {produtosRoca.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                          Nenhum produto cadastrado
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      produtosRoca.map((p) => {
-                        const prod = produtores.find((x) => x.id === p.produtorId);
-                        return (
-                          <TableRow key={p.id}>
-                            <TableCell className="font-medium">{p.codigo}</TableCell>
-                            <TableCell>{p.nome}</TableCell>
-                            <TableCell>{p.unidade_medida || '—'}</TableCell>
-                            <TableCell>{prod ? prod.nome_razao : p.produtorId}</TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Tab Lançamentos */}
-          <TabsContent value="lancamentos" className="space-y-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label>Produtor</Label>
-                <Select
-                  value={produtorIdLanc === '' ? '' : String(produtorIdLanc)}
-                  onValueChange={(v) => setProdutorIdLanc(v === '' ? '' : Number(v))}
-                >
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="Selecione o produtor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {produtores.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.codigo} – {p.nome_razao}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <Button
-                onClick={() => setOpenLancamento(true)}
+                onClick={() => {
+                  setLancData(new Date().toISOString().slice(0, 10));
+                  setOpenLancamento(true);
+                }}
                 disabled={produtores.length === 0}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Lançamento
               </Button>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="incluir-inativos-lanc"
+                  checked={incluirInativosLancamentos}
+                  onCheckedChange={setIncluirInativosLancamentos}
+                />
+                <Label htmlFor="incluir-inativos-lanc" className="cursor-pointer">
+                  Exibir inativos
+                </Label>
+              </div>
             </div>
             <div className="bg-card border rounded-xl overflow-hidden">
               {loadingLancamentos ? (
@@ -1060,24 +1314,146 @@ export default function ControleRoca() {
                     <TableRow>
                       <TableHead>Data</TableHead>
                       <TableHead>Roça</TableHead>
-                      <TableHead>Total geral</TableHead>
+                      <TableHead>Produtos</TableHead>
+                      <TableHead>Quantidades</TableHead>
+                      <TableHead>Meeiros</TableHead>
+                      <TableHead className="text-right">Total geral</TableHead>
+                      <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {lancamentos.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
                     ) : (
                       lancamentos.map((l) => {
                         const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
+                        const itens = l.itens ?? [];
+                        const meeirosList = itens.flatMap((i) => i.meeiros ?? []);
+                        const seenM = new Set<number>();
+                        const meeiros = meeirosList.filter((m) => {
+                          if (seenM.has(m.meeiroId)) return false;
+                          seenM.add(m.meeiroId);
+                          return true;
+                        });
                         return (
                           <TableRow key={l.id}>
                             <TableCell>{formatDate(l.data)}</TableCell>
                             <TableCell>{roca ? roca.nome : l.rocaId}</TableCell>
-                            <TableCell>{formatCurrency(Number(l.total_geral))}</TableCell>
+                            <TableCell className="max-w-[200px]">
+                              {itens.length === 0
+                                ? '—'
+                                : (
+                                    <>
+                                      {itens.slice(0, 3).map((item, i) => (
+                                        <div key={i} className="text-sm">
+                                          {item.produto}
+                                        </div>
+                                      ))}
+                                      {itens.length > 3 && (
+                                        <div className="text-sm text-muted-foreground">…</div>
+                                      )}
+                                    </>
+                                  )}
+                            </TableCell>
+                            <TableCell>
+                              {itens.length === 0
+                                ? '—'
+                                : (
+                                    <>
+                                      {itens.slice(0, 3).map((item, i) => (
+                                        <div key={i} className="text-sm">
+                                          {item.quantidade}
+                                        </div>
+                                      ))}
+                                      {itens.length > 3 && (
+                                        <div className="text-sm text-muted-foreground">…</div>
+                                      )}
+                                    </>
+                                  )}
+                            </TableCell>
+                            <TableCell className="max-w-[220px]">
+                              {meeiros.length === 0
+                                ? '—'
+                                : (
+                                    <>
+                                      {meeiros.slice(0, 3).map((m, i) => {
+                                        const totalParte = meeirosList
+                                          .filter((x) => x.meeiroId === m.meeiroId)
+                                          .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
+                                        return (
+                                          <div key={i} className="text-sm">
+                                            {m.meeiroNome ?? `ID ${m.meeiroId}`}
+                                            <span className="text-muted-foreground ml-1">
+                                              ({formatCurrency(totalParte)})
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                      {meeiros.length > 3 && (
+                                        <div className="text-sm text-muted-foreground">…</div>
+                                      )}
+                                    </>
+                                  )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(Number(l.total_geral))}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => setDetalheLancamentoId(l.id)}
+                                  >
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    Ver detalhes
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => setEditLancamentoId(l.id)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Editar
+                                  </DropdownMenuItem>
+                                  {l.ativo !== false ? (
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => {
+                                        const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
+                                        setLancamentoToDesativar({
+                                          id: l.id,
+                                          data: formatDate(l.data),
+                                          rocaNome: roca ? roca.nome : String(l.rocaId),
+                                          totalGeral: formatCurrency(Number(l.total_geral)),
+                                        });
+                                      }}
+                                    >
+                                      <Archive className="w-4 h-4 mr-2" />
+                                      Desativar
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        updateLancamento.mutate({
+                                          id: l.id,
+                                          data: { ativo: true },
+                                        })
+                                      }
+                                    >
+                                      <Check className="w-4 h-4 mr-2" />
+                                      Reativar
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
                           </TableRow>
                         );
                       })
@@ -1086,6 +1462,473 @@ export default function ControleRoca() {
                 </Table>
               )}
             </div>
+
+            {/* Dialog Ver detalhes do lançamento - mesmo design de Visualizar Produtor */}
+            <Dialog
+              open={detalheLancamentoId != null}
+              onOpenChange={(open) => !open && setDetalheLancamentoId(null)}
+            >
+              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-primary" />
+                    Visualizar Lançamento
+                  </DialogTitle>
+                  <DialogDescription>
+                    Informações completas do lançamento: data, roça, produtos e meeiros.
+                  </DialogDescription>
+                </DialogHeader>
+                {detalheLancamentoId != null && (
+                  <>
+                    {!detalheLancamento ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <div className="space-y-8 mt-6">
+                        {/* Informações do lançamento */}
+                        <div className="space-y-6">
+                          <h3 className="text-lg font-semibold flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-primary" />
+                            Informações do Lançamento
+                          </h3>
+                          <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                              <Label className="text-sm text-muted-foreground">Data</Label>
+                              <p className="font-medium text-base">
+                                {formatDate(detalheLancamento.data)}
+                              </p>
+                            </div>
+                            <div className="space-y-3">
+                              <Label className="text-sm text-muted-foreground">Roça</Label>
+                              <p className="font-medium text-base">
+                                {rocasParaLancamento.find((r) => r.id === detalheLancamento.rocaId)?.nome ??
+                                  detalheLancamento.rocaId}
+                              </p>
+                            </div>
+                            <div className="space-y-3">
+                              <Label className="text-sm text-muted-foreground">Total geral</Label>
+                              <p className="font-medium text-base text-primary font-semibold">
+                                {formatCurrency(Number(detalheLancamento.total_geral))}
+                              </p>
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <Label className="text-sm text-muted-foreground">Status</Label>
+                                <span
+                                  className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${
+                                    detalheLancamento.ativo !== false
+                                      ? 'bg-green-500/10 text-green-500'
+                                      : 'bg-muted text-muted-foreground'
+                                  }`}
+                                >
+                                  {detalheLancamento.ativo !== false ? 'ATIVO' : 'INATIVO'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Produtos e meeiros por item */}
+                        {detalheLancamento.itens && detalheLancamento.itens.length > 0 && (
+                          <div className="space-y-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                              <Package className="w-5 h-5 text-primary" />
+                              Produtos e participação dos meeiros
+                            </h3>
+                            <div className="border rounded-lg overflow-hidden">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Produto</TableHead>
+                                    <TableHead>Qtd</TableHead>
+                                    <TableHead className="text-right">Preço un.</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                    <TableHead>Meeiros (% e valor)</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {detalheLancamento.itens.map((item, i) => (
+                                    <TableRow key={i}>
+                                      <TableCell className="font-medium">{item.produto}</TableCell>
+                                      <TableCell>{item.quantidade}</TableCell>
+                                      <TableCell className="text-right">
+                                        {formatCurrency(item.preco_unitario ?? 0)}
+                                      </TableCell>
+                                      <TableCell className="text-right font-medium">
+                                        {formatCurrency(item.valor_total ?? 0)}
+                                      </TableCell>
+                                      <TableCell className="text-muted-foreground text-sm">
+                                        {(item.meeiros ?? []).length === 0
+                                          ? '—'
+                                          : (item.meeiros ?? []).map((m, j) => (
+                                              <div key={j}>
+                                                {m.meeiroNome ?? m.meeiroId}: {m.porcentagem}% ={' '}
+                                                {formatCurrency(m.valor_parte)}
+                                              </div>
+                                            ))}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {detalheLancamento && detalheLancamentoId != null && (
+                      <div className="flex justify-end gap-2 mt-6 pt-6 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => setDetalheLancamentoId(null)}
+                        >
+                          Fechar
+                        </Button>
+                        <Button
+                          variant="default"
+                          onClick={() => {
+                            setDetalheLancamentoId(null);
+                            setEditLancamentoId(detalheLancamentoId);
+                          }}
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Editar
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </DialogContent>
+            </Dialog>
+
+            {/* Dialog Editar lançamento */}
+            <Dialog
+              open={editLancamentoId != null}
+              onOpenChange={(open) => !open && setEditLancamentoId(null)}
+            >
+              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Editar lançamento</DialogTitle>
+                  <DialogDescription>
+                    Altere data, roça, meeiros e produtos. Salve para aplicar.
+                  </DialogDescription>
+                </DialogHeader>
+                {editLancamentoId != null && (
+                  <>
+                    {!editLancamento ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Data</Label>
+                          <Input
+                            type="date"
+                            value={editLancData}
+                            onChange={(e) => setEditLancData(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Roça</Label>
+                          <Select
+                            value={editLancRocaId === '' ? '' : String(editLancRocaId)}
+                            onValueChange={(v) =>
+                              setEditLancRocaId(v === '' ? '' : Number(v))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a roça" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {rocasParaEdit.map((r) => (
+                                <SelectItem key={r.id} value={String(r.id)}>
+                                  {r.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <Label>Meeiros participantes</Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              A porcentagem de cada meeiro é definida ao lado de cada produto abaixo.
+                            </p>
+                          </div>
+                          <div className="rounded border p-2 space-y-2">
+                            {editLancMeeiros.map((m, idx) => (
+                              <div
+                                key={idx}
+                                className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                              >
+                                <span className="font-medium">
+                                  {m.nome ??
+                                    meeirosParaEdit.find(
+                                      (x) => Number(x.id) === Number(m.meeiroId)
+                                    )?.nome ??
+                                    m.meeiroId}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditLancMeeiros((prev) =>
+                                      prev.filter((_, i) => i !== idx)
+                                    );
+                                    setEditLancProdutos((prev) =>
+                                      prev.map((p) => ({
+                                        ...p,
+                                        meeiros: (p.meeiros ?? []).filter(
+                                          (mm) => mm.meeiroId !== m.meeiroId
+                                        ),
+                                      }))
+                                    );
+                                  }}
+                                >
+                                  Remover
+                                </Button>
+                              </div>
+                            ))}
+                            <Select
+                              value={editLancMeeiroSelecionado}
+                              onValueChange={(v) => setEditLancMeeiroSelecionado(v)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Adicionar meeiro" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {meeirosParaEdit
+                                  .filter(
+                                    (x) =>
+                                      !editLancMeeiros.some(
+                                        (m) => Number(m.meeiroId) === Number(x.id)
+                                      )
+                                  )
+                                  .map((x) => (
+                                    <SelectItem key={x.id} value={String(x.id)}>
+                                      {x.nome} ({x.porcentagem_padrao}%)
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const id = Number(editLancMeeiroSelecionado);
+                                const m = meeirosParaEdit.find((x) => Number(x.id) === id);
+                                if (!m) return;
+                                setEditLancMeeiros((prev) => [
+                                  ...prev,
+                                  {
+                                    meeiroId: m.id,
+                                    porcentagem: m.porcentagem_padrao,
+                                    nome: m.nome,
+                                  },
+                                ]);
+                                setEditLancProdutos((prev) =>
+                                  prev.map((p) => ({
+                                    ...p,
+                                    meeiros: [
+                                      ...(p.meeiros ?? []),
+                                      {
+                                        meeiroId: m.id,
+                                        nome: m.nome,
+                                        porcentagem: m.porcentagem_padrao,
+                                      },
+                                    ],
+                                  }))
+                                );
+                                setEditLancMeeiroSelecionado('');
+                              }}
+                              disabled={!editLancMeeiroSelecionado}
+                            >
+                              Adicionar meeiro
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Produtos (porcentagem por meeiro ao lado de cada um)</Label>
+                          <div className="rounded border p-2 space-y-3 max-h-64 overflow-y-auto">
+                            {editLancProdutos.map((item, idx) => {
+                              const valorItem = item.quantidade * item.preco_unitario;
+                              return (
+                                <div
+                                  key={idx}
+                                  className="rounded border border-border/60 p-2 space-y-2 bg-muted/10"
+                                >
+                                  <div className="flex items-center justify-between gap-2 text-sm flex-wrap">
+                                    <span>{item.nome ?? item.produtoId}</span>
+                                    <span>Qtd: {item.quantidade}</span>
+                                    <span>
+                                      {formatCurrency(item.preco_unitario)}/un —{' '}
+                                      {formatCurrency(valorItem)}
+                                    </span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setEditLancProdutos((prev) =>
+                                          prev.filter((_, i) => i !== idx)
+                                        )
+                                      }
+                                    >
+                                      Remover
+                                    </Button>
+                                  </div>
+                                  {(item.meeiros ?? []).length > 0 && (
+                                    <div className="flex flex-wrap gap-3 pt-2 border-t border-border/40">
+                                      {(item.meeiros ?? []).map((mm) => {
+                                        const valorParte = (valorItem * (mm.porcentagem ?? 0)) / 100;
+                                        return (
+                                          <div
+                                            key={mm.meeiroId}
+                                            className="flex items-center gap-2 text-sm"
+                                          >
+                                            <span className="text-muted-foreground">
+                                              {mm.nome ?? mm.meeiroId}:
+                                            </span>
+                                            <Input
+                                              type="number"
+                                              min={0}
+                                              max={100}
+                                              placeholder="0"
+                                              className="w-14 h-8 text-right"
+                                              value={mm.porcentagem !== undefined && mm.porcentagem !== null && mm.porcentagem !== 0 ? String(mm.porcentagem) : ''}
+                                              onChange={(e) => {
+                                                const v =
+                                                  e.target.value === '' ? 0 : Number(e.target.value);
+                                                setEditLancProdutos((prev) =>
+                                                  prev.map((p, i) =>
+                                                    i !== idx
+                                                      ? p
+                                                      : {
+                                                          ...p,
+                                                          meeiros: (p.meeiros ?? []).map((mmm) =>
+                                                            mmm.meeiroId === mm.meeiroId
+                                                              ? { ...mmm, porcentagem: v }
+                                                              : mmm
+                                                          ),
+                                                        }
+                                                  )
+                                                );
+                                              }}
+                                            />
+                                            <span>% = {formatCurrency(valorParte)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                            <AddProdutoLanc
+                              produtos={produtosDisponiveisEdit}
+                              onAdd={(produtoId, qtd, preco) => {
+                                const p = produtosDisponiveisEdit.find(
+                                  (x) => Number(x.id) === Number(produtoId)
+                                ) as { id: number; nome?: string } | undefined;
+                                const meeirosDoProduto = editLancMeeiros.map((m) => ({
+                                  meeiroId: m.meeiroId,
+                                  nome: m.nome,
+                                  porcentagem: Number(m.porcentagem ?? 0),
+                                }));
+                                setEditLancProdutos((prev) => [
+                                  ...prev,
+                                  {
+                                    produtoId: Number(produtoId),
+                                    quantidade: qtd,
+                                    preco_unitario: preco,
+                                    nome: p?.nome ?? '—',
+                                    meeiros: meeirosDoProduto,
+                                  },
+                                ]);
+                              }}
+                              disabled={editLancMeeiros.length === 0}
+                            />
+                          <p className="text-sm font-semibold">
+                            Total:{' '}
+                            {formatCurrency(
+                              editLancProdutos.reduce(
+                                (s, i) => s + i.quantidade * i.preco_unitario,
+                                0
+                              )
+                            )}
+                          </p>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            variant="outline"
+                            onClick={() => setEditLancamentoId(null)}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              if (!editLancData || !editLancRocaId) {
+                                toast.error('Preencha data e roça');
+                                return;
+                              }
+                              if (editLancMeeiros.length === 0) {
+                                toast.error('Adicione ao menos um meeiro');
+                                return;
+                              }
+                              if (editLancProdutos.length === 0) {
+                                toast.error('Adicione ao menos um produto');
+                                return;
+                              }
+                              const produtosComMeeiros = editLancProdutos.filter(
+                                (p) => p.meeiros?.length > 0
+                              );
+                              if (produtosComMeeiros.length !== editLancProdutos.length) {
+                                toast.error('Cada produto deve ter ao menos um meeiro');
+                                return;
+                              }
+                              const produtosValidos = editLancProdutos.filter(
+                                (p) => p.produtoId > 0 && (p.meeiros?.length ?? 0) > 0
+                              );
+                              if (produtosValidos.length === 0) {
+                                toast.error('Adicione ao menos um produto válido com meeiros');
+                                return;
+                              }
+                              updateLancamento.mutate({
+                                id: editLancamentoId,
+                                data: {
+                                  data: editLancData,
+                                  rocaId: Number(editLancRocaId),
+                                  produtos: produtosValidos.map((p) => ({
+                                    produtoId: p.produtoId,
+                                    quantidade: p.quantidade,
+                                    preco_unitario: p.preco_unitario,
+                                    meeiros: (p.meeiros ?? []).map((m) => ({
+                                      meeiroId: m.meeiroId,
+                                      porcentagem: Number(m.porcentagem ?? 0),
+                                    })),
+                                  })),
+                                },
+                              });
+                            }}
+                            disabled={updateLancamento.isPending}
+                          >
+                            {updateLancamento.isPending && (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            )}
+                            Salvar
+                          </Button>
+                        </DialogFooter>
+                      </div>
+                    )}
+                  </>
+                )}
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Tab Relatório */}
@@ -1194,7 +2037,24 @@ export default function ControleRoca() {
         </Tabs>
 
         {/* Dialog Novo Produtor - mesmo design do Novo Cliente: tipo PF/PJ, CPF/CNPJ separados, consulta CNPJ */}
-        <Dialog open={openProdutor} onOpenChange={setOpenProdutor}>
+        <Dialog
+        open={openProdutor}
+        onOpenChange={(open) => {
+          setOpenProdutor(open);
+          if (!open) {
+            setFormProdutor({
+              nome: '',
+              codigo: '',
+              tipo_pessoa: 'pessoa_fisica',
+              cpf: '',
+              telefone: '',
+              endereco: '',
+              nome_razao: '',
+              cnpj: '',
+            });
+          }
+        }}
+      >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center gap-3">
@@ -1851,7 +2711,13 @@ export default function ControleRoca() {
         </Dialog>
 
         {/* Dialog Nova Roça */}
-        <Dialog open={openRoca} onOpenChange={setOpenRoca}>
+        <Dialog
+        open={openRoca}
+        onOpenChange={(open) => {
+          setOpenRoca(open);
+          if (!open) setFormRoca({ produtorId: '', nome: '', codigo: '', localizacao: '' });
+        }}
+      >
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center gap-3">
@@ -2310,8 +3176,92 @@ export default function ControleRoca() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Modal de confirmação para desativar lançamento */}
+        <AlertDialog
+          open={lancamentoToDesativar != null}
+          onOpenChange={(open) => !open && setLancamentoToDesativar(null)}
+        >
+          <AlertDialogContent className="max-w-xl rounded-2xl border shadow-xl p-8">
+            <AlertDialogHeader className="space-y-6">
+              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+                  <Archive className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1 space-y-5 text-center sm:text-left">
+                  <AlertDialogTitle className="text-2xl leading-tight">
+                    Desativar lançamento?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-5 text-base text-muted-foreground">
+                      {lancamentoToDesativar && (
+                        <>
+                          <p className="leading-relaxed">
+                            O lançamento de <strong className="font-semibold text-foreground">{lancamentoToDesativar.data}</strong>{' '}
+                            na roça <strong className="font-semibold text-foreground">{lancamentoToDesativar.rocaNome}</strong>{' '}
+                            (total {lancamentoToDesativar.totalGeral}) será desativado e não aparecerá mais na listagem padrão.
+                          </p>
+                          <p className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 leading-relaxed">
+                            Você pode reativá-lo depois pelo menu Ações, escolhendo &quot;Reativar&quot; ao exibir os inativos.
+                          </p>
+                          <p className="font-medium text-foreground/90">Tem certeza que deseja desativar?</p>
+                        </>
+                      )}
+                    </div>
+                  </AlertDialogDescription>
+                </div>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex gap-3 sm:gap-3 mt-8">
+              <AlertDialogCancel className="mt-4 sm:mt-0">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (lancamentoToDesativar) {
+                    updateLancamento.mutate({
+                      id: lancamentoToDesativar.id,
+                      data: { ativo: false },
+                    });
+                  }
+                }}
+                disabled={updateLancamento.isPending || !lancamentoToDesativar}
+                className="bg-amber-600 text-white hover:bg-amber-700"
+              >
+                {updateLancamento.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Desativando...
+                  </>
+                ) : (
+                  <>
+                    <Archive className="mr-2 h-4 w-4" />
+                    Desativar lançamento
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Dialog Novo Meeiro - mesmo design de criar cliente */}
-        <Dialog open={openMeeiro} onOpenChange={setOpenMeeiro}>
+        <Dialog
+        open={openMeeiro}
+        onOpenChange={(open) => {
+          setOpenMeeiro(open);
+          if (!open) {
+            setFormMeeiro({
+              produtorId: '',
+              codigo: '',
+              nome: '',
+              cpf: '',
+              telefone: '',
+              endereco: '',
+              porcentagem_padrao: '',
+            });
+          }
+        }}
+      >
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center gap-3">
@@ -2864,11 +3814,22 @@ export default function ControleRoca() {
         </Dialog>
 
         {/* Dialog Novo Produto */}
-        <Dialog open={openProduto} onOpenChange={setOpenProduto}>
-          <DialogContent>
+        <Dialog
+        open={openProduto}
+        onOpenChange={(open) => {
+          setOpenProduto(open);
+          if (!open) {
+            setProdutorIdProduto('');
+            setFormProduto({ produtorId: '', nome: '', codigo: '', unidade_medida: '' });
+          }
+        }}
+      >
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Novo Produto da Roça</DialogTitle>
-              <DialogDescription>Produtos produzidos na roça (milho, feijão, mandioca, etc.).</DialogDescription>
+              <DialogDescription>
+                Produtos produzidos na roça (milho, feijão, mandioca, etc.). Selecione o produtor e cadastre o novo produto; ele será criado também no catálogo geral de produtos.
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
@@ -2876,7 +3837,12 @@ export default function ControleRoca() {
                 <Select
                   value={formProduto.produtorId ? String(formProduto.produtorId) : ''}
                   onValueChange={(v) =>
-                    setFormProduto((p) => ({ ...p, produtorId: Number(v) }))
+                    setFormProduto((p) => ({
+                      ...p,
+                      produtorId: Number(v),
+                      codigo: '',
+                      nome: '',
+                    }))
                   }
                 >
                   <SelectTrigger>
@@ -2891,15 +3857,16 @@ export default function ControleRoca() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Código do produto</Label>
                   <Input
-                    value={formProduto.codigo}
+                    value={formProduto.codigo ?? ''}
                     onChange={(e) =>
                       setFormProduto((p) => ({ ...p, codigo: e.target.value }))
                     }
-                    placeholder="Ex: MILHO"
+                    placeholder="Deixe em branco para gerar automaticamente"
                   />
                 </div>
                 <div className="space-y-2">
@@ -2940,15 +3907,14 @@ export default function ControleRoca() {
               </Button>
               <Button
                 onClick={() => {
-                  if (
-                    !formProduto.codigo.trim() ||
-                    !formProduto.nome.trim() ||
-                    !formProduto.produtorId
-                  ) {
-                    toast.error('Código, nome e produtor são obrigatórios');
+                  if (!formProduto.nome?.trim() || !formProduto.produtorId) {
+                    toast.error('Nome e produtor são obrigatórios');
                     return;
                   }
-                  createProduto.mutate(formProduto);
+                  createProduto.mutate({
+                    ...formProduto,
+                    codigo: formProduto.codigo?.trim() || undefined,
+                  });
                 }}
                 disabled={createProduto.isPending}
               >
@@ -2962,7 +3928,25 @@ export default function ControleRoca() {
         </Dialog>
 
         {/* Dialog Novo Lançamento - simplified: need produtor selected first, then roça, date, meeiros by code, products with qty/price */}
-        <Dialog open={openLancamento} onOpenChange={setOpenLancamento}>
+        <Dialog
+        open={openLancamento}
+        onOpenChange={(open) => {
+          setOpenLancamento(open);
+          if (open) {
+            setLancData(new Date().toISOString().slice(0, 10));
+          } else {
+            setProdutoPreselecionadoLancamento(null);
+            setProdutorIdLanc('');
+            setProdutorLancPopoverOpen(false);
+            setProdutorLancSearchTerm('');
+            setLancData('');
+            setLancRocaId('');
+            setLancMeeiros([]);
+            setLancMeeiroSelecionado('');
+            setLancProdutos([]);
+          }
+        }}
+      >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Novo Lançamento de Produção</DialogTitle>
@@ -2970,48 +3954,94 @@ export default function ControleRoca() {
                 Registre a produção: selecione roça, data, meeiros e produtos com quantidade e preço.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="flex flex-wrap gap-4">
-                <div className="space-y-2">
+            <div className="space-y-6 py-4 min-w-0">
+              {/* Linha 1: Produtor, Data, Roça — grid alinhado */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-lg border border-border/60 bg-muted/10 p-3">
+                <div className="space-y-2 min-w-0">
                   <Label>Produtor</Label>
-                  <Select
-                    value={produtorIdLanc === '' ? '' : String(produtorIdLanc)}
-                    onValueChange={(v) => {
-                      setProdutorIdLanc(v === '' ? '' : Number(v));
-                      setLancRocaId('');
-                      setLancMeeiros([]);
-                      setLancProdutos([]);
-                    }}
-                  >
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {produtores.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>
-                          {p.codigo} – {p.nome_razao}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={produtorLancPopoverOpen} onOpenChange={setProdutorLancPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={produtorLancPopoverOpen}
+                        className="w-full justify-between font-normal min-h-10"
+                      >
+                        <span className="truncate">
+                          {produtorIdLanc !== ''
+                            ? (() => {
+                                const p = produtores.find((x) => x.id === produtorIdLanc);
+                                return p ? `${p.codigo} – ${p.nome_razao}` : 'Selecione';
+                              })()
+                            : 'Selecione o produtor'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[400px] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar por código ou nome do produtor..."
+                          value={produtorLancSearchTerm}
+                          onValueChange={setProdutorLancSearchTerm}
+                        />
+                        <CommandList>
+                          <CommandEmpty>Nenhum produtor encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {produtores
+                              .filter((p) => {
+                                if (!produtorLancSearchTerm.trim()) return true;
+                                const term = produtorLancSearchTerm.toLowerCase();
+                                return (
+                                  (p.codigo?.toLowerCase().includes(term) ?? false) ||
+                                  (p.nome_razao?.toLowerCase().includes(term) ?? false)
+                                );
+                              })
+                              .map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  value={`${p.codigo ?? ''} ${p.nome_razao ?? ''}`.trim()}
+                                  onSelect={() => {
+                                    setProdutorIdLanc(p.id);
+                                    setLancRocaId('');
+                                    setLancMeeiros([]);
+                                    setLancProdutos([]);
+                                    setProdutorLancPopoverOpen(false);
+                                    setProdutorLancSearchTerm('');
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      produtorIdLanc === p.id ? 'opacity-100' : 'opacity-0'
+                                    )}
+                                  />
+                                  {p.codigo} – {p.nome_razao}
+                                </CommandItem>
+                              ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label>Data</Label>
                   <Input
                     type="date"
                     value={lancData}
                     onChange={(e) => setLancData(e.target.value)}
-                    className="w-[160px]"
+                    className="w-full min-h-10"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <Label>Roça</Label>
                   <Select
                     value={lancRocaId === '' ? '' : String(lancRocaId)}
                     onValueChange={(v) => setLancRocaId(v === '' ? '' : Number(v))}
                     disabled={!produtorIdLanc}
                   >
-                    <SelectTrigger className="w-[220px]">
+                    <SelectTrigger className="w-full min-h-10">
                       <SelectValue placeholder="Selecione a roça" />
                     </SelectTrigger>
                     <SelectContent>
@@ -3025,107 +4055,174 @@ export default function ControleRoca() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Meeiros (informe o código para adicionar)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={lancMeeiroCodigo}
-                    onChange={(e) => setLancMeeiroCodigo(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddMeeiroByCodigo())}
-                    placeholder="Código do meeiro"
-                    className="max-w-[180px]"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleAddMeeiroByCodigo}
+              {/* Meeiros participantes (porcentagem é definida por produto abaixo) */}
+              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+                <Label className="text-sm font-medium">Meeiros participantes</Label>
+                <p className="text-xs text-muted-foreground">
+                  Adicione os meeiros que participaram do lançamento. A porcentagem de cada um é definida ao lado de cada produto.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={lancMeeiroSelecionado}
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      handleAddMeeiro(v);
+                    }}
                     disabled={!produtorIdLanc}
                   >
-                    Adicionar
-                  </Button>
-                </div>
-                {lancMeeiros.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {lancMeeiros.map((m) => (
-                      <div
-                        key={m.meeiroId}
-                        className="flex items-center justify-between rounded border px-3 py-2 text-sm"
-                      >
-                        <span>{m.nome ?? m.meeiroId}</span>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            className="w-16 h-8 text-right"
-                            value={m.porcentagem ?? ''}
-                            onChange={(e) => {
-                              const v = e.target.value === '' ? undefined : Number(e.target.value);
-                              setLancMeeiros((prev) =>
-                                prev.map((x) =>
-                                  x.meeiroId === m.meeiroId
-                                    ? { ...x, porcentagem: v }
-                                    : x
-                                )
-                              );
-                            }}
-                          />
-                          <span>%</span>
+                    <SelectTrigger className="w-full sm:w-[240px] min-h-9">
+                      <SelectValue placeholder="Selecione o meeiro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meeirosParaLancamento.map((m) => {
+                        const jaAdicionado = lancMeeiros.some(
+                          (x) => Number(x.meeiroId) === Number(m.id)
+                        );
+                        return (
+                          <SelectItem
+                            key={m.id}
+                            value={String(m.id)}
+                            disabled={jaAdicionado}
+                          >
+                            {m.codigo} – {m.nome}
+                            {jaAdicionado ? ' (já adicionado)' : ''}
+                          </SelectItem>
+                        );
+                      })}
+                      {meeirosParaLancamento.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          Nenhum meeiro cadastrado para este produtor
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {lancMeeiros.length > 0 && (
+                    <span className="text-xs text-muted-foreground hidden sm:inline">Adicionados:</span>
+                  )}
+                  {lancMeeiros.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {lancMeeiros.map((m) => (
+                        <span
+                          key={m.meeiroId}
+                          className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-sm font-medium shadow-sm"
+                        >
+                          <span className="truncate max-w-[120px]">{m.nome ?? `Meeiro ${m.meeiroId}`}</span>
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() =>
-                              setLancMeeiros((prev) =>
-                                prev.filter((x) => x.meeiroId !== m.meeiroId)
-                              )
-                            }
+                            className="h-6 w-6 p-0 shrink-0 rounded-full hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleRemoveMeeiroLanc(m.meeiroId)}
+                            aria-label={`Remover ${m.nome ?? m.meeiroId}`}
                           >
-                            Remover
+                            <X className="h-3.5 w-3.5" />
                           </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Produtos (quantidade e preço unitário)</Label>
-                <div className="rounded border p-3 space-y-2 max-h-48 overflow-y-auto">
-                  {lancProdutos.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between gap-2 text-sm border-b pb-2 last:border-0"
-                    >
-                      <span className="font-medium">{item.nome ?? item.produtoId}</span>
-                      <span>Qtd: {item.quantidade}</span>
-                      <span>{formatCurrency(item.preco_unitario)}/un</span>
-                      <span>{formatCurrency(item.quantidade * item.preco_unitario)}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setLancProdutos((prev) => prev.filter((_, i) => i !== idx))
-                        }
+              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+                <Label className="text-sm font-medium">Produtos (quantidade, preço e % por meeiro)</Label>
+                <div className="rounded-md border border-border/40 bg-background p-3 space-y-3 max-h-[340px] overflow-y-auto min-h-[72px]">
+                  {lancProdutos.map((item, idx) => {
+                    const valorItem = item.quantidade * item.preco_unitario;
+                    return (
+                      <div
+                        key={idx}
+                        className="rounded-md border border-border/60 p-3 space-y-2 bg-background"
                       >
-                        Remover
-                      </Button>
-                    </div>
-                  ))}
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 gap-x-4 items-center text-sm">
+                          <span className="font-medium truncate" title={String(item.nome ?? item.produtoId)}>
+                            {item.nome ?? item.produtoId}
+                          </span>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="tabular-nums">Qtd: {item.quantidade}</span>
+                            <span className="tabular-nums">{formatCurrency(item.preco_unitario)}/un</span>
+                            <span className="font-medium tabular-nums">{formatCurrency(valorItem)}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() =>
+                                setLancProdutos((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                            >
+                              Remover
+                            </Button>
+                          </div>
+                        </div>
+                        {item.meeiros.length > 0 && (
+                          <div className="space-y-2 pt-2 border-t border-border/40">
+                            <p className="text-xs font-medium text-muted-foreground">Porcentagem por meeiro (sobre o valor deste produto)</p>
+                            {item.meeiros.map((m) => {
+                              const pct = Number(m.porcentagem ?? 0);
+                              const valorParte = (valorItem * pct) / 100;
+                              return (
+                                <div
+                                  key={m.meeiroId}
+                                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+                                >
+                                  <span className="font-medium text-foreground w-24 shrink-0">
+                                    {m.nome ?? `Meeiro ${m.meeiroId}`}:
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      placeholder="0"
+                                      className="w-16 h-9 text-right tabular-nums"
+                                      value={m.porcentagem !== undefined && m.porcentagem !== null && m.porcentagem !== 0 ? String(m.porcentagem) : ''}
+                                      onChange={(e) => {
+                                        const v = e.target.value === '' ? 0 : Number(e.target.value);
+                                        setLancProdutos((prev) =>
+                                          prev.map((p, i) =>
+                                            i !== idx
+                                              ? p
+                                              : {
+                                                  ...p,
+                                                  meeiros: p.meeiros.map((mm) =>
+                                                    mm.meeiroId === m.meeiroId
+                                                      ? { ...mm, porcentagem: v }
+                                                      : mm
+                                                  ),
+                                                }
+                                          )
+                                        );
+                                      }}
+                                    />
+                                    <span className="text-muted-foreground w-4">%</span>
+                                  </div>
+                                  <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+                                    = {formatCurrency(valorParte)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   <AddProdutoLanc
-                    produtos={produtosParaLancamento}
+                    produtos={produtosDisponiveisLancamento}
                     onAdd={handleAddProdutoLanc}
-                    disabled={!produtorIdLanc}
+                    disabled={!produtorIdLanc || lancMeeiros.length === 0}
+                    produtoPreselecionado={produtoPreselecionadoLancamento}
+                    onProdutoPreselecionadoConsumido={() => setProdutoPreselecionadoLancamento(null)}
                   />
                 </div>
-                <p className="text-sm font-semibold text-foreground">
-                  Total geral: {formatCurrency(totalGeralLanc)}
-                </p>
+                <div className="flex items-center justify-between gap-4 pt-3 border-t border-border/60">
+                  <p className="text-sm text-muted-foreground">Total geral</p>
+                  <p className="text-base font-semibold tabular-nums">{formatCurrency(totalGeralLanc)}</p>
+                </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="border-t pt-4 mt-2">
               <Button variant="outline" onClick={() => setOpenLancamento(false)}>
                 Cancelar
               </Button>
@@ -3156,33 +4253,101 @@ function AddProdutoLanc({
   produtos,
   onAdd,
   disabled,
+  produtoPreselecionado,
+  onProdutoPreselecionadoConsumido,
 }: {
-  produtos: ProdutoRoca[];
+  produtos: Array<{ id: number; nome?: string; unidade_medida?: string }>;
   onAdd: (produtoId: number, quantidade: number, preco_unitario: number) => void;
   disabled: boolean;
+  produtoPreselecionado?: { id: number; nome: string } | null;
+  onProdutoPreselecionadoConsumido?: () => void;
 }) {
   const [produtoId, setProdutoId] = useState<number | ''>('');
   const [qtd, setQtd] = useState('');
   const [preco, setPreco] = useState('');
-  if (produtos.length === 0) return null;
+  const [produtoPopoverOpen, setProdutoPopoverOpen] = useState(false);
+  const [produtoSearchTerm, setProdutoSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (produtoPreselecionado) {
+      setProdutoId(produtoPreselecionado.id);
+      setQtd('1');
+      setPreco('0');
+      onProdutoPreselecionadoConsumido?.();
+    }
+  }, [produtoPreselecionado, onProdutoPreselecionadoConsumido]);
+
+  const produtosFiltrados = produtos.filter((p) => {
+    if (!produtoSearchTerm.trim()) return true;
+    const term = produtoSearchTerm.toLowerCase();
+    const nome = (p.nome ?? '').toLowerCase();
+    const unidade = (p.unidade_medida ?? '').toLowerCase();
+    return nome.includes(term) || unidade.includes(term);
+  });
+
+  if (produtos.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-2">
+        Nenhum produto disponível. Cadastre produtos na aba Produtos ou no catálogo geral.
+      </p>
+    );
+  }
   return (
-    <div className="flex flex-wrap items-end gap-2 pt-2">
-      <Select
-        value={produtoId === '' ? '' : String(produtoId)}
-        onValueChange={(v) => setProdutoId(v === '' ? '' : Number(v))}
-        disabled={disabled}
-      >
-        <SelectTrigger className="w-[180px]">
-          <SelectValue placeholder="Produto" />
-        </SelectTrigger>
-        <SelectContent>
-          {produtos.map((p) => (
-            <SelectItem key={p.id} value={String(p.id)}>
-              {p.nome} ({p.unidade_medida})
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-2 pt-2 items-end">
+      <Popover open={produtoPopoverOpen} onOpenChange={(open) => { setProdutoPopoverOpen(open); if (!open) setProdutoSearchTerm(''); }}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={produtoPopoverOpen}
+            disabled={disabled}
+            className="w-full min-w-0 sm:min-w-[200px] justify-between font-normal h-9"
+          >
+            <span className="truncate">
+              {produtoId !== ''
+                ? (() => {
+                    const p = produtos.find((x) => x.id === produtoId);
+                    return p ? `${p.nome ?? '—'} (${p.unidade_medida ?? 'UN'})` : 'Selecione o produto';
+                  })()
+                : 'Selecione o produto'}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[360px] p-0" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Buscar por nome ou unidade..."
+              value={produtoSearchTerm}
+              onValueChange={setProdutoSearchTerm}
+            />
+            <CommandList>
+              <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+              <CommandGroup>
+                {produtosFiltrados.map((p) => (
+                  <CommandItem
+                    key={p.id}
+                    value={`${p.nome ?? ''} ${p.unidade_medida ?? ''}`.trim()}
+                    onSelect={() => {
+                      setProdutoId(p.id);
+                      setProdutoPopoverOpen(false);
+                      setProdutoSearchTerm('');
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        produtoId === p.id ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
+                    {p.nome ?? '—'} ({p.unidade_medida ?? 'UN'})
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
       <Input
         type="number"
         min={0.001}
@@ -3190,7 +4355,7 @@ function AddProdutoLanc({
         placeholder="Qtd"
         value={qtd}
         onChange={(e) => setQtd(e.target.value)}
-        className="w-20"
+        className="w-20 shrink-0"
         disabled={disabled}
       />
       <Input
@@ -3200,17 +4365,35 @@ function AddProdutoLanc({
         placeholder="Preço un."
         value={preco}
         onChange={(e) => setPreco(e.target.value)}
-        className="w-24"
+        className="w-24 shrink-0"
         disabled={disabled}
       />
       <Button
         type="button"
         size="sm"
         onClick={() => {
-          if (!produtoId || !qtd || !preco) return;
-          const q = parseFloat(qtd);
-          const p = parseFloat(preco);
-          if (q <= 0 || p < 0) return;
+          if (!produtoId) {
+            toast.error('Selecione um produto');
+            return;
+          }
+          if (!qtd?.trim() || !preco?.trim()) {
+            toast.error('Informe quantidade e preço unitário');
+            return;
+          }
+          const q = parseFloat(qtd.replace(',', '.'));
+          const p = parseFloat(preco.replace(',', '.'));
+          if (Number.isNaN(q) || Number.isNaN(p)) {
+            toast.error('Quantidade e preço devem ser números');
+            return;
+          }
+          if (q <= 0) {
+            toast.error('Quantidade deve ser maior que zero');
+            return;
+          }
+          if (p < 0) {
+            toast.error('Preço não pode ser negativo');
+            return;
+          }
           onAdd(produtoId, q, p);
           setProdutoId('');
           setQtd('');

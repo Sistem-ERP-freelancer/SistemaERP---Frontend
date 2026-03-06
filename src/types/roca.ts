@@ -112,12 +112,15 @@ export interface ProdutoRoca {
   nome: string;
   unidade_medida: string;
   produtorId: number;
+  /** ID do produto no catálogo global (módulo Produtos), quando criado via Controle de Roça. */
+  produtoGlobalId?: number | null;
   criadoEm?: string;
   atualizadoEm?: string;
 }
 
 export interface CreateProdutoRocaDto {
-  codigo: string;
+  /** Se não informado, o sistema gera automaticamente (ex: PRD001, PRD002). */
+  codigo?: string;
   nome: string;
   unidade_medida?: string;
   produtorId: number;
@@ -132,13 +135,25 @@ export interface LancamentoProducaoRocaProdutoDto {
   produtoId: number;
   quantidade: number;
   preco_unitario: number;
+  /** Porcentagem por meeiro sobre o valor deste produto (qtd × preço). */
+  meeiros: LancamentoProducaoRocaMeeiroDto[];
 }
 
 export interface CreateLancamentoProducaoRocaDto {
   data: string;
   rocaId: number;
-  meeiros: LancamentoProducaoRocaMeeiroDto[];
   produtos: LancamentoProducaoRocaProdutoDto[];
+}
+
+/** Item do lançamento (produto + quantidade) retornado na listagem/detalhes */
+export interface LancamentoItemRoca {
+  produtoId?: number;
+  produto: string;
+  quantidade: number;
+  preco_unitario?: number;
+  valor_total?: number;
+  /** Meeiros e porcentagem/valor da parte sobre este item */
+  meeiros?: LancamentoMeeiroRoca[];
 }
 
 export interface LancamentoProducaoRoca {
@@ -147,6 +162,31 @@ export interface LancamentoProducaoRoca {
   produtorId: number;
   rocaId: number;
   total_geral: number;
+  ativo?: boolean;
+  /** Itens do lançamento (produto, quantidade) — preenchido pela API ao listar */
+  itens?: LancamentoItemRoca[];
+  /** Meeiros do lançamento (nome, porcentagem, valor_parte) — preenchido pela API ao listar */
+  meeiros?: LancamentoMeeiroRoca[];
+}
+
+export interface LancamentoMeeiroRoca {
+  meeiroId: number;
+  meeiroNome?: string;
+  porcentagem: number;
+  valor_parte: number;
+}
+
+/** Detalhes do lançamento (GET /lancamentos/:id) com itens e meeiros */
+export interface LancamentoDetalhesRoca extends LancamentoProducaoRoca {
+  meeiros?: LancamentoMeeiroRoca[];
+}
+
+export interface UpdateLancamentoProducaoRocaDto {
+  data?: string;
+  rocaId?: number;
+  meeiros?: { meeiroId: number; porcentagem?: number }[];
+  produtos?: LancamentoProducaoRocaProdutoDto[];
+  ativo?: boolean;
 }
 
 export interface LinhaRelatorioMeeiro {
