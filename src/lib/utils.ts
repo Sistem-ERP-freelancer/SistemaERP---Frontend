@@ -38,7 +38,21 @@ export function parseNumeroParcela(
 }
 
 export function formatDate(date: string | Date): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  if (date === null || date === undefined) return '';
+  let d: Date;
+  if (typeof date === 'string') {
+    // Strings YYYY-MM-DD são interpretadas como UTC à meia-noite e exibem dia anterior em fusos como BR. Tratar como data local.
+    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [, y, m, day] = match;
+      d = new Date(Number(y), Number(m) - 1, Number(day));
+    } else {
+      d = new Date(date);
+    }
+  } else {
+    d = date;
+  }
+  if (Number.isNaN(d.getTime())) return '';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
