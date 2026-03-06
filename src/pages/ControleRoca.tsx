@@ -69,7 +69,6 @@ import { produtosService } from '@/services/produtos.service';
 import type {
     CreateLancamentoProducaoRocaDto,
     CreateMeeiroRocaDto,
-    CreateProdutoRocaDto,
     CreateProdutorRocaDto,
     CreateRocaDto,
     MeeiroRoca,
@@ -374,26 +373,54 @@ export default function ControleRoca() {
     catalogPage * CATALOG_PAGE_SIZE,
   );
   const [openProduto, setOpenProduto] = useState(false);
-  const [formProduto, setFormProduto] = useState<CreateProdutoRocaDto>({
+  const [formProduto, setFormProduto] = useState<{
+    codigo: string;
+    nome: string;
+    unidade_medida: string;
+    produtorId: number | '';
+  }>({
     codigo: '',
     nome: '',
     unidade_medida: 'KG',
-    produtorId: 0,
+    produtorId: '',
   });
   const createProduto = useMutation({
-    mutationFn: async (data: CreateProdutoRocaDto) => {
-      // Backend cria na roça e no módulo Produtos (catálogo geral) em uma única chamada
-      return controleRocaService.criarProdutoRoca(data);
+    mutationFn: async (data: { codigo?: string; nome: string; unidade_medida?: string; produtorId: number | '' }) => {
+      const temProdutor = data.produtorId !== '' && data.produtorId !== undefined && Number(data.produtorId) > 0;
+      if (temProdutor) {
+        return controleRocaService.criarProdutoRoca({
+          nome: data.nome,
+          codigo: data.codigo?.trim() || undefined,
+          unidade_medida: (data.unidade_medida as 'KG' | 'UN' | 'LT' | 'CX' | 'SC' | 'ARROBA') || 'KG',
+          produtorId: Number(data.produtorId),
+        });
+      }
+      const unidadeCatalogo = ['UN', 'KG', 'LT', 'CX'].includes(data.unidade_medida ?? '')
+        ? (data.unidade_medida as 'UN' | 'KG' | 'LT' | 'CX')
+        : 'UN';
+      return produtosService.criar({
+        nome: data.nome.trim(),
+        unidade_medida: unidadeCatalogo,
+        preco_custo: 0,
+        preco_venda: 0,
+        estoque_atual: 0,
+        estoque_minimo: 0,
+      });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
-      toast.success('Produto cadastrado com sucesso');
+      queryClient.invalidateQueries({ queryKey: ['controle-roca', 'produtos-catalogo'] });
+      toast.success(
+        variables.produtorId !== '' && Number(variables.produtorId) > 0
+          ? 'Produto cadastrado com sucesso'
+          : 'Produto cadastrado no catálogo geral (disponível para qualquer produtor)'
+      );
       setOpenProduto(false);
       setFormProduto({
         codigo: '',
         nome: '',
         unidade_medida: 'KG',
-        produtorId: 0,
+        produtorId: '',
       });
     },
     onError: (err: any) => {
@@ -3820,35 +3847,38 @@ export default function ControleRoca() {
           setOpenProduto(open);
           if (!open) {
             setProdutorIdProduto('');
-            setFormProduto({ produtorId: '', nome: '', codigo: '', unidade_medida: '' });
+            setFormProduto({ produtorId: '', nome: '', codigo: '', unidade_medida: 'KG' });
           }
         }}
       >
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Novo Produto da Roça</DialogTitle>
+              <DialogTitle>Novo Produto</DialogTitle>
               <DialogDescription>
-                Produtos produzidos na roça (milho, feijão, mandioca, etc.). Selecione o produtor e cadastre o novo produto; ele será criado também no catálogo geral de produtos.
+                Cadastre um produto no catálogo geral (disponível para qualquer produtor) ou vincule a um produtor específico. Produtos do catálogo podem ser usados em qualquer lançamento.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label>Produtor</Label>
+                <Label>Onde cadastrar</Label>
                 <Select
-                  value={formProduto.produtorId ? String(formProduto.produtorId) : ''}
+                  value={formProduto.produtorId === '' ? 'catalogo' : String(formProduto.produtorId)}
                   onValueChange={(v) =>
                     setFormProduto((p) => ({
                       ...p,
-                      produtorId: Number(v),
+                      produtorId: v === 'catalogo' ? '' : Number(v),
                       codigo: '',
-                      nome: '',
+                      nome: p.nome,
                     }))
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o produtor" />
+                    <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="catalogo">
+                      Catálogo geral (qualquer produtor)
+                    </SelectItem>
                     {produtores.map((p) => (
                       <SelectItem key={p.id} value={String(p.id)}>
                         {p.codigo} – {p.nome_razao}
@@ -3856,6 +3886,11 @@ export default function ControleRoca() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formProduto.produtorId === ''
+                    ? 'O produto ficará disponível para todos os produtores nos lançamentos.'
+                    : 'O produto será vinculado a este produtor e criado no catálogo.'}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -3907,8 +3942,8 @@ export default function ControleRoca() {
               </Button>
               <Button
                 onClick={() => {
-                  if (!formProduto.nome?.trim() || !formProduto.produtorId) {
-                    toast.error('Nome e produtor são obrigatórios');
+                  if (!formProduto.nome?.trim()) {
+                    toast.error('Nome do produto é obrigatório');
                     return;
                   }
                   createProduto.mutate({
