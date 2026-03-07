@@ -1775,7 +1775,7 @@ export default function ControleRoca() {
                                           porcentagem: m.porcentagem_padrao,
                                         },
                                       ],
-                                    })
+                                    }))
                                   );
                                   setEditLancMeeiroSelecionado('');
                                 }}
@@ -1796,13 +1796,49 @@ export default function ControleRoca() {
                                   key={idx}
                                   className="rounded-lg border border-border/60 p-4 space-y-3 bg-background"
                                 >
-                                  <div className="flex items-center justify-between gap-3 text-sm flex-wrap">
+                                  <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                                     <span className="font-medium">{item.nome ?? item.produtoId}</span>
-                                    <span>Qtd: {item.quantidade}</span>
-                                    <span>
-                                      {formatCurrency(item.preco_unitario)}/un —{' '}
-                                      {formatCurrency(valorItem)}
-                                    </span>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <div className="flex items-center gap-2">
+                                        <Label className="text-muted-foreground text-xs whitespace-nowrap">Qtd</Label>
+                                        <Input
+                                          type="number"
+                                          min={0.001}
+                                          step="any"
+                                          className="w-20 h-9 text-right"
+                                          value={item.quantidade}
+                                          onChange={(e) => {
+                                            const v = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                            setEditLancProdutos((prev) =>
+                                              prev.map((p, i) =>
+                                                i !== idx ? p : { ...p, quantidade: v }
+                                              )
+                                            );
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Label className="text-muted-foreground text-xs whitespace-nowrap">Preço un.</Label>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          className="w-24 h-9 text-right"
+                                          value={item.preco_unitario}
+                                          onChange={(e) => {
+                                            const v = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                            setEditLancProdutos((prev) =>
+                                              prev.map((p, i) =>
+                                                i !== idx ? p : { ...p, preco_unitario: v }
+                                              )
+                                            );
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="text-muted-foreground">
+                                        Total: {formatCurrency(valorItem)}
+                                      </span>
+                                    </div>
                                     <Button
                                       type="button"
                                       variant="ghost"
