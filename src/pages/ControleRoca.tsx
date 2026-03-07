@@ -1639,8 +1639,8 @@ export default function ControleRoca() {
               open={editLancamentoId != null}
               onOpenChange={(open) => !open && setEditLancamentoId(null)}
             >
-              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8">
+                <DialogHeader className="space-y-2 pb-2">
                   <DialogTitle>Editar lançamento</DialogTitle>
                   <DialogDescription>
                     Altere data, roça, meeiros e produtos. Salve para aplicar.
@@ -1649,17 +1649,18 @@ export default function ControleRoca() {
                 {editLancamentoId != null && (
                   <>
                     {!editLancamento ? (
-                      <div className="flex justify-center py-8">
+                      <div className="flex justify-center py-12">
                         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-6 pt-2">
                         <div className="space-y-2">
                           <Label>Data</Label>
                           <Input
                             type="date"
                             value={editLancData}
                             onChange={(e) => setEditLancData(e.target.value)}
+                            className="max-w-[200px]"
                           />
                         </div>
                         <div className="space-y-2">
@@ -1670,7 +1671,7 @@ export default function ControleRoca() {
                               setEditLancRocaId(v === '' ? '' : Number(v))
                             }
                           >
-                            <SelectTrigger>
+                            <SelectTrigger className="max-w-[280px]">
                               <SelectValue placeholder="Selecione a roça" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1682,18 +1683,18 @@ export default function ControleRoca() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div>
                             <Label>Meeiros participantes</Label>
-                            <p className="text-xs text-muted-foreground mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-1">
                               A porcentagem de cada meeiro é definida ao lado de cada produto abaixo.
                             </p>
                           </div>
-                          <div className="rounded border p-2 space-y-2">
+                          <div className="rounded-lg border p-4 space-y-3 bg-muted/5">
                             {editLancMeeiros.map((m, idx) => (
                               <div
                                 key={idx}
-                                className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                                className="flex flex-wrap items-center justify-between gap-3 text-sm py-1"
                               >
                                 <span className="font-medium">
                                   {m.nome ??
@@ -1724,77 +1725,79 @@ export default function ControleRoca() {
                                 </Button>
                               </div>
                             ))}
-                            <Select
-                              value={editLancMeeiroSelecionado}
-                              onValueChange={(v) => setEditLancMeeiroSelecionado(v)}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Adicionar meeiro" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {meeirosParaEdit
-                                  .filter(
-                                    (x) =>
-                                      !editLancMeeiros.some(
-                                        (m) => Number(m.meeiroId) === Number(x.id)
-                                      )
-                                  )
-                                  .map((x) => (
-                                    <SelectItem key={x.id} value={String(x.id)}>
-                                      {x.nome} ({x.porcentagem_padrao}%)
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const id = Number(editLancMeeiroSelecionado);
-                                const m = meeirosParaEdit.find((x) => Number(x.id) === id);
-                                if (!m) return;
-                                setEditLancMeeiros((prev) => [
-                                  ...prev,
-                                  {
-                                    meeiroId: m.id,
-                                    porcentagem: m.porcentagem_padrao,
-                                    nome: m.nome,
-                                  },
-                                ]);
-                                setEditLancProdutos((prev) =>
-                                  prev.map((p) => ({
-                                    ...p,
-                                    meeiros: [
-                                      ...(p.meeiros ?? []),
-                                      {
-                                        meeiroId: m.id,
-                                        nome: m.nome,
-                                        porcentagem: m.porcentagem_padrao,
-                                      },
-                                    ],
-                                  }))
-                                );
-                                setEditLancMeeiroSelecionado('');
-                              }}
-                              disabled={!editLancMeeiroSelecionado}
-                            >
-                              Adicionar meeiro
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border/50">
+                              <Select
+                                value={editLancMeeiroSelecionado}
+                                onValueChange={(v) => setEditLancMeeiroSelecionado(v)}
+                              >
+                                <SelectTrigger className="w-full min-w-[200px] max-w-[280px]">
+                                  <SelectValue placeholder="Adicionar meeiro" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {meeirosParaEdit
+                                    .filter(
+                                      (x) =>
+                                        !editLancMeeiros.some(
+                                          (m) => Number(m.meeiroId) === Number(x.id)
+                                        )
+                                    )
+                                    .map((x) => (
+                                      <SelectItem key={x.id} value={String(x.id)}>
+                                        {x.nome} ({x.porcentagem_padrao}%)
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const id = Number(editLancMeeiroSelecionado);
+                                  const m = meeirosParaEdit.find((x) => Number(x.id) === id);
+                                  if (!m) return;
+                                  setEditLancMeeiros((prev) => [
+                                    ...prev,
+                                    {
+                                      meeiroId: m.id,
+                                      porcentagem: m.porcentagem_padrao,
+                                      nome: m.nome,
+                                    },
+                                  ]);
+                                  setEditLancProdutos((prev) =>
+                                    prev.map((p) => ({
+                                      ...p,
+                                      meeiros: [
+                                        ...(p.meeiros ?? []),
+                                        {
+                                          meeiroId: m.id,
+                                          nome: m.nome,
+                                          porcentagem: m.porcentagem_padrao,
+                                        },
+                                      ],
+                                    })
+                                  );
+                                  setEditLancMeeiroSelecionado('');
+                                }}
+                                disabled={!editLancMeeiroSelecionado}
+                              >
+                                Adicionar meeiro
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <Label>Produtos (porcentagem por meeiro ao lado de cada um)</Label>
-                          <div className="rounded border p-2 space-y-3 max-h-64 overflow-y-auto">
+                          <div className="rounded-lg border p-4 space-y-4 max-h-72 overflow-y-auto bg-muted/5">
                             {editLancProdutos.map((item, idx) => {
                               const valorItem = item.quantidade * item.preco_unitario;
                               return (
                                 <div
                                   key={idx}
-                                  className="rounded border border-border/60 p-2 space-y-2 bg-muted/10"
+                                  className="rounded-lg border border-border/60 p-4 space-y-3 bg-background"
                                 >
-                                  <div className="flex items-center justify-between gap-2 text-sm flex-wrap">
-                                    <span>{item.nome ?? item.produtoId}</span>
+                                  <div className="flex items-center justify-between gap-3 text-sm flex-wrap">
+                                    <span className="font-medium">{item.nome ?? item.produtoId}</span>
                                     <span>Qtd: {item.quantidade}</span>
                                     <span>
                                       {formatCurrency(item.preco_unitario)}/un —{' '}
@@ -1814,15 +1817,15 @@ export default function ControleRoca() {
                                     </Button>
                                   </div>
                                   {(item.meeiros ?? []).length > 0 && (
-                                    <div className="flex flex-wrap gap-3 pt-2 border-t border-border/40">
+                                    <div className="flex flex-wrap gap-4 pt-3 border-t border-border/40">
                                       {(item.meeiros ?? []).map((mm) => {
                                         const valorParte = (valorItem * (mm.porcentagem ?? 0)) / 100;
                                         return (
                                           <div
                                             key={mm.meeiroId}
-                                            className="flex items-center gap-2 text-sm"
+                                            className="flex items-center gap-3 text-sm"
                                           >
-                                            <span className="text-muted-foreground">
+                                            <span className="text-muted-foreground min-w-[80px]">
                                               {mm.nome ?? mm.meeiroId}:
                                             </span>
                                             <Input
@@ -1830,7 +1833,7 @@ export default function ControleRoca() {
                                               min={0}
                                               max={100}
                                               placeholder="0"
-                                              className="w-14 h-8 text-right"
+                                              className="w-16 h-9 text-right"
                                               value={mm.porcentagem !== undefined && mm.porcentagem !== null && mm.porcentagem !== 0 ? String(mm.porcentagem) : ''}
                                               onChange={(e) => {
                                                 const v =
@@ -1885,7 +1888,7 @@ export default function ControleRoca() {
                               }}
                               disabled={editLancMeeiros.length === 0}
                             />
-                          <p className="text-sm font-semibold">
+                          <p className="text-sm font-semibold pt-2">
                             Total:{' '}
                             {formatCurrency(
                               editLancProdutos.reduce(
@@ -1895,7 +1898,7 @@ export default function ControleRoca() {
                             )}
                           </p>
                         </div>
-                        <DialogFooter>
+                        <DialogFooter className="gap-3 pt-4 sm:pt-6 border-t">
                           <Button
                             variant="outline"
                             onClick={() => setEditLancamentoId(null)}
