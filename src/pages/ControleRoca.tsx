@@ -469,18 +469,11 @@ export default function ControleRoca() {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
       toast.success('Lançamento atualizado');
       setEditLancamentoId(null);
-      setLancamentoToDesativar(null);
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao atualizar');
     },
   });
-  const [lancamentoToDesativar, setLancamentoToDesativar] = useState<{
-    id: number;
-    data: string;
-    rocaNome: string;
-    totalGeral: string;
-  } | null>(null);
   const [editLancamentoId, setEditLancamentoId] = useState<number | null>(null);
   const { data: editLancamento } = useQuery({
     queryKey: ['controle-roca', 'lancamento-edit', editLancamentoId],
@@ -1343,7 +1336,9 @@ export default function ControleRoca() {
                       <TableHead>Roça</TableHead>
                       <TableHead>Produtos</TableHead>
                       <TableHead>Quantidades</TableHead>
-                      <TableHead>Meeiros</TableHead>
+                      <TableHead>Meeiro</TableHead>
+                      <TableHead className="text-right">Porcentagem</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Total geral</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
@@ -1351,7 +1346,7 @@ export default function ControleRoca() {
                   <TableBody>
                     {lancamentos.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
@@ -1402,7 +1397,49 @@ export default function ControleRoca() {
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="max-w-[220px]">
+                            <TableCell className="max-w-[140px]">
+                              {meeiros.length === 0
+                                ? '—'
+                                : (
+                                    <>
+                                      {meeiros.slice(0, 3).map((m, i) => (
+                                        <div key={i} className="text-sm">
+                                          {m.meeiroNome ?? `ID ${m.meeiroId}`}
+                                        </div>
+                                      ))}
+                                      {meeiros.length > 3 && (
+                                        <div className="text-sm text-muted-foreground">…</div>
+                                      )}
+                                    </>
+                                  )}
+                            </TableCell>
+                            <TableCell className="text-right max-w-[100px]">
+                              {meeiros.length === 0
+                                ? '—'
+                                : (
+                                    <>
+                                      {meeiros.slice(0, 3).map((m, i) => {
+                                        const totalParte = meeirosList
+                                          .filter((x) => x.meeiroId === m.meeiroId)
+                                          .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
+                                        const totalGeralNum = Number(l.total_geral) || 1;
+                                        const pct =
+                                          totalGeralNum > 0
+                                            ? Math.round((totalParte / totalGeralNum) * 100)
+                                            : 0;
+                                        return (
+                                          <div key={i} className="text-sm">
+                                            {pct}%
+                                          </div>
+                                        );
+                                      })}
+                                      {meeiros.length > 3 && (
+                                        <div className="text-sm text-muted-foreground">…</div>
+                                      )}
+                                    </>
+                                  )}
+                            </TableCell>
+                            <TableCell className="text-right max-w-[120px]">
                               {meeiros.length === 0
                                 ? '—'
                                 : (
@@ -1413,10 +1450,7 @@ export default function ControleRoca() {
                                           .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
                                         return (
                                           <div key={i} className="text-sm">
-                                            {m.meeiroNome ?? `ID ${m.meeiroId}`}
-                                            <span className="text-muted-foreground ml-1">
-                                              ({formatCurrency(totalParte)})
-                                            </span>
+                                            {formatCurrency(totalParte)}
                                           </div>
                                         );
                                       })}
@@ -1449,35 +1483,6 @@ export default function ControleRoca() {
                                     <Pencil className="w-4 h-4 mr-2" />
                                     Editar
                                   </DropdownMenuItem>
-                                  {l.ativo !== false ? (
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => {
-                                        const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
-                                        setLancamentoToDesativar({
-                                          id: l.id,
-                                          data: formatDate(l.data),
-                                          rocaNome: roca ? roca.nome : String(l.rocaId),
-                                          totalGeral: formatCurrency(Number(l.total_geral)),
-                                        });
-                                      }}
-                                    >
-                                      <Archive className="w-4 h-4 mr-2" />
-                                      Desativar
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        updateLancamento.mutate({
-                                          id: l.id,
-                                          data: { ativo: true },
-                                        })
-                                      }
-                                    >
-                                      <Check className="w-4 h-4 mr-2" />
-                                      Reativar
-                                    </DropdownMenuItem>
-                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -3196,74 +3201,6 @@ export default function ControleRoca() {
                   <>
                     <Archive className="mr-2 h-4 w-4" />
                     Desativar roça
-                  </>
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Modal de confirmação para desativar lançamento */}
-        <AlertDialog
-          open={lancamentoToDesativar != null}
-          onOpenChange={(open) => !open && setLancamentoToDesativar(null)}
-        >
-          <AlertDialogContent className="max-w-xl rounded-2xl border shadow-xl p-8">
-            <AlertDialogHeader className="space-y-6">
-              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-                  <Archive className="h-7 w-7 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div className="flex-1 space-y-5 text-center sm:text-left">
-                  <AlertDialogTitle className="text-2xl leading-tight">
-                    Desativar lançamento?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription asChild>
-                    <div className="space-y-5 text-base text-muted-foreground">
-                      {lancamentoToDesativar && (
-                        <>
-                          <p className="leading-relaxed">
-                            O lançamento de <strong className="font-semibold text-foreground">{lancamentoToDesativar.data}</strong>{' '}
-                            na roça <strong className="font-semibold text-foreground">{lancamentoToDesativar.rocaNome}</strong>{' '}
-                            (total {lancamentoToDesativar.totalGeral}) será desativado e não aparecerá mais na listagem padrão.
-                          </p>
-                          <p className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 leading-relaxed">
-                            Você pode reativá-lo depois pelo menu Ações, escolhendo &quot;Reativar&quot; ao exibir os inativos.
-                          </p>
-                          <p className="font-medium text-foreground/90">Tem certeza que deseja desativar?</p>
-                        </>
-                      )}
-                    </div>
-                  </AlertDialogDescription>
-                </div>
-              </div>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex gap-3 sm:gap-3 mt-8">
-              <AlertDialogCancel className="mt-4 sm:mt-0">
-                Cancelar
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (lancamentoToDesativar) {
-                    updateLancamento.mutate({
-                      id: lancamentoToDesativar.id,
-                      data: { ativo: false },
-                    });
-                  }
-                }}
-                disabled={updateLancamento.isPending || !lancamentoToDesativar}
-                className="bg-amber-600 text-white hover:bg-amber-700"
-              >
-                {updateLancamento.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Desativando...
-                  </>
-                ) : (
-                  <>
-                    <Archive className="mr-2 h-4 w-4" />
-                    Desativar lançamento
                   </>
                 )}
               </AlertDialogAction>
