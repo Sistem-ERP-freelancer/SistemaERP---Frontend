@@ -88,6 +88,7 @@ import {
     Check,
     ChevronsUpDown,
     ClipboardList,
+    Download,
     Eye,
     FileText,
     Hash,
@@ -98,7 +99,9 @@ import {
     Pencil,
     Phone,
     Plus,
+    Printer,
     Sprout,
+    Trash2,
     User,
     UserX,
     Users,
@@ -439,13 +442,11 @@ export default function ControleRoca() {
         produtorIdLanc === '' ? undefined : Number(produtorIdLanc)
       ),
   });
-  const [incluirInativosLancamentos, setIncluirInativosLancamentos] = useState(false);
   const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
-    queryKey: ['controle-roca', 'lancamentos', produtorIdLanc, incluirInativosLancamentos],
+    queryKey: ['controle-roca', 'lancamentos', produtorIdLanc],
     queryFn: () =>
       controleRocaService.listarLancamentos({
         ...(produtorIdLanc === '' ? {} : { produtorId: Number(produtorIdLanc) }),
-        incluirInativos: incluirInativosLancamentos,
       }),
   });
   const [detalheLancamentoId, setDetalheLancamentoId] = useState<number | null>(null);
@@ -474,6 +475,20 @@ export default function ControleRoca() {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao atualizar');
     },
   });
+  const deleteLancamento = useMutation({
+    mutationFn: (id: number) => controleRocaService.excluirLancamento(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Lançamento excluído');
+      setLancamentoParaExcluirId(null);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Erro ao excluir lançamento.'
+      );
+    },
+  });
+  const [lancamentoParaExcluirId, setLancamentoParaExcluirId] = useState<number | null>(null);
   const [editLancamentoId, setEditLancamentoId] = useState<number | null>(null);
   const { data: editLancamento } = useQuery({
     queryKey: ['controle-roca', 'lancamento-edit', editLancamentoId],
@@ -708,6 +723,8 @@ export default function ControleRoca() {
   const [relDataFinal, setRelDataFinal] = useState('');
   const [relResult, setRelResult] = useState<RelatorioMeeiroResponse | null>(null);
   const [relLoading, setRelLoading] = useState(false);
+  const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
+  const [relPdfLoadingAction, setRelPdfLoadingAction] = useState<'download' | 'print' | null>(null);
   const { data: meeirosParaRelatorio = [] } = useQuery({
     queryKey: ['controle-roca', 'meeiros'],
     queryFn: () => controleRocaService.listarMeeiros(),
@@ -1312,16 +1329,6 @@ export default function ControleRoca() {
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Lançamento
               </Button>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="incluir-inativos-lanc"
-                  checked={incluirInativosLancamentos}
-                  onCheckedChange={setIncluirInativosLancamentos}
-                />
-                <Label htmlFor="incluir-inativos-lanc" className="cursor-pointer">
-                  Exibir inativos
-                </Label>
-              </div>
             </div>
             <div className="bg-card border rounded-xl overflow-hidden">
               {loadingLancamentos ? (
@@ -1482,6 +1489,13 @@ export default function ControleRoca() {
                                   >
                                     <Pencil className="w-4 h-4 mr-2" />
                                     Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => setLancamentoParaExcluirId(l.id)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Excluir
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -2119,11 +2133,126 @@ export default function ControleRoca() {
                 ) : (
                   <FileText className="w-4 h-4 mr-2" />
                 )}
-                Gerar relatório
+                Pré visualização
               </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (relMeeiroId === '') {
+                      toast.error('Selecione um meeiro');
+                      return;
+                    }
+                    setRelPdfDialogOpen(true);
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Gerar relatório em PDF
+                </Button>
+              </div>
             </div>
+            {relMeeiroId !== '' && (() => {
+              const meeiroSel = meeirosParaRelatorio.find((m) => Number(m.id) === Number(relMeeiroId));
+              if (!meeiroSel) return null;
+              return (
+                <p className="text-sm text-muted-foreground px-1">
+                  Meeiro selecionado: <span className="font-medium text-foreground">{meeiroSel.nome}</span>
+                </p>
+              );
+            })()}
+
+            {/* Dialog: Imprimir ou Baixar PDF do Relatório por Meeiro */}
+            <Dialog open={relPdfDialogOpen} onOpenChange={setRelPdfDialogOpen}>
+              <DialogContent className="max-w-sm p-0 overflow-hidden">
+                <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
+                  <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                    <FileText className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <DialogTitle className="text-base font-semibold text-foreground">
+                      Relatório por Meeiro
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground">
+                      Baixar o relatório em PDF ou abrir para impressão.
+                    </DialogDescription>
+                  </div>
+                </DialogHeader>
+
+                <div className="px-6 py-5">
+                  <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="justify-start gap-2 bg-background hover:bg-accent"
+                        disabled={relPdfLoadingAction !== null}
+                        onClick={async () => {
+                          try {
+                            setRelPdfLoadingAction('download');
+                            await controleRocaService.downloadRelatorioMeeiroPdf({
+                              meeiroId: Number(relMeeiroId),
+                              dataInicial: relDataInicial || undefined,
+                              dataFinal: relDataFinal || undefined,
+                            });
+                            toast.success('PDF baixado');
+                            setRelPdfDialogOpen(false);
+                          } catch (err: any) {
+                            toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                          } finally {
+                            setRelPdfLoadingAction(null);
+                          }
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="text-sm">
+                          {relPdfLoadingAction === 'download' ? 'Baixando...' : 'Baixar PDF'}
+                        </span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="justify-start gap-2 bg-background hover:bg-accent"
+                        disabled={relPdfLoadingAction !== null}
+                        onClick={async () => {
+                          try {
+                            setRelPdfLoadingAction('print');
+                            await controleRocaService.printRelatorioMeeiroPdf({
+                              meeiroId: Number(relMeeiroId),
+                              dataInicial: relDataInicial || undefined,
+                              dataFinal: relDataFinal || undefined,
+                            });
+                            setRelPdfDialogOpen(false);
+                          } catch (err: any) {
+                            toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir relatório.');
+                          } finally {
+                            setRelPdfLoadingAction(null);
+                          }
+                        }}
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span className="text-sm">
+                          {relPdfLoadingAction === 'print' ? 'Abrindo...' : 'Imprimir'}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             {relResult && (
               <div className="bg-card border rounded-xl overflow-hidden space-y-4">
+                {relMeeiroId !== '' && (() => {
+                  const meeiroSel = meeirosParaRelatorio.find((m) => Number(m.id) === Number(relMeeiroId));
+                  if (!meeiroSel) return null;
+                  const meeiroLabel = meeiroSel.nome;
+                  return (
+                    <div className="p-4 pb-0">
+                      <p className="text-sm text-muted-foreground">Meeiro</p>
+                      <p className="text-base font-semibold text-foreground">{meeiroLabel}</p>
+                    </div>
+                  );
+                })()}
                 <div className="p-4 border-b grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Valor bruto</p>
@@ -2148,29 +2277,39 @@ export default function ControleRoca() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
+                      <TableHead>Meeiro</TableHead>
                       <TableHead>Produto</TableHead>
                       <TableHead>Quantidade</TableHead>
                       <TableHead>Preço unit.</TableHead>
                       <TableHead>Valor total</TableHead>
+                      <TableHead className="text-right">Porcentagem</TableHead>
+                      <TableHead className="text-right">Valor a receber</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {relResult.linhas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
                     ) : (
-                      relResult.linhas.map((linha, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{formatDate(linha.data)}</TableCell>
-                          <TableCell>{linha.produto}</TableCell>
-                          <TableCell>{linha.quantidade}</TableCell>
-                          <TableCell>{formatCurrency(linha.preco_unitario)}</TableCell>
-                          <TableCell>{formatCurrency(linha.valor_total)}</TableCell>
-                        </TableRow>
-                      ))
+                      relResult.linhas.map((linha, idx) => {
+                        const meeiroSel = meeirosParaRelatorio.find((m) => Number(m.id) === Number(relMeeiroId));
+                        const meeiroNome = meeiroSel ? meeiroSel.nome : '-';
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell>{formatDate(linha.data)}</TableCell>
+                            <TableCell>{meeiroNome}</TableCell>
+                            <TableCell>{linha.produto}</TableCell>
+                            <TableCell>{linha.quantidade}</TableCell>
+                            <TableCell>{formatCurrency(linha.preco_unitario)}</TableCell>
+                            <TableCell>{formatCurrency(linha.valor_total)}</TableCell>
+                            <TableCell className="text-right">{linha.porcentagem ?? 0}%</TableCell>
+                            <TableCell className="text-right">{formatCurrency(Number(linha.valorParte ?? linha.valor_parte ?? 0))}</TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -3250,6 +3389,61 @@ export default function ControleRoca() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Modal de confirmação para excluir lançamento */}
+        <AlertDialog
+          open={lancamentoParaExcluirId != null}
+          onOpenChange={(open) => {
+            if (!open) setLancamentoParaExcluirId(null);
+          }}
+        >
+          <AlertDialogContent className="max-w-md rounded-2xl border shadow-xl">
+            <AlertDialogHeader>
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-6 w-6 text-destructive" />
+                </div>
+                <div className="flex-1 space-y-2 text-center sm:text-left">
+                  <AlertDialogTitle className="text-xl">
+                    Excluir lançamento?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <p className="text-sm text-muted-foreground">
+                      Esta ação não pode ser desfeita. O lançamento será removido permanentemente.
+                    </p>
+                  </AlertDialogDescription>
+                </div>
+              </div>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex gap-2 sm:gap-2">
+              <AlertDialogCancel className="mt-4 sm:mt-0">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (lancamentoParaExcluirId != null) {
+                    deleteLancamento.mutate(lancamentoParaExcluirId);
+                  }
+                }}
+                disabled={deleteLancamento.isPending || lancamentoParaExcluirId == null}
+                className="bg-destructive text-white hover:bg-destructive/90"
+              >
+                {deleteLancamento.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Modal de confirmação para desativar roça */}
         <AlertDialog

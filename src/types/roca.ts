@@ -195,6 +195,11 @@ export interface LinhaRelatorioMeeiro {
   quantidade: number;
   preco_unitario: number;
   valor_total: number;
+  /** Porcentagem do meeiro sobre o valor deste item (vindo da API) */
+  porcentagem?: number;
+  /** Valor que o meeiro recebe neste item (camelCase ou valor_parte em snake_case) */
+  valorParte?: number;
+  valor_parte?: number;
 }
 
 export interface ResumoRelatorioMeeiro {

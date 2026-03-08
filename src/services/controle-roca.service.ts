@@ -146,6 +146,10 @@ class ControleRocaService {
     return apiClient.post<LancamentoProducaoRoca>(`${BASE}/lancamentos`, data);
   }
 
+  async excluirLancamento(id: number): Promise<{ sucesso: boolean }> {
+    return apiClient.delete<{ sucesso: boolean }>(`${BASE}/lancamentos/${id}`);
+  }
+
   // Relatório por meeiro
   async relatorioPorMeeiro(params: {
     meeiroId: number;
@@ -158,6 +162,51 @@ class ControleRocaService {
     return apiClient.get<RelatorioMeeiroResponse>(
       `${BASE}/relatorios/meeiro?${search.toString()}`
     );
+  }
+
+  /**
+   * Download do PDF do Relatório por Meeiro.
+   */
+  async downloadRelatorioMeeiroPdf(params: {
+    meeiroId: number;
+    dataInicial?: string;
+    dataFinal?: string;
+  }): Promise<void> {
+    const search = new URLSearchParams({ meeiroId: String(params.meeiroId) });
+    if (params.dataInicial) search.set('dataInicial', params.dataInicial);
+    if (params.dataFinal) search.set('dataFinal', params.dataFinal);
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorios/meeiro/pdf?${search.toString()}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-meeiro-${params.meeiroId}-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Abre o PDF do Relatório por Meeiro em nova aba para impressão.
+   */
+  async printRelatorioMeeiroPdf(params: {
+    meeiroId: number;
+    dataInicial?: string;
+    dataFinal?: string;
+  }): Promise<void> {
+    const search = new URLSearchParams({ meeiroId: String(params.meeiroId) });
+    if (params.dataInicial) search.set('dataInicial', params.dataInicial);
+    if (params.dataFinal) search.set('dataFinal', params.dataFinal);
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorios/meeiro/pdf?${search.toString()}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
   }
 }
 
