@@ -503,32 +503,43 @@ const Produtos = () => {
   });
 
   const handleCreate = () => {
-    if (!newProduto.nome || !newProduto.preco_custo || !newProduto.preco_venda) {
-      toast.error("Preencha os campos obrigatórios (Nome, Preço de Custo e Preço de Venda)");
-      return;
-    }
+    // Todos os campos podem ser enviados vazios; o backend já assume padrões.
+    // Apenas mantemos a regra de que, se preço promocional vier maior que venda (quando ambos existirem), bloqueamos.
+    const precoVenda = newProduto.preco_venda !== undefined && newProduto.preco_venda !== null
+      ? Number(newProduto.preco_venda)
+      : undefined;
+    const precoPromocional =
+      newProduto.preco_promocional !== undefined && newProduto.preco_promocional !== null
+        ? Number(newProduto.preco_promocional)
+        : undefined;
 
-    if (!newProduto.categoriaId) {
-      toast.error("Selecione uma categoria");
-      return;
-    }
-
-    // Validação de preço promocional conforme GUIA_FRONTEND_CORRECOES_BACKEND.md
-    const precoVenda = Number(newProduto.preco_venda);
-    const precoPromocional = newProduto.preco_promocional ? Number(newProduto.preco_promocional) : null;
-    if (precoPromocional !== null && precoPromocional > precoVenda) {
+    if (
+      precoVenda !== undefined &&
+      precoPromocional !== undefined &&
+      precoPromocional > precoVenda
+    ) {
       toast.error("O preço promocional não pode ser maior que o preço de venda");
       return;
     }
 
     const produtoData: CreateProdutoDto = {
-      nome: newProduto.nome!,
-      preco_custo: Number(newProduto.preco_custo),
-      preco_venda: precoVenda,
-      estoque_atual: Number(newProduto.estoque_atual) || 0,
-      estoque_minimo: Number(newProduto.estoque_minimo) || 0,
-      unidade_medida: newProduto.unidade_medida || "UN",
-      statusProduto: newProduto.statusProduto || "ATIVO",
+      nome: newProduto.nome || undefined,
+      preco_custo:
+        newProduto.preco_custo !== undefined && newProduto.preco_custo !== null
+          ? Number(newProduto.preco_custo)
+          : undefined,
+      preco_venda:
+        precoVenda !== undefined ? precoVenda : undefined,
+      estoque_atual:
+        newProduto.estoque_atual !== undefined && newProduto.estoque_atual !== null
+          ? Number(newProduto.estoque_atual)
+          : undefined,
+      estoque_minimo:
+        newProduto.estoque_minimo !== undefined && newProduto.estoque_minimo !== null
+          ? Number(newProduto.estoque_minimo)
+          : undefined,
+      unidade_medida: (newProduto.unidade_medida as any) || "UN",
+      statusProduto: (newProduto.statusProduto as any) || "ATIVO",
     };
 
     // SKU opcional: se preenchido, enviar; senão backend gera automaticamente (SKU-01, SKU-02, ...)
@@ -540,7 +551,7 @@ const Produtos = () => {
 
     // Adicionar campos opcionais apenas se tiverem valor
     if (newProduto.descricao) produtoData.descricao = newProduto.descricao;
-    if (precoPromocional !== null) produtoData.preco_promocional = precoPromocional;
+    if (precoPromocional !== undefined) produtoData.preco_promocional = precoPromocional;
     if (newProduto.categoriaId) produtoData.categoriaId = newProduto.categoriaId;
     if (newProduto.fornecedorId) produtoData.fornecedorId = newProduto.fornecedorId;
     if (newProduto.data_validade) produtoData.data_validade = newProduto.data_validade;
@@ -687,28 +698,29 @@ const Produtos = () => {
       toast.error("Selecione um produto");
       return;
     }
-
-    if (!editingProduto.nome || !editingProduto.sku || !editingProduto.preco_custo || !editingProduto.preco_venda) {
-      toast.error("Preencha os campos obrigatórios (Nome, SKU, Preço de Custo e Preço de Venda)");
-      return;
-    }
-
-    if (!editingProduto.categoriaId) {
-      toast.error("Selecione uma categoria");
-      return;
-    }
-
     // Conforme GUIA_FRONTEND_ESTOQUE_SECAO_PRODUTO: o backend cria a movimentação
     // automaticamente ao processar o PATCH com estoque_atual diferente do atual
     const produtoData: Partial<CreateProdutoDto> = {
-      nome: editingProduto.nome!,
-      sku: editingProduto.sku!,
-      preco_custo: Number(editingProduto.preco_custo),
-      preco_venda: Number(editingProduto.preco_venda),
-      estoque_atual: Number(editingProduto.estoque_atual) || 0,
-      estoque_minimo: Number(editingProduto.estoque_minimo) || 0,
-      unidade_medida: editingProduto.unidade_medida || "UN",
-      statusProduto: editingProduto.statusProduto || "ATIVO",
+      nome: editingProduto.nome || undefined,
+      sku: editingProduto.sku || undefined,
+      preco_custo:
+        editingProduto.preco_custo !== undefined && editingProduto.preco_custo !== null
+          ? Number(editingProduto.preco_custo)
+          : undefined,
+      preco_venda:
+        editingProduto.preco_venda !== undefined && editingProduto.preco_venda !== null
+          ? Number(editingProduto.preco_venda)
+          : undefined,
+      estoque_atual:
+        editingProduto.estoque_atual !== undefined && editingProduto.estoque_atual !== null
+          ? Number(editingProduto.estoque_atual)
+          : undefined,
+      estoque_minimo:
+        editingProduto.estoque_minimo !== undefined && editingProduto.estoque_minimo !== null
+          ? Number(editingProduto.estoque_minimo)
+          : undefined,
+      unidade_medida: (editingProduto.unidade_medida as any) || "UN",
+      statusProduto: (editingProduto.statusProduto as any) || "ATIVO",
       categoriaId: editingProduto.categoriaId,
       fornecedorId: editingProduto.fornecedorId === null ? null : editingProduto.fornecedorId,
     };

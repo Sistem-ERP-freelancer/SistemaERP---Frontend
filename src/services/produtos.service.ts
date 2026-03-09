@@ -37,14 +37,14 @@ export interface Produto {
 }
 
 export interface CreateProdutoDto {
-  nome: string;
+  nome?: string;
   descricao?: string;
   sku?: string; // Opcional: se não enviado ou vazio, backend gera SKU-01, SKU-02, ...
-  preco_custo: number;
-  preco_venda: number;
+  preco_custo?: number;
+  preco_venda?: number;
   preco_promocional?: number;
-  estoque_atual: number;
-  estoque_minimo: number;
+  estoque_atual?: number;
+  estoque_minimo?: number;
   estoque_maximo?: number;
   localizacao?: string;
   statusProduto?: 'ATIVO' | 'INATIVO';

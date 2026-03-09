@@ -1205,6 +1205,7 @@ export default function ControleRoca() {
                         <TableHead>Nome</TableHead>
                         <TableHead>Código / SKU</TableHead>
                         <TableHead>Unidade</TableHead>
+                        <TableHead>Valor unit. prod</TableHead>
                         <TableHead>Estoque</TableHead>
                         <TableHead className="text-right w-[140px]">Ações</TableHead>
                       </TableRow>
@@ -1212,7 +1213,7 @@ export default function ControleRoca() {
                     <TableBody>
                       {produtosCatalogo.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                             Nenhum produto cadastrado. Use &quot;Novo Produto&quot; para cadastrar.
                           </TableCell>
                         </TableRow>
@@ -1222,6 +1223,7 @@ export default function ControleRoca() {
                             <TableCell className="font-medium">{p.nome}</TableCell>
                             <TableCell className="font-mono text-xs">{p.sku}</TableCell>
                             <TableCell>{p.unidade_medida || '—'}</TableCell>
+                            <TableCell>{formatCurrency(p.preco_venda ?? 0)}</TableCell>
                             <TableCell>{p.estoque_atual ?? 0}</TableCell>
                             <TableCell className="text-right">
                               <Button
@@ -1342,12 +1344,12 @@ export default function ControleRoca() {
                       <TableHead>Data</TableHead>
                       <TableHead>Roça</TableHead>
                       <TableHead>Produtos</TableHead>
-                      <TableHead>Quantidades</TableHead>
-                      <TableHead>Valor unit. prod</TableHead>
+                      <TableHead>Qtde</TableHead>
+                      <TableHead>Valor Unit.</TableHead>
                       <TableHead>Meeiro</TableHead>
-                      <TableHead className="text-right">Porcentagem</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="text-right">Total geral</TableHead>
+                      <TableHead className="text-right">%</TableHead>
+                      <TableHead className="text-right">Valor do meeiro</TableHead>
+                      <TableHead className="text-right">Valor total do lançamento</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
