@@ -1343,6 +1343,7 @@ export default function ControleRoca() {
                       <TableHead>Roça</TableHead>
                       <TableHead>Produtos</TableHead>
                       <TableHead>Quantidades</TableHead>
+                      <TableHead>Valor unit. prod</TableHead>
                       <TableHead>Meeiro</TableHead>
                       <TableHead className="text-right">Porcentagem</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
@@ -1353,7 +1354,7 @@ export default function ControleRoca() {
                   <TableBody>
                     {lancamentos.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
@@ -1396,6 +1397,22 @@ export default function ControleRoca() {
                                       {itens.slice(0, 3).map((item, i) => (
                                         <div key={i} className="text-sm">
                                           {item.quantidade}
+                                        </div>
+                                      ))}
+                                      {itens.length > 3 && (
+                                        <div className="text-sm text-muted-foreground">…</div>
+                                      )}
+                                    </>
+                                  )}
+                            </TableCell>
+                            <TableCell>
+                              {itens.length === 0
+                                ? '—'
+                                : (
+                                    <>
+                                      {itens.slice(0, 3).map((item, i) => (
+                                        <div key={i} className="text-sm">
+                                          {formatCurrency(item.preco_unitario ?? 0)}
                                         </div>
                                       ))}
                                       {itens.length > 3 && (
