@@ -750,19 +750,19 @@ export default function ControleRoca() {
 
   return (
     <AppLayout>
-      <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Sprout className="w-7 h-7" />
+      <div className="p-3 sm:p-4 md:p-6 min-w-0">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 flex-wrap">
+            <Sprout className="w-6 h-6 sm:w-7 sm:h-7 shrink-0" />
             Controle de Roça
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm sm:text-base mt-1">
             Cadastros de produtor, roça, meeiro, produtos e lançamento da produção
           </p>
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-          <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsList className="flex flex-wrap h-auto gap-1 overflow-x-auto overflow-y-hidden -mx-1 px-1 w-full sm:w-auto">
             <TabsTrigger value="produtores" className="gap-1">
               <User className="w-4 h-4" />
               Produtores
@@ -797,7 +797,7 @@ export default function ControleRoca() {
                 Novo Produtor
               </Button>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden">
+            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingProdutores ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -935,7 +935,7 @@ export default function ControleRoca() {
                 Nova Roça
               </Button>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden">
+            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingRocas ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -1078,7 +1078,7 @@ export default function ControleRoca() {
                 Novo Meeiro
               </Button>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden">
+            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingMeeiros ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -1184,7 +1184,7 @@ export default function ControleRoca() {
               </Button>
             </div>
 
-            <div className="bg-card border rounded-xl overflow-hidden">
+            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <div>
                   <h3 className="text-sm font-semibold">Catálogo de produtos</h3>
@@ -1299,16 +1299,16 @@ export default function ControleRoca() {
 
           {/* Tab Lançamentos */}
           <TabsContent value="lancamentos" className="space-y-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label>Produtor</Label>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                <Label className="shrink-0">Produtor</Label>
                 <Select
                   value={produtorIdLanc === '' ? 'todos' : String(produtorIdLanc)}
                   onValueChange={(v) =>
                     setProdutorIdLanc(v === 'todos' ? '' : Number(v))
                   }
                 >
-                  <SelectTrigger className="w-[220px]">
+                  <SelectTrigger className="w-full sm:w-[220px] min-w-0">
                     <SelectValue placeholder="Todos os lançamentos" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1332,7 +1332,7 @@ export default function ControleRoca() {
                 Novo Lançamento
               </Button>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden">
+            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingLancamentos ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />

@@ -104,9 +104,18 @@
     @apply border-border;
   }
 
+  html {
+    @apply overflow-x-hidden;
+    /* Safe area para celulares com notch (iPhone X+, etc.) */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden;
     font-family: 'Plus Jakarta Sans', sans-serif;
+    /* Evitar zoom em inputs no iOS */
+    -webkit-text-size-adjust: 100%;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -148,6 +157,12 @@
 @layer components {
   .glass-card {
     @apply bg-card/80 backdrop-blur-sm border border-border/50 shadow-md;
+  }
+
+  /* Área tocável mínima para celulares (acessibilidade) */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .gradient-text {

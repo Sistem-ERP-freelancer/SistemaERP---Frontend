@@ -194,7 +194,7 @@ const ContasAReceberPedidoPagamentos = () => {
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/financeiro/contas-receber/${pedidoId}`)}>
             <ArrowLeft className="w-5 h-5" />

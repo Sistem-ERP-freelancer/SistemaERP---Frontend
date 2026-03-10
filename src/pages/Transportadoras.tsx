@@ -1,16 +1,16 @@
+import { CarrierForm } from '@/components/carriers/CarrierForm';
+import { CarrierOrdersDialog } from '@/components/carriers/CarrierOrdersDialog';
+import { CarrierStats } from '@/components/carriers/CarrierStats';
+import { CarrierTable } from '@/components/carriers/CarrierTable';
+import { CarrierViewDialog } from '@/components/carriers/CarrierViewDialog';
+import { DeleteCarrierDialog } from '@/components/carriers/DeleteCarrierDialog';
+import { Pagination } from '@/components/carriers/Pagination';
+import { SearchInput } from '@/components/carriers/SearchInput';
 import AppLayout from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Plus, Truck, Loader2 } from 'lucide-react';
-import { useState } from 'react';
 import { useCarriers } from '@/hooks/useCarriers';
-import { CarrierTable } from '@/components/carriers/CarrierTable';
-import { CarrierForm } from '@/components/carriers/CarrierForm';
-import { DeleteCarrierDialog } from '@/components/carriers/DeleteCarrierDialog';
-import { CarrierOrdersDialog } from '@/components/carriers/CarrierOrdersDialog';
-import { CarrierViewDialog } from '@/components/carriers/CarrierViewDialog';
-import { SearchInput } from '@/components/carriers/SearchInput';
-import { Pagination } from '@/components/carriers/Pagination';
-import { CarrierStats } from '@/components/carriers/CarrierStats';
+import { Loader2, Plus } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Transportadoras() {
   const {
@@ -75,7 +75,7 @@ export default function Transportadoras() {
 
   return (
     <AppLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6 min-w-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>

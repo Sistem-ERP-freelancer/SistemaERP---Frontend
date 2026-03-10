@@ -1,72 +1,71 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import {
-  ArrowLeft,
-  Users,
-  Settings as SettingsIcon,
-  Building2,
-  Search,
-  Plus,
-  MoreVertical,
-  Edit,
-  Trash2,
-  Power,
-  PowerOff,
-  Save,
-  RotateCcw,
-  FileText,
-  Hash,
-  Phone,
-  Calendar,
-  Mail,
-  Globe,
-  Loader2,
-} from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
-import { usuariosService, Usuario, CreateUsuarioDto, UpdateUsuarioDto } from "@/services/usuarios.service";
-import { configuracoesService, Configuracoes } from "@/services/configuracoes.service";
-import { tenantsService, UpdateTenantInfoDto } from "@/services/tenants.service";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDate } from "@/lib/utils";
+import { Configuracoes, configuracoesService } from "@/services/configuracoes.service";
+import { tenantsService, UpdateTenantInfoDto } from "@/services/tenants.service";
+import { CreateUsuarioDto, UpdateUsuarioDto, Usuario, usuariosService } from "@/services/usuarios.service";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+    ArrowLeft,
+    Building2,
+    Calendar,
+    Edit,
+    FileText,
+    Globe,
+    Hash,
+    Loader2,
+    Mail,
+    MoreVertical,
+    Phone,
+    Plus,
+    Power,
+    PowerOff,
+    RotateCcw,
+    Save,
+    Search,
+    Settings as SettingsIcon,
+    Trash2,
+    Users,
+} from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -335,7 +334,7 @@ const Settings = () => {
   if (!canManageUsers && !canViewConfig) {
     return (
       <AppLayout>
-        <div className="p-6">
+        <div className="p-3 sm:p-4 md:p-6 min-w-0">
           <div className="bg-card rounded-xl border border-border p-8 text-center">
             <p className="text-muted-foreground">
               Você não tem permissão para acessar esta página.
@@ -348,7 +347,7 @@ const Settings = () => {
 
   return (
     <AppLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6 min-w-0">
         {/* Header */}
         <div className="mb-6 flex items-center gap-4">
           <Button

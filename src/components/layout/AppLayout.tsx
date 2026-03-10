@@ -29,7 +29,7 @@ import {
     Wallet,
     X
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const getMenuItems = (isSuperAdmin: boolean) => {
@@ -63,7 +63,16 @@ interface AppLayoutProps {
 }
 
 const AppLayout = ({ children }: AppLayoutProps) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const mqLarge = window.matchMedia("(min-width: 1024px)");
+    const mqSmallNotebook = window.matchMedia("(min-width: 1024px) and (max-width: 1279px)");
+    const mqDesktop = window.matchMedia("(min-width: 1280px)");
+    if (mqDesktop.matches) setSidebarOpen(true);
+    else if (mqLarge.matches && mqSmallNotebook.matches) setSidebarOpen(false); // notebook pequeno: sidebar colapsada
+    else setSidebarOpen(false); // mobile/tablet
+  }, []);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isSuperAdmin } = useAuth();
@@ -90,7 +99,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div 
@@ -99,14 +108,19 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar: no mobile é overlay (fixed); no desktop faz parte do layout (não fixa) */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-sidebar transition-all duration-300 ${
-          sidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full lg:w-20 lg:translate-x-0"
-        }`}
+        className={`
+          flex flex-col bg-sidebar transition-all duration-300 ease-out flex-shrink-0
+          fixed inset-y-0 left-0 z-50 lg:relative lg:inset-auto lg:z-auto
+          ${sidebarOpen 
+            ? "w-64 translate-x-0 shadow-xl lg:shadow-none" 
+            : "w-0 -translate-x-full lg:w-16 xl:w-20 lg:translate-x-0"
+          }
+        `}
       >
         {/* Logo - Fixo no topo */}
-        <div className="h-16 flex-shrink-0 flex items-center justify-between px-4 border-b border-sidebar-border">
+        <div className="h-14 sm:h-16 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 border-b border-sidebar-border gap-2">
           {sidebarOpen && (
             <TopERPLogo 
               variant="sidebar"
@@ -123,21 +137,21 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           )}
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground transition-colors"
+            className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-sidebar-accent text-sidebar-foreground transition-colors shrink-0"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
 
         {/* Navigation - Área rolável */}
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto overflow-x-hidden min-h-0">
+        <nav className="flex-1 py-3 sm:py-4 px-2 sm:px-3 space-y-0.5 overflow-y-auto overflow-x-hidden min-h-0">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.href;
             return (
               <Link
                 key={item.label}
                 to={item.href}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+                className={`flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 ${
                   isActive 
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow" 
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -151,10 +165,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </nav>
 
         {/* Logout - Fixo no final */}
-        <div className="flex-shrink-0 px-3 pt-2 pb-3 border-t border-sidebar-border">
+        <div className="flex-shrink-0 px-2 sm:px-3 pt-2 pb-3 border-t border-sidebar-border">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
+            className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 min-h-[44px] rounded-lg w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <LogOut className="w-5 h-5 shrink-0" />
             {sidebarOpen && <span className="font-medium">Sair</span>}
@@ -162,26 +176,24 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className={`flex-1 min-w-0 transition-all duration-300 ${
-        sidebarOpen ? "lg:ml-64" : "lg:ml-20"
-      }`}>
+      {/* Main Content - ocupa o espaço restante; sem margem fixa pois a sidebar está no fluxo no desktop */}
+      <main className="flex-1 min-w-0 flex flex-col min-h-0 transition-all duration-300">
         {/* Header */}
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
+        <header className="h-14 sm:h-16 bg-card border-b border-border flex items-center justify-between px-3 sm:px-6 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 rounded-lg hover:bg-secondary text-foreground transition-colors"
+              className="lg:hidden touch-target min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-secondary text-foreground transition-colors shrink-0"
             >
               <Menu className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <Notifications />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 p-1 rounded-full hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-            <div className="w-10 h-10 rounded-full primary-gradient flex items-center justify-center text-primary-foreground font-semibold">
+                <button className="flex items-center gap-2 p-1.5 sm:p-1 min-h-[44px] min-w-[44px] sm:min-w-0 rounded-full hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full primary-gradient flex items-center justify-center text-primary-foreground font-semibold text-sm">
               {getUserInitials()}
             </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -248,7 +260,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </header>
 
         {/* Content */}
-        {children}
+        <div className="min-w-0 overflow-x-hidden flex-1 flex flex-col">
+          {children}
+        </div>
       </main>
     </div>
   );

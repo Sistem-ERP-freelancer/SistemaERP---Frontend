@@ -1061,7 +1061,7 @@ const Produtos = () => {
 
   return (
     <AppLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6 min-w-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Produtos</h1>
@@ -1080,7 +1080,7 @@ const Produtos = () => {
             </Button>
             <Dialog open={categoriasDialogOpen} onOpenChange={handleCategoriasDialogChange}>
               <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-gradient-to-br from-card to-secondary/30">
-                <div className="p-6">
+                <div className="p-3 sm:p-4 md:p-6 min-w-0">
                   <DialogHeader>
                     <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
                       <div className="bg-primary p-2 rounded-lg">
