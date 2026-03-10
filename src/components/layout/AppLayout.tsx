@@ -62,16 +62,25 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
+const LARGURA_MENU_COMPLETO_PX = 1024; // a partir de 1024px (notebook 15", etc.) o menu pode mostrar ícones + nomes; abaixo disso é overlay no mobile
+
 const AppLayout = ({ children }: AppLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const mqLarge = window.matchMedia("(min-width: 1024px)");
-    const mqSmallNotebook = window.matchMedia("(min-width: 1024px) and (max-width: 1279px)");
-    const mqDesktop = window.matchMedia("(min-width: 1280px)");
-    if (mqDesktop.matches) setSidebarOpen(true);
-    else if (mqLarge.matches && mqSmallNotebook.matches) setSidebarOpen(false); // notebook pequeno: sidebar colapsada
-    else setSidebarOpen(false); // mobile/tablet
+    const updateSidebar = () => {
+      const w = window.innerWidth;
+      if (w >= LARGURA_MENU_COMPLETO_PX) {
+        setSidebarOpen((prev) => prev);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+    const mqMenuCompleto = window.matchMedia(`(min-width: ${LARGURA_MENU_COMPLETO_PX}px)`);
+    if (mqMenuCompleto.matches) setSidebarOpen(true);
+    else setSidebarOpen(false);
+    window.addEventListener("resize", updateSidebar);
+    return () => window.removeEventListener("resize", updateSidebar);
   }, []);
   const location = useLocation();
   const navigate = useNavigate();
@@ -81,6 +90,18 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const handleLogout = async () => {
     await logout();
     navigate("/login");
+  };
+
+  const toggleSidebar = () => {
+    if (typeof window === "undefined") return;
+    const w = window.innerWidth;
+    if (w < 1024) {
+      setSidebarOpen((prev) => !prev);
+    } else if (w >= LARGURA_MENU_COMPLETO_PX) {
+      setSidebarOpen((prev) => !prev);
+    } else {
+      setSidebarOpen(false);
+    }
   };
 
   const getUserInitials = () => {
@@ -136,7 +157,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             </div>
           )}
           <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={toggleSidebar}
             className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-sidebar-accent text-sidebar-foreground transition-colors shrink-0"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -182,7 +203,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         <header className="h-14 sm:h-16 bg-card border-b border-border flex items-center justify-between px-3 sm:px-6 gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button 
-              onClick={() => setSidebarOpen(!sidebarOpen)}
+              onClick={toggleSidebar}
               className="lg:hidden touch-target min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-secondary text-foreground transition-colors shrink-0"
             >
               <Menu className="w-5 h-5" />

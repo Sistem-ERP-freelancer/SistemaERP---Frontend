@@ -1338,7 +1338,7 @@ export default function ControleRoca() {
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <Table>
+                <Table className="min-w-[1100px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
@@ -1349,7 +1349,7 @@ export default function ControleRoca() {
                       <TableHead>Meeiro</TableHead>
                       <TableHead className="text-right">%</TableHead>
                       <TableHead className="text-right">Valor do meeiro</TableHead>
-                      <TableHead className="text-right">Valor total do lançamento</TableHead>
+                      <TableHead className="text-right">Valor total</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1378,18 +1378,14 @@ export default function ControleRoca() {
                             <TableCell className="max-w-[200px]">
                               {itens.length === 0
                                 ? '—'
-                                : (
-                                    <>
-                                      {itens.slice(0, 3).map((item, i) => (
-                                        <div key={i} className="text-sm">
-                                          {item.produto}
-                                        </div>
-                                      ))}
-                                      {itens.length > 3 && (
-                                        <div className="text-sm text-muted-foreground">…</div>
-                                      )}
-                                    </>
-                                  )}
+                                : (() => {
+                                    const textoProdutos = itens.map((item) => item.produto).join(', ');
+                                    return (
+                                      <span className="block truncate text-sm" title={textoProdutos}>
+                                        {textoProdutos}
+                                      </span>
+                                    );
+                                  })()}
                             </TableCell>
                             <TableCell>
                               {itens.length === 0
