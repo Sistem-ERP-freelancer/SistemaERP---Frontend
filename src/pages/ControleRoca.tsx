@@ -1338,18 +1338,18 @@ export default function ControleRoca() {
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <Table className="min-w-[1100px]">
+                <Table className="min-w-[1100px] table-fixed">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
                       <TableHead>Roça</TableHead>
-                      <TableHead>Produtos</TableHead>
+                      <TableHead className="w-[140px] max-w-[140px]">Produtos</TableHead>
                       <TableHead>Qtde</TableHead>
                       <TableHead>Valor Unit.</TableHead>
-                      <TableHead>Meeiro</TableHead>
+                      <TableHead className="w-[100px] max-w-[100px]">Meeiro</TableHead>
                       <TableHead className="text-right">%</TableHead>
-                      <TableHead className="text-right">Valor do meeiro</TableHead>
-                      <TableHead className="text-right">Valor total</TableHead>
+                      <TableHead className="text-right min-w-[90px]">Valor do meeiro</TableHead>
+                      <TableHead className="text-right min-w-[90px]">Valor total</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1375,7 +1375,7 @@ export default function ControleRoca() {
                           <TableRow key={l.id}>
                             <TableCell>{formatDate(l.data)}</TableCell>
                             <TableCell>{roca ? roca.nome : l.rocaId}</TableCell>
-                            <TableCell className="max-w-[200px]">
+                            <TableCell className="max-w-[140px] overflow-hidden">
                               {itens.length === 0
                                 ? '—'
                                 : (() => {
@@ -1419,13 +1419,13 @@ export default function ControleRoca() {
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="max-w-[140px]">
+                            <TableCell className="max-w-[100px] overflow-hidden">
                               {meeiros.length === 0
                                 ? '—'
                                 : (
                                     <>
                                       {meeiros.slice(0, 3).map((m, i) => (
-                                        <div key={i} className="text-sm">
+                                        <div key={i} className="text-sm truncate" title={meeiros.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
                                           {m.meeiroNome ?? `ID ${m.meeiroId}`}
                                         </div>
                                       ))}
