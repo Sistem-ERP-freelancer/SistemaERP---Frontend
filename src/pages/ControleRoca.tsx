@@ -133,7 +133,6 @@ export default function ControleRoca() {
   const [filtrosProdutorOpen, setFiltrosProdutorOpen] = useState(false);
   const [filtrosRocaOpen, setFiltrosRocaOpen] = useState(false);
   const [filtrosMeeiroOpen, setFiltrosMeeiroOpen] = useState(false);
-  const [filtrosProdutoOpen, setFiltrosProdutoOpen] = useState(false);
 
   // Produtores
   const { data: produtores = [], isLoading: loadingProdutores } = useQuery({
@@ -1440,28 +1439,6 @@ export default function ControleRoca() {
           <TabsContent value="produtos" className="space-y-6">
             <div className="bg-card rounded-xl border border-border p-4 mb-6">
               <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setFiltrosProdutoOpen(true)}
-                >
-                  <Filter className="w-4 h-4" />
-                  Filtros
-                </Button>
-                <Sheet open={filtrosProdutoOpen} onOpenChange={setFiltrosProdutoOpen}>
-                  <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
-                    <SheetHeader className="mb-6">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <Filter className="w-5 h-5 text-primary" />
-                        </div>
-                        <SheetTitle className="text-xl">Filtros de produtos</SheetTitle>
-                      </div>
-                      <SheetDescription>Refine sua busca</SheetDescription>
-                    </SheetHeader>
-                    <p className="text-sm text-muted-foreground">Use a barra de pesquisa para buscar por nome ou SKU.</p>
-                  </SheetContent>
-                </Sheet>
                 <div className="relative flex-1 w-full">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
