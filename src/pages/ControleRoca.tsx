@@ -50,6 +50,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import {
     Table,
@@ -91,6 +99,7 @@ import {
     Download,
     Eye,
     FileText,
+    Filter,
     Hash,
     Loader2,
     MapPin,
@@ -100,6 +109,7 @@ import {
     Phone,
     Plus,
     Printer,
+    Search,
     Sprout,
     Trash2,
     User,
@@ -107,7 +117,7 @@ import {
     Users,
     X,
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
@@ -115,6 +125,15 @@ const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
 export default function ControleRoca() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState('produtores');
+
+  // Busca e painéis de filtro (layout igual ao de Lançamentos)
+  const [searchProdutor, setSearchProdutor] = useState('');
+  const [searchRoca, setSearchRoca] = useState('');
+  const [searchProdutoCatalogo, setSearchProdutoCatalogo] = useState('');
+  const [filtrosProdutorOpen, setFiltrosProdutorOpen] = useState(false);
+  const [filtrosRocaOpen, setFiltrosRocaOpen] = useState(false);
+  const [filtrosMeeiroOpen, setFiltrosMeeiroOpen] = useState(false);
+  const [filtrosProdutoOpen, setFiltrosProdutoOpen] = useState(false);
 
   // Produtores
   const { data: produtores = [], isLoading: loadingProdutores } = useQuery({
@@ -186,6 +205,17 @@ export default function ControleRoca() {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao atualizar produtor');
     },
   });
+
+  const filteredProdutores = useMemo(() => {
+    const s = searchProdutor.trim().toLowerCase();
+    if (!s) return produtores;
+    return produtores.filter(
+      (p) =>
+        (p.nome_razao ?? '').toLowerCase().includes(s) ||
+        (p.codigo ?? '').toLowerCase().includes(s) ||
+        (p.cpf_cnpj ?? '').replace(/\D/g, '').includes(s.replace(/\D/g, ''))
+    );
+  }, [produtores, searchProdutor]);
 
   // Roças
   const [produtorIdRocas, setProdutorIdRocas] = useState<number | ''>('');
@@ -275,6 +305,23 @@ export default function ControleRoca() {
 
   const [rocaToDelete, setRocaToDelete] = useState<Roca | null>(null);
   const [openDeleteRoca, setOpenDeleteRoca] = useState(false);
+
+  const filteredRocas = useMemo(() => {
+    const s = searchRoca.trim().toLowerCase();
+    if (!s) return rocas;
+    return rocas.filter((r) => {
+      const prod = produtores.find((p) => p.id === r.produtorId);
+      const prodNome = (prod?.nome_razao ?? '').toLowerCase();
+      const prodCodigo = (prod?.codigo ?? '').toLowerCase();
+      return (
+        (r.nome ?? '').toLowerCase().includes(s) ||
+        (r.codigo ?? '').toLowerCase().includes(s) ||
+        (r.localizacao ?? '').toLowerCase().includes(s) ||
+        prodNome.includes(s) ||
+        prodCodigo.includes(s)
+      );
+    });
+  }, [rocas, produtores, searchRoca]);
 
   // Meeiros
   const [produtorIdMeeiros, setProdutorIdMeeiros] = useState<number | ''>('');
@@ -369,12 +416,27 @@ export default function ControleRoca() {
   });
   const [catalogPage, setCatalogPage] = useState(1);
   const CATALOG_PAGE_SIZE = 10;
+  const produtosCatalogoFiltrados = useMemo(() => {
+    const s = searchProdutoCatalogo.trim().toLowerCase();
+    if (!s) return produtosCatalogo;
+    return produtosCatalogo.filter(
+      (p) =>
+        (p.nome ?? '').toLowerCase().includes(s) ||
+        (p.sku ?? '').toLowerCase().includes(s)
+    );
+  }, [produtosCatalogo, searchProdutoCatalogo]);
   const totalCatalogPages =
-    produtosCatalogo.length > 0 ? Math.ceil(produtosCatalogo.length / CATALOG_PAGE_SIZE) : 1;
-  const produtosCatalogoPagina = produtosCatalogo.slice(
+    produtosCatalogoFiltrados.length > 0
+      ? Math.ceil(produtosCatalogoFiltrados.length / CATALOG_PAGE_SIZE)
+      : 1;
+  const produtosCatalogoPagina = produtosCatalogoFiltrados.slice(
     (catalogPage - 1) * CATALOG_PAGE_SIZE,
     catalogPage * CATALOG_PAGE_SIZE,
   );
+
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [searchProdutoCatalogo]);
   const [openProduto, setOpenProduto] = useState(false);
   const [formProduto, setFormProduto] = useState<{
     codigo: string;
@@ -435,6 +497,16 @@ export default function ControleRoca() {
   const [produtorIdLanc, setProdutorIdLanc] = useState<number | ''>('');
   const [produtorLancPopoverOpen, setProdutorLancPopoverOpen] = useState(false);
   const [produtorLancSearchTerm, setProdutorLancSearchTerm] = useState('');
+  const [searchLancamento, setSearchLancamento] = useState('');
+  const [filtrosLancamentoOpen, setFiltrosLancamentoOpen] = useState(false);
+  const [filtrosLancamento, setFiltrosLancamento] = useState<{
+    produtorId: number | '';
+    rocaId: number | '';
+    meeiroId: number | '';
+    produto: string;
+    dataInicio: string;
+    dataFim: string;
+  }>({ produtorId: '', rocaId: '', meeiroId: '', produto: '', dataInicio: '', dataFim: '' });
   const { data: rocasParaLancamento = [] } = useQuery({
     queryKey: ['controle-roca', 'rocas', produtorIdLanc],
     queryFn: () =>
@@ -628,6 +700,82 @@ export default function ControleRoca() {
     },
   });
 
+  // Meeiros únicos nos lançamentos (para filtro)
+  const meeirosUnicosLancamentos = useMemo(() => {
+    const map = new Map<number, string>();
+    lancamentos.forEach((l) => {
+      (l.itens ?? []).forEach((item) => {
+        (item.meeiros ?? []).forEach((m) => {
+          if (!map.has(m.meeiroId)) map.set(m.meeiroId, m.meeiroNome ?? `Meeiro ${m.meeiroId}`);
+        });
+      });
+    });
+    return Array.from(map.entries()).map(([id, nome]) => ({ meeiroId: id, nome }));
+  }, [lancamentos]);
+
+  const temFiltrosLancamentoAtivos =
+    filtrosLancamento.produtorId !== '' ||
+    filtrosLancamento.rocaId !== '' ||
+    filtrosLancamento.meeiroId !== '' ||
+    filtrosLancamento.produto.trim() !== '' ||
+    filtrosLancamento.dataInicio !== '' ||
+    filtrosLancamento.dataFim !== '';
+
+  const filteredLancamentos = useMemo(() => {
+    let list = lancamentos;
+    const search = searchLancamento.trim().toLowerCase();
+    if (search) {
+      list = list.filter((l) => {
+        const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
+        const rocaNome = (roca?.nome ?? '').toLowerCase();
+        const itens = l.itens ?? [];
+        const produtosStr = itens.map((i) => i.produto).join(' ').toLowerCase();
+        const meeirosStr = itens
+          .flatMap((i) => i.meeiros ?? [])
+          .map((m) => (m.meeiroNome ?? '').toLowerCase())
+          .join(' ');
+        return (
+          rocaNome.includes(search) ||
+          produtosStr.includes(search) ||
+          meeirosStr.includes(search)
+        );
+      });
+    }
+    if (filtrosLancamento.rocaId !== '') {
+      list = list.filter((l) => l.rocaId === filtrosLancamento.rocaId);
+    }
+    if (filtrosLancamento.meeiroId !== '') {
+      list = list.filter((l) =>
+        (l.itens ?? []).some((item) =>
+          (item.meeiros ?? []).some((m) => m.meeiroId === filtrosLancamento.meeiroId)
+        )
+      );
+    }
+    if (filtrosLancamento.produto.trim() !== '') {
+      const sub = filtrosLancamento.produto.trim().toLowerCase();
+      list = list.filter((l) =>
+        (l.itens ?? []).some((item) => item.produto.toLowerCase().includes(sub))
+      );
+    }
+    if (filtrosLancamento.dataInicio !== '') {
+      list = list.filter((l) => (l.data.slice(0, 10)) >= filtrosLancamento.dataInicio);
+    }
+    if (filtrosLancamento.dataFim !== '') {
+      list = list.filter((l) => (l.data.slice(0, 10)) <= filtrosLancamento.dataFim);
+    }
+    return list;
+  }, [
+    lancamentos,
+    rocasParaLancamento,
+    searchLancamento,
+    filtrosLancamento.produtorId,
+    filtrosLancamento.rocaId,
+    filtrosLancamento.meeiroId,
+    filtrosLancamento.produto,
+    filtrosLancamento.dataInicio,
+    filtrosLancamento.dataFim,
+  ]);
+
   const handleAddMeeiro = (meeiroId: number | string) => {
     const idNum = Number(meeiroId);
     const m = meeirosParaLancamento.find((x) => Number(x.id) === idNum);
@@ -791,11 +939,44 @@ export default function ControleRoca() {
 
           {/* Tab Produtores */}
           <TabsContent value="produtores" className="space-y-4">
-            <div className="flex justify-end">
-              <Button onClick={() => setOpenProdutor(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Produtor
-              </Button>
+            <div className="bg-card rounded-xl border border-border p-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setFiltrosProdutorOpen(true)}
+                >
+                  <Filter className="w-4 h-4" />
+                  Filtros
+                </Button>
+                <Sheet open={filtrosProdutorOpen} onOpenChange={setFiltrosProdutorOpen}>
+                  <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                    <SheetHeader className="mb-6">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Filter className="w-5 h-5 text-primary" />
+                        </div>
+                        <SheetTitle className="text-xl">Filtros de produtores</SheetTitle>
+                      </div>
+                      <SheetDescription>Refine sua busca</SheetDescription>
+                    </SheetHeader>
+                    <p className="text-sm text-muted-foreground">Use a barra de pesquisa para buscar por nome, código ou CPF/CNPJ.</p>
+                  </SheetContent>
+                </Sheet>
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome, código ou CPF/CNPJ..."
+                    className="pl-10"
+                    value={searchProdutor}
+                    onChange={(e) => setSearchProdutor(e.target.value)}
+                  />
+                </div>
+                <Button variant="gradient" onClick={() => setOpenProdutor(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Produtor
+                </Button>
+              </div>
             </div>
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingProdutores ? (
@@ -815,20 +996,22 @@ export default function ControleRoca() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {produtores.length === 0 ? (
+                    {filteredProdutores.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                          Nenhum produtor cadastrado
+                          {searchProdutor.trim()
+                            ? 'Nenhum resultado para a busca.'
+                            : 'Nenhum produtor cadastrado'}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      produtores.map((p) => (
+                      filteredProdutores.map((p) => (
                         <TableRow key={p.id}>
                           <TableCell className="font-medium">{p.codigo}</TableCell>
                           <TableCell>{p.nome_razao}</TableCell>
                           <TableCell>{p.cpf_cnpj || '—'}</TableCell>
                           <TableCell>{p.telefone || p.whatsapp || '—'}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">
+                          <TableCell className="max-w-[200px] truncate min-[1920px]:max-w-none min-[1920px]:overflow-visible min-[1920px]:whitespace-normal min-[1920px]:text-clip">
                             {p.endereco || '—'}
                           </TableCell>
                           <TableCell className="text-right">
@@ -898,42 +1081,86 @@ export default function ControleRoca() {
 
           {/* Tab Roças */}
           <TabsContent value="rocas" className="space-y-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label>Produtor</Label>
-                <Select
-                  value={produtorIdRocas === '' ? 'todos' : String(produtorIdRocas)}
-                  onValueChange={(v) =>
-                    setProdutorIdRocas(v === 'todos' ? '' : Number(v))
+            <div className="bg-card rounded-xl border border-border p-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setFiltrosRocaOpen(true)}
+                  style={
+                    produtorIdRocas !== '' || incluirRocasInativas
+                      ? { borderColor: 'var(--primary)', borderWidth: '2px' }
+                      : {}
                   }
                 >
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos os produtores</SelectItem>
-                    {produtores.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.codigo} – {p.nome_razao}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Filter className="w-4 h-4" />
+                  Filtros
+                  {(produtorIdRocas !== '' || incluirRocasInativas) && (
+                    <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                      {[produtorIdRocas !== '', incluirRocasInativas].filter(Boolean).length}
+                    </span>
+                  )}
+                </Button>
+                <Sheet open={filtrosRocaOpen} onOpenChange={setFiltrosRocaOpen}>
+                  <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                    <SheetHeader className="mb-6">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Filter className="w-5 h-5 text-primary" />
+                        </div>
+                        <SheetTitle className="text-xl">Filtros de roças</SheetTitle>
+                      </div>
+                      <SheetDescription>Refine por produtor e status</SheetDescription>
+                    </SheetHeader>
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm font-semibold">Produtor</Label>
+                        <Select
+                          value={produtorIdRocas === '' ? 'todos' : String(produtorIdRocas)}
+                          onValueChange={(v) =>
+                            setProdutorIdRocas(v === 'todos' ? '' : Number(v))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos os produtores" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os produtores</SelectItem>
+                            {produtores.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.codigo} – {p.nome_razao}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="filtro-rocas-inativas"
+                          checked={incluirRocasInativas}
+                          onCheckedChange={setIncluirRocasInativas}
+                        />
+                        <Label htmlFor="filtro-rocas-inativas" className="cursor-pointer text-sm">
+                          Exibir desativadas
+                        </Label>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome, código, localização ou produtor..."
+                    className="pl-10"
+                    value={searchRoca}
+                    onChange={(e) => setSearchRoca(e.target.value)}
+                  />
+                </div>
+                <Button variant="gradient" onClick={() => setOpenRoca(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nova Roça
+                </Button>
               </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="incluir-rocas-inativas"
-                  checked={incluirRocasInativas}
-                  onCheckedChange={setIncluirRocasInativas}
-                />
-                <Label htmlFor="incluir-rocas-inativas" className="cursor-pointer text-sm">
-                  Exibir desativadas
-                </Label>
-              </div>
-              <Button onClick={() => setOpenRoca(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Roça
-              </Button>
             </div>
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingRocas ? (
@@ -952,14 +1179,16 @@ export default function ControleRoca() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rocas.length === 0 ? (
+                    {filteredRocas.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                          Nenhuma roça cadastrada
+                          {searchRoca.trim()
+                            ? 'Nenhum resultado para a busca.'
+                            : 'Nenhuma roça cadastrada'}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      rocas.map((r) => {
+                      filteredRocas.map((r) => {
                         const prod = produtores.find((p) => p.id === r.produtorId);
                         return (
                           <TableRow
@@ -975,7 +1204,7 @@ export default function ControleRoca() {
                               )}
                             </TableCell>
                             <TableCell>{r.nome}</TableCell>
-                            <TableCell className="max-w-[200px] truncate">
+                            <TableCell className="max-w-[200px] truncate min-[1920px]:max-w-none min-[1920px]:overflow-visible min-[1920px]:whitespace-normal min-[1920px]:text-clip">
                               {r.localizacao || '—'}
                             </TableCell>
                             <TableCell>{prod ? `${prod.codigo} – ${prod.nome_razao}` : r.produtorId}</TableCell>
@@ -1051,32 +1280,67 @@ export default function ControleRoca() {
 
           {/* Tab Meeiros */}
           <TabsContent value="meeiros" className="space-y-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label>Produtor</Label>
-                <Select
-                  value={produtorIdMeeiros === '' ? 'todos' : String(produtorIdMeeiros)}
-                  onValueChange={(v) =>
-                    setProdutorIdMeeiros(v === 'todos' ? '' : Number(v))
+            <div className="bg-card rounded-xl border border-border p-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setFiltrosMeeiroOpen(true)}
+                  style={
+                    produtorIdMeeiros !== ''
+                      ? { borderColor: 'var(--primary)', borderWidth: '2px' }
+                      : {}
                   }
                 >
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos os produtores</SelectItem>
-                    {produtores.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.codigo} – {p.nome_razao}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Filter className="w-4 h-4" />
+                  Filtros
+                  {produtorIdMeeiros !== '' && (
+                    <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                      1
+                    </span>
+                  )}
+                </Button>
+                <Sheet open={filtrosMeeiroOpen} onOpenChange={setFiltrosMeeiroOpen}>
+                  <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                    <SheetHeader className="mb-6">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Filter className="w-5 h-5 text-primary" />
+                        </div>
+                        <SheetTitle className="text-xl">Filtros de meeiros</SheetTitle>
+                      </div>
+                      <SheetDescription>Refine por produtor</SheetDescription>
+                    </SheetHeader>
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <Label className="text-sm font-semibold">Produtor</Label>
+                        <Select
+                          value={produtorIdMeeiros === '' ? 'todos' : String(produtorIdMeeiros)}
+                          onValueChange={(v) =>
+                            setProdutorIdMeeiros(v === 'todos' ? '' : Number(v))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos os produtores" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os produtores</SelectItem>
+                            {produtores.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.codigo} – {p.nome_razao}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                <Button variant="gradient" onClick={() => setOpenMeeiro(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Meeiro
+                </Button>
               </div>
-              <Button onClick={() => setOpenMeeiro(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Meeiro
-              </Button>
             </div>
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingMeeiros ? (
@@ -1174,16 +1438,48 @@ export default function ControleRoca() {
 
           {/* Tab Produtos — lista unificada (todos os produtos do sistema) */}
           <TabsContent value="produtos" className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">
-                Todos os produtos do sistema em uma única lista (incluindo os cadastrados no Controle de Roça).
-              </p>
-              <Button onClick={() => setOpenProduto(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Produto
-              </Button>
+            <div className="bg-card rounded-xl border border-border p-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setFiltrosProdutoOpen(true)}
+                >
+                  <Filter className="w-4 h-4" />
+                  Filtros
+                </Button>
+                <Sheet open={filtrosProdutoOpen} onOpenChange={setFiltrosProdutoOpen}>
+                  <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                    <SheetHeader className="mb-6">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Filter className="w-5 h-5 text-primary" />
+                        </div>
+                        <SheetTitle className="text-xl">Filtros de produtos</SheetTitle>
+                      </div>
+                      <SheetDescription>Refine sua busca</SheetDescription>
+                    </SheetHeader>
+                    <p className="text-sm text-muted-foreground">Use a barra de pesquisa para buscar por nome ou SKU.</p>
+                  </SheetContent>
+                </Sheet>
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome ou SKU..."
+                    className="pl-10"
+                    value={searchProdutoCatalogo}
+                    onChange={(e) => setSearchProdutoCatalogo(e.target.value)}
+                  />
+                </div>
+                <Button variant="gradient" onClick={() => setOpenProduto(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Produto
+                </Button>
+              </div>
             </div>
-
+            <p className="text-sm text-muted-foreground">
+              Todos os produtos do sistema em uma única lista (incluindo os cadastrados no Controle de Roça).
+            </p>
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <div>
@@ -1211,10 +1507,12 @@ export default function ControleRoca() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {produtosCatalogo.length === 0 ? (
+                      {produtosCatalogoFiltrados.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                            Nenhum produto cadastrado. Use &quot;Novo Produto&quot; para cadastrar.
+                            {searchProdutoCatalogo.trim()
+                              ? 'Nenhum resultado para a busca.'
+                              : 'Nenhum produto cadastrado. Use "Novo Produto" para cadastrar.'}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1248,16 +1546,16 @@ export default function ControleRoca() {
                       )}
                     </TableBody>
                   </Table>
-                  {produtosCatalogo.length > CATALOG_PAGE_SIZE && (
+                  {produtosCatalogoFiltrados.length > CATALOG_PAGE_SIZE && (
                     <div className="border-t px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-xs text-muted-foreground">
                         Mostrando{' '}
-                        {produtosCatalogo.length > 0
+                        {produtosCatalogoFiltrados.length > 0
                           ? (catalogPage - 1) * CATALOG_PAGE_SIZE + 1
                           : 0}{' '}
                         a{' '}
-                        {Math.min(catalogPage * CATALOG_PAGE_SIZE, produtosCatalogo.length)} de{' '}
-                        {produtosCatalogo.length}{' '}
+                        {Math.min(catalogPage * CATALOG_PAGE_SIZE, produtosCatalogoFiltrados.length)} de{' '}
+                        {produtosCatalogoFiltrados.length}{' '}
                         produtos
                       </div>
                       <Pagination className="justify-end">
@@ -1281,11 +1579,11 @@ export default function ControleRoca() {
                                   Math.min(totalCatalogPages, prev + 1),
                                 );
                               }}
-                              className={
-                                catalogPage === totalCatalogPages
-                                  ? 'pointer-events-none opacity-50'
-                                  : ''
-                              }
+className={
+                          catalogPage === totalCatalogPages
+                            ? 'pointer-events-none opacity-50'
+                            : ''
+                        }
                             />
                           </PaginationItem>
                         </PaginationContent>
@@ -1299,39 +1597,238 @@ export default function ControleRoca() {
 
           {/* Tab Lançamentos */}
           <TabsContent value="lancamentos" className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 flex-1 sm:flex-initial">
-                <Label className="shrink-0">Produtor</Label>
-                <Select
-                  value={produtorIdLanc === '' ? 'todos' : String(produtorIdLanc)}
-                  onValueChange={(v) =>
-                    setProdutorIdLanc(v === 'todos' ? '' : Number(v))
+            {/* Barra de pesquisa e filtros - mesmo design de Produtos */}
+            <div className="bg-card rounded-xl border border-border p-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setFiltrosLancamentoOpen(true)}
+                  style={
+                    temFiltrosLancamentoAtivos
+                      ? { borderColor: 'var(--primary)', borderWidth: '2px' }
+                      : {}
                   }
                 >
-                  <SelectTrigger className="w-full sm:w-[220px] min-w-0">
-                    <SelectValue placeholder="Todos os lançamentos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos os produtores</SelectItem>
-                    {produtores.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.codigo} – {p.nome_razao}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <Filter className="w-4 h-4" />
+                  Filtros
+                  {temFiltrosLancamentoAtivos && (
+                    <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                      {[
+                        filtrosLancamento.produtorId,
+                        filtrosLancamento.rocaId,
+                        filtrosLancamento.meeiroId,
+                        filtrosLancamento.produto.trim(),
+                        filtrosLancamento.dataInicio,
+                        filtrosLancamento.dataFim,
+                      ].filter((v) => v !== '').length}
+                    </span>
+                  )}
+                </Button>
+                <Sheet open={filtrosLancamentoOpen} onOpenChange={setFiltrosLancamentoOpen}>
+                  <SheetContent
+                    side="right"
+                    className="w-[400px] sm:w-[540px] overflow-y-auto"
+                  >
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">Filtros de lançamentos</SheetTitle>
+                  </div>
+                  <SheetDescription>Refine sua busca</SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  {/* Produtor */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Produtor</Label>
+                    <Select
+                      value={filtrosLancamento.produtorId === '' ? 'todos' : String(filtrosLancamento.produtorId)}
+                      onValueChange={(v) =>
+                        setFiltrosLancamento((prev) => ({
+                          ...prev,
+                          produtorId: v === 'todos' ? '' : Number(v),
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os produtores" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtores</SelectItem>
+                        {produtores.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.codigo} – {p.nome_razao}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Produto */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Produto</Label>
+                    <Input
+                      placeholder="Nome do produto"
+                      value={filtrosLancamento.produto}
+                      onChange={(e) =>
+                        setFiltrosLancamento((prev) => ({ ...prev, produto: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  {/* Roça */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Select
+                      value={filtrosLancamento.rocaId === '' ? 'todas' : String(filtrosLancamento.rocaId)}
+                      onValueChange={(v) =>
+                        setFiltrosLancamento((prev) => ({
+                          ...prev,
+                          rocaId: v === 'todas' ? '' : Number(v),
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        {rocasParaLancamento.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Meeiro */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Meeiro</Label>
+                    <Select
+                      value={filtrosLancamento.meeiroId === '' ? 'todos' : String(filtrosLancamento.meeiroId)}
+                      onValueChange={(v) =>
+                        setFiltrosLancamento((prev) => ({
+                          ...prev,
+                          meeiroId: v === 'todos' ? '' : Number(v),
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os meeiros" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os meeiros</SelectItem>
+                        {meeirosUnicosLancamentos.map((m) => (
+                          <SelectItem key={m.meeiroId} value={String(m.meeiroId)}>
+                            {m.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Data */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                      DATA
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Data Inicial</Label>
+                        <Input
+                          type="date"
+                          value={filtrosLancamento.dataInicio}
+                          onChange={(e) =>
+                            setFiltrosLancamento((prev) => ({
+                              ...prev,
+                              dataInicio: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Data Final</Label>
+                        <Input
+                          type="date"
+                          value={filtrosLancamento.dataFim}
+                          onChange={(e) =>
+                            setFiltrosLancamento((prev) => ({
+                              ...prev,
+                              dataFim: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Botões de ação */}
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={() => setFiltrosLancamentoOpen(false)}
+                      className="flex-1"
+                      variant="gradient"
+                    >
+                      Aplicar Filtros
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setFiltrosLancamento({
+                          produtorId: '',
+                          rocaId: '',
+                          meeiroId: '',
+                          produto: '',
+                          dataInicio: '',
+                          dataFim: '',
+                        });
+                      }}
+                    >
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+                  </SheetContent>
+                </Sheet>
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por roça, meeiro ou produto..."
+                    className="pl-10"
+                    value={searchLancamento}
+                    onChange={(e) => setSearchLancamento(e.target.value)}
+                  />
+                </div>
+                <Button
+                  variant="gradient"
+                  className="shrink-0"
+                  onClick={() => {
+                    setLancData(new Date().toISOString().slice(0, 10));
+                    setOpenLancamento(true);
+                  }}
+                  disabled={produtores.length === 0}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Lançamento
+                </Button>
               </div>
-              <Button
-                onClick={() => {
-                  setLancData(new Date().toISOString().slice(0, 10));
-                  setOpenLancamento(true);
-                }}
-                disabled={produtores.length === 0}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Lançamento
-              </Button>
             </div>
+
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingLancamentos ? (
                 <div className="flex justify-center py-12">
@@ -1354,14 +1851,14 @@ export default function ControleRoca() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lancamentos.length === 0 ? (
+                    {filteredLancamentos.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
                     ) : (
-                      lancamentos.map((l) => {
+                      filteredLancamentos.map((l) => {
                         const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
                         const itens = l.itens ?? [];
                         const meeirosList = itens.flatMap((i) => i.meeiros ?? []);
@@ -1374,16 +1871,16 @@ export default function ControleRoca() {
                         return (
                           <TableRow key={l.id}>
                             <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
-                            <TableCell className="max-w-0 overflow-hidden" title={roca ? roca.nome : String(l.rocaId)}>
-                              <span className="block truncate">{roca ? roca.nome : l.rocaId}</span>
+                            <TableCell className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible" title={roca ? roca.nome : String(l.rocaId)}>
+                              <span className="block truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip">{roca ? roca.nome : l.rocaId}</span>
                             </TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-w-0">
+                            <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
                               {itens.length === 0
                                 ? '—'
                                 : (() => {
                                     const textoProdutos = itens.map((item) => item.produto).join(', ');
                                     return (
-                                      <span className="block truncate whitespace-nowrap" title={textoProdutos}>
+                                      <span className="block truncate whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={textoProdutos}>
                                         {textoProdutos}
                                       </span>
                                     );
@@ -1421,13 +1918,13 @@ export default function ControleRoca() {
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-w-0">
+                            <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
                               {meeiros.length === 0
                                 ? '—'
                                 : (
                                     <>
                                       {meeiros.slice(0, 3).map((m, i) => (
-                                        <div key={i} className="truncate" title={meeiros.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
+                                        <div key={i} className="truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={meeiros.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
                                           {m.meeiroNome ?? `ID ${m.meeiroId}`}
                                         </div>
                                       ))}
@@ -2039,6 +2536,7 @@ export default function ControleRoca() {
                             Cancelar
                           </Button>
                           <Button
+                            variant="gradient"
                             onClick={() => {
                               if (!editLancData || !editLancRocaId) {
                                 toast.error('Preencha data e roça');
@@ -2138,7 +2636,7 @@ export default function ControleRoca() {
                   className="w-[160px]"
                 />
               </div>
-              <Button onClick={runRelatorio} disabled={relLoading}>
+              <Button variant="gradient" onClick={runRelatorio} disabled={relLoading}>
                 {relLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : (
@@ -2602,6 +3100,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!formProdutor.nome_razao.trim()) {
                     toast.error('Nome é obrigatório');
@@ -2975,6 +3474,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!formEditProdutor.nome_razao?.trim()) {
                     toast.error('Nome é obrigatório');
@@ -3113,6 +3613,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!formRoca.nome.trim() || !formRoca.produtorId) {
                     toast.error('Produtor e nome da roça são obrigatórios');
@@ -3367,6 +3868,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!editRoca) return;
                   if (!formEditRoca.nome?.trim() || !formEditRoca.produtorId) {
@@ -3720,6 +4222,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!formMeeiro.nome.trim() || !formMeeiro.produtorId) {
                     toast.error('Nome e produtor são obrigatórios');
@@ -4062,6 +4565,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!editMeeiro) return;
                   if (!formEditMeeiro.nome?.trim() || !formEditMeeiro.produtorId) {
@@ -4194,6 +4698,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={() => {
                   if (!formProduto.nome?.trim()) {
                     toast.error('Nome do produto é obrigatório');
@@ -4515,6 +5020,7 @@ export default function ControleRoca() {
                 Cancelar
               </Button>
               <Button
+                variant="gradient"
                 onClick={handleSubmitLancamento}
                 disabled={
                   createLancamento.isPending ||

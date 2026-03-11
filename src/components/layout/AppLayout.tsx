@@ -135,8 +135,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           flex flex-col bg-sidebar transition-all duration-300 ease-out flex-shrink-0
           fixed inset-y-0 left-0 z-50 lg:relative lg:inset-auto lg:z-auto
           ${sidebarOpen 
-            ? "w-[193px] translate-x-0 shadow-xl lg:shadow-none" 
-            : "w-0 -translate-x-full lg:w-16 xl:w-20 lg:translate-x-0"
+            ? "w-[193px] min-[1920px]:w-[420px] translate-x-0 shadow-xl lg:shadow-none" 
+            : "w-0 -translate-x-full lg:w-16 xl:w-20 min-[1920px]:lg:w-[160px] min-[1920px]:xl:w-[160px] lg:translate-x-0"
           }
         `}
       >

@@ -112,9 +112,15 @@
     /*
      * Tamanho da letra de acordo com a tela:
      * tela menor → fonte menor; tela maior → fonte no tamanho padrão.
-     * Um pouco mais reduzida em telas médias para caber a coluna Ações sem cortar.
+     * A partir de 1920px (≈ 24") exibe sempre o tamanho normal (16px).
      */
     font-size: clamp(11px, 9px + 0.4vw, 16px);
+  }
+
+  @media (min-width: 1920px) {
+    html {
+      font-size: 16px;
+    }
   }
 
   body {
