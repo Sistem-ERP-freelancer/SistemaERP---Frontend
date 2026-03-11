@@ -424,6 +424,14 @@ export default function ControleRoca() {
         (p.sku ?? '').toLowerCase().includes(s)
     );
   }, [produtosCatalogo, searchProdutoCatalogo]);
+  const produtosParaFiltroLancamento = useMemo(() => {
+    if (!Array.isArray(produtosCatalogo)) return [];
+    return produtosCatalogo
+      .filter((p: any) => (p?.nome ?? '').trim() !== '')
+      .sort((a: any, b: any) =>
+        String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR')
+      );
+  }, [produtosCatalogo]);
   const totalCatalogPages =
     produtosCatalogoFiltrados.length > 0
       ? Math.ceil(produtosCatalogoFiltrados.length / CATALOG_PAGE_SIZE)
@@ -1644,13 +1652,31 @@ className={
                   {/* Produto */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Produto</Label>
-                    <Input
-                      placeholder="Nome do produto"
-                      value={filtrosLancamento.produto}
-                      onChange={(e) =>
-                        setFiltrosLancamento((prev) => ({ ...prev, produto: e.target.value }))
+                    <Select
+                      value={
+                        filtrosLancamento.produto.trim() === ''
+                          ? 'todos'
+                          : filtrosLancamento.produto
                       }
-                    />
+                      onValueChange={(v) =>
+                        setFiltrosLancamento((prev) => ({
+                          ...prev,
+                          produto: v === 'todos' ? '' : v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os produtos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtos</SelectItem>
+                        {produtosParaFiltroLancamento.map((p: any) => (
+                          <SelectItem key={p.id} value={String(p.nome)}>
+                            {p.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <Separator />
