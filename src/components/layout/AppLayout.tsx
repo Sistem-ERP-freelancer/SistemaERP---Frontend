@@ -135,7 +135,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           flex flex-col bg-sidebar transition-all duration-300 ease-out flex-shrink-0
           fixed inset-y-0 left-0 z-50 lg:relative lg:inset-auto lg:z-auto
           ${sidebarOpen 
-            ? "w-64 translate-x-0 shadow-xl lg:shadow-none" 
+            ? "w-[193px] translate-x-0 shadow-xl lg:shadow-none" 
             : "w-0 -translate-x-full lg:w-16 xl:w-20 lg:translate-x-0"
           }
         `}
@@ -179,7 +179,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 }`}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
-                {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                {sidebarOpen && <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis min-w-0" title={item.label}>{item.label}</span>}
               </Link>
             );
           })}
@@ -192,7 +192,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 min-h-[44px] rounded-lg w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <LogOut className="w-5 h-5 shrink-0" />
-            {sidebarOpen && <span className="font-medium">Sair</span>}
+            {sidebarOpen && <span className="font-medium whitespace-nowrap">Sair</span>}
           </button>
         </div>
       </aside>

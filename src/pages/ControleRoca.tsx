@@ -1338,19 +1338,19 @@ export default function ControleRoca() {
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <Table className="min-w-[1100px] table-fixed">
+                <Table className="w-full table-fixed text-xs sm:text-sm">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Roça</TableHead>
-                      <TableHead className="w-[140px] max-w-[140px]">Produtos</TableHead>
-                      <TableHead>Qtde</TableHead>
-                      <TableHead>Valor Unit.</TableHead>
-                      <TableHead className="w-[100px] max-w-[100px]">Meeiro</TableHead>
-                      <TableHead className="text-right">%</TableHead>
-                      <TableHead className="text-right min-w-[90px]">Valor do meeiro</TableHead>
-                      <TableHead className="text-right min-w-[90px]">Valor total</TableHead>
-                      <TableHead className="w-[70px] text-right">Ações</TableHead>
+                      <TableHead className="w-[10%] whitespace-nowrap">Data</TableHead>
+                      <TableHead className="w-[12%] whitespace-nowrap">Roça</TableHead>
+                      <TableHead className="w-[22%] whitespace-nowrap">Produtos</TableHead>
+                      <TableHead className="w-[6%] whitespace-nowrap">Qtde</TableHead>
+                      <TableHead className="w-[10%] whitespace-nowrap text-right">Valor Unit.</TableHead>
+                      <TableHead className="w-[12%] whitespace-nowrap">Meeiro</TableHead>
+                      <TableHead className="w-[3%] text-right py-2 px-1">%</TableHead>
+                      <TableHead className="w-[10%] text-right">Valor do meeiro</TableHead>
+                      <TableHead className="w-[10%] text-right">Valor total</TableHead>
+                      <TableHead className="w-[8%] min-w-[72px] text-right pl-4 pr-6">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1373,15 +1373,17 @@ export default function ControleRoca() {
                         });
                         return (
                           <TableRow key={l.id}>
-                            <TableCell>{formatDate(l.data)}</TableCell>
-                            <TableCell>{roca ? roca.nome : l.rocaId}</TableCell>
-                            <TableCell className="max-w-[140px] overflow-hidden">
+                            <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
+                            <TableCell className="max-w-0 overflow-hidden" title={roca ? roca.nome : String(l.rocaId)}>
+                              <span className="block truncate">{roca ? roca.nome : l.rocaId}</span>
+                            </TableCell>
+                            <TableCell className="max-w-0 overflow-hidden min-w-0">
                               {itens.length === 0
                                 ? '—'
                                 : (() => {
                                     const textoProdutos = itens.map((item) => item.produto).join(', ');
                                     return (
-                                      <span className="block truncate text-sm" title={textoProdutos}>
+                                      <span className="block truncate whitespace-nowrap" title={textoProdutos}>
                                         {textoProdutos}
                                       </span>
                                     );
@@ -1419,23 +1421,23 @@ export default function ControleRoca() {
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="max-w-[100px] overflow-hidden">
+                            <TableCell className="max-w-0 overflow-hidden min-w-0">
                               {meeiros.length === 0
                                 ? '—'
                                 : (
                                     <>
                                       {meeiros.slice(0, 3).map((m, i) => (
-                                        <div key={i} className="text-sm truncate" title={meeiros.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
+                                        <div key={i} className="truncate" title={meeiros.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
                                           {m.meeiroNome ?? `ID ${m.meeiroId}`}
                                         </div>
                                       ))}
                                       {meeiros.length > 3 && (
-                                        <div className="text-sm text-muted-foreground">…</div>
+                                        <div className="text-muted-foreground">…</div>
                                       )}
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="text-right max-w-[100px]">
+                            <TableCell className="text-right py-2 px-1">
                               {meeiros.length === 0
                                 ? '—'
                                 : (
@@ -1450,18 +1452,16 @@ export default function ControleRoca() {
                                             ? Math.round((totalParte / totalGeralNum) * 100)
                                             : 0;
                                         return (
-                                          <div key={i} className="text-sm">
-                                            {pct}%
-                                          </div>
+                                          <div key={i}>{pct}%</div>
                                         );
                                       })}
                                       {meeiros.length > 3 && (
-                                        <div className="text-sm text-muted-foreground">…</div>
+                                        <div className="text-muted-foreground">…</div>
                                       )}
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="text-right max-w-[120px]">
+                            <TableCell className="text-right whitespace-nowrap">
                               {meeiros.length === 0
                                 ? '—'
                                 : (
@@ -1471,21 +1471,17 @@ export default function ControleRoca() {
                                           .filter((x) => x.meeiroId === m.meeiroId)
                                           .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
                                         return (
-                                          <div key={i} className="text-sm">
-                                            {formatCurrency(totalParte)}
-                                          </div>
+                                          <div key={i}>{formatCurrency(totalParte)}</div>
                                         );
                                       })}
                                       {meeiros.length > 3 && (
-                                        <div className="text-sm text-muted-foreground">…</div>
+                                        <div className="text-muted-foreground">…</div>
                                       )}
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(Number(l.total_geral))}
-                            </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right whitespace-nowrap">{formatCurrency(Number(l.total_geral))}</TableCell>
+                            <TableCell className="text-right pl-4 pr-6">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8">
