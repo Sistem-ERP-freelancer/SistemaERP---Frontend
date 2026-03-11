@@ -513,6 +513,19 @@ export default function ControleRoca() {
         produtorIdLanc === '' ? undefined : Number(produtorIdLanc)
       ),
   });
+  const rocasParaLancamentoFiltradas = useMemo(
+    () => {
+      if (filtrosLancamento.produtorId === '' || !Array.isArray(rocasParaLancamento)) {
+        return rocasParaLancamento;
+      }
+      return rocasParaLancamento.filter(
+        (r: any) =>
+          r?.produtorId != null &&
+          Number(r.produtorId) === Number(filtrosLancamento.produtorId)
+      );
+    },
+    [rocasParaLancamento, filtrosLancamento.produtorId]
+  );
   const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
     queryKey: ['controle-roca', 'lancamentos', produtorIdLanc],
     queryFn: () =>
@@ -741,12 +754,16 @@ export default function ControleRoca() {
       });
     }
     if (filtrosLancamento.rocaId !== '') {
-      list = list.filter((l) => l.rocaId === filtrosLancamento.rocaId);
+      const rocaIdNum = Number(filtrosLancamento.rocaId);
+      list = list.filter((l) => Number(l.rocaId) === rocaIdNum);
     }
     if (filtrosLancamento.meeiroId !== '') {
+      const meeiroIdNum = Number(filtrosLancamento.meeiroId);
       list = list.filter((l) =>
         (l.itens ?? []).some((item) =>
-          (item.meeiros ?? []).some((m) => m.meeiroId === filtrosLancamento.meeiroId)
+          (item.meeiros ?? []).some(
+            (m) => Number(m.meeiroId) === meeiroIdNum
+          )
         )
       );
     }
@@ -940,28 +957,6 @@ export default function ControleRoca() {
           <TabsContent value="produtores" className="space-y-4">
             <div className="bg-card rounded-xl border border-border p-4 mb-6">
               <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setFiltrosProdutorOpen(true)}
-                >
-                  <Filter className="w-4 h-4" />
-                  Filtros
-                </Button>
-                <Sheet open={filtrosProdutorOpen} onOpenChange={setFiltrosProdutorOpen}>
-                  <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
-                    <SheetHeader className="mb-6">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <Filter className="w-5 h-5 text-primary" />
-                        </div>
-                        <SheetTitle className="text-xl">Filtros de produtores</SheetTitle>
-                      </div>
-                      <SheetDescription>Refine sua busca</SheetDescription>
-                    </SheetHeader>
-                    <p className="text-sm text-muted-foreground">Use a barra de pesquisa para buscar por nome, código ou CPF/CNPJ.</p>
-                  </SheetContent>
-                </Sheet>
                 <div className="relative flex-1 w-full">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -1675,14 +1670,14 @@ className={
                       <SelectTrigger>
                         <SelectValue placeholder="Todas as roças" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
-                        {rocasParaLancamento.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>
-                            {r.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
+                        <SelectContent>
+                          <SelectItem value="todas">Todas as roças</SelectItem>
+                          {rocasParaLancamentoFiltradas.map((r) => (
+                            <SelectItem key={r.id} value={String(r.id)}>
+                              {r.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                     </Select>
                   </div>
 
