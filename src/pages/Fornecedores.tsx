@@ -1789,7 +1789,7 @@ const Fornecedores = () => {
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     // Scroll para o topo da tabela
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
   return (

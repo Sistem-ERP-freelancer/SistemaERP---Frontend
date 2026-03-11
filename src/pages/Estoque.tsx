@@ -69,7 +69,8 @@ const Estoque = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("Todos");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20);
+  const [itemsPerPage] = useState(10);
+  const [ordenacaoMov, setOrdenacaoMov] = useState<"desc" | "asc">("desc");
   const [dialogMovimentacaoOpen, setDialogMovimentacaoOpen] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [movimentacao, setMovimentacao] = useState<MovimentacaoEstoqueDto>({
@@ -190,9 +191,11 @@ const Estoque = () => {
         }
       });
 
-      // Ordena por data (mais recentes primeiro)
+      // Ordena por data (mais recentes primeiro por padrão)
       todasMovimentacoes.sort((a, b) => {
-        return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
+        const da = new Date(a.criado_em).getTime();
+        const db = new Date(b.criado_em).getTime();
+        return db - da;
       });
 
       // Filtra por tipo se necessário
@@ -203,15 +206,10 @@ const Estoque = () => {
         );
       }
 
-      // Aplica paginação
-      const total = movimentacoesFiltradas.length;
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const endIndex = startIndex + itemsPerPage;
-      const movimentacoesPaginadas = movimentacoesFiltradas.slice(startIndex, endIndex);
-
+      // Retorna lista completa filtrada; paginação é aplicada no frontend
       return {
-        movimentacoes: movimentacoesPaginadas,
-        total,
+        movimentacoes: movimentacoesFiltradas,
+        total: movimentacoesFiltradas.length,
       };
     },
     enabled: produtos.length > 0,
@@ -229,21 +227,42 @@ const Estoque = () => {
     retryDelay: 1000, // Esperar 1 segundo entre tentativas
   });
 
-  const movimentacoes: MovimentacaoEstoque[] = movimentacoesData?.movimentacoes || [];
-  const totalMovimentacoes = movimentacoesData?.total || 0;
-  const totalPages = Math.ceil(totalMovimentacoes / itemsPerPage);
+  const movimentacoesOriginais: MovimentacaoEstoque[] = movimentacoesData?.movimentacoes || [];
+  const totalMovimentacoesOriginais = movimentacoesData?.total || 0;
 
-  // Filtrar movimentações por busca (já vem paginado do backend, mas aplicamos busca local)
+  // Filtrar movimentações por busca (lista completa) e aplicar ordenação
   const movimentacoesFiltradas = useMemo(() => {
-    if (!searchTerm.trim()) return movimentacoes;
-    
-    const termo = searchTerm.toLowerCase();
-    return movimentacoes.filter((mov) => {
-      const produtoNome = mov.produto?.nome?.toLowerCase() || "";
-      const produtoSku = mov.produto?.sku?.toLowerCase() || "";
-      return produtoNome.includes(termo) || produtoSku.includes(termo);
+    let lista = movimentacoesOriginais;
+
+    if (searchTerm.trim()) {
+      const termo = searchTerm.toLowerCase();
+      lista = lista.filter((mov) => {
+        const produtoNome = mov.produto?.nome?.toLowerCase() || "";
+        const produtoSku = mov.produto?.sku?.toLowerCase() || "";
+        return produtoNome.includes(termo) || produtoSku.includes(termo);
+      });
+    }
+
+    // ordenar por data conforme seleção
+    lista = [...lista].sort((a, b) => {
+      const da = new Date(a.criado_em).getTime();
+      const db = new Date(b.criado_em).getTime();
+      if (ordenacaoMov === "desc") {
+        return db - da;
+      }
+      return da - db;
     });
-  }, [movimentacoes, searchTerm]);
+
+    return lista;
+  }, [movimentacoesOriginais, searchTerm, ordenacaoMov]);
+
+  const totalMovimentacoes = movimentacoesFiltradas.length;
+  const totalPages = Math.ceil(totalMovimentacoes / itemsPerPage);
+  const movimentacoes = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return movimentacoesFiltradas.slice(startIndex, endIndex);
+  }, [movimentacoesFiltradas, currentPage, itemsPerPage]);
 
   // Resetar página quando filtro ou busca mudar
   useEffect(() => {
@@ -563,7 +582,7 @@ const Estoque = () => {
           </div>
         </div>
 
-        {/* Barra de Busca e Filtros */}
+        {/* Barra de Busca, Filtros e Ordenação */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
@@ -596,6 +615,17 @@ const Estoque = () => {
                 <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              className="gap-2 shrink-0"
+              onClick={() =>
+                setOrdenacaoMov((prev) => (prev === "desc" ? "asc" : "desc"))
+              }
+            >
+              {ordenacaoMov === "desc"
+                ? "Mais recentes primeiro"
+                : "Mais antigos primeiro"}
+            </Button>
             <Button
               variant="outline"
               className="gap-2 shrink-0"

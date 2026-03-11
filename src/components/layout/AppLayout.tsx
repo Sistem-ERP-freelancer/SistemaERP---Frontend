@@ -135,8 +135,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           flex flex-col bg-sidebar transition-all duration-300 ease-out flex-shrink-0
           fixed inset-y-0 left-0 z-50 lg:relative lg:inset-auto lg:z-auto
           ${sidebarOpen 
-            ? "w-[193px] min-[1920px]:w-[420px] translate-x-0 shadow-xl lg:shadow-none" 
-            : "w-0 -translate-x-full lg:w-16 xl:w-20 min-[1920px]:lg:w-[160px] min-[1920px]:xl:w-[160px] lg:translate-x-0"
+            ? "w-[193px] min-[1920px]:w-[700px] translate-x-0 shadow-xl lg:shadow-none" 
+            : "w-0 -translate-x-full lg:w-16 xl:w-20 min-[1920px]:lg:w-[220px] min-[1920px]:xl:w-[220px] lg:translate-x-0"
           }
         `}
       >
@@ -179,7 +179,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 }`}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
-                {sidebarOpen && <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis min-w-0" title={item.label}>{item.label}</span>}
+                {sidebarOpen && (
+                  <span
+                    className="font-medium min-w-0 max-w-full whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:overflow-visible min-[1920px]:text-clip"
+                    title={item.label}
+                  >
+                    {item.label}
+                  </span>
+                )}
               </Link>
             );
           })}

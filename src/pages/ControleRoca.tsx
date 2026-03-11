@@ -39,6 +39,7 @@ import {
     Pagination,
     PaginationContent,
     PaginationItem,
+    PaginationLink,
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
@@ -415,6 +416,8 @@ export default function ControleRoca() {
   });
   const [catalogPage, setCatalogPage] = useState(1);
   const CATALOG_PAGE_SIZE = 10;
+  const LANC_PAGE_SIZE = 10;
+  const [lancPage, setLancPage] = useState(1);
   const produtosCatalogoFiltrados = useMemo(() => {
     const s = searchProdutoCatalogo.trim().toLowerCase();
     if (!s) return produtosCatalogo;
@@ -514,6 +517,14 @@ export default function ControleRoca() {
     dataInicio: string;
     dataFim: string;
   }>({ produtorId: '', rocaId: '', meeiroId: '', produto: '', dataInicio: '', dataFim: '' });
+  const [filtroProdutorSearch, setFiltroProdutorSearch] = useState('');
+  const [filtroProdutoSearch, setFiltroProdutoSearch] = useState('');
+  const [filtroRocaSearch, setFiltroRocaSearch] = useState('');
+  const [filtroMeeiroSearch, setFiltroMeeiroSearch] = useState('');
+  const [filtroProdutorOpen, setFiltroProdutorOpen] = useState(false);
+  const [filtroProdutoOpen, setFiltroProdutoOpen] = useState(false);
+  const [filtroRocaOpen, setFiltroRocaOpen] = useState(false);
+  const [filtroMeeiroOpen, setFiltroMeeiroOpen] = useState(false);
   const { data: rocasParaLancamento = [] } = useQuery({
     queryKey: ['controle-roca', 'rocas', produtorIdLanc],
     queryFn: () =>
@@ -521,24 +532,34 @@ export default function ControleRoca() {
         produtorIdLanc === '' ? undefined : Number(produtorIdLanc)
       ),
   });
-  const rocasParaLancamentoFiltradas = useMemo(
-    () => {
-      if (filtrosLancamento.produtorId === '' || !Array.isArray(rocasParaLancamento)) {
-        return rocasParaLancamento;
-      }
-      return rocasParaLancamento.filter(
-        (r: any) =>
-          r?.produtorId != null &&
-          Number(r.produtorId) === Number(filtrosLancamento.produtorId)
-      );
-    },
-    [rocasParaLancamento, filtrosLancamento.produtorId]
-  );
+  /** Todas as roças para o dropdown do filtro de lançamentos (sempre todas, sem filtrar por produtor) */
+  const { data: rocasParaFiltroLancamento = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas-filtro'],
+    queryFn: () => controleRocaService.listarRocas(undefined),
+  });
   const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
-    queryKey: ['controle-roca', 'lancamentos', produtorIdLanc],
+    queryKey: [
+      'controle-roca',
+      'lancamentos',
+      filtrosLancamento.produtorId,
+      filtrosLancamento.rocaId,
+      filtrosLancamento.dataInicio,
+      filtrosLancamento.dataFim,
+    ],
     queryFn: () =>
       controleRocaService.listarLancamentos({
-        ...(produtorIdLanc === '' ? {} : { produtorId: Number(produtorIdLanc) }),
+        ...(filtrosLancamento.produtorId !== ''
+          ? { produtorId: Number(filtrosLancamento.produtorId) }
+          : {}),
+        ...(filtrosLancamento.rocaId !== ''
+          ? { rocaId: Number(filtrosLancamento.rocaId) }
+          : {}),
+        ...(filtrosLancamento.dataInicio !== ''
+          ? { dataInicial: filtrosLancamento.dataInicio }
+          : {}),
+        ...(filtrosLancamento.dataFim !== ''
+          ? { dataFinal: filtrosLancamento.dataFim }
+          : {}),
       }),
   });
   const [detalheLancamentoId, setDetalheLancamentoId] = useState<number | null>(null);
@@ -676,6 +697,8 @@ export default function ControleRoca() {
     { meeiroId: number; nome?: string; porcentagem_padrao: number }[]
   >([]);
   const [lancMeeiroSelecionado, setLancMeeiroSelecionado] = useState('');
+  const [lancMeeiroPopoverOpen, setLancMeeiroPopoverOpen] = useState(false);
+  const [lancMeeiroSearchTerm, setLancMeeiroSearchTerm] = useState('');
   const [lancProdutos, setLancProdutos] = useState<
     {
       produtoId: number;
@@ -703,6 +726,18 @@ export default function ControleRoca() {
         produtorIdLanc === '' ? undefined : Number(produtorIdLanc)
       ),
   });
+  const meeirosLancamentoOrdenadosEFiltrados = useMemo(() => {
+    const term = lancMeeiroSearchTerm.trim().toLowerCase();
+    const sorted = [...meeirosParaLancamento].sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (m) =>
+        (m.nome ?? '').toLowerCase().includes(term) ||
+        (m.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [meeirosParaLancamento, lancMeeiroSearchTerm]);
   const createLancamento = useMutation({
     mutationFn: (data: CreateLancamentoProducaoRocaDto) =>
       controleRocaService.criarLancamento(data),
@@ -733,6 +768,48 @@ export default function ControleRoca() {
     return Array.from(map.entries()).map(([id, nome]) => ({ meeiroId: id, nome }));
   }, [lancamentos]);
 
+  const produtoresFiltroOrdenados = useMemo(() => {
+    const term = filtroProdutorSearch.trim().toLowerCase();
+    const sorted = [...produtores].sort((a, b) =>
+      (a.nome_razao ?? a.codigo ?? '').localeCompare(b.nome_razao ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (p) =>
+        (p.nome_razao ?? '').toLowerCase().includes(term) ||
+        (p.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [produtores, filtroProdutorSearch]);
+
+  const produtosFiltroOrdenados = useMemo(() => {
+    const term = filtroProdutoSearch.trim().toLowerCase();
+    const sorted = [...produtosParaFiltroLancamento].sort((a: any, b: any) =>
+      String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter((p: any) => (p.nome ?? '').toLowerCase().includes(term));
+  }, [produtosParaFiltroLancamento, filtroProdutoSearch]);
+
+  const rocasFiltroOrdenadas = useMemo(() => {
+    const term = filtroRocaSearch.trim().toLowerCase();
+    const sorted = [...rocasParaFiltroLancamento].sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter((r) => (r.nome ?? '').toLowerCase().includes(term));
+  }, [rocasParaFiltroLancamento, filtroRocaSearch]);
+
+  const meeirosFiltroOrdenados = useMemo(() => {
+    const term = filtroMeeiroSearch.trim().toLowerCase();
+    const sorted = [...meeirosUnicosLancamentos].sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter((m) => (m.nome ?? '').toLowerCase().includes(term));
+  }, [meeirosUnicosLancamentos, filtroMeeiroSearch]);
+
+  const [lancOrdenacao, setLancOrdenacao] = useState<'desc' | 'asc'>('desc');
+
   const temFiltrosLancamentoAtivos =
     filtrosLancamento.produtorId !== '' ||
     filtrosLancamento.rocaId !== '' ||
@@ -742,7 +819,7 @@ export default function ControleRoca() {
     filtrosLancamento.dataFim !== '';
 
   const filteredLancamentos = useMemo(() => {
-    let list = lancamentos;
+    let list = [...lancamentos];
     const search = searchLancamento.trim().toLowerCase();
     if (search) {
       list = list.filter((l) => {
@@ -787,6 +864,18 @@ export default function ControleRoca() {
     if (filtrosLancamento.dataFim !== '') {
       list = list.filter((l) => (l.data.slice(0, 10)) <= filtrosLancamento.dataFim);
     }
+    // ordenação por data
+    list.sort((a, b) => {
+      const da = a.data?.slice(0, 10) ?? '';
+      const db = b.data?.slice(0, 10) ?? '';
+      if (da === db) return 0;
+      if (lancOrdenacao === 'desc') {
+        // mais recentes primeiro
+        return da < db ? 1 : -1;
+      }
+      // mais antigos primeiro
+      return da < db ? -1 : 1;
+    });
     return list;
   }, [
     lancamentos,
@@ -798,7 +887,17 @@ export default function ControleRoca() {
     filtrosLancamento.produto,
     filtrosLancamento.dataInicio,
     filtrosLancamento.dataFim,
+    lancOrdenacao,
   ]);
+
+  const totalLancPages =
+    filteredLancamentos.length > 0
+      ? Math.ceil(filteredLancamentos.length / LANC_PAGE_SIZE)
+      : 1;
+  const lancamentosPagina = filteredLancamentos.slice(
+    (lancPage - 1) * LANC_PAGE_SIZE,
+    lancPage * LANC_PAGE_SIZE
+  );
 
   const handleAddMeeiro = (meeiroId: number | string) => {
     const idNum = Number(meeiroId);
@@ -1605,6 +1704,17 @@ className={
                     </span>
                   )}
                 </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() =>
+                    setLancOrdenacao((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                  }
+                >
+                  {lancOrdenacao === 'desc'
+                    ? 'Mais recentes primeiro'
+                    : 'Mais antigos primeiro'}
+                </Button>
                 <Sheet open={filtrosLancamentoOpen} onOpenChange={setFiltrosLancamentoOpen}>
                   <SheetContent
                     side="right"
@@ -1624,27 +1734,64 @@ className={
                   {/* Produtor */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Produtor</Label>
-                    <Select
-                      value={filtrosLancamento.produtorId === '' ? 'todos' : String(filtrosLancamento.produtorId)}
-                      onValueChange={(v) =>
-                        setFiltrosLancamento((prev) => ({
-                          ...prev,
-                          produtorId: v === 'todos' ? '' : Number(v),
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os produtores" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os produtores</SelectItem>
-                        {produtores.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.codigo} – {p.nome_razao}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={filtroProdutorOpen} onOpenChange={(o) => { setFiltroProdutorOpen(o); if (!o) setFiltroProdutorSearch(''); }} modal>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={filtroProdutorOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {filtrosLancamento.produtorId === ''
+                              ? 'Todos os produtores'
+                              : (() => {
+                                  const p = produtores.find((x) => x.id === filtrosLancamento.produtorId);
+                                  return p ? `${p.codigo} – ${p.nome_razao}` : 'Todos os produtores';
+                                })()}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome ou código..."
+                            value={filtroProdutorSearch}
+                            onValueChange={setFiltroProdutorSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhum produtor encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="todos"
+                                onSelect={() => {
+                                  setFiltrosLancamento((prev) => ({ ...prev, produtorId: '' }));
+                                  setFiltroProdutorOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.produtorId === '' ? 'opacity-100' : 'opacity-0')} />
+                                Todos os produtores
+                              </CommandItem>
+                              {produtoresFiltroOrdenados.map((p) => (
+                                <CommandItem
+                                  key={p.id}
+                                  value={String(p.id)}
+                                  onSelect={() => {
+                                    setFiltrosLancamento((prev) => ({ ...prev, produtorId: p.id }));
+                                    setFiltroProdutorOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.produtorId === p.id ? 'opacity-100' : 'opacity-0')} />
+                                  {p.codigo} – {p.nome_razao}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <Separator />
@@ -1652,31 +1799,61 @@ className={
                   {/* Produto */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Produto</Label>
-                    <Select
-                      value={
-                        filtrosLancamento.produto.trim() === ''
-                          ? 'todos'
-                          : filtrosLancamento.produto
-                      }
-                      onValueChange={(v) =>
-                        setFiltrosLancamento((prev) => ({
-                          ...prev,
-                          produto: v === 'todos' ? '' : v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os produtos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os produtos</SelectItem>
-                        {produtosParaFiltroLancamento.map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.nome)}>
-                            {p.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={filtroProdutoOpen} onOpenChange={(o) => { setFiltroProdutoOpen(o); if (!o) setFiltroProdutoSearch(''); }} modal>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={filtroProdutoOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {filtrosLancamento.produto.trim() === ''
+                              ? 'Todos os produtos'
+                              : filtrosLancamento.produto}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome do produto..."
+                            value={filtroProdutoSearch}
+                            onValueChange={setFiltroProdutoSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="todos"
+                                onSelect={() => {
+                                  setFiltrosLancamento((prev) => ({ ...prev, produto: '' }));
+                                  setFiltroProdutoOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.produto.trim() === '' ? 'opacity-100' : 'opacity-0')} />
+                                Todos os produtos
+                              </CommandItem>
+                              {produtosFiltroOrdenados.map((p: any) => (
+                                <CommandItem
+                                  key={p.id}
+                                  value={String(p.nome)}
+                                  onSelect={() => {
+                                    setFiltrosLancamento((prev) => ({ ...prev, produto: p.nome ?? '' }));
+                                    setFiltroProdutoOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.produto === (p.nome ?? '') ? 'opacity-100' : 'opacity-0')} />
+                                  {p.nome}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <Separator />
@@ -1684,27 +1861,61 @@ className={
                   {/* Roça */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Roça</Label>
-                    <Select
-                      value={filtrosLancamento.rocaId === '' ? 'todas' : String(filtrosLancamento.rocaId)}
-                      onValueChange={(v) =>
-                        setFiltrosLancamento((prev) => ({
-                          ...prev,
-                          rocaId: v === 'todas' ? '' : Number(v),
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="todas">Todas as roças</SelectItem>
-                          {rocasParaLancamentoFiltradas.map((r) => (
-                            <SelectItem key={r.id} value={String(r.id)}>
-                              {r.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                    </Select>
+                    <Popover open={filtroRocaOpen} onOpenChange={(o) => { setFiltroRocaOpen(o); if (!o) setFiltroRocaSearch(''); }} modal>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={filtroRocaOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {filtrosLancamento.rocaId === ''
+                              ? 'Todas as roças'
+                              : rocasParaFiltroLancamento.find((r) => r.id === filtrosLancamento.rocaId)?.nome ?? 'Todas as roças'}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome da roça..."
+                            value={filtroRocaSearch}
+                            onValueChange={setFiltroRocaSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhuma roça encontrada.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="todas"
+                                onSelect={() => {
+                                  setFiltrosLancamento((prev) => ({ ...prev, rocaId: '' }));
+                                  setFiltroRocaOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.rocaId === '' ? 'opacity-100' : 'opacity-0')} />
+                                Todas as roças
+                              </CommandItem>
+                              {rocasFiltroOrdenadas.map((r) => (
+                                <CommandItem
+                                  key={r.id}
+                                  value={String(r.id)}
+                                  onSelect={() => {
+                                    setFiltrosLancamento((prev) => ({ ...prev, rocaId: r.id }));
+                                    setFiltroRocaOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.rocaId === r.id ? 'opacity-100' : 'opacity-0')} />
+                                  {r.nome}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <Separator />
@@ -1712,27 +1923,61 @@ className={
                   {/* Meeiro */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Meeiro</Label>
-                    <Select
-                      value={filtrosLancamento.meeiroId === '' ? 'todos' : String(filtrosLancamento.meeiroId)}
-                      onValueChange={(v) =>
-                        setFiltrosLancamento((prev) => ({
-                          ...prev,
-                          meeiroId: v === 'todos' ? '' : Number(v),
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os meeiros" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os meeiros</SelectItem>
-                        {meeirosUnicosLancamentos.map((m) => (
-                          <SelectItem key={m.meeiroId} value={String(m.meeiroId)}>
-                            {m.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={filtroMeeiroOpen} onOpenChange={(o) => { setFiltroMeeiroOpen(o); if (!o) setFiltroMeeiroSearch(''); }} modal>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={filtroMeeiroOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {filtrosLancamento.meeiroId === ''
+                              ? 'Todos os meeiros'
+                              : meeirosUnicosLancamentos.find((m) => m.meeiroId === filtrosLancamento.meeiroId)?.nome ?? 'Todos os meeiros'}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome do meeiro..."
+                            value={filtroMeeiroSearch}
+                            onValueChange={setFiltroMeeiroSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="todos"
+                                onSelect={() => {
+                                  setFiltrosLancamento((prev) => ({ ...prev, meeiroId: '' }));
+                                  setFiltroMeeiroOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.meeiroId === '' ? 'opacity-100' : 'opacity-0')} />
+                                Todos os meeiros
+                              </CommandItem>
+                              {meeirosFiltroOrdenados.map((m) => (
+                                <CommandItem
+                                  key={m.meeiroId}
+                                  value={String(m.meeiroId)}
+                                  onSelect={() => {
+                                    setFiltrosLancamento((prev) => ({ ...prev, meeiroId: m.meeiroId }));
+                                    setFiltroMeeiroOpen(false);
+                                  }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.meeiroId === m.meeiroId ? 'opacity-100' : 'opacity-0')} />
+                                  {m.nome}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <Separator />
@@ -1849,14 +2094,14 @@ className={
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLancamentos.length === 0 ? (
+                    {lancamentosPagina.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredLancamentos.map((l) => {
+                      lancamentosPagina.map((l) => {
                         const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
                         const itens = l.itens ?? [];
                         const meeirosList = itens.flatMap((i) => i.meeiros ?? []);
@@ -1959,21 +2204,14 @@ className={
                             <TableCell className="text-right whitespace-nowrap">
                               {meeiros.length === 0
                                 ? '—'
-                                : (
-                                    <>
-                                      {meeiros.slice(0, 3).map((m, i) => {
-                                        const totalParte = meeirosList
-                                          .filter((x) => x.meeiroId === m.meeiroId)
-                                          .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
-                                        return (
-                                          <div key={i}>{formatCurrency(totalParte)}</div>
-                                        );
-                                      })}
-                                      {meeiros.length > 3 && (
-                                        <div className="text-muted-foreground">…</div>
-                                      )}
-                                    </>
-                                  )}
+                                : meeiros.map((m, i) => {
+                                    const totalParte = meeirosList
+                                      .filter((x) => x.meeiroId === m.meeiroId)
+                                      .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
+                                    return (
+                                      <div key={i}>{formatCurrency(totalParte)}</div>
+                                    );
+                                  })}
                             </TableCell>
                             <TableCell className="text-right whitespace-nowrap">{formatCurrency(Number(l.total_geral))}</TableCell>
                             <TableCell className="text-right pl-4 pr-6">
@@ -2014,6 +2252,83 @@ className={
                 </Table>
               )}
             </div>
+            {totalLancPages > 1 && (
+              <div className="border-t border-border p-4">
+                <Pagination className="justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setLancPage((prev) => Math.max(1, prev - 1));
+                        }}
+                        className={
+                          lancPage === 1
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
+                        }
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.min(5, totalLancPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalLancPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (lancPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (lancPage >= totalLancPages - 2) {
+                        pageNum = totalLancPages - 4 + i;
+                      } else {
+                        pageNum = lancPage - 2 + i;
+                      }
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setLancPage(pageNum);
+                            }}
+                            isActive={lancPage === pageNum}
+                            className="cursor-pointer"
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setLancPage((prev) =>
+                            Math.min(totalLancPages, prev + 1)
+                          );
+                        }}
+                        className={
+                          lancPage === totalLancPages
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+                <div className="text-center text-sm text-muted-foreground mt-2">
+                  Mostrando{' '}
+                  {filteredLancamentos.length > 0
+                    ? (lancPage - 1) * LANC_PAGE_SIZE + 1
+                    : 0}{' '}
+                  a{' '}
+                  {Math.min(
+                    lancPage * LANC_PAGE_SIZE,
+                    filteredLancamentos.length
+                  )}{' '}
+                  de {filteredLancamentos.length} lançamentos
+                </div>
+              </div>
+            )}
 
             {/* Dialog Ver detalhes do lançamento - mesmo design de Visualizar Produtor */}
             <Dialog
@@ -4734,20 +5049,22 @@ className={
             setLancRocaId('');
             setLancMeeiros([]);
             setLancMeeiroSelecionado('');
+            setLancMeeiroPopoverOpen(false);
+            setLancMeeiroSearchTerm('');
             setLancProdutos([]);
           }
         }}
       >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Novo Lançamento de Produção</DialogTitle>
               <DialogDescription>
                 Registre a produção: selecione roça, data, meeiros e produtos com quantidade e preço.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-6 py-4 min-w-0">
-              {/* Linha 1: Produtor, Data, Roça — grid alinhado */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-lg border border-border/60 bg-muted/10 p-3">
+            <div className="space-y-8 py-6 px-1 min-w-0">
+              {/* Bloco: Produtor em uma linha; Data + Roça na linha abaixo (Roça com mais espaço) */}
+              <div className="space-y-5 rounded-lg border border-border/60 bg-muted/10 p-5">
                 <div className="space-y-2 min-w-0">
                   <Label>Produtor</Label>
                   <Popover open={produtorLancPopoverOpen} onOpenChange={setProdutorLancPopoverOpen}>
@@ -4756,27 +5073,28 @@ className={
                         variant="outline"
                         role="combobox"
                         aria-expanded={produtorLancPopoverOpen}
-                        className="w-full justify-between font-normal min-h-10"
+                        className="w-full justify-between font-normal min-h-11 py-3 text-base"
                       >
-                        <span className="truncate">
+                        <span className={cn('truncate', 'max-[1366px]:text-sm')}>
                           {produtorIdLanc !== ''
                             ? (() => {
                                 const p = produtores.find((x) => x.id === produtorIdLanc);
-                                return p ? `${p.codigo} – ${p.nome_razao}` : 'Selecione';
+                                return p ? p.nome_razao : 'Selecione';
                               })()
                             : 'Selecione o produtor'}
                         </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[400px] p-0" align="start">
+                    <PopoverContent className="min-w-[320px] w-[var(--radix-popover-trigger-width)] max-w-[520px] p-0" align="start">
                       <Command shouldFilter={false}>
                         <CommandInput
-                          placeholder="Buscar por código ou nome do produtor..."
+                          placeholder="Buscar por nome do produtor..."
                           value={produtorLancSearchTerm}
                           onValueChange={setProdutorLancSearchTerm}
+                          className="h-11"
                         />
-                        <CommandList>
+                        <CommandList className="max-h-[320px]">
                           <CommandEmpty>Nenhum produtor encontrado.</CommandEmpty>
                           <CommandGroup>
                             {produtores
@@ -4800,14 +5118,15 @@ className={
                                     setProdutorLancPopoverOpen(false);
                                     setProdutorLancSearchTerm('');
                                   }}
+                                  className="py-3 text-base cursor-pointer"
                                 >
                                   <Check
                                     className={cn(
-                                      'mr-2 h-4 w-4',
+                                      'mr-2 h-4 w-4 shrink-0',
                                       produtorIdLanc === p.id ? 'opacity-100' : 'opacity-0'
                                     )}
                                   />
-                                  {p.codigo} – {p.nome_razao}
+                                  <span className={cn('max-[1366px]:text-sm')}>{p.nome_razao}</span>
                                 </CommandItem>
                               ))}
                           </CommandGroup>
@@ -4816,82 +5135,132 @@ className={
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div className="space-y-2 min-w-0">
-                  <Label>Data</Label>
-                  <Input
-                    type="date"
-                    value={lancData}
-                    onChange={(e) => setLancData(e.target.value)}
-                    className="w-full min-h-10"
-                  />
-                </div>
-                <div className="space-y-2 min-w-0">
-                  <Label>Roça</Label>
-                  <Select
-                    value={lancRocaId === '' ? '' : String(lancRocaId)}
-                    onValueChange={(v) => setLancRocaId(v === '' ? '' : Number(v))}
-                    disabled={!produtorIdLanc}
-                  >
-                    <SelectTrigger className="w-full min-h-10">
-                      <SelectValue placeholder="Selecione a roça" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {rocasParaLancamento.map((r) => (
-                        <SelectItem key={r.id} value={String(r.id)}>
-                          {r.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-5 items-end">
+                  <div className="space-y-2 min-w-0 w-full sm:w-[180px]">
+                    <Label>Data</Label>
+                    <Input
+                      type="date"
+                      value={lancData}
+                      onChange={(e) => setLancData(e.target.value)}
+                      className="w-full min-h-11"
+                    />
+                  </div>
+                  <div className="space-y-2 min-w-0 flex-1">
+                    <Label>Roça</Label>
+                    <Select
+                      value={lancRocaId === '' ? '' : String(lancRocaId)}
+                      onValueChange={(v) => setLancRocaId(v === '' ? '' : Number(v))}
+                      disabled={!produtorIdLanc}
+                    >
+                      <SelectTrigger className="w-full min-h-11">
+                        <SelectValue placeholder="Selecione a roça" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rocasParaLancamento.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
               {/* Meeiros participantes (porcentagem é definida por produto abaixo) */}
-              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-5">
                 <Label className="text-sm font-medium">Meeiros participantes</Label>
                 <p className="text-xs text-muted-foreground">
                   Adicione os meeiros que participaram do lançamento. A porcentagem de cada um é definida ao lado de cada produto.
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={lancMeeiroSelecionado}
-                    onValueChange={(v) => {
-                      if (!v) return;
-                      handleAddMeeiro(v);
-                    }}
-                    disabled={!produtorIdLanc}
-                  >
-                    <SelectTrigger className="w-full sm:w-[240px] min-h-9">
-                      <SelectValue placeholder="Selecione o meeiro" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {meeirosParaLancamento.map((m) => {
-                        const jaAdicionado = lancMeeiros.some(
-                          (x) => Number(x.meeiroId) === Number(m.id)
-                        );
-                        return (
-                          <SelectItem
-                            key={m.id}
-                            value={String(m.id)}
-                            disabled={jaAdicionado}
-                          >
-                            {m.codigo} – {m.nome}
-                            {jaAdicionado ? ' (já adicionado)' : ''}
-                          </SelectItem>
-                        );
-                      })}
-                      {meeirosParaLancamento.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">
-                          Nenhum meeiro cadastrado para este produtor
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Popover open={lancMeeiroPopoverOpen} onOpenChange={setLancMeeiroPopoverOpen} modal>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={lancMeeiroPopoverOpen}
+                        disabled={!produtorIdLanc}
+                        className="w-full sm:w-[280px] min-h-10 justify-between font-normal"
+                      >
+                        <span className="truncate">
+                          {lancMeeiroSelecionado
+                            ? (() => {
+                                const m = meeirosParaLancamento.find(
+                                  (x) => String(x.id) === lancMeeiroSelecionado
+                                );
+                                return m ? `${m.codigo ?? ''} – ${m.nome ?? ''}` : 'Selecione o meeiro';
+                              })()
+                            : 'Selecione o meeiro'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="min-w-[280px] w-[var(--radix-popover-trigger-width)] max-w-[400px] p-0"
+                      align="start"
+                    >
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar por nome ou código do meeiro..."
+                          value={lancMeeiroSearchTerm}
+                          onValueChange={setLancMeeiroSearchTerm}
+                          className="h-10"
+                        />
+                        <CommandList
+                          className="max-h-[280px]"
+                          onWheel={(e) => e.stopPropagation()}
+                        >
+                          <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {meeirosLancamentoOrdenadosEFiltrados.length === 0 ? (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">
+                                {meeirosParaLancamento.length === 0
+                                  ? 'Nenhum meeiro cadastrado para este produtor'
+                                  : 'Nenhum meeiro corresponde à busca'}
+                              </div>
+                            ) : (
+                              meeirosLancamentoOrdenadosEFiltrados.map((m) => {
+                                const jaAdicionado = lancMeeiros.some(
+                                  (x) => Number(x.meeiroId) === Number(m.id)
+                                );
+                                return (
+                                  <CommandItem
+                                    key={m.id}
+                                    value={`${m.codigo ?? ''} ${m.nome ?? ''}`.trim()}
+                                    disabled={jaAdicionado}
+                                    onSelect={() => {
+                                      if (jaAdicionado) return;
+                                      handleAddMeeiro(String(m.id));
+                                      setLancMeeiroPopoverOpen(false);
+                                      setLancMeeiroSearchTerm('');
+                                    }}
+                                    className="py-2.5"
+                                  >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-4 w-4 shrink-0',
+                                        jaAdicionado ? 'opacity-100' : 'opacity-0'
+                                      )}
+                                    />
+                                    <span className="truncate">
+                                      {m.codigo ?? ''} – {m.nome ?? ''}
+                                      {jaAdicionado ? ' (já adicionado)' : ''}
+                                    </span>
+                                  </CommandItem>
+                                );
+                              })
+                            )}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   {lancMeeiros.length > 0 && (
                     <span className="text-xs text-muted-foreground hidden sm:inline">Adicionados:</span>
                   )}
                   {lancMeeiros.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-3">
                       {lancMeeiros.map((m) => (
                         <span
                           key={m.meeiroId}
@@ -4915,21 +5284,21 @@ className={
                 </div>
               </div>
 
-              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-5">
                 <Label className="text-sm font-medium">Produtos (quantidade, preço e % por meeiro)</Label>
-                <div className="rounded-md border border-border/40 bg-background p-3 space-y-3 max-h-[340px] overflow-y-auto min-h-[72px]">
+                <div className="rounded-md border border-border/40 bg-background p-4 space-y-4 max-h-[340px] overflow-y-auto min-h-[72px]">
                   {lancProdutos.map((item, idx) => {
                     const valorItem = item.quantidade * item.preco_unitario;
                     return (
                       <div
                         key={idx}
-                        className="rounded-md border border-border/60 p-3 space-y-2 bg-background"
+                        className="rounded-md border border-border/60 p-4 space-y-3 bg-background"
                       >
-                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 gap-x-4 items-center text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 gap-x-6 items-center text-sm">
                           <span className="font-medium truncate" title={String(item.nome ?? item.produtoId)}>
                             {item.nome ?? item.produtoId}
                           </span>
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                             <span className="tabular-nums">Qtd: {item.quantidade}</span>
                             <span className="tabular-nums">{formatCurrency(item.preco_unitario)}/un</span>
                             <span className="font-medium tabular-nums">{formatCurrency(valorItem)}</span>
@@ -4947,7 +5316,7 @@ className={
                           </div>
                         </div>
                         {item.meeiros.length > 0 && (
-                          <div className="space-y-2 pt-2 border-t border-border/40">
+                          <div className="space-y-2 pt-3 border-t border-border/40">
                             <p className="text-xs font-medium text-muted-foreground">Porcentagem por meeiro (sobre o valor deste produto)</p>
                             {item.meeiros.map((m) => {
                               const pct = Number(m.porcentagem ?? 0);
@@ -4955,7 +5324,7 @@ className={
                               return (
                                 <div
                                   key={m.meeiroId}
-                                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+                                  className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
                                 >
                                   <span className="font-medium text-foreground w-24 shrink-0">
                                     {m.nome ?? `Meeiro ${m.meeiroId}`}:
@@ -5007,13 +5376,13 @@ className={
                     onProdutoPreselecionadoConsumido={() => setProdutoPreselecionadoLancamento(null)}
                   />
                 </div>
-                <div className="flex items-center justify-between gap-4 pt-3 border-t border-border/60">
+                <div className="flex items-center justify-between gap-4 py-4 pt-4 border-t border-border/60">
                   <p className="text-sm text-muted-foreground">Total geral</p>
                   <p className="text-base font-semibold tabular-nums">{formatCurrency(totalGeralLanc)}</p>
                 </div>
               </div>
             </div>
-            <DialogFooter className="border-t pt-4 mt-2">
+            <DialogFooter className="border-t pt-6 mt-4 gap-3">
               <Button variant="outline" onClick={() => setOpenLancamento(false)}>
                 Cancelar
               </Button>
@@ -5085,116 +5454,131 @@ function AddProdutoLanc({
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-2 pt-2 items-end">
-      <Popover open={produtoPopoverOpen} onOpenChange={(open) => { setProdutoPopoverOpen(open); if (!open) setProdutoSearchTerm(''); }}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={produtoPopoverOpen}
+    <div className="space-y-5">
+      {/* Produto: mesma linha de design que Produtor (largura total) */}
+      <div className="space-y-2 min-w-0">
+        <Label>Produto</Label>
+        <Popover open={produtoPopoverOpen} onOpenChange={(open) => { setProdutoPopoverOpen(open); if (!open) setProdutoSearchTerm(''); }} modal>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={produtoPopoverOpen}
+              disabled={disabled}
+              className="w-full justify-between font-normal min-h-11 py-3 text-base"
+            >
+              <span className={cn('truncate', 'max-[1366px]:text-sm')}>
+                {produtoId !== ''
+                  ? (() => {
+                      const p = produtos.find((x) => x.id === produtoId);
+                      return p ? `${p.nome ?? '—'} (${p.unidade_medida ?? 'UN'})` : 'Selecione o produto';
+                    })()
+                  : 'Selecione o produto'}
+              </span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[360px] p-0" align="start">
+            <Command shouldFilter={false}>
+              <CommandInput
+                placeholder="Buscar por nome ou unidade..."
+                value={produtoSearchTerm}
+                onValueChange={setProdutoSearchTerm}
+                className="h-11"
+              />
+              <CommandList className="max-h-[280px]" onWheel={(e) => e.stopPropagation()}>
+                <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                <CommandGroup>
+                  {produtosFiltrados.map((p) => (
+                    <CommandItem
+                      key={p.id}
+                      value={`${p.nome ?? ''} ${p.unidade_medida ?? ''}`.trim()}
+                      onSelect={() => {
+                        setProdutoId(p.id);
+                        setProdutoPopoverOpen(false);
+                        setProdutoSearchTerm('');
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          'mr-2 h-4 w-4',
+                          produtoId === p.id ? 'opacity-100' : 'opacity-0'
+                        )}
+                      />
+                      {p.nome ?? '—'} ({p.unidade_medida ?? 'UN'})
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {/* Qtd e Preço un.: mesmo grid que Data + Roça */}
+      <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-5 items-end">
+        <div className="space-y-2 min-w-0 w-full sm:w-[180px]">
+          <Label>Qtd</Label>
+          <Input
+            type="number"
+            min={0.001}
+            step="any"
+            placeholder="Quantidade"
+            value={qtd}
+            onChange={(e) => setQtd(e.target.value)}
+            className="w-full min-h-11"
             disabled={disabled}
-            className="w-full min-w-0 sm:min-w-[200px] justify-between font-normal h-9"
-          >
-            <span className="truncate">
-              {produtoId !== ''
-                ? (() => {
-                    const p = produtos.find((x) => x.id === produtoId);
-                    return p ? `${p.nome ?? '—'} (${p.unidade_medida ?? 'UN'})` : 'Selecione o produto';
-                  })()
-                : 'Selecione o produto'}
-            </span>
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[360px] p-0" align="start">
-          <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Buscar por nome ou unidade..."
-              value={produtoSearchTerm}
-              onValueChange={setProdutoSearchTerm}
-            />
-            <CommandList>
-              <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
-              <CommandGroup>
-                {produtosFiltrados.map((p) => (
-                  <CommandItem
-                    key={p.id}
-                    value={`${p.nome ?? ''} ${p.unidade_medida ?? ''}`.trim()}
-                    onSelect={() => {
-                      setProdutoId(p.id);
-                      setProdutoPopoverOpen(false);
-                      setProdutoSearchTerm('');
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        produtoId === p.id ? 'opacity-100' : 'opacity-0'
-                      )}
-                    />
-                    {p.nome ?? '—'} ({p.unidade_medida ?? 'UN'})
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-      <Input
-        type="number"
-        min={0.001}
-        step="any"
-        placeholder="Qtd"
-        value={qtd}
-        onChange={(e) => setQtd(e.target.value)}
-        className="w-20 shrink-0"
-        disabled={disabled}
-      />
-      <Input
-        type="number"
-        min={0}
-        step="0.01"
-        placeholder="Preço un."
-        value={preco}
-        onChange={(e) => setPreco(e.target.value)}
-        className="w-24 shrink-0"
-        disabled={disabled}
-      />
-      <Button
-        type="button"
-        size="sm"
-        onClick={() => {
-          if (!produtoId) {
-            toast.error('Selecione um produto');
-            return;
-          }
-          if (!qtd?.trim() || !preco?.trim()) {
-            toast.error('Informe quantidade e preço unitário');
-            return;
-          }
-          const q = parseFloat(qtd.replace(',', '.'));
-          const p = parseFloat(preco.replace(',', '.'));
-          if (Number.isNaN(q) || Number.isNaN(p)) {
-            toast.error('Quantidade e preço devem ser números');
-            return;
-          }
-          if (q <= 0) {
-            toast.error('Quantidade deve ser maior que zero');
-            return;
-          }
-          if (p < 0) {
-            toast.error('Preço não pode ser negativo');
-            return;
-          }
-          onAdd(produtoId, q, p);
-          setProdutoId('');
-          setQtd('');
-          setPreco('');
-        }}
-        disabled={disabled}
-      >
-        Adicionar
-      </Button>
+          />
+        </div>
+        <div className="space-y-2 min-w-0 flex-1">
+          <Label>Preço un.</Label>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="Preço unitário"
+            value={preco}
+            onChange={(e) => setPreco(e.target.value)}
+            className="w-full min-h-11"
+            disabled={disabled}
+          />
+        </div>
+        <Button
+          type="button"
+          size="default"
+          className="min-h-11 px-6"
+          onClick={() => {
+            if (!produtoId) {
+              toast.error('Selecione um produto');
+              return;
+            }
+            if (!qtd?.trim() || !preco?.trim()) {
+              toast.error('Informe quantidade e preço unitário');
+              return;
+            }
+            const q = parseFloat(qtd.replace(',', '.'));
+            const p = parseFloat(preco.replace(',', '.'));
+            if (Number.isNaN(q) || Number.isNaN(p)) {
+              toast.error('Quantidade e preço devem ser números');
+              return;
+            }
+            if (q <= 0) {
+              toast.error('Quantidade deve ser maior que zero');
+              return;
+            }
+            if (p < 0) {
+              toast.error('Preço não pode ser negativo');
+              return;
+            }
+            onAdd(produtoId, q, p);
+            setProdutoId('');
+            setQtd('');
+            setPreco('');
+          }}
+          disabled={disabled}
+        >
+          Adicionar
+        </Button>
+      </div>
     </div>
   );
 }

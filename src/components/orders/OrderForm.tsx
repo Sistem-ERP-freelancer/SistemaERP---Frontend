@@ -373,7 +373,7 @@ export function OrderForm({
     setItens([...itens, { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' }]);
     if (hadTwoOrMore) {
       setTimeout(() => {
-        addItemButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        addItemButtonRef.current?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
       }, 80);
     }
   };
@@ -731,7 +731,7 @@ export function OrderForm({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 shrink-0"
-                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'auto' })}
                     title="Ir para resumo dos itens"
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -883,7 +883,7 @@ export function OrderForm({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 shrink-0"
-                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'auto' })}
                     title="Ir para resumo dos itens"
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -1227,7 +1227,7 @@ export function OrderForm({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => itensSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+              onClick={() => itensSectionRef.current?.scrollIntoView({ behavior: 'auto' })}
             >
               <Plus className="w-4 h-4 mr-2" />
               Adicionar mais produtos

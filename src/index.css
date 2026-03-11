@@ -106,6 +106,8 @@
 
   html {
     @apply overflow-x-hidden;
+    /* Evitar efeitos scroll-linked para compatibilidade com panning assíncrono (Firefox) */
+    scroll-behavior: auto;
     /* Safe area para celulares com notch (iPhone X+, etc.) */
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
