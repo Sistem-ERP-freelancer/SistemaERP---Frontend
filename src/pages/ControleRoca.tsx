@@ -219,6 +219,8 @@ export default function ControleRoca() {
 
   // Roças
   const [produtorIdRocas, setProdutorIdRocas] = useState<number | ''>('');
+  const [filtroRocaProdutorSearch, setFiltroRocaProdutorSearch] = useState('');
+  const [filtroRocaProdutorOpen, setFiltroRocaProdutorOpen] = useState(false);
   const [incluirRocasInativas, setIncluirRocasInativas] = useState(false);
   const { data: rocas = [], isLoading: loadingRocas } = useQuery({
     queryKey: ['controle-roca', 'rocas', produtorIdRocas, incluirRocasInativas],
@@ -308,23 +310,30 @@ export default function ControleRoca() {
 
   const filteredRocas = useMemo(() => {
     const s = searchRoca.trim().toLowerCase();
-    if (!s) return rocas;
-    return rocas.filter((r) => {
-      const prod = produtores.find((p) => p.id === r.produtorId);
-      const prodNome = (prod?.nome_razao ?? '').toLowerCase();
-      const prodCodigo = (prod?.codigo ?? '').toLowerCase();
-      return (
-        (r.nome ?? '').toLowerCase().includes(s) ||
-        (r.codigo ?? '').toLowerCase().includes(s) ||
-        (r.localizacao ?? '').toLowerCase().includes(s) ||
-        prodNome.includes(s) ||
-        prodCodigo.includes(s)
-      );
-    });
+    let list = rocas;
+    if (s) {
+      list = rocas.filter((r) => {
+        const prod = produtores.find((p) => p.id === r.produtorId);
+        const prodNome = (prod?.nome_razao ?? '').toLowerCase();
+        const prodCodigo = (prod?.codigo ?? '').toLowerCase();
+        return (
+          (r.nome ?? '').toLowerCase().includes(s) ||
+          (r.codigo ?? '').toLowerCase().includes(s) ||
+          (r.localizacao ?? '').toLowerCase().includes(s) ||
+          prodNome.includes(s) ||
+          prodCodigo.includes(s)
+        );
+      });
+    }
+    return [...list].sort((a, b) =>
+      (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
   }, [rocas, produtores, searchRoca]);
 
   // Meeiros
   const [produtorIdMeeiros, setProdutorIdMeeiros] = useState<number | ''>('');
+  const [filtroMeeiroProdutorSearch, setFiltroMeeiroProdutorSearch] = useState('');
+  const [filtroMeeiroProdutorOpen, setFiltroMeeiroProdutorOpen] = useState(false);
   const { data: meeiros = [], isLoading: loadingMeeiros } = useQuery({
     queryKey: ['controle-roca', 'meeiros', produtorIdMeeiros],
     queryFn: () =>
@@ -332,6 +341,37 @@ export default function ControleRoca() {
         produtorIdMeeiros === '' ? undefined : Number(produtorIdMeeiros)
       ),
   });
+  const produtoresFiltroRocaOrdenados = useMemo(() => {
+    const term = filtroRocaProdutorSearch.trim().toLowerCase();
+    const sorted = [...produtores].sort((a, b) =>
+      (a.nome_razao ?? a.codigo ?? '').localeCompare(b.nome_razao ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (p) =>
+        (p.nome_razao ?? '').toLowerCase().includes(term) ||
+        (p.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [produtores, filtroRocaProdutorSearch]);
+  const produtoresFiltroMeeiroOrdenados = useMemo(() => {
+    const term = filtroMeeiroProdutorSearch.trim().toLowerCase();
+    const sorted = [...produtores].sort((a, b) =>
+      (a.nome_razao ?? a.codigo ?? '').localeCompare(b.nome_razao ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (p) =>
+        (p.nome_razao ?? '').toLowerCase().includes(term) ||
+        (p.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [produtores, filtroMeeiroProdutorSearch]);
+  const meeirosOrdenados = useMemo(
+    () =>
+      [...meeiros].sort((a, b) =>
+        (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+      ),
+    [meeiros]
+  );
   const [openMeeiro, setOpenMeeiro] = useState(false);
   const [formMeeiro, setFormMeeiro] = useState<CreateMeeiroRocaDto>({
     codigo: '',
@@ -1216,24 +1256,64 @@ export default function ControleRoca() {
                     <div className="space-y-6">
                       <div className="space-y-3">
                         <Label className="text-sm font-semibold">Produtor</Label>
-                        <Select
-                          value={produtorIdRocas === '' ? 'todos' : String(produtorIdRocas)}
-                          onValueChange={(v) =>
-                            setProdutorIdRocas(v === 'todos' ? '' : Number(v))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Todos os produtores" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos os produtores</SelectItem>
-                            {produtores.map((p) => (
-                              <SelectItem key={p.id} value={String(p.id)}>
-                                {p.codigo} – {p.nome_razao}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={filtroRocaProdutorOpen} onOpenChange={(o) => { setFiltroRocaProdutorOpen(o); if (!o) setFiltroRocaProdutorSearch(''); }} modal>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={filtroRocaProdutorOpen}
+                              className="w-full justify-between font-normal"
+                            >
+                              <span className="truncate">
+                                {produtorIdRocas === ''
+                                  ? 'Todos os produtores'
+                                  : (() => {
+                                      const p = produtores.find((x) => x.id === produtorIdRocas);
+                                      return p ? `${p.codigo} – ${p.nome_razao}` : 'Todos os produtores';
+                                    })()}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Buscar por nome ou código..."
+                                value={filtroRocaProdutorSearch}
+                                onValueChange={setFiltroRocaProdutorSearch}
+                                className="h-10"
+                              />
+                              <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                                <CommandEmpty>Nenhum produtor encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="todos"
+                                    onSelect={() => {
+                                      setProdutorIdRocas('');
+                                      setFiltroRocaProdutorOpen(false);
+                                    }}
+                                  >
+                                    <Check className={cn('mr-2 h-4 w-4', produtorIdRocas === '' ? 'opacity-100' : 'opacity-0')} />
+                                    Todos os produtores
+                                  </CommandItem>
+                                  {produtoresFiltroRocaOrdenados.map((p) => (
+                                    <CommandItem
+                                      key={p.id}
+                                      value={String(p.id)}
+                                      onSelect={() => {
+                                        setProdutorIdRocas(p.id);
+                                        setFiltroRocaProdutorOpen(false);
+                                      }}
+                                    >
+                                      <Check className={cn('mr-2 h-4 w-4', produtorIdRocas === p.id ? 'opacity-100' : 'opacity-0')} />
+                                      {p.codigo} – {p.nome_razao}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                       <div className="flex items-center gap-2">
                         <Switch
@@ -1415,24 +1495,64 @@ export default function ControleRoca() {
                     <div className="space-y-6">
                       <div className="space-y-3">
                         <Label className="text-sm font-semibold">Produtor</Label>
-                        <Select
-                          value={produtorIdMeeiros === '' ? 'todos' : String(produtorIdMeeiros)}
-                          onValueChange={(v) =>
-                            setProdutorIdMeeiros(v === 'todos' ? '' : Number(v))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Todos os produtores" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos os produtores</SelectItem>
-                            {produtores.map((p) => (
-                              <SelectItem key={p.id} value={String(p.id)}>
-                                {p.codigo} – {p.nome_razao}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={filtroMeeiroProdutorOpen} onOpenChange={(o) => { setFiltroMeeiroProdutorOpen(o); if (!o) setFiltroMeeiroProdutorSearch(''); }} modal>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={filtroMeeiroProdutorOpen}
+                              className="w-full justify-between font-normal"
+                            >
+                              <span className="truncate">
+                                {produtorIdMeeiros === ''
+                                  ? 'Todos os produtores'
+                                  : (() => {
+                                      const p = produtores.find((x) => x.id === produtorIdMeeiros);
+                                      return p ? `${p.codigo} – ${p.nome_razao}` : 'Todos os produtores';
+                                    })()}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Buscar por nome ou código..."
+                                value={filtroMeeiroProdutorSearch}
+                                onValueChange={setFiltroMeeiroProdutorSearch}
+                                className="h-10"
+                              />
+                              <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                                <CommandEmpty>Nenhum produtor encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="todos"
+                                    onSelect={() => {
+                                      setProdutorIdMeeiros('');
+                                      setFiltroMeeiroProdutorOpen(false);
+                                    }}
+                                  >
+                                    <Check className={cn('mr-2 h-4 w-4', produtorIdMeeiros === '' ? 'opacity-100' : 'opacity-0')} />
+                                    Todos os produtores
+                                  </CommandItem>
+                                  {produtoresFiltroMeeiroOrdenados.map((p) => (
+                                    <CommandItem
+                                      key={p.id}
+                                      value={String(p.id)}
+                                      onSelect={() => {
+                                        setProdutorIdMeeiros(p.id);
+                                        setFiltroMeeiroProdutorOpen(false);
+                                      }}
+                                    >
+                                      <Check className={cn('mr-2 h-4 w-4', produtorIdMeeiros === p.id ? 'opacity-100' : 'opacity-0')} />
+                                      {p.codigo} – {p.nome_razao}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
                   </SheetContent>
@@ -1461,14 +1581,14 @@ export default function ControleRoca() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {meeiros.length === 0 ? (
+                    {meeirosOrdenados.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           Nenhum meeiro cadastrado
                         </TableCell>
                       </TableRow>
                     ) : (
-                      meeiros.map((m) => (
+                      meeirosOrdenados.map((m) => (
                         <TableRow key={m.id}>
                           <TableCell className="font-medium">{m.codigo}</TableCell>
                           <TableCell>{m.nome}</TableCell>
