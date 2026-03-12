@@ -893,9 +893,11 @@ export default function ControleRoca() {
       );
     }
     if (filtrosLancamento.produto.trim() !== '') {
-      const sub = filtrosLancamento.produto.trim().toLowerCase();
+      const produtoSelecionado = filtrosLancamento.produto.trim().toLowerCase();
       list = list.filter((l) =>
-        (l.itens ?? []).some((item) => item.produto.toLowerCase().includes(sub))
+        (l.itens ?? []).some(
+          (item) => (item.produto ?? '').toLowerCase() === produtoSelecionado
+        )
       );
     }
     if (filtrosLancamento.dataInicio !== '') {
