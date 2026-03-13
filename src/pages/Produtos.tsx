@@ -1710,6 +1710,7 @@ const Produtos = () => {
                             <SelectItem value="KG">Quilograma (KG)</SelectItem>
                             <SelectItem value="LT">Litro (LT)</SelectItem>
                             <SelectItem value="CX">Caixa (CX)</SelectItem>
+                            <SelectItem value="SC">Saco (SC)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -2140,6 +2141,7 @@ const Produtos = () => {
                         <SelectItem value="KG">Quilograma (KG)</SelectItem>
                         <SelectItem value="LT">Litro (LT)</SelectItem>
                         <SelectItem value="CX">Caixa (CX)</SelectItem>
+                        <SelectItem value="SC">Saco (SC)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -3181,6 +3183,7 @@ const Produtos = () => {
                         <SelectItem value="KG">Quilograma (KG)</SelectItem>
                         <SelectItem value="LT">Litro (LT)</SelectItem>
                         <SelectItem value="CX">Caixa (CX)</SelectItem>
+                        <SelectItem value="SC">Saco (SC)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
