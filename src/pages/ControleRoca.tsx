@@ -2530,6 +2530,7 @@ className={
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>Produto</TableHead>
+                                    <TableHead>Unidade</TableHead>
                                     <TableHead>Qtd</TableHead>
                                     <TableHead className="text-right">Preço un.</TableHead>
                                     <TableHead className="text-right">Total</TableHead>
@@ -2540,6 +2541,7 @@ className={
                                     <React.Fragment key={i}>
                                       <TableRow>
                                         <TableCell className="font-medium">{item.produto}</TableCell>
+                                        <TableCell>{item.unidade_medida || 'UN'}</TableCell>
                                         <TableCell>{item.quantidade}</TableCell>
                                         <TableCell className="text-right">
                                           {formatCurrency(item.preco_unitario ?? 0)}
@@ -2549,7 +2551,7 @@ className={
                                         </TableCell>
                                       </TableRow>
                                       <TableRow>
-                                        <TableCell colSpan={4} className="bg-muted/30 p-0">
+                                        <TableCell colSpan={5} className="bg-muted/30 p-0">
                                           <div className="px-4 py-3 border-t border-border/50">
                                             <div className="grid grid-cols-[auto_1fr_1fr] gap-x-6 gap-y-1 text-sm text-muted-foreground items-baseline">
                                               <span className="font-medium text-foreground/80">Meeiro</span>

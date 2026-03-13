@@ -149,6 +149,7 @@ export interface CreateLancamentoProducaoRocaDto {
 export interface LancamentoItemRoca {
   produtoId?: number;
   produto: string;
+  unidade_medida?: string;
   quantidade: number;
   preco_unitario?: number;
   valor_total?: number;
