@@ -150,6 +150,17 @@ class ControleRocaService {
     return apiClient.delete<{ sucesso: boolean }>(`${BASE}/lancamentos/${id}`);
   }
 
+  /** Reajustar valor unitário de múltiplos lançamentos */
+  async reajustarValorLancamentos(data: {
+    idsLancamentos: number[];
+    novoValorUnitario: number;
+  }): Promise<{ sucesso: boolean; novoValorUnitario: number; lancamentosAtualizados: any[] }> {
+    return apiClient.patch<{ sucesso: boolean; novoValorUnitario: number; lancamentosAtualizados: any[] }>(
+      `${BASE}/lancamentos/reajustar-valor`,
+      data
+    );
+  }
+
   // Relatório por meeiro
   async relatorioPorMeeiro(params: {
     meeiroId: number;

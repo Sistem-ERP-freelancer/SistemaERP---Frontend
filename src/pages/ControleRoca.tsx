@@ -11,6 +11,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Command,
     CommandEmpty,
@@ -642,6 +643,35 @@ export default function ControleRoca() {
     },
   });
   const [lancamentoParaExcluirId, setLancamentoParaExcluirId] = useState<number | null>(null);
+  // Seleção múltipla e reajuste em massa
+  const [lancamentosSelecionados, setLancamentosSelecionados] = useState<Set<number>>(new Set());
+  const [openReajuste, setOpenReajuste] = useState(false);
+  const [novoValorReajuste, setNovoValorReajuste] = useState('');
+  const reajustarValor = useMutation({
+    mutationFn: (data: { idsLancamentos: number[]; novoValorUnitario: number }) =>
+      controleRocaService.reajustarValorLancamentos(data),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success(`Reajuste aplicado com sucesso! ${res.lancamentosAtualizados?.length ?? 0} lançamento(s) atualizado(s).`);
+      setOpenReajuste(false);
+      setNovoValorReajuste('');
+      setLancamentosSelecionados(new Set());
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Erro ao reajustar valores');
+    },
+  });
+  const toggleSelecionarLancamento = (id: number) => {
+    setLancamentosSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
   const [editLancamentoId, setEditLancamentoId] = useState<number | null>(null);
   const { data: editLancamento } = useQuery({
     queryKey: ['controle-roca', 'lancamento-edit', editLancamentoId],
@@ -940,6 +970,24 @@ export default function ControleRoca() {
     (lancPage - 1) * LANC_PAGE_SIZE,
     lancPage * LANC_PAGE_SIZE
   );
+
+  const toggleSelecionarTodosLancamentos = () => {
+    const idsVisiveis = lancamentosPagina.map((l) => l.id);
+    const todosSelecionados = idsVisiveis.every((id) => lancamentosSelecionados.has(id));
+    if (todosSelecionados) {
+      setLancamentosSelecionados((prev) => {
+        const next = new Set(prev);
+        idsVisiveis.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setLancamentosSelecionados((prev) => {
+        const next = new Set(prev);
+        idsVisiveis.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
 
   const handleAddMeeiro = (meeiroId: number | string) => {
     const idNum = Number(meeiroId);
@@ -2179,6 +2227,16 @@ className={
                     onChange={(e) => setSearchLancamento(e.target.value)}
                   />
                 </div>
+                {lancamentosSelecionados.size > 0 && (
+                  <Button
+                    variant="outline"
+                    className="shrink-0 border-primary text-primary hover:bg-primary/10"
+                    onClick={() => setOpenReajuste(true)}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Reajustar valor ({lancamentosSelecionados.size})
+                  </Button>
+                )}
                 <Button
                   variant="gradient"
                   className="shrink-0"
@@ -2203,22 +2261,32 @@ className={
                 <Table className="w-full table-fixed text-xs sm:text-sm">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[10%] whitespace-nowrap">Data</TableHead>
-                      <TableHead className="w-[12%] whitespace-nowrap">Roça</TableHead>
-                      <TableHead className="w-[22%] whitespace-nowrap">Produtos</TableHead>
+                      <TableHead className="w-[40px] px-2">
+                        <Checkbox
+                          checked={
+                            lancamentosPagina.length > 0 &&
+                            lancamentosPagina.every((l) => lancamentosSelecionados.has(l.id))
+                          }
+                          onCheckedChange={toggleSelecionarTodosLancamentos}
+                          aria-label="Selecionar todos"
+                        />
+                      </TableHead>
+                      <TableHead className="w-[9%] whitespace-nowrap">Data</TableHead>
+                      <TableHead className="w-[11%] whitespace-nowrap">Roça</TableHead>
+                      <TableHead className="w-[20%] whitespace-nowrap">Produtos</TableHead>
                       <TableHead className="w-[6%] whitespace-nowrap">Qtde</TableHead>
-                      <TableHead className="w-[10%] whitespace-nowrap text-right">Valor Unit.</TableHead>
-                      <TableHead className="w-[12%] whitespace-nowrap">Meeiro</TableHead>
+                      <TableHead className="w-[9%] whitespace-nowrap text-right">Valor Unit.</TableHead>
+                      <TableHead className="w-[11%] whitespace-nowrap">Meeiro</TableHead>
                       <TableHead className="w-[3%] text-right py-2 px-1">%</TableHead>
-                      <TableHead className="w-[10%] text-right">Valor do meeiro</TableHead>
-                      <TableHead className="w-[10%] text-right">Valor total</TableHead>
+                      <TableHead className="w-[9%] text-right">Valor do meeiro</TableHead>
+                      <TableHead className="w-[9%] text-right">Valor total</TableHead>
                       <TableHead className="w-[8%] min-w-[72px] text-right pl-4 pr-6">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {lancamentosPagina.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
@@ -2235,6 +2303,13 @@ className={
                         });
                         return (
                           <TableRow key={l.id}>
+                            <TableCell className="px-2">
+                              <Checkbox
+                                checked={lancamentosSelecionados.has(l.id)}
+                                onCheckedChange={() => toggleSelecionarLancamento(l.id)}
+                                aria-label={`Selecionar lançamento ${l.id}`}
+                              />
+                            </TableCell>
                             <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
                             <TableCell className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible" title={roca ? roca.nome : String(l.rocaId)}>
                               <span className="block truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip">{roca ? roca.nome : l.rocaId}</span>
@@ -4394,6 +4469,67 @@ className={
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Modal de reajuste em massa */}
+        <Dialog open={openReajuste} onOpenChange={setOpenReajuste}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-primary" />
+                Reajustar valor unitário
+              </DialogTitle>
+              <DialogDescription>
+                Defina o novo preço unitário que será aplicado a todos os itens dos {lancamentosSelecionados.size} lançamento(s) selecionado(s).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="novoValorReajuste">Novo valor unitário (R$)</Label>
+                <Input
+                  id="novoValorReajuste"
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  placeholder="Ex: 5.00"
+                  value={novoValorReajuste}
+                  onChange={(e) => setNovoValorReajuste(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Este valor será aplicado como preço unitário de todos os produtos em todos os lançamentos selecionados. Os totais serão recalculados automaticamente.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenReajuste(false)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="gradient"
+                disabled={reajustarValor.isPending || !novoValorReajuste || parseFloat(novoValorReajuste) <= 0}
+                onClick={() => {
+                  const valor = parseFloat(novoValorReajuste.replace(',', '.'));
+                  if (!valor || valor <= 0) {
+                    toast.error('Informe um valor válido maior que zero');
+                    return;
+                  }
+                  reajustarValor.mutate({
+                    idsLancamentos: Array.from(lancamentosSelecionados),
+                    novoValorUnitario: valor,
+                  });
+                }}
+              >
+                {reajustarValor.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Reajustando...
+                  </>
+                ) : (
+                  'Aplicar reajuste'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de confirmação para desativar roça */}
         <AlertDialog
