@@ -4513,8 +4513,8 @@ className={
                     return;
                   }
                   reajustarValor.mutate({
-                    idsLancamentos: Array.from(lancamentosSelecionados),
-                    novoValorUnitario: valor,
+                    idsLancamentos: Array.from(lancamentosSelecionados).map(Number),
+                    novoValorUnitario: Number(valor),
                   });
                 }}
               >
