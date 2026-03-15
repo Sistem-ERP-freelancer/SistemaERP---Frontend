@@ -962,6 +962,11 @@ export default function ControleRoca() {
     lancOrdenacao,
   ]);
 
+  const valorTotalFiltrado = useMemo(
+    () => filteredLancamentos.reduce((acc, l) => acc + (Number(l.total_geral) || 0), 0),
+    [filteredLancamentos]
+  );
+
   const totalLancPages =
     filteredLancamentos.length > 0
       ? Math.ceil(filteredLancamentos.length / LANC_PAGE_SIZE)
@@ -1080,6 +1085,8 @@ export default function ControleRoca() {
 
   // Relatório por meeiro
   const [relMeeiroId, setRelMeeiroId] = useState<number | ''>('');
+  const [relMeeiroSearchTerm, setRelMeeiroSearchTerm] = useState('');
+  const [relMeeiroPopoverOpen, setRelMeeiroPopoverOpen] = useState(false);
   const [relDataInicial, setRelDataInicial] = useState('');
   const [relDataFinal, setRelDataFinal] = useState('');
   const [relResult, setRelResult] = useState<RelatorioMeeiroResponse | null>(null);
@@ -1090,6 +1097,18 @@ export default function ControleRoca() {
     queryKey: ['controle-roca', 'meeiros'],
     queryFn: () => controleRocaService.listarMeeiros(),
   });
+  const meeirosRelatorioFiltrados = useMemo(() => {
+    const term = relMeeiroSearchTerm.trim().toLowerCase();
+    const list = [...meeirosParaRelatorio].sort((a, b) =>
+      `${a.codigo ?? ''} ${a.nome ?? ''}`.localeCompare(`${b.codigo ?? ''} ${b.nome ?? ''}`)
+    );
+    if (!term) return list;
+    return list.filter(
+      (m) =>
+        (m.codigo ?? '').toLowerCase().includes(term) ||
+        (m.nome ?? '').toLowerCase().includes(term)
+    );
+  }, [meeirosParaRelatorio, relMeeiroSearchTerm]);
   const runRelatorio = () => {
     if (relMeeiroId === '') {
       toast.error('Selecione um meeiro');
@@ -2157,6 +2176,81 @@ className={
                     <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
                       DATA
                     </h3>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant={
+                          (() => {
+                            const hoje = new Date().toISOString().slice(0, 10);
+                            return filtrosLancamento.dataInicio === hoje && filtrosLancamento.dataFim === hoje
+                              ? 'default'
+                              : 'outline';
+                          })()
+                        }
+                        size="sm"
+                        onClick={() => {
+                          const hoje = new Date().toISOString().slice(0, 10);
+                          setFiltrosLancamento((prev) => ({
+                            ...prev,
+                            dataInicio: hoje,
+                            dataFim: hoje,
+                          }));
+                        }}
+                      >
+                        Hoje
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const d = new Date();
+                          const fim = d.toISOString().slice(0, 10);
+                          const ini = new Date(d);
+                          ini.setDate(ini.getDate() - 6);
+                          setFiltrosLancamento((prev) => ({
+                            ...prev,
+                            dataInicio: ini.toISOString().slice(0, 10),
+                            dataFim: fim,
+                          }));
+                        }}
+                      >
+                        Esta semana
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const d = new Date();
+                          const ano = d.getFullYear();
+                          const mes = d.getMonth();
+                          const primeiro = new Date(ano, mes, 1).toISOString().slice(0, 10);
+                          const ultimo = new Date(ano, mes + 1, 0).toISOString().slice(0, 10);
+                          setFiltrosLancamento((prev) => ({
+                            ...prev,
+                            dataInicio: primeiro,
+                            dataFim: ultimo,
+                          }));
+                        }}
+                      >
+                        Este mês
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFiltrosLancamento((prev) => ({
+                            ...prev,
+                            dataInicio: '',
+                            dataFim: '',
+                          }));
+                        }}
+                      >
+                        Limpar datas
+                      </Button>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Data Inicial</Label>
@@ -2250,6 +2344,19 @@ className={
                   Novo Lançamento
                 </Button>
               </div>
+            </div>
+
+            {/* Resumo: quantidade de lançamentos e valor total no período */}
+            <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
+              <span className="font-medium text-foreground">
+                <span className="text-muted-foreground">Lançamentos no período:</span>{' '}
+                {filteredLancamentos.length}
+              </span>
+              <span className="text-muted-foreground">|</span>
+              <span className="font-medium text-foreground">
+                <span className="text-muted-foreground">Valor total:</span>{' '}
+                {formatCurrency(valorTotalFiltrado)}
+              </span>
             </div>
 
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
@@ -3114,21 +3221,55 @@ className={
             <div className="bg-card border rounded-xl p-4 flex flex-wrap items-end gap-4">
               <div className="space-y-2">
                 <Label>Meeiro</Label>
-                <Select
-                  value={relMeeiroId === '' ? '' : String(relMeeiroId)}
-                  onValueChange={(v) => setRelMeeiroId(v === '' ? '' : Number(v))}
-                >
-                  <SelectTrigger className="w-[260px]">
-                    <SelectValue placeholder="Selecione o meeiro" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {meeirosParaRelatorio.map((m) => (
-                      <SelectItem key={m.id} value={String(m.id)}>
-                        {m.codigo} – {m.nome} ({m.porcentagem_padrao}%)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={relMeeiroPopoverOpen} onOpenChange={(o) => { setRelMeeiroPopoverOpen(o); if (!o) setRelMeeiroSearchTerm(''); }} modal>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={relMeeiroPopoverOpen}
+                      className="w-[260px] justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {relMeeiroId === ''
+                          ? 'Selecione o meeiro'
+                          : (() => {
+                              const m = meeirosParaRelatorio.find((x) => Number(x.id) === Number(relMeeiroId));
+                              return m ? `${m.codigo ?? ''} – ${m.nome ?? ''} (${m.porcentagem_padrao}%)` : 'Selecione o meeiro';
+                            })()}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[260px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Buscar por código ou nome..."
+                        value={relMeeiroSearchTerm}
+                        onValueChange={setRelMeeiroSearchTerm}
+                        className="h-10"
+                      />
+                      <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                        <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {meeirosRelatorioFiltrados.map((m) => (
+                            <CommandItem
+                              key={m.id}
+                              value={String(m.id)}
+                              onSelect={() => {
+                                setRelMeeiroId(Number(m.id));
+                                setRelMeeiroPopoverOpen(false);
+                                setRelMeeiroSearchTerm('');
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', Number(relMeeiroId) === Number(m.id) ? 'opacity-100' : 'opacity-0')} />
+                              {m.codigo} – {m.nome} ({m.porcentagem_padrao}%)
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Data inicial</Label>
