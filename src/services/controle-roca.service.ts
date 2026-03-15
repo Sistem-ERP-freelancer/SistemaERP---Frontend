@@ -115,6 +115,7 @@ class ControleRocaService {
   async listarLancamentos(params?: {
     produtorId?: number;
     rocaId?: number;
+    meeiroId?: number;
     dataInicial?: string;
     dataFinal?: string;
     incluirInativos?: boolean;
@@ -122,6 +123,7 @@ class ControleRocaService {
     const search = new URLSearchParams();
     if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
     if (params?.rocaId != null) search.set('rocaId', String(params.rocaId));
+    if (params?.meeiroId != null) search.set('meeiroId', String(params.meeiroId));
     if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
     if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
     if (params?.incluirInativos === true) search.set('incluirInativos', 'true');

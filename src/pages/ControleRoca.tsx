@@ -578,12 +578,17 @@ export default function ControleRoca() {
     queryKey: ['controle-roca', 'rocas-filtro'],
     queryFn: () => controleRocaService.listarRocas(undefined),
   });
+  const { data: meeirosParaRelatorio = [] } = useQuery({
+    queryKey: ['controle-roca', 'meeiros'],
+    queryFn: () => controleRocaService.listarMeeiros(),
+  });
   const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
     queryKey: [
       'controle-roca',
       'lancamentos',
       filtrosLancamento.produtorId,
       filtrosLancamento.rocaId,
+      filtrosLancamento.meeiroId,
       filtrosLancamento.dataInicio,
       filtrosLancamento.dataFim,
     ],
@@ -594,6 +599,9 @@ export default function ControleRoca() {
           : {}),
         ...(filtrosLancamento.rocaId !== ''
           ? { rocaId: Number(filtrosLancamento.rocaId) }
+          : {}),
+        ...(filtrosLancamento.meeiroId !== ''
+          ? { meeiroId: Number(filtrosLancamento.meeiroId) }
           : {}),
         ...(filtrosLancamento.dataInicio !== ''
           ? { dataInicial: filtrosLancamento.dataInicio }
@@ -878,6 +886,25 @@ export default function ControleRoca() {
     return sorted.filter((m) => (m.nome ?? '').toLowerCase().includes(term));
   }, [meeirosUnicosLancamentos, filtroMeeiroSearch]);
 
+  /** Lista completa de meeiros para o filtro de lançamentos (permite selecionar qualquer meeiro e buscar na API) */
+  const meeirosParaFiltroLancamentoOrdenados = useMemo(() => {
+    const term = filtroMeeiroSearch.trim().toLowerCase();
+    const list = meeirosParaRelatorio.map((m) => ({
+      meeiroId: Number(m.id),
+      nome: m.nome ?? '',
+      codigo: m.codigo ?? '',
+    }));
+    const sorted = [...list].sort((a, b) =>
+      (a.nome || a.codigo).localeCompare(b.nome || b.codigo, 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (m) =>
+        (m.nome ?? '').toLowerCase().includes(term) ||
+        (m.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [meeirosParaRelatorio, filtroMeeiroSearch]);
+
   const [lancOrdenacao, setLancOrdenacao] = useState<'desc' | 'asc'>('desc');
 
   const temFiltrosLancamentoAtivos =
@@ -1093,10 +1120,6 @@ export default function ControleRoca() {
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
   const [relPdfLoadingAction, setRelPdfLoadingAction] = useState<'download' | 'print' | null>(null);
-  const { data: meeirosParaRelatorio = [] } = useQuery({
-    queryKey: ['controle-roca', 'meeiros'],
-    queryFn: () => controleRocaService.listarMeeiros(),
-  });
   const meeirosRelatorioFiltrados = useMemo(() => {
     const term = relMeeiroSearchTerm.trim().toLowerCase();
     const list = [...meeirosParaRelatorio].sort((a, b) =>
@@ -2123,7 +2146,7 @@ className={
                           <span className="truncate">
                             {filtrosLancamento.meeiroId === ''
                               ? 'Todos os meeiros'
-                              : meeirosUnicosLancamentos.find((m) => m.meeiroId === filtrosLancamento.meeiroId)?.nome ?? 'Todos os meeiros'}
+                              : meeirosParaRelatorio.find((m) => Number(m.id) === Number(filtrosLancamento.meeiroId))?.nome ?? 'Todos os meeiros'}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -2149,7 +2172,7 @@ className={
                                 <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.meeiroId === '' ? 'opacity-100' : 'opacity-0')} />
                                 Todos os meeiros
                               </CommandItem>
-                              {meeirosFiltroOrdenados.map((m) => (
+                              {meeirosParaFiltroLancamentoOrdenados.map((m) => (
                                 <CommandItem
                                   key={m.meeiroId}
                                   value={String(m.meeiroId)}
@@ -2158,8 +2181,8 @@ className={
                                     setFiltroMeeiroOpen(false);
                                   }}
                                 >
-                                  <Check className={cn('mr-2 h-4 w-4', filtrosLancamento.meeiroId === m.meeiroId ? 'opacity-100' : 'opacity-0')} />
-                                  {m.nome}
+                                  <Check className={cn('mr-2 h-4 w-4', Number(filtrosLancamento.meeiroId) === m.meeiroId ? 'opacity-100' : 'opacity-0')} />
+                                  {m.codigo ? `${m.codigo} – ${m.nome}` : m.nome}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
