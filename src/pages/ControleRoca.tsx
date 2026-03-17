@@ -994,6 +994,15 @@ export default function ControleRoca() {
     [filteredLancamentos]
   );
 
+  const somaQuantidadeFiltrada = useMemo(
+    () =>
+      filteredLancamentos.reduce((acc, l) => {
+        const itens = l.itens ?? [];
+        return acc + itens.reduce((s, i) => s + (Number(i.quantidade) || 0), 0);
+      }, 0),
+    [filteredLancamentos]
+  );
+
   const totalLancPages =
     filteredLancamentos.length > 0
       ? Math.ceil(filteredLancamentos.length / LANC_PAGE_SIZE)
@@ -1001,6 +1010,22 @@ export default function ControleRoca() {
   const lancamentosPagina = filteredLancamentos.slice(
     (lancPage - 1) * LANC_PAGE_SIZE,
     lancPage * LANC_PAGE_SIZE
+  );
+
+  /** Uma linha por produto: lançamentos com mais de um produto viram várias linhas */
+  const linhasExpandidas = useMemo(
+    () =>
+      lancamentosPagina.flatMap((l) => {
+        const itens = l.itens ?? [];
+        if (itens.length === 0) return [{ l, item: null, itemIndex: 0, rowKey: `${l.id}-0` }];
+        return itens.map((item, idx) => ({
+          l,
+          item,
+          itemIndex: idx,
+          rowKey: `${l.id}-${(item as { itemId?: number }).itemId ?? idx}`,
+        }));
+      }),
+    [lancamentosPagina]
   );
 
   const toggleSelecionarTodosLancamentos = () => {
@@ -2369,11 +2394,16 @@ className={
               </div>
             </div>
 
-            {/* Resumo: quantidade de lançamentos e valor total no período */}
+            {/* Resumo: quantidade de lançamentos, soma dos produtos e valor total no período */}
             <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
               <span className="font-medium text-foreground">
                 <span className="text-muted-foreground">Lançamentos no período:</span>{' '}
                 {filteredLancamentos.length}
+              </span>
+              <span className="text-muted-foreground">|</span>
+              <span className="font-medium text-foreground">
+                <span className="text-muted-foreground">Soma dos produtos (qtde):</span>{' '}
+                {somaQuantidadeFiltrada.toLocaleString('pt-BR')}
               </span>
               <span className="text-muted-foreground">|</span>
               <span className="font-medium text-foreground">
@@ -2421,155 +2451,106 @@ className={
                         </TableCell>
                       </TableRow>
                     ) : (
-                      lancamentosPagina.map((l) => {
+                      linhasExpandidas.map(({ l, item, itemIndex, rowKey }) => {
                         const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
-                        const itens = l.itens ?? [];
-                        const meeirosList = itens.flatMap((i) => i.meeiros ?? []);
-                        const seenM = new Set<number>();
-                        const meeiros = meeirosList.filter((m) => {
-                          if (seenM.has(m.meeiroId)) return false;
-                          seenM.add(m.meeiroId);
-                          return true;
-                        });
+                        const isPrimeiraLinhaDoLancamento = itemIndex === 0;
+                        const valorTotalItem = item ? (Number(item.valor_total) || 0) : 0;
+                        const meeirosDoItem = item?.meeiros ?? [];
                         return (
-                          <TableRow key={l.id}>
+                          <TableRow key={rowKey}>
                             <TableCell className="px-2">
-                              <Checkbox
-                                checked={lancamentosSelecionados.has(l.id)}
-                                onCheckedChange={() => toggleSelecionarLancamento(l.id)}
-                                aria-label={`Selecionar lançamento ${l.id}`}
-                              />
+                              {isPrimeiraLinhaDoLancamento ? (
+                                <Checkbox
+                                  checked={lancamentosSelecionados.has(l.id)}
+                                  onCheckedChange={() => toggleSelecionarLancamento(l.id)}
+                                  aria-label={`Selecionar lançamento ${l.id}`}
+                                />
+                              ) : null}
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
                             <TableCell className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible" title={roca ? roca.nome : String(l.rocaId)}>
                               <span className="block truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip">{roca ? roca.nome : l.rocaId}</span>
                             </TableCell>
                             <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
-                              {itens.length === 0
-                                ? '—'
-                                : (() => {
-                                    const textoProdutos = itens.map((item) => item.produto).join(', ');
-                                    return (
-                                      <span className="block truncate whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={textoProdutos}>
-                                        {textoProdutos}
-                                      </span>
-                                    );
-                                  })()}
+                              {item ? (
+                                <span className="block truncate whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={item.produto}>
+                                  {item.produto}
+                                </span>
+                              ) : (
+                                '—'
+                              )}
                             </TableCell>
-                            <TableCell>
-                              {itens.length === 0
-                                ? '—'
-                                : (
-                                    <>
-                                      {itens.slice(0, 3).map((item, i) => (
-                                        <div key={i} className="text-sm">
-                                          {item.quantidade}
-                                        </div>
-                                      ))}
-                                      {itens.length > 3 && (
-                                        <div className="text-sm text-muted-foreground">…</div>
-                                      )}
-                                    </>
-                                  )}
+                            <TableCell className="text-sm">
+                              {item != null ? item.quantidade : '—'}
                             </TableCell>
-                            <TableCell>
-                              {itens.length === 0
-                                ? '—'
-                                : (
-                                    <>
-                                      {itens.slice(0, 3).map((item, i) => (
-                                        <div key={i} className="text-sm">
-                                          {formatCurrency(item.preco_unitario ?? 0)}
-                                        </div>
-                                      ))}
-                                      {itens.length > 3 && (
-                                        <div className="text-sm text-muted-foreground">…</div>
-                                      )}
-                                    </>
-                                  )}
+                            <TableCell className="text-right text-sm">
+                              {item != null ? formatCurrency(item.preco_unitario ?? 0) : '—'}
                             </TableCell>
                             <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
-                              {meeiros.length === 0
+                              {meeirosDoItem.length === 0
                                 ? '—'
                                 : (
                                     <>
-                                      {meeiros.slice(0, 3).map((m, i) => (
-                                        <div key={i} className="truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={meeiros.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
+                                      {meeirosDoItem.map((m, i) => (
+                                        <div key={i} className="truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={meeirosDoItem.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
                                           {m.meeiroNome ?? `ID ${m.meeiroId}`}
                                         </div>
                                       ))}
-                                      {meeiros.length > 3 && (
-                                        <div className="text-muted-foreground">…</div>
-                                      )}
                                     </>
                                   )}
                             </TableCell>
                             <TableCell className="text-right py-2 px-1">
-                              {meeiros.length === 0
+                              {meeirosDoItem.length === 0
                                 ? '—'
-                                : (
-                                    <>
-                                      {meeiros.slice(0, 3).map((m, i) => {
-                                        const totalParte = meeirosList
-                                          .filter((x) => x.meeiroId === m.meeiroId)
-                                          .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
-                                        const totalGeralNum = Number(l.total_geral) || 1;
-                                        const pct =
-                                          totalGeralNum > 0
-                                            ? Math.round((totalParte / totalGeralNum) * 100)
-                                            : 0;
-                                        return (
-                                          <div key={i}>{pct}%</div>
-                                        );
-                                      })}
-                                      {meeiros.length > 3 && (
-                                        <div className="text-muted-foreground">…</div>
-                                      )}
-                                    </>
-                                  )}
-                            </TableCell>
-                            <TableCell className="text-right whitespace-nowrap">
-                              {meeiros.length === 0
-                                ? '—'
-                                : meeiros.map((m, i) => {
-                                    const totalParte = meeirosList
-                                      .filter((x) => x.meeiroId === m.meeiroId)
-                                      .reduce((s, x) => s + (x.valor_parte ?? 0), 0);
-                                    return (
-                                      <div key={i}>{formatCurrency(totalParte)}</div>
-                                    );
+                                : meeirosDoItem.map((m, i) => {
+                                    const pct =
+                                      valorTotalItem > 0 && (m.valor_parte != null)
+                                        ? Math.round((Number(m.valor_parte) / valorTotalItem) * 100)
+                                        : 0;
+                                    return <div key={i}>{pct}%</div>;
                                   })}
                             </TableCell>
-                            <TableCell className="text-right whitespace-nowrap">{formatCurrency(Number(l.total_geral))}</TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                              {meeirosDoItem.length === 0
+                                ? '—'
+                                : meeirosDoItem.map((m, i) => (
+                                    <div key={i}>{formatCurrency(m.valor_parte ?? 0)}</div>
+                                  ))}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                              {item != null ? formatCurrency(valorTotalItem) : formatCurrency(Number(l.total_geral))}
+                            </TableCell>
                             <TableCell className="text-right pl-4 pr-6">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() => setDetalheLancamentoId(l.id)}
-                                  >
-                                    <Eye className="w-4 h-4 mr-2" />
-                                    Ver detalhes
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => setEditLancamentoId(l.id)}
-                                  >
-                                    <Pencil className="w-4 h-4 mr-2" />
-                                    Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={() => setLancamentoParaExcluirId(l.id)}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Excluir
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              {isPrimeiraLinhaDoLancamento ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() => setDetalheLancamentoId(l.id)}
+                                    >
+                                      <Eye className="w-4 h-4 mr-2" />
+                                      Ver detalhes
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => setEditLancamentoId(l.id)}
+                                    >
+                                      <Pencil className="w-4 h-4 mr-2" />
+                                      Editar
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => setLancamentoParaExcluirId(l.id)}
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : null}
                             </TableCell>
                           </TableRow>
                         );
