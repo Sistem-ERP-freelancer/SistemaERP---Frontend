@@ -2459,13 +2459,11 @@ className={
                         return (
                           <TableRow key={rowKey}>
                             <TableCell className="px-2">
-                              {isPrimeiraLinhaDoLancamento ? (
-                                <Checkbox
-                                  checked={lancamentosSelecionados.has(l.id)}
-                                  onCheckedChange={() => toggleSelecionarLancamento(l.id)}
-                                  aria-label={`Selecionar lançamento ${l.id}`}
-                                />
-                              ) : null}
+                              <Checkbox
+                                checked={lancamentosSelecionados.has(l.id)}
+                                onCheckedChange={() => toggleSelecionarLancamento(l.id)}
+                                aria-label={`Selecionar lançamento ${l.id}`}
+                              />
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
                             <TableCell className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible" title={roca ? roca.nome : String(l.rocaId)}>
