@@ -1111,6 +1111,7 @@ export default function ControleRoca() {
       0
     );
   const handleSubmitLancamento = () => {
+    if (createLancamento.isPending) return; // evita duplo envio
     if (!lancData || !lancRocaId || lancMeeiros.length === 0 || lancProdutos.length === 0) {
       toast.error('Preencha data, roça, ao menos um meeiro e ao menos um produto');
       return;
