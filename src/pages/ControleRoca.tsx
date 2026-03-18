@@ -119,7 +119,7 @@ import {
     Users,
     X,
 } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
@@ -816,6 +816,7 @@ export default function ControleRoca() {
         (m.codigo ?? '').toLowerCase().includes(term)
     );
   }, [meeirosParaLancamento, lancMeeiroSearchTerm]);
+  const submittingLancamentoRef = useRef(false);
   const createLancamento = useMutation({
     mutationFn: (data: CreateLancamentoProducaoRocaDto) =>
       controleRocaService.criarLancamento(data),
@@ -830,6 +831,9 @@ export default function ControleRoca() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao registrar lançamento');
+    },
+    onSettled: () => {
+      submittingLancamentoRef.current = false;
     },
   });
 
@@ -1111,13 +1115,16 @@ export default function ControleRoca() {
       0
     );
   const handleSubmitLancamento = () => {
-    if (createLancamento.isPending) return; // evita duplo envio
+    if (submittingLancamentoRef.current || createLancamento.isPending) return; // evita duplo envio (ref é síncrono)
+    submittingLancamentoRef.current = true;
     if (!lancData || !lancRocaId || lancMeeiros.length === 0 || lancProdutos.length === 0) {
+      submittingLancamentoRef.current = false;
       toast.error('Preencha data, roça, ao menos um meeiro e ao menos um produto');
       return;
     }
     const produtosComMeeiros = lancProdutos.filter((p) => p.meeiros.length > 0);
     if (produtosComMeeiros.length !== lancProdutos.length) {
+      submittingLancamentoRef.current = false;
       toast.error('Cada produto deve ter ao menos um meeiro (adicione meeiros antes dos produtos)');
       return;
     }
