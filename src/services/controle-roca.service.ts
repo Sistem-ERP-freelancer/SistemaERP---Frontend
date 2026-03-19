@@ -4,12 +4,16 @@ import type {
     CreateProdutoRocaDto,
     CreateProdutorRocaDto,
     CreateRocaDto,
+    EmprestimoMeeiro,
     LancamentoDetalhesRoca,
     LancamentoProducaoRoca,
+    ListaEmprestimosResponse,
+    MeeiroDetalhe,
     MeeiroRoca,
     ProdutoRoca,
     ProdutorRoca,
     RelatorioMeeiroResponse,
+    ResumoPagamentoMeeirosResponse,
     Roca,
     RocaDetalhes,
     UpdateLancamentoProducaoRocaDto,
@@ -71,9 +75,18 @@ class ControleRocaService {
   }
 
   // Meeiros
-  async listarMeeiros(produtorId?: number): Promise<MeeiroRoca[]> {
-    const q = produtorId != null ? `?produtorId=${produtorId}` : '';
-    return apiClient.get<MeeiroRoca[]>(`${BASE}/meeiros${q}`);
+  async listarMeeiros(
+    produtorId?: number,
+    opts?: { comEmprestimos?: boolean; page?: number; limit?: number }
+  ): Promise<MeeiroRoca[]> {
+    const params = new URLSearchParams();
+    if (produtorId != null) params.set('produtorId', String(produtorId));
+    if (opts?.comEmprestimos === true) params.set('comEmprestimos', 'true');
+    if (opts?.page != null) params.set('page', String(opts.page));
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    const q = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiClient.get<MeeiroRoca[] | { items: MeeiroRoca[] }>(`${BASE}/meeiros${q}`);
+    return Array.isArray(res) ? res : (res?.items ?? []);
   }
 
   async buscarMeeiroPorCodigo(codigo: string): Promise<MeeiroRoca> {
@@ -86,8 +99,9 @@ class ControleRocaService {
     return apiClient.post<MeeiroRoca>(`${BASE}/meeiros`, data);
   }
 
-  async obterMeeiro(id: number): Promise<MeeiroRoca> {
-    return apiClient.get<MeeiroRoca>(`${BASE}/meeiros/${id}`);
+  /** Retorna detalhe do meeiro com resumo financeiro e lista de empréstimos. */
+  async obterMeeiro(id: number): Promise<MeeiroDetalhe> {
+    return apiClient.get<MeeiroDetalhe>(`${BASE}/meeiros/${id}`);
   }
 
   async atualizarMeeiro(
@@ -99,6 +113,126 @@ class ControleRocaService {
 
   async excluirMeeiro(id: number): Promise<{ sucesso: boolean }> {
     return apiClient.delete<{ sucesso: boolean }>(`${BASE}/meeiros/${id}`);
+  }
+
+  // Empréstimos
+  async criarEmprestimo(data: {
+    meeiroId: number;
+    valor: number;
+    data: string;
+    observacao?: string;
+  }): Promise<EmprestimoMeeiro> {
+    return apiClient.post<EmprestimoMeeiro>(`${BASE}/emprestimos`, data);
+  }
+
+  async listarEmprestimosMeeiro(
+    meeiroId: number,
+    opts?: { page?: number; limit?: number; status?: string }
+  ): Promise<ListaEmprestimosResponse> {
+    const params = new URLSearchParams();
+    if (opts?.page != null) params.set('page', String(opts.page));
+    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    if (opts?.status) params.set('status', opts.status);
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return apiClient.get<ListaEmprestimosResponse>(
+      `${BASE}/meeiros/${meeiroId}/emprestimos${q}`
+    );
+  }
+
+  async atualizarStatusEmprestimo(
+    id: number,
+    data: { status: 'ABERTO' | 'LIQUIDADO' | 'CANCELADO' }
+  ): Promise<EmprestimoMeeiro> {
+    return apiClient.patch<EmprestimoMeeiro>(
+      `${BASE}/emprestimos/${id}/status`,
+      data
+    );
+  }
+
+  // Pagamentos de meeiros
+  async listarResumoPagamentoMeeiros(params?: {
+    produtorId?: number;
+    dataInicial?: string;
+    dataFinal?: string;
+    rocas?: number[];
+    page?: number;
+    limit?: number;
+    apenasComValorEmAberto?: boolean;
+    apenasPagos?: boolean;
+  }): Promise<ResumoPagamentoMeeirosResponse> {
+    const search = new URLSearchParams();
+    if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
+    if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
+    if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
+    if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
+    if (params?.page != null) search.set('page', String(params.page));
+    if (params?.limit != null) search.set('limit', String(params.limit));
+    if (params?.apenasComValorEmAberto === true) search.set('apenasComValorEmAberto', 'true');
+    if (params?.apenasPagos === true) search.set('apenasPagos', 'true');
+    const q = search.toString() ? `?${search.toString()}` : '';
+    return apiClient.get<ResumoPagamentoMeeirosResponse>(
+      `${BASE}/pagamentos-meeiros/resumo${q}`
+    );
+  }
+
+  async registrarPagamentoMeeiro(data: {
+    meeiroId: number;
+    formaPagamento: string;
+    contaCaixa?: string;
+    dataPagamento: string;
+    observacao?: string;
+  }): Promise<{
+    pagamento: any;
+    totalReceber: number;
+    totalEmprestimos: number;
+    valorLiquido: number;
+    emprestimosLiquidados: Array<{ id: number; valor: number }>;
+  }> {
+    return apiClient.post(`${BASE}/pagamentos-meeiros`, data);
+  }
+
+  /** Relatório de Meeiros (múltiplos) em PDF – filtro por período e roças. */
+  async downloadRelatorioMeeirosPdf(params?: {
+    dataInicial?: string;
+    dataFinal?: string;
+    rocas?: number[];
+  }): Promise<void> {
+    const search = new URLSearchParams();
+    if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
+    if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
+    if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
+    const q = search.toString() ? `?${search.toString()}` : '';
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorios/meeiros/pdf${q}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-meeiros-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async printRelatorioMeeirosPdf(params?: {
+    dataInicial?: string;
+    dataFinal?: string;
+    rocas?: number[];
+  }): Promise<void> {
+    const search = new URLSearchParams();
+    if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
+    if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
+    if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
+    const q = search.toString() ? `?${search.toString()}` : '';
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorios/meeiros/pdf${q}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
   }
 
   // Produtos da roça
@@ -286,9 +420,11 @@ export interface RelatorioLancamentoProdutosLinha {
   produto_id: number;
   codigo: string;
   nome: string;
+  roca_nome: string;
   estoque_inicial: number;
   qtde_lancada: number;
   valor_total_lancado: number;
+  total_pagar_meeiros: number;
   estoque_atual: number;
 }
 

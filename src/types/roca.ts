@@ -76,6 +76,7 @@ export interface MeeiroRoca {
   nome: string;
   cpf?: string;
   telefone?: string;
+  pixChave?: string;
   endereco?: string;
   porcentagem_padrao: number;
   produtorId: number;
@@ -89,6 +90,8 @@ export interface CreateMeeiroRocaDto {
   nome: string;
   cpf?: string;
   telefone?: string;
+  /** Chave PIX (CPF, celular, e-mail ou chave aleatória), opcional, até 140 caracteres. */
+  pixChave?: string;
   endereco?: string;
   porcentagem_padrao: number;
   produtorId: number;
@@ -99,9 +102,64 @@ export interface UpdateMeeiroRocaDto {
   nome?: string;
   cpf?: string;
   telefone?: string;
+  pixChave?: string;
   endereco?: string;
   porcentagem_padrao?: number;
   produtorId?: number;
+}
+
+/** Status do empréstimo. */
+export type EmprestimoStatus = 'ABERTO' | 'LIQUIDADO' | 'CANCELADO';
+
+export interface EmprestimoMeeiro {
+  id: number;
+  meeiroId: number;
+  valor: number;
+  data: string;
+  observacao?: string;
+  status: EmprestimoStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ResumoFinanceiroMeeiro {
+  totalReceber: number;
+  totalEmprestimosAbertos: number;
+  valorLiquido: number;
+}
+
+/** Resposta de GET /meeiros/:id (detalhe com resumo e empréstimos). */
+export interface MeeiroDetalhe extends MeeiroRoca {
+  documento?: string;
+  resumoFinanceiro?: ResumoFinanceiroMeeiro;
+  emprestimos?: EmprestimoMeeiro[];
+}
+
+export interface ListaEmprestimosResponse {
+  items: EmprestimoMeeiro[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/** Item do resumo para tela de pagamento de meeiros. */
+export interface ResumoPagamentoMeeiro {
+  meeiroId: number;
+  nome: string;
+  chavePix: string | null;
+  totalReceber: number;
+  totalEmprestimosAbertos: number;
+  /** Valor final a pagar (totalReceber - totalEmprestimosAbertos). */
+  valorLiquido: number;
+  /** True se o meeiro já teve pelo menos um pagamento registrado. */
+  jaPago?: boolean;
+}
+
+export interface ResumoPagamentoMeeirosResponse {
+  items: ResumoPagamentoMeeiro[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export type UnidadeMedidaRoca = 'UN' | 'KG' | 'LT' | 'CX' | 'SC' | 'ARROBA';

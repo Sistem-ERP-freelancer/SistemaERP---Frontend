@@ -84,6 +84,7 @@ import type {
     MeeiroRoca,
     ProdutorRoca,
     RelatorioMeeiroResponse,
+    ResumoPagamentoMeeiro,
     Roca,
     RocaDetalhes,
     UpdateMeeiroRocaDto,
@@ -93,11 +94,13 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Archive,
+    Banknote,
     Building2,
     Calendar,
     Check,
     ChevronsUpDown,
     ClipboardList,
+    Copy,
     Download,
     Eye,
     FileText,
@@ -126,6 +129,11 @@ import { toast } from 'sonner';
 function getDataHojeLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getPrimeiroDiaMesLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
@@ -339,13 +347,15 @@ export default function ControleRoca() {
 
   // Meeiros
   const [produtorIdMeeiros, setProdutorIdMeeiros] = useState<number | ''>('');
+  const [apenasComEmprestimosMeeiros, setApenasComEmprestimosMeeiros] = useState(false);
   const [filtroMeeiroProdutorSearch, setFiltroMeeiroProdutorSearch] = useState('');
   const [filtroMeeiroProdutorOpen, setFiltroMeeiroProdutorOpen] = useState(false);
   const { data: meeiros = [], isLoading: loadingMeeiros } = useQuery({
-    queryKey: ['controle-roca', 'meeiros', produtorIdMeeiros],
+    queryKey: ['controle-roca', 'meeiros', produtorIdMeeiros, apenasComEmprestimosMeeiros],
     queryFn: () =>
       controleRocaService.listarMeeiros(
-        produtorIdMeeiros === '' ? undefined : Number(produtorIdMeeiros)
+        produtorIdMeeiros === '' ? undefined : Number(produtorIdMeeiros),
+        { comEmprestimos: apenasComEmprestimosMeeiros }
       ),
   });
   const produtoresFiltroRocaOrdenados = useMemo(() => {
@@ -385,6 +395,7 @@ export default function ControleRoca() {
     nome: '',
     cpf: '',
     telefone: '',
+    pixChave: '',
     endereco: '',
     porcentagem_padrao: 40,
     produtorId: 0,
@@ -401,6 +412,7 @@ export default function ControleRoca() {
         nome: '',
         cpf: '',
         telefone: '',
+        pixChave: '',
         endereco: '',
         porcentagem_padrao: 40,
         produtorId: 0,
@@ -410,20 +422,42 @@ export default function ControleRoca() {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao cadastrar meeiro');
     },
   });
-  const [detailMeeiro, setDetailMeeiro] = useState<MeeiroRoca | null>(null);
+  const [detailMeeiroId, setDetailMeeiroId] = useState<number | null>(null);
+  const { data: detailMeeiro = null, isLoading: loadingDetailMeeiro } = useQuery({
+    queryKey: ['controle-roca', 'meeiro-detail', detailMeeiroId],
+    queryFn: () => controleRocaService.obterMeeiro(detailMeeiroId!),
+    enabled: !!detailMeeiroId,
+  });
   const [openDetailMeeiro, setOpenDetailMeeiro] = useState(false);
   const [editMeeiro, setEditMeeiro] = useState<MeeiroRoca | null>(null);
   const [openEditMeeiro, setOpenEditMeeiro] = useState(false);
   const [formEditMeeiro, setFormEditMeeiro] = useState<
-    UpdateMeeiroRocaDto & { nome: string; produtorId: number; porcentagem_padrao: number }
+    UpdateMeeiroRocaDto & { nome: string; produtorId: number; porcentagem_padrao: number; pixChave?: string }
   >({
     codigo: '',
     nome: '',
     cpf: '',
     telefone: '',
+    pixChave: '',
     endereco: '',
     porcentagem_padrao: 40,
     produtorId: 0,
+  });
+  const [openEmprestimo, setOpenEmprestimo] = useState(false);
+  const [meeiroEmprestimo, setMeeiroEmprestimo] = useState<MeeiroRoca | null>(null);
+  const [formEmprestimo, setFormEmprestimo] = useState({ meeiroId: 0, valor: 0, data: '', observacao: '' });
+  const createEmprestimo = useMutation({
+    mutationFn: (data: { meeiroId: number; valor: number; data: string; observacao?: string }) =>
+      controleRocaService.criarEmprestimo(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Empréstimo registrado');
+      setOpenEmprestimo(false);
+      setMeeiroEmprestimo(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Erro ao registrar empréstimo');
+    },
   });
   const updateMeeiro = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateMeeiroRocaDto }) =>
@@ -587,6 +621,11 @@ export default function ControleRoca() {
   const { data: meeirosParaRelatorio = [] } = useQuery({
     queryKey: ['controle-roca', 'meeiros'],
     queryFn: () => controleRocaService.listarMeeiros(),
+  });
+  const { data: rocasParaRelatorioPdf = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas-all'],
+    queryFn: () => controleRocaService.listarRocas(),
+    enabled: tab === 'relatorio',
   });
   const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
     queryKey: [
@@ -1161,6 +1200,17 @@ export default function ControleRoca() {
   const [relMeeiroPopoverOpen, setRelMeeiroPopoverOpen] = useState(false);
   const [relDataInicial, setRelDataInicial] = useState('');
   const [relDataFinal, setRelDataFinal] = useState('');
+  const [relMeeirosPdfDataInicial, setRelMeeirosPdfDataInicial] = useState(() => new Date().toISOString().slice(0, 10));
+  const [relMeeirosPdfDataFinal, setRelMeeirosPdfDataFinal] = useState(() => new Date().toISOString().slice(0, 10));
+  const [relMeeirosPdfRocaIds, setRelMeeirosPdfRocaIds] = useState<number[]>([]);
+  const [pagamentoDataInicial, setPagamentoDataInicial] = useState(() => getPrimeiroDiaMesLocal());
+  const [pagamentoDataFinal, setPagamentoDataFinal] = useState(() => getDataHojeLocal());
+  const [pagamentoProdutorId, setPagamentoProdutorId] = useState<number | ''>('');
+  const [pagamentoRocaIds, setPagamentoRocaIds] = useState<number[]>([]);
+  const [pagamentoSubTab, setPagamentoSubTab] = useState<'em-aberto' | 'quitados'>('em-aberto');
+  const [openPagarModal, setOpenPagarModal] = useState(false);
+  const [meeiroParaPagar, setMeeiroParaPagar] = useState<ResumoPagamentoMeeiro | null>(null);
+  const [formPagamento, setFormPagamento] = useState({ formaPagamento: 'PIX', contaCaixa: '', dataPagamento: '', observacao: '' });
   const [relResult, setRelResult] = useState<RelatorioMeeiroResponse | null>(null);
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
@@ -1196,6 +1246,51 @@ export default function ControleRoca() {
       .finally(() => setRelLoading(false));
   };
 
+  const { data: pagamentoRocas = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas', pagamentoProdutorId],
+    queryFn: () =>
+      controleRocaService.listarRocas(
+        pagamentoProdutorId === '' ? undefined : Number(pagamentoProdutorId)
+      ),
+    enabled: tab === 'pagamento-meeiros',
+  });
+  const { data: resumoPagamentoMeeiros, isLoading: loadingResumoPagamento } = useQuery({
+    queryKey: [
+      'controle-roca',
+      'pagamentos-meeiros-resumo',
+      pagamentoDataInicial,
+      pagamentoDataFinal,
+      pagamentoProdutorId,
+      pagamentoRocaIds,
+    ],
+    queryFn: () =>
+      controleRocaService.listarResumoPagamentoMeeiros({
+        dataInicial: pagamentoDataInicial || undefined,
+        dataFinal: pagamentoDataFinal || undefined,
+        produtorId: pagamentoProdutorId === '' ? undefined : Number(pagamentoProdutorId),
+        rocas: pagamentoRocaIds.length ? pagamentoRocaIds : undefined,
+      }),
+    enabled: tab === 'pagamento-meeiros',
+  });
+  const registrarPagamento = useMutation({
+    mutationFn: (data: {
+      meeiroId: number;
+      formaPagamento: string;
+      contaCaixa?: string;
+      dataPagamento: string;
+      observacao?: string;
+    }) => controleRocaService.registrarPagamentoMeeiro(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Pagamento registrado');
+      setOpenPagarModal(false);
+      setMeeiroParaPagar(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Erro ao registrar pagamento');
+    },
+  });
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -1230,6 +1325,10 @@ export default function ControleRoca() {
             <TabsTrigger value="lancamentos" className="gap-1">
               <ClipboardList className="w-4 h-4" />
               Lançamentos
+            </TabsTrigger>
+            <TabsTrigger value="pagamento-meeiros" className="gap-1">
+              <Banknote className="w-4 h-4" />
+              Pagamento Meeiros
             </TabsTrigger>
             <TabsTrigger value="relatorio" className="gap-1">
               <FileText className="w-4 h-4" />
@@ -1691,6 +1790,16 @@ export default function ControleRoca() {
                           </PopoverContent>
                         </Popover>
                       </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="filtro-com-emprestimos"
+                          checked={apenasComEmprestimosMeeiros}
+                          onCheckedChange={(c) => setApenasComEmprestimosMeeiros(!!c)}
+                        />
+                        <Label htmlFor="filtro-com-emprestimos" className="text-sm font-normal cursor-pointer">
+                          Apenas meeiros com empréstimos em aberto
+                        </Label>
+                      </div>
                     </div>
                   </SheetContent>
                 </Sheet>
@@ -1740,9 +1849,9 @@ export default function ControleRoca() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem
+                                                <DropdownMenuItem
                                   onClick={() => {
-                                    setDetailMeeiro(m);
+                                    setDetailMeeiroId(m.id);
                                     setOpenDetailMeeiro(true);
                                   }}
                                 >
@@ -1757,6 +1866,7 @@ export default function ControleRoca() {
                                       nome: m.nome,
                                       cpf: m.cpf ?? '',
                                       telefone: m.telefone ?? '',
+                                      pixChave: m.pixChave ?? '',
                                       endereco: m.endereco ?? '',
                                       porcentagem_padrao: m.porcentagem_padrao,
                                       produtorId: m.produtorId,
@@ -1766,6 +1876,16 @@ export default function ControleRoca() {
                                 >
                                   <Pencil className="w-4 h-4 mr-2" />
                                   Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setMeeiroEmprestimo(m);
+                                    setFormEmprestimo({ meeiroId: m.id, valor: 0, data: getDataHojeLocal(), observacao: '' });
+                                    setOpenEmprestimo(true);
+                                  }}
+                                >
+                                  <Banknote className="w-4 h-4 mr-2" />
+                                  Registrar Empréstimo
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
@@ -2553,36 +2673,34 @@ className={
                               {item != null ? formatCurrency(valorTotalItem) : formatCurrency(Number(l.total_geral))}
                             </TableCell>
                             <TableCell className="text-right pl-4 pr-6">
-                              {isPrimeiraLinhaDoLancamento ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <MoreHorizontal className="w-4 h-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      onClick={() => setDetalheLancamentoId(l.id)}
-                                    >
-                                      <Eye className="w-4 h-4 mr-2" />
-                                      Ver detalhes
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => setEditLancamentoId(l.id)}
-                                    >
-                                      <Pencil className="w-4 h-4 mr-2" />
-                                      Editar
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => setLancamentoParaExcluirId(l.id)}
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Excluir
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : null}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => setDetalheLancamentoId(l.id)}
+                                  >
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    Ver detalhes
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => setEditLancamentoId(l.id)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => setLancamentoParaExcluirId(l.id)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Excluir
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         );
@@ -3252,6 +3370,229 @@ className={
             </Dialog>
           </TabsContent>
 
+          {/* Tab Pagamento de Meeiros */}
+          <TabsContent value="pagamento-meeiros" className="space-y-4">
+            <div className="bg-card rounded-xl border p-4 mb-4">
+              <p className="text-sm text-muted-foreground mb-3">Filtros</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Os valores vêm dos lançamentos no período (porcentagem de cada meeiro). Use um período que inclua as datas dos lançamentos (ex.: início do mês até hoje).
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Produtor</Label>
+                  <Select
+                    value={pagamentoProdutorId === '' ? 'todos' : String(pagamentoProdutorId)}
+                    onValueChange={(v) => {
+                      setPagamentoProdutorId(v === 'todos' ? '' : Number(v));
+                      setPagamentoRocaIds([]);
+                    }}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os produtores</SelectItem>
+                      {produtores.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.codigo} – {p.nome_razao}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data inicial</Label>
+                  <Input
+                    type="date"
+                    className="w-[140px]"
+                    value={pagamentoDataInicial}
+                    onChange={(e) => setPagamentoDataInicial(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data final</Label>
+                  <Input
+                    type="date"
+                    className="w-[140px]"
+                    value={pagamentoDataFinal}
+                    onChange={(e) => setPagamentoDataFinal(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Roças (opcional)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[220px] justify-between">
+                        <span className="truncate">
+                          {pagamentoRocaIds.length === 0
+                            ? 'Todas as roças'
+                            : `${pagamentoRocaIds.length} roça(s) selecionada(s)`}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-2" align="start">
+                      <div className="max-h-[240px] overflow-y-auto space-y-1">
+                        {pagamentoRocas.map((r) => (
+                          <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
+                            <Checkbox
+                              checked={pagamentoRocaIds.includes(r.id)}
+                              onCheckedChange={(c) => {
+                                setPagamentoRocaIds((prev) =>
+                                  c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
+                                );
+                              }}
+                            />
+                            <span className="text-sm">{r.nome}</span>
+                          </label>
+                        ))}
+                        {pagamentoRocas.length === 0 && (
+                          <p className="text-sm text-muted-foreground px-2">Selecione um produtor para listar roças.</p>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            </div>
+
+            <Tabs value={pagamentoSubTab} onValueChange={(v) => setPagamentoSubTab(v as 'em-aberto' | 'quitados')} className="space-y-4">
+              <TabsList className="bg-muted/50">
+                <TabsTrigger value="em-aberto" className="gap-2">
+                  <Banknote className="w-4 h-4" />
+                  Em aberto
+                  <span className="ml-1 text-xs bg-primary/20 text-primary rounded-full px-2 py-0.5">
+                    {(resumoPagamentoMeeiros?.items ?? []).filter((m) => m.valorLiquido > 0 && !m.jaPago).length}
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger value="quitados" className="gap-2">
+                  <Archive className="w-4 h-4" />
+                  Quitados
+                  <span className="ml-1 text-xs bg-muted-foreground/20 rounded-full px-2 py-0.5">
+                    {(resumoPagamentoMeeiros?.items ?? []).filter((m) => m.jaPago === true).length}
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="em-aberto" className="mt-0">
+                <div className="bg-card border rounded-xl overflow-hidden">
+                  {loadingResumoPagamento ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead>Meeiro</TableHead>
+                          <TableHead>Chave PIX</TableHead>
+                          <TableHead className="text-right">Valor a receber</TableHead>
+                          <TableHead className="text-right">Empréstimos em aberto</TableHead>
+                          <TableHead className="text-right">Valor final a pagar</TableHead>
+                          <TableHead className="w-[100px] text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(() => {
+                          const emAberto = (resumoPagamentoMeeiros?.items ?? []).filter((m) => m.valorLiquido > 0 && !m.jaPago);
+                          if (emAberto.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                  Nenhum meeiro com valor em aberto no período (ou já pago). Verifique se há lançamentos no período e se as datas incluem os dias dos lançamentos.
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
+                          return emAberto.map((m) => (
+                            <TableRow key={m.meeiroId}>
+                              <TableCell className="font-medium">{m.nome}</TableCell>
+                              <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
+                                {m.chavePix || '—'}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalReceber)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
+                              <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setMeeiroParaPagar(m);
+                                    setFormPagamento({
+                                      formaPagamento: 'PIX',
+                                      contaCaixa: '',
+                                      dataPagamento: getDataHojeLocal(),
+                                      observacao: '',
+                                    });
+                                    setOpenPagarModal(true);
+                                  }}
+                                >
+                                  Pagar
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ));
+                        })()}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="quitados" className="mt-0">
+                <div className="bg-card border rounded-xl overflow-hidden">
+                  {loadingResumoPagamento ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead>Meeiro</TableHead>
+                          <TableHead>Chave PIX</TableHead>
+                          <TableHead className="text-right">Valor a receber</TableHead>
+                          <TableHead className="text-right">Empréstimos em aberto</TableHead>
+                          <TableHead className="text-right">Valor final a pagar</TableHead>
+                          <TableHead className="w-[100px] text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(() => {
+                          const quitados = (resumoPagamentoMeeiros?.items ?? []).filter((m) => m.jaPago === true);
+                          if (quitados.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                  Nenhum meeiro quitado ainda. Após registrar um pagamento, o meeiro aparecerá aqui.
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
+                          return quitados.map((m) => (
+                            <TableRow key={m.meeiroId}>
+                              <TableCell className="font-medium">{m.nome}</TableCell>
+                              <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
+                                {m.chavePix || '—'}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalReceber)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
+                              <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="outline" size="sm" disabled title="Sem valor a pagar">
+                                  Pagar
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ));
+                        })()}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
           {/* Tab Relatório */}
           <TabsContent value="relatorio" className="space-y-4">
             <div className="bg-card border rounded-xl p-4 flex flex-wrap items-end gap-4">
@@ -3270,7 +3611,7 @@ className={
                           ? 'Selecione o meeiro'
                           : (() => {
                               const m = meeirosParaRelatorio.find((x) => Number(x.id) === Number(relMeeiroId));
-                              return m ? `${m.codigo ?? ''} – ${m.nome ?? ''} (${m.porcentagem_padrao}%)` : 'Selecione o meeiro';
+                              return m ? `${m.nome ?? ''} (${m.porcentagem_padrao}%)` : 'Selecione o meeiro';
                             })()}
                       </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -3298,7 +3639,7 @@ className={
                               }}
                             >
                               <Check className={cn('mr-2 h-4 w-4', Number(relMeeiroId) === Number(m.id) ? 'opacity-100' : 'opacity-0')} />
-                              {m.codigo} – {m.nome} ({m.porcentagem_padrao}%)
+                              {m.nome} ({m.porcentagem_padrao}%)
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -3438,6 +3779,107 @@ className={
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Relatório de Meeiros (múltiplos) em PDF – período e roças */}
+            <div className="bg-card border rounded-xl p-4 mt-6">
+              <h3 className="text-base font-semibold flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-primary" />
+                Relatório de Meeiros (PDF)
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Gera PDF com todos os meeiros, totais a receber, empréstimos e valor final. Filtro por período e roças (meeiro pode ter mais de uma roça).
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data inicial</Label>
+                  <Input
+                    type="date"
+                    className="w-[140px]"
+                    value={relMeeirosPdfDataInicial}
+                    onChange={(e) => setRelMeeirosPdfDataInicial(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Data final</Label>
+                  <Input
+                    type="date"
+                    className="w-[140px]"
+                    value={relMeeirosPdfDataFinal}
+                    onChange={(e) => setRelMeeirosPdfDataFinal(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Roças (opcional)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-[220px] justify-between">
+                        <span className="truncate">
+                          {relMeeirosPdfRocaIds.length === 0
+                            ? 'Todas as roças'
+                            : `${relMeeirosPdfRocaIds.length} roça(s)`}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-2" align="start">
+                      <div className="max-h-[240px] overflow-y-auto space-y-1">
+                        {rocasParaRelatorioPdf.map((r) => (
+                          <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
+                            <Checkbox
+                              checked={relMeeirosPdfRocaIds.includes(r.id)}
+                              onCheckedChange={(c) => {
+                                setRelMeeirosPdfRocaIds((prev) =>
+                                  c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
+                                );
+                              }}
+                            />
+                            <span className="text-sm">{r.nome}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={async () => {
+                    try {
+                      await controleRocaService.downloadRelatorioMeeirosPdf({
+                        dataInicial: relMeeirosPdfDataInicial || undefined,
+                        dataFinal: relMeeirosPdfDataFinal || undefined,
+                        rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                      });
+                      toast.success('PDF baixado');
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.message || e?.message || 'Erro ao gerar PDF');
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4" />
+                  Baixar PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={async () => {
+                    try {
+                      await controleRocaService.printRelatorioMeeirosPdf({
+                        dataInicial: relMeeirosPdfDataInicial || undefined,
+                        dataFinal: relMeeirosPdfDataFinal || undefined,
+                        rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                      });
+                    } catch (e: any) {
+                      toast.error(e?.response?.data?.message || e?.message || 'Erro ao abrir PDF');
+                    }
+                  }}
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir
+                </Button>
+              </div>
+            </div>
+
             {relResult && (
               <div className="bg-card border rounded-xl overflow-hidden space-y-4">
                 {relMeeiroId !== '' && (() => {
@@ -4783,13 +5225,14 @@ className={
           setOpenMeeiro(open);
           if (!open) {
             setFormMeeiro({
-              produtorId: '',
               codigo: '',
               nome: '',
               cpf: '',
               telefone: '',
+              pixChave: '',
               endereco: '',
-              porcentagem_padrao: '',
+              porcentagem_padrao: 40,
+              produtorId: 0,
             });
           }
         }}
@@ -4949,6 +5392,23 @@ className={
                   />
                 </div>
 
+                {/* Chave PIX */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-muted-foreground" />
+                    Chave PIX
+                    <span className="text-xs text-muted-foreground">(opcional, até 140 caracteres)</span>
+                  </Label>
+                  <Input
+                    placeholder="CPF, celular, e-mail ou chave aleatória"
+                    value={formMeeiro.pixChave || ''}
+                    onChange={(e) =>
+                      setFormMeeiro((p) => ({ ...p, pixChave: e.target.value.slice(0, 140) }))
+                    }
+                    maxLength={140}
+                  />
+                </div>
+
                 {/* Endereço */}
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
@@ -4980,7 +5440,8 @@ className={
                   }
                   createMeeiro.mutate({
                     ...formMeeiro,
-                    codigo: formMeeiro.codigo.trim() || undefined,
+                    codigo: formMeeiro.codigo?.toString().trim() || undefined,
+                    pixChave: formMeeiro.pixChave?.trim() || undefined,
                   });
                 }}
                 disabled={createMeeiro.isPending}
@@ -4999,7 +5460,7 @@ className={
           open={openDetailMeeiro}
           onOpenChange={(open) => {
             setOpenDetailMeeiro(open);
-            if (!open) setDetailMeeiro(null);
+            if (!open) setDetailMeeiroId(null);
           }}
         >
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -5009,10 +5470,14 @@ className={
                 Visualizar Meeiro
               </DialogTitle>
               <DialogDescription>
-                Informações completas do meeiro.
+                Informações completas do meeiro e resumo financeiro.
               </DialogDescription>
             </DialogHeader>
-            {detailMeeiro && (
+            {loadingDetailMeeiro ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : detailMeeiro ? (
               <div className="space-y-8 mt-6">
                 <div className="space-y-6">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -5022,36 +5487,112 @@ className={
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Código</Label>
-                      <p className="font-medium text-base font-mono">
-                        {detailMeeiro.codigo}
-                      </p>
+                      <p className="font-medium text-base font-mono">{detailMeeiro.codigo}</p>
                     </div>
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Nome</Label>
                       <p className="font-medium text-base">{detailMeeiro.nome}</p>
                     </div>
                     <div className="space-y-3">
-                      <Label className="text-sm text-muted-foreground">CPF</Label>
+                      <Label className="text-sm text-muted-foreground">Documento (CPF)</Label>
                       <p className="font-medium text-base font-mono">
-                        {detailMeeiro.cpf || '—'}
+                        {detailMeeiro.documento ?? detailMeeiro.cpf ?? '—'}
                       </p>
                     </div>
                     <div className="space-y-3">
-                      <Label className="text-sm text-muted-foreground">
-                        Porcentagem padrão (%)
-                      </Label>
-                      <p className="font-medium text-base">
-                        {detailMeeiro.porcentagem_padrao ?? 0}%
+                      <Label className="text-sm text-muted-foreground">Chave PIX</Label>
+                      <p className="font-medium text-base break-all">
+                        {detailMeeiro.pixChave?.trim() || '—'}
                       </p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Porcentagem padrão (%)</Label>
+                      <p className="font-medium text-base">{detailMeeiro.porcentagem_padrao ?? 0}%</p>
                     </div>
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Telefone</Label>
-                      <p className="font-medium text-base">
-                        {detailMeeiro.telefone || '—'}
-                      </p>
+                      <p className="font-medium text-base">{detailMeeiro.telefone || '—'}</p>
                     </div>
                   </div>
                 </div>
+
+                {detailMeeiro.resumoFinanceiro && (
+                  <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Banknote className="w-5 h-5 text-primary" />
+                      Resumo financeiro
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <Label className="text-muted-foreground">Total a receber</Label>
+                        <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalReceber)}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Empréstimos em aberto</Label>
+                        <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalEmprestimosAbertos)}</p>
+                      </div>
+                      <div>
+                        <Label className="text-muted-foreground">Valor líquido a pagar</Label>
+                        <p className="font-semibold text-base text-primary">{formatCurrency(detailMeeiro.resumoFinanceiro.valorLiquido)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {Array.isArray(detailMeeiro.emprestimos) && detailMeeiro.emprestimos.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold">Empréstimos</h3>
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50">
+                            <TableHead>Data</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
+                            <TableHead>Observação</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-[100px] text-right">Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {detailMeeiro.emprestimos.map((emp) => (
+                            <TableRow key={emp.id}>
+                              <TableCell>{formatDate(emp.data)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{formatCurrency(Number(emp.valor))}</TableCell>
+                              <TableCell className="max-w-[180px] truncate">{emp.observacao || '—'}</TableCell>
+                              <TableCell>
+                                <span className={cn(
+                                  'text-xs font-medium px-2 py-1 rounded',
+                                  emp.status === 'ABERTO' && 'bg-amber-100 text-amber-800',
+                                  emp.status === 'LIQUIDADO' && 'bg-green-100 text-green-800',
+                                  emp.status === 'CANCELADO' && 'bg-gray-100 text-gray-600'
+                                )}>
+                                  {emp.status === 'ABERTO' ? 'Em aberto' : emp.status === 'LIQUIDADO' ? 'Liquidado' : 'Cancelado'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {emp.status === 'ABERTO' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      controleRocaService.atualizarStatusEmprestimo(emp.id, { status: 'LIQUIDADO' }).then(() => {
+                                        queryClient.invalidateQueries({ queryKey: ['controle-roca', 'meeiro-detail', detailMeeiroId] });
+                                        queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+                                        toast.success('Empréstimo marcado como quitado');
+                                      }).catch((e: any) => toast.error(e?.response?.data?.message || 'Erro ao atualizar'));
+                                    }}
+                                  >
+                                    Marcar quitado
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -5059,9 +5600,7 @@ className={
                     Endereço
                   </h3>
                   <div className="p-4 border rounded-lg">
-                    <p className="font-medium text-base whitespace-pre-wrap">
-                      {detailMeeiro.endereco || '—'}
-                    </p>
+                    <p className="font-medium text-base whitespace-pre-wrap">{detailMeeiro.endereco || '—'}</p>
                   </div>
                 </div>
 
@@ -5074,55 +5613,112 @@ className={
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       {detailMeeiro.criadoEm && (
                         <div>
-                          <Label className="text-xs text-muted-foreground">
-                            Criado em
-                          </Label>
-                          <p>
-                            {new Date(detailMeeiro.criadoEm).toLocaleString('pt-BR')}
-                          </p>
+                          <Label className="text-xs text-muted-foreground">Criado em</Label>
+                          <p>{new Date(detailMeeiro.criadoEm).toLocaleString('pt-BR')}</p>
                         </div>
                       )}
                       {detailMeeiro.atualizadoEm && (
                         <div>
-                          <Label className="text-xs text-muted-foreground">
-                            Atualizado em
-                          </Label>
-                          <p>
-                            {new Date(detailMeeiro.atualizadoEm).toLocaleString(
-                              'pt-BR',
-                            )}
-                          </p>
+                          <Label className="text-xs text-muted-foreground">Atualizado em</Label>
+                          <p>{new Date(detailMeeiro.atualizadoEm).toLocaleString('pt-BR')}</p>
                         </div>
                       )}
                     </div>
                   </div>
                 )}
+
+                <div className="flex justify-end gap-2 pt-6 border-t">
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      setOpenDetailMeeiro(false);
+                      setDetailMeeiroId(null);
+                      setEditMeeiro(detailMeeiro);
+                      setFormEditMeeiro({
+                        codigo: detailMeeiro.codigo,
+                        nome: detailMeeiro.nome,
+                        cpf: detailMeeiro.cpf ?? '',
+                        telefone: detailMeeiro.telefone ?? '',
+                        pixChave: detailMeeiro.pixChave ?? '',
+                        endereco: detailMeeiro.endereco ?? '',
+                        porcentagem_padrao: detailMeeiro.porcentagem_padrao,
+                        produtorId: detailMeeiro.produtorId,
+                      });
+                      setOpenEditMeeiro(true);
+                    }}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Editar
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Registrar Empréstimo */}
+        <Dialog open={openEmprestimo} onOpenChange={setOpenEmprestimo}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Registrar Empréstimo</DialogTitle>
+              <DialogDescription>
+                {meeiroEmprestimo ? `Registrar empréstimo para ${meeiroEmprestimo.nome}` : 'Preencha os dados do empréstimo.'}
+              </DialogDescription>
+            </DialogHeader>
+            {meeiroEmprestimo && (
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Valor do empréstimo</Label>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step={0.01}
+                    value={formEmprestimo.valor || ''}
+                    onChange={(e) => setFormEmprestimo((p) => ({ ...p, valor: Number(e.target.value) || 0 }))}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data do empréstimo</Label>
+                  <Input
+                    type="date"
+                    value={formEmprestimo.data}
+                    onChange={(e) => setFormEmprestimo((p) => ({ ...p, data: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Observação (opcional)</Label>
+                  <Textarea
+                    value={formEmprestimo.observacao}
+                    onChange={(e) => setFormEmprestimo((p) => ({ ...p, observacao: e.target.value }))}
+                    placeholder="Ex: adiantamento safra"
+                    rows={2}
+                  />
+                </div>
               </div>
             )}
-            {detailMeeiro && (
-              <div className="flex justify-end gap-2 mt-6 pt-6 border-t">
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setOpenDetailMeeiro(false);
-                    setEditMeeiro(detailMeeiro);
-                    setFormEditMeeiro({
-                      codigo: detailMeeiro.codigo,
-                      nome: detailMeeiro.nome,
-                      cpf: detailMeeiro.cpf ?? '',
-                      telefone: detailMeeiro.telefone ?? '',
-                      endereco: detailMeeiro.endereco ?? '',
-                      porcentagem_padrao: detailMeeiro.porcentagem_padrao,
-                      produtorId: detailMeeiro.produtorId,
-                    });
-                    setOpenEditMeeiro(true);
-                  }}
-                >
-                  <Pencil className="w-4 h-4 mr-2" />
-                  Editar
-                </Button>
-              </div>
-            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenEmprestimo(false)}>Cancelar</Button>
+              <Button
+                variant="gradient"
+                disabled={createEmprestimo.isPending || !formEmprestimo.valor || !formEmprestimo.data}
+                onClick={() => {
+                  if (!formEmprestimo.meeiroId || formEmprestimo.valor <= 0 || !formEmprestimo.data) {
+                    toast.error('Preencha valor e data.');
+                    return;
+                  }
+                  createEmprestimo.mutate({
+                    meeiroId: formEmprestimo.meeiroId,
+                    valor: formEmprestimo.valor,
+                    data: formEmprestimo.data,
+                    observacao: formEmprestimo.observacao?.trim() || undefined,
+                  });
+                }}
+              >
+                {createEmprestimo.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Salvar
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -5294,6 +5890,22 @@ className={
 
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
+                      <Banknote className="w-4 h-4 text-muted-foreground" />
+                      Chave PIX
+                      <span className="text-xs text-muted-foreground">(opcional, até 140 caracteres)</span>
+                    </Label>
+                    <Input
+                      placeholder="CPF, celular, e-mail ou chave aleatória"
+                      value={formEditMeeiro.pixChave ?? ''}
+                      onChange={(e) =>
+                        setFormEditMeeiro((p) => ({ ...p, pixChave: e.target.value.slice(0, 140) }))
+                      }
+                      maxLength={140}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-muted-foreground" />
                       Endereço
                       <span className="text-xs text-muted-foreground">(opcional)</span>
@@ -5329,6 +5941,7 @@ className={
                       nome: formEditMeeiro.nome,
                       cpf: formEditMeeiro.cpf || undefined,
                       telefone: formEditMeeiro.telefone || undefined,
+                      pixChave: formEditMeeiro.pixChave?.trim() || undefined,
                       endereco: formEditMeeiro.endereco || undefined,
                       porcentagem_padrao:
                         formEditMeeiro.porcentagem_padrao ?? editMeeiro.porcentagem_padrao,
@@ -5342,6 +5955,123 @@ className={
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 )}
                 Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Pagar Meeiro */}
+        <Dialog
+          open={openPagarModal}
+          onOpenChange={(open) => {
+            setOpenPagarModal(open);
+            if (!open) setMeeiroParaPagar(null);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Registrar pagamento</DialogTitle>
+              <DialogDescription>
+                {meeiroParaPagar ? `Pagamento para ${meeiroParaPagar.nome}` : 'Confirme os dados do pagamento.'}
+              </DialogDescription>
+            </DialogHeader>
+            {meeiroParaPagar && (
+              <div className="space-y-4 pt-2">
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Chave PIX</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1"
+                      onClick={() => {
+                        if (meeiroParaPagar.chavePix) {
+                          navigator.clipboard.writeText(meeiroParaPagar.chavePix);
+                          toast.success('Chave PIX copiada');
+                        }
+                      }}
+                      disabled={!meeiroParaPagar.chavePix}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <p className="font-mono break-all">{meeiroParaPagar.chavePix || '—'}</p>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-muted-foreground">Valor total a receber</span>
+                    <span className="font-semibold">{formatCurrency(meeiroParaPagar.totalReceber)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Empréstimos em aberto</span>
+                    <span>{formatCurrency(meeiroParaPagar.totalEmprestimosAbertos)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-muted-foreground">Valor final a pagar</span>
+                    <span className="font-semibold text-primary">{formatCurrency(meeiroParaPagar.valorLiquido)}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Forma de pagamento</Label>
+                  <Select
+                    value={formPagamento.formaPagamento}
+                    onValueChange={(v) => setFormPagamento((p) => ({ ...p, formaPagamento: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PIX">PIX</SelectItem>
+                      <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="Transferência">Transferência</SelectItem>
+                      <SelectItem value="Outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Conta ou caixa utilizado (opcional)</Label>
+                  <Input
+                    value={formPagamento.contaCaixa}
+                    onChange={(e) => setFormPagamento((p) => ({ ...p, contaCaixa: e.target.value }))}
+                    placeholder="Ex: Caixa Geral"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data do pagamento</Label>
+                  <Input
+                    type="date"
+                    value={formPagamento.dataPagamento}
+                    onChange={(e) => setFormPagamento((p) => ({ ...p, dataPagamento: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Observação (opcional)</Label>
+                  <Textarea
+                    value={formPagamento.observacao}
+                    onChange={(e) => setFormPagamento((p) => ({ ...p, observacao: e.target.value }))}
+                    placeholder="Observação"
+                    rows={2}
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenPagarModal(false)}>Cancelar</Button>
+              <Button
+                variant="gradient"
+                disabled={registrarPagamento.isPending || !meeiroParaPagar || !formPagamento.dataPagamento}
+                onClick={() => {
+                  if (!meeiroParaPagar || !formPagamento.dataPagamento) return;
+                  registrarPagamento.mutate({
+                    meeiroId: meeiroParaPagar.meeiroId,
+                    formaPagamento: formPagamento.formaPagamento,
+                    contaCaixa: formPagamento.contaCaixa?.trim() || undefined,
+                    dataPagamento: formPagamento.dataPagamento,
+                    observacao: formPagamento.observacao?.trim() || undefined,
+                  });
+                }}
+              >
+                {registrarPagamento.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Confirmar pagamento
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -5940,21 +6670,21 @@ className={
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableHead className="font-semibold">Código</TableHead>
                         <TableHead className="font-semibold">Produto</TableHead>
-                        <TableHead className="text-right font-semibold">Estoque inicial</TableHead>
+                        <TableHead className="font-semibold">Roça</TableHead>
                         <TableHead className="text-right font-semibold">Qtde lançada</TableHead>
                         <TableHead className="text-right font-semibold">Valor total lançado</TableHead>
-                        <TableHead className="text-right font-semibold">Estoque atual</TableHead>
+                        <TableHead className="text-right font-semibold">Total pagar meeiros</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {relatorioEstoqueDados.map((row, i) => (
-                        <TableRow key={row.produto_id} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
+                        <TableRow key={`${row.produto_id}-${row.roca_nome}`} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
                           <TableCell className="font-mono text-sm">{row.codigo}</TableCell>
                           <TableCell>{row.nome}</TableCell>
-                          <TableCell className="text-right tabular-nums">{row.estoque_inicial.toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>{row.roca_nome || '-'}</TableCell>
                           <TableCell className="text-right tabular-nums">{row.qtde_lancada.toLocaleString('pt-BR')}</TableCell>
                           <TableCell className="text-right tabular-nums">{row.valor_total_lancado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="text-right tabular-nums font-medium">{row.estoque_atual.toLocaleString('pt-BR')}</TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">{row.total_pagar_meeiros.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
