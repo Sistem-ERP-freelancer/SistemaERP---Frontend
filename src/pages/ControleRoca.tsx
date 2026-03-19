@@ -1071,7 +1071,14 @@ export default function ControleRoca() {
   const linhasExpandidas = useMemo(
     () =>
       lancamentosPagina.flatMap((l) => {
-        const itens = l.itens ?? [];
+        const produtoSelecionado = filtrosLancamento.produto.trim().toLowerCase();
+        const itensOriginais = l.itens ?? [];
+        const itens =
+          produtoSelecionado === ''
+            ? itensOriginais
+            : itensOriginais.filter(
+                (item) => (item.produto ?? '').trim().toLowerCase() === produtoSelecionado
+              );
         if (itens.length === 0) return [{ l, item: null, itemIndex: 0, rowKey: `${l.id}-0` }];
         return itens.map((item, idx) => ({
           l,
@@ -1080,7 +1087,7 @@ export default function ControleRoca() {
           rowKey: `${l.id}-${(item as { itemId?: number }).itemId ?? idx}`,
         }));
       }),
-    [lancamentosPagina]
+    [lancamentosPagina, filtrosLancamento.produto]
   );
 
   const toggleSelecionarTodosLancamentos = () => {
