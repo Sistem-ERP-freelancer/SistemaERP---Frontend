@@ -221,6 +221,75 @@ class ControleRocaService {
       throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
     }
   }
+
+  /** Dados do Relatório de Lançamento de Produtos (apenas produtos com lançamento no período). */
+  async getRelatorioLancamentoProdutos(params?: {
+    data_inicial?: string;
+    data_final?: string;
+    rocaId?: number;
+  }): Promise<RelatorioLancamentoProdutosLinha[]> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial) q.set('data_inicial', params.data_inicial);
+    if (params?.data_final) q.set('data_final', params.data_final);
+    if (params?.rocaId != null) q.set('rocaId', String(params.rocaId));
+    const query = q.toString();
+    return apiClient.get<RelatorioLancamentoProdutosLinha[]>(
+      `${BASE}/relatorio/lancamento-produtos${query ? `?${query}` : ''}`
+    );
+  }
+
+  async downloadRelatorioLancamentoProdutosPdf(
+    dataInicial?: string,
+    dataFinal?: string,
+    rocaId?: number
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
+    if (rocaId != null) q.set('rocaId', String(rocaId));
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorio/lancamento-produtos/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-lancamento-produtos-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async printRelatorioLancamentoProdutosPdf(
+    dataInicial?: string,
+    dataFinal?: string,
+    rocaId?: number
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
+    if (rocaId != null) q.set('rocaId', String(rocaId));
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorio/lancamento-produtos/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
+}
+
+export interface RelatorioLancamentoProdutosLinha {
+  produto_id: number;
+  codigo: string;
+  nome: string;
+  estoque_inicial: number;
+  qtde_lancada: number;
+  valor_total_lancado: number;
+  estoque_atual: number;
 }
 
 export const controleRocaService = new ControleRocaService();

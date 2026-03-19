@@ -74,7 +74,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { cleanDocument, formatCPF, formatTelefone } from '@/lib/validators';
 import { ConsultaCnpjResponse } from '@/services/cnpj.service';
-import { controleRocaService } from '@/services/controle-roca.service';
+import { controleRocaService, type RelatorioLancamentoProdutosLinha } from '@/services/controle-roca.service';
 import { produtosService } from '@/services/produtos.service';
 import type {
     CreateLancamentoProducaoRocaDto,
@@ -121,6 +121,12 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+
+/** Retorna a data de hoje no fuso local em YYYY-MM-DD (evita deslocamento de 1 dia do toISOString/UTC). */
+function getDataHojeLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
 
@@ -765,6 +771,12 @@ export default function ControleRoca() {
     );
   }, [editLancamento, editLancamentoId]);
   const [openLancamento, setOpenLancamento] = useState(false);
+  const [relatorioEstoqueOpen, setRelatorioEstoqueOpen] = useState(false);
+  const [relatorioEstoqueDataInicio, setRelatorioEstoqueDataInicio] = useState(() => getDataHojeLocal());
+  const [relatorioEstoqueDataFim, setRelatorioEstoqueDataFim] = useState(() => getDataHojeLocal());
+  const [relatorioEstoqueRocaId, setRelatorioEstoqueRocaId] = useState<number | ''>('');
+  const [relatorioEstoqueLoading, setRelatorioEstoqueLoading] = useState<'download' | 'print' | 'preview' | null>(null);
+  const [relatorioEstoqueDados, setRelatorioEstoqueDados] = useState<RelatorioLancamentoProdutosLinha[] | null>(null);
   const [produtoPreselecionadoLancamento, setProdutoPreselecionadoLancamento] = useState<{
     id: number;
     nome: string;
@@ -2387,6 +2399,20 @@ className={
                     Reajustar valor ({lancamentosSelecionados.size})
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  className="shrink-0 gap-2"
+                  onClick={() => {
+                    const hoje = getDataHojeLocal();
+                    setRelatorioEstoqueDataInicio(hoje);
+                    setRelatorioEstoqueDataFim(hoje);
+                    setRelatorioEstoqueDados(null);
+                    setRelatorioEstoqueOpen(true);
+                  }}
+                >
+                  <FileText className="w-4 h-4" />
+                  Relatório de Lançamento de Produtos
+                </Button>
                 <Button
                   variant="gradient"
                   className="shrink-0"
@@ -5812,6 +5838,187 @@ className={
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 )}
                 Registrar lançamento
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog: Relatório de Lançamento de Produtos (apenas produtos com lançamento no período) */}
+        <Dialog open={relatorioEstoqueOpen} onOpenChange={setRelatorioEstoqueOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+            <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg">Relatório de Lançamento de Produtos</DialogTitle>
+                  <DialogDescription className="mt-1 text-muted-foreground">
+                    Produtos com lançamento no período. Escolha as datas, visualize e exporte em PDF ou imprima.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="px-6 pb-4 shrink-0">
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="text-sm font-medium text-foreground mb-3">Filtros</p>
+                <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+                  <div className="space-y-1.5 min-w-[180px]">
+                    <Label className="text-xs text-muted-foreground">Roça</Label>
+                    <Select
+                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
+                      onValueChange={(v) => setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v))}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        {rocasParaFiltroLancamento.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>{r.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 w-[140px]">
+                    <Label className="text-xs text-muted-foreground">Data inicial</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relatorioEstoqueDataInicio}
+                      onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5 w-[140px]">
+                    <Label className="text-xs text-muted-foreground">Data final</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relatorioEstoqueDataFim}
+                      onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    className="h-9 gap-2 shrink-0"
+                    disabled={relatorioEstoqueLoading !== null}
+                    onClick={async () => {
+                      try {
+                        setRelatorioEstoqueLoading('preview');
+                        const dados = await controleRocaService.getRelatorioLancamentoProdutos({
+                          data_inicial: relatorioEstoqueDataInicio || undefined,
+                          data_final: relatorioEstoqueDataFim || undefined,
+                          rocaId: relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                        });
+                        setRelatorioEstoqueDados(dados);
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : 'Erro ao carregar relatório.');
+                        setRelatorioEstoqueDados(null);
+                      } finally {
+                        setRelatorioEstoqueLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioEstoqueLoading === 'preview' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                    Visualizar
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 pb-4 overflow-y-auto min-h-0 flex-1">
+              {relatorioEstoqueDados ? (
+                <div className="rounded-xl border overflow-hidden shadow-sm">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableHead className="font-semibold">Código</TableHead>
+                        <TableHead className="font-semibold">Produto</TableHead>
+                        <TableHead className="text-right font-semibold">Estoque inicial</TableHead>
+                        <TableHead className="text-right font-semibold">Qtde lançada</TableHead>
+                        <TableHead className="text-right font-semibold">Valor total lançado</TableHead>
+                        <TableHead className="text-right font-semibold">Estoque atual</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioEstoqueDados.map((row, i) => (
+                        <TableRow key={row.produto_id} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
+                          <TableCell className="font-mono text-sm">{row.codigo}</TableCell>
+                          <TableCell>{row.nome}</TableCell>
+                          <TableCell className="text-right tabular-nums">{row.estoque_inicial.toLocaleString('pt-BR')}</TableCell>
+                          <TableCell className="text-right tabular-nums">{row.qtde_lancada.toLocaleString('pt-BR')}</TableCell>
+                          <TableCell className="text-right tabular-nums">{row.valor_total_lancado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="text-right tabular-nums font-medium">{row.estoque_atual.toLocaleString('pt-BR')}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed bg-muted/20 flex flex-col items-center justify-center py-12 px-4 text-center">
+                  <FileText className="w-10 h-10 text-muted-foreground/50 mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">Nenhum dado carregado</p>
+                  <p className="text-xs text-muted-foreground mt-1">Defina o período e a roça (se quiser) e clique em Visualizar.</p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-2 shrink-0">
+              <Button
+                variant="gradient"
+                className="gap-2"
+                disabled={relatorioEstoqueLoading !== null}
+                onClick={async () => {
+                  try {
+                    setRelatorioEstoqueLoading('download');
+                    await controleRocaService.downloadRelatorioLancamentoProdutosPdf(
+                      relatorioEstoqueDataInicio || undefined,
+                      relatorioEstoqueDataFim || undefined,
+                      relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
+                    );
+                    toast.success('Relatório baixado.');
+                    setRelatorioEstoqueOpen(false);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Erro ao gerar PDF.');
+                  } finally {
+                    setRelatorioEstoqueLoading(null);
+                  }
+                }}
+              >
+                <Download className="w-4 h-4" />
+                Baixar PDF
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={relatorioEstoqueLoading !== null}
+                onClick={async () => {
+                  try {
+                    setRelatorioEstoqueLoading('print');
+                    await controleRocaService.printRelatorioLancamentoProdutosPdf(
+                      relatorioEstoqueDataInicio || undefined,
+                      relatorioEstoqueDataFim || undefined,
+                      relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
+                    );
+                    setRelatorioEstoqueOpen(false);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Erro ao abrir PDF.');
+                  } finally {
+                    setRelatorioEstoqueLoading(null);
+                  }
+                }}
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir
+              </Button>
+              <Button variant="ghost" onClick={() => setRelatorioEstoqueOpen(false)}>
+                Fechar
               </Button>
             </DialogFooter>
           </DialogContent>
