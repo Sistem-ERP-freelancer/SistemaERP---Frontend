@@ -122,11 +122,21 @@ export interface EmprestimoMeeiro {
   updatedAt?: string;
 }
 
-export interface ResumoFinanceiroMeeiro {
-  totalReceber: number;
-  totalEmprestimosAbertos: number;
-  valorLiquido: number;
-}
+/** Resumo no detalhe do meeiro: em aberto ou já com pagamento registrado. */
+export type ResumoFinanceiroMeeiro =
+  | {
+      jaPago: true;
+      valorTotalPago: number;
+      /** Total a receber (base) registrado no último pagamento. */
+      valorBasePagamento: number;
+      teveEmprestimoNoPagamento: boolean;
+    }
+  | {
+      jaPago: false;
+      totalReceber: number;
+      totalEmprestimosAbertos: number;
+      valorLiquido: number;
+    };
 
 /** Resposta de GET /meeiros/:id (detalhe com resumo e empréstimos). */
 export interface MeeiroDetalhe extends MeeiroRoca {
@@ -153,6 +163,12 @@ export interface ResumoPagamentoMeeiro {
   valorLiquido: number;
   /** True se o meeiro já teve pelo menos um pagamento registrado. */
   jaPago?: boolean;
+  /** Soma dos valores líquidos pagos (histórico de tb_roca_pagamento_meeiro). */
+  valorTotalPago?: number;
+  /** Total a receber (base) do último pagamento registrado. */
+  valorBasePagamento?: number | null;
+  /** Se em algum pagamento havia empréstimo a descontar. */
+  teveEmprestimoNoPagamento?: boolean;
 }
 
 export interface ResumoPagamentoMeeirosResponse {

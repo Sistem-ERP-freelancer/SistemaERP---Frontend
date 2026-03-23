@@ -2,19 +2,65 @@
 
 import { getTokenInfo, validateToken } from '@/lib/token-utils';
 
-// Detecta automaticamente a URL da API baseado no ambiente
-const getApiBaseUrl = () => {
-  // Se houver uma variável de ambiente definida, usa ela (prioridade máxima)
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+const PRODUCTION_API_DEFAULT =
+  'https://sistemaerp-3.onrender.com/api/v1';
+
+/**
+ * URL base da API. Em produção, ignora VITE_API_URL se apontar para localhost
+ * (evita build na Vercel com .env local por engano).
+ */
+const getApiBaseUrl = (): string => {
+  const raw = (import.meta.env.VITE_API_URL ?? '').trim();
+  const normalized = raw.replace(/\/+$/, '');
+
+  if (import.meta.env.PROD) {
+    if (
+      !normalized ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(normalized)
+    ) {
+      return PRODUCTION_API_DEFAULT;
+    }
+    return normalized;
   }
-  
-  // Por padrão, usa a URL do Render (API online)
-  // Se precisar usar localhost em desenvolvimento, defina VITE_API_URL no .env
-  return 'https://sistemaerp-3.onrender.com/api/v1';
+
+  if (normalized) {
+    return normalized;
+  }
+  return PRODUCTION_API_DEFAULT;
 };
 
 const API_BASE_URL = getApiBaseUrl();
+
+/** Retentativa só em falha de rede (ex.: cold start no Render); evita POST duplicado em rotas sensíveis */
+function shouldRetryAfterConnectionError(
+  method: string,
+  endpoint: string,
+): boolean {
+  const m = (method || 'GET').toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(m)) return true;
+  if (m === 'POST' && /\/usuarios\/login$/i.test(endpoint)) return true;
+  return false;
+}
+
+async function fetchWithOptionalRetry(
+  url: string,
+  config: RequestInit,
+  endpoint: string,
+): Promise<Response> {
+  try {
+    return await fetch(url, config);
+  } catch (firstError) {
+    const method = (config.method || 'GET').toUpperCase();
+    if (
+      !import.meta.env.PROD ||
+      !shouldRetryAfterConnectionError(method, endpoint)
+    ) {
+      throw firstError;
+    }
+    await new Promise((r) => setTimeout(r, 2500));
+    return fetch(url, config);
+  }
+}
 
 // Log da URL da API em desenvolvimento
 if (import.meta.env.DEV) {
@@ -130,7 +176,7 @@ class ApiClient {
         }
       }
 
-      const response = await fetch(url, config);
+      const response = await fetchWithOptionalRetry(url, config, endpoint);
       
       // Log da resposta em desenvolvimento
       if (import.meta.env.DEV) {

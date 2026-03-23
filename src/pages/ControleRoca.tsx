@@ -93,6 +93,7 @@ import type {
 } from '@/types/roca';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+    AlertTriangle,
     Archive,
     Banknote,
     Building2,
@@ -125,6 +126,34 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+/** Pendência em aberto: ainda há empréstimo em aberto, ou valor líquido sem pagamento quitado. */
+function isMeeiroPagamentoEmAberto(m: ResumoPagamentoMeeiro): boolean {
+  if ((m.totalEmprestimosAbertos ?? 0) > 0) return true;
+  if (m.jaPago) return false;
+  return (m.valorLiquido ?? 0) > 0;
+}
+
+/** Quitado: já houve pagamento registrado e não restou empréstimo em aberto. */
+function isMeeiroPagamentoQuitado(m: ResumoPagamentoMeeiro): boolean {
+  return m.jaPago === true && (m.totalEmprestimosAbertos ?? 0) === 0;
+}
+
+/** Permite registrar liquidação (dinheiro ou abate da produção na dívida). */
+function podeRegistrarPagamentoMeeiro(m: ResumoPagamentoMeeiro): boolean {
+  if ((m.totalReceber ?? 0) <= 0) return false;
+  const vl = m.valorLiquido ?? 0;
+  const emp = m.totalEmprestimosAbertos ?? 0;
+  if (vl > 0) return true;
+  if (vl < 0 && emp > 0) return true;
+  if (vl === 0 && emp > 0) return true;
+  return false;
+}
+
+/** Produção já zerada nos cálculos, mas ainda há empréstimo em aberto (valor final pode ficar negativo). */
+function apenasDividaEmprestimoSemProducaoRemanescente(m: ResumoPagamentoMeeiro): boolean {
+  return (m.totalReceber ?? 0) <= 0 && (m.totalEmprestimosAbertos ?? 0) > 0;
+}
+
 /** Retorna a data de hoje no fuso local em YYYY-MM-DD (evita deslocamento de 1 dia do toISOString/UTC). */
 function getDataHojeLocal(): string {
   const d = new Date();
@@ -134,6 +163,22 @@ function getDataHojeLocal(): string {
 function getPrimeiroDiaMesLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+type PagamentoMeeirosFiltros = {
+  dataInicial: string;
+  dataFinal: string;
+  produtorId: number | '';
+  rocaIds: number[];
+};
+
+function createDefaultPagamentoMeeirosFiltros(): PagamentoMeeirosFiltros {
+  return {
+    dataInicial: getPrimeiroDiaMesLocal(),
+    dataFinal: getDataHojeLocal(),
+    produtorId: '',
+    rocaIds: [],
+  };
 }
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
@@ -1205,15 +1250,41 @@ export default function ControleRoca() {
   const [relMeeiroId, setRelMeeiroId] = useState<number | ''>('');
   const [relMeeiroSearchTerm, setRelMeeiroSearchTerm] = useState('');
   const [relMeeiroPopoverOpen, setRelMeeiroPopoverOpen] = useState(false);
+  const [relPagMeeiroId, setRelPagMeeiroId] = useState<number | ''>('');
+  const [relPagMeeiroSearchTerm, setRelPagMeeiroSearchTerm] = useState('');
+  const [relPagMeeiroPopoverOpen, setRelPagMeeiroPopoverOpen] = useState(false);
   const [relDataInicial, setRelDataInicial] = useState('');
   const [relDataFinal, setRelDataFinal] = useState('');
   const [relMeeirosPdfDataInicial, setRelMeeirosPdfDataInicial] = useState(() => new Date().toISOString().slice(0, 10));
   const [relMeeirosPdfDataFinal, setRelMeeirosPdfDataFinal] = useState(() => new Date().toISOString().slice(0, 10));
   const [relMeeirosPdfRocaIds, setRelMeeirosPdfRocaIds] = useState<number[]>([]);
-  const [pagamentoDataInicial, setPagamentoDataInicial] = useState(() => getPrimeiroDiaMesLocal());
-  const [pagamentoDataFinal, setPagamentoDataFinal] = useState(() => getDataHojeLocal());
-  const [pagamentoProdutorId, setPagamentoProdutorId] = useState<number | ''>('');
-  const [pagamentoRocaIds, setPagamentoRocaIds] = useState<number[]>([]);
+  const [pagamentoFiltrosDraft, setPagamentoFiltrosDraft] = useState<PagamentoMeeirosFiltros>(() =>
+    createDefaultPagamentoMeeirosFiltros(),
+  );
+  const [pagamentoFiltrosAplicados, setPagamentoFiltrosAplicados] = useState<PagamentoMeeirosFiltros>(() =>
+    createDefaultPagamentoMeeirosFiltros(),
+  );
+  const [pagamentoFiltrosSheetOpen, setPagamentoFiltrosSheetOpen] = useState(false);
+  const [pagamentoRelatoriosSheetOpen, setPagamentoRelatoriosSheetOpen] = useState(false);
+  const [pagamentoPdfMeeiroDialogOpen, setPagamentoPdfMeeiroDialogOpen] = useState(false);
+  const [pdfPagMeeiroId, setPdfPagMeeiroId] = useState<number | ''>('');
+  const [pdfPagDataInicial, setPdfPagDataInicial] = useState('');
+  const [pdfPagDataFinal, setPdfPagDataFinal] = useState('');
+  const [pdfPagDataPagamento, setPdfPagDataPagamento] = useState('');
+  const [pdfPagMeeiroDownloading, setPdfPagMeeiroDownloading] = useState(false);
+  const [pdfPagMeeiroPrinting, setPdfPagMeeiroPrinting] = useState(false);
+  const [pdfRelMeeirosLoading, setPdfRelMeeirosLoading] = useState<
+    null | 'todos' | 'pagos' | 'pendentes'
+  >(null);
+  const [pdfRelMeeirosPrintLoading, setPdfRelMeeirosPrintLoading] = useState<
+    null | 'todos' | 'pagos' | 'pendentes'
+  >(null);
+  const pagamentoFiltrosAtivosCount = useMemo(() => {
+    let n = 0;
+    if (pagamentoFiltrosAplicados.produtorId !== '') n++;
+    if (pagamentoFiltrosAplicados.rocaIds.length > 0) n++;
+    return n;
+  }, [pagamentoFiltrosAplicados]);
   const [pagamentoSubTab, setPagamentoSubTab] = useState<'em-aberto' | 'quitados'>('em-aberto');
   const [openPagarModal, setOpenPagarModal] = useState(false);
   const [meeiroParaPagar, setMeeiroParaPagar] = useState<ResumoPagamentoMeeiro | null>(null);
@@ -1222,6 +1293,18 @@ export default function ControleRoca() {
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
   const [relPdfLoadingAction, setRelPdfLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [relPagPdfLoadingAction, setRelPagPdfLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [relMeeirosPagosDataPagamentoInicial, setRelMeeirosPagosDataPagamentoInicial] = useState(() => new Date().toISOString().slice(0, 10));
+  const [relMeeirosPagosDataPagamentoFinal, setRelMeeirosPagosDataPagamentoFinal] = useState(() => new Date().toISOString().slice(0, 10));
+  const [relMeeirosPagosDataLancamentoInicial, setRelMeeirosPagosDataLancamentoInicial] = useState('');
+  const [relMeeirosPagosDataLancamentoFinal, setRelMeeirosPagosDataLancamentoFinal] = useState('');
+  const [relMeeirosPagosRocaIds, setRelMeeirosPagosRocaIds] = useState<number[]>([]);
+  const [relMeeirosPagosAplicarEmbalagem, setRelMeeirosPagosAplicarEmbalagem] = useState(true);
+  const [relMeeirosPagosLoadingAction, setRelMeeirosPagosLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [relEmprestimosDataInicial, setRelEmprestimosDataInicial] = useState('');
+  const [relEmprestimosDataFinal, setRelEmprestimosDataFinal] = useState('');
+  const [relEmprestimosRocaId, setRelEmprestimosRocaId] = useState<number | ''>('');
+  const [relEmprestimosLoadingAction, setRelEmprestimosLoadingAction] = useState<'download' | 'print' | null>(null);
   const meeirosRelatorioFiltrados = useMemo(() => {
     const term = relMeeiroSearchTerm.trim().toLowerCase();
     const list = [...meeirosParaRelatorio].sort((a, b) =>
@@ -1234,6 +1317,18 @@ export default function ControleRoca() {
         (m.nome ?? '').toLowerCase().includes(term)
     );
   }, [meeirosParaRelatorio, relMeeiroSearchTerm]);
+  const meeirosRelatorioPagFiltrados = useMemo(() => {
+    const term = relPagMeeiroSearchTerm.trim().toLowerCase();
+    const list = [...meeirosParaRelatorio].sort((a, b) =>
+      `${a.codigo ?? ''} ${a.nome ?? ''}`.localeCompare(`${b.codigo ?? ''} ${b.nome ?? ''}`)
+    );
+    if (!term) return list;
+    return list.filter(
+      (m) =>
+        (m.codigo ?? '').toLowerCase().includes(term) ||
+        (m.nome ?? '').toLowerCase().includes(term)
+    );
+  }, [meeirosParaRelatorio, relPagMeeiroSearchTerm]);
   const runRelatorio = () => {
     if (relMeeiroId === '') {
       toast.error('Selecione um meeiro');
@@ -1254,31 +1349,60 @@ export default function ControleRoca() {
   };
 
   const { data: pagamentoRocas = [] } = useQuery({
-    queryKey: ['controle-roca', 'rocas', pagamentoProdutorId],
+    queryKey: ['controle-roca', 'rocas', pagamentoFiltrosDraft.produtorId],
     queryFn: () =>
       controleRocaService.listarRocas(
-        pagamentoProdutorId === '' ? undefined : Number(pagamentoProdutorId)
+        pagamentoFiltrosDraft.produtorId === ''
+          ? undefined
+          : Number(pagamentoFiltrosDraft.produtorId),
       ),
     enabled: tab === 'pagamento-meeiros',
   });
-  const { data: resumoPagamentoMeeiros, isLoading: loadingResumoPagamento } = useQuery({
+  const {
+    data: resumoPagamentoMeeiros,
+    isLoading: loadingResumoPagamento,
+    isFetching: fetchingResumoPagamento,
+  } = useQuery({
     queryKey: [
       'controle-roca',
       'pagamentos-meeiros-resumo',
-      pagamentoDataInicial,
-      pagamentoDataFinal,
-      pagamentoProdutorId,
-      pagamentoRocaIds,
+      pagamentoFiltrosAplicados.dataInicial,
+      pagamentoFiltrosAplicados.dataFinal,
+      pagamentoFiltrosAplicados.produtorId,
+      pagamentoFiltrosAplicados.rocaIds,
     ],
     queryFn: () =>
       controleRocaService.listarResumoPagamentoMeeiros({
-        dataInicial: pagamentoDataInicial || undefined,
-        dataFinal: pagamentoDataFinal || undefined,
-        produtorId: pagamentoProdutorId === '' ? undefined : Number(pagamentoProdutorId),
-        rocas: pagamentoRocaIds.length ? pagamentoRocaIds : undefined,
+        dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+        dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+        produtorId:
+          pagamentoFiltrosAplicados.produtorId === ''
+            ? undefined
+            : Number(pagamentoFiltrosAplicados.produtorId),
+        rocas: pagamentoFiltrosAplicados.rocaIds.length
+          ? pagamentoFiltrosAplicados.rocaIds
+          : undefined,
       }),
     enabled: tab === 'pagamento-meeiros',
   });
+
+  const aplicarFiltrosPagamentoMeeiros = () => {
+    setPagamentoFiltrosAplicados({ ...pagamentoFiltrosDraft });
+    setPagamentoFiltrosSheetOpen(false);
+    void queryClient.invalidateQueries({
+      queryKey: ['controle-roca', 'pagamentos-meeiros-resumo'],
+    });
+  };
+
+  const limparFiltrosPagamentoMeeiros = () => {
+    const def = createDefaultPagamentoMeeirosFiltros();
+    setPagamentoFiltrosDraft(def);
+    setPagamentoFiltrosAplicados(def);
+    setPagamentoFiltrosSheetOpen(false);
+    void queryClient.invalidateQueries({
+      queryKey: ['controle-roca', 'pagamentos-meeiros-resumo'],
+    });
+  };
   const registrarPagamento = useMutation({
     mutationFn: (data: {
       meeiroId: number;
@@ -1339,7 +1463,7 @@ export default function ControleRoca() {
             </TabsTrigger>
             <TabsTrigger value="relatorio" className="gap-1">
               <FileText className="w-4 h-4" />
-              Relatório por Meeiro
+              Relatórios de controle de roça
             </TabsTrigger>
           </TabsList>
 
@@ -3379,105 +3503,628 @@ className={
 
           {/* Tab Pagamento de Meeiros */}
           <TabsContent value="pagamento-meeiros" className="space-y-4">
-            <div className="bg-card rounded-xl border p-4 mb-4">
-              <p className="text-sm text-muted-foreground mb-3">Filtros</p>
-              <p className="text-xs text-muted-foreground mb-3">
-                Os valores vêm dos lançamentos no período (porcentagem de cada meeiro). Use um período que inclua as datas dos lançamentos (ex.: início do mês até hoje).
-              </p>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Produtor</Label>
-                  <Select
-                    value={pagamentoProdutorId === '' ? 'todos' : String(pagamentoProdutorId)}
-                    onValueChange={(v) => {
-                      setPagamentoProdutorId(v === 'todos' ? '' : Number(v));
-                      setPagamentoRocaIds([]);
+            <Sheet
+              open={pagamentoFiltrosSheetOpen}
+              onOpenChange={(open) => {
+                setPagamentoFiltrosSheetOpen(open);
+                if (open) {
+                  setPagamentoFiltrosDraft({ ...pagamentoFiltrosAplicados });
+                } else {
+                  setPagamentoFiltrosDraft({ ...pagamentoFiltrosAplicados });
+                }
+              }}
+            >
+              <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Filter className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">Filtros</SheetTitle>
+                  </div>
+                  <SheetDescription>
+                    Refine o período, o produtor e as roças. Os totais vêm dos lançamentos no intervalo
+                    (participação de cada meeiro).
+                  </SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Produtor</Label>
+                    <Select
+                      value={pagamentoFiltrosDraft.produtorId === '' ? 'todos' : String(pagamentoFiltrosDraft.produtorId)}
+                      onValueChange={(v) => {
+                        setPagamentoFiltrosDraft((prev) => ({
+                          ...prev,
+                          produtorId: v === 'todos' ? '' : Number(v),
+                          rocaIds: [],
+                        }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os produtores" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtores</SelectItem>
+                        {produtores.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.codigo} – {p.nome_razao}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Período</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Data inicial</Label>
+                        <Input
+                          type="date"
+                          value={pagamentoFiltrosDraft.dataInicial}
+                          onChange={(e) =>
+                            setPagamentoFiltrosDraft((prev) => ({ ...prev, dataInicial: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Data final</Label>
+                        <Input
+                          type="date"
+                          value={pagamentoFiltrosDraft.dataFinal}
+                          onChange={(e) =>
+                            setPagamentoFiltrosDraft((prev) => ({ ...prev, dataFinal: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Roças (opcional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {pagamentoFiltrosDraft.rocaIds.length === 0
+                              ? 'Todas as roças'
+                              : `${pagamentoFiltrosDraft.rocaIds.length} roça(s) selecionada(s)`}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
+                        <div className="max-h-[240px] overflow-y-auto space-y-1">
+                          {pagamentoRocas.map((r) => (
+                            <label
+                              key={r.id}
+                              className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50"
+                            >
+                              <Checkbox
+                                checked={pagamentoFiltrosDraft.rocaIds.includes(r.id)}
+                                onCheckedChange={(c) => {
+                                  setPagamentoFiltrosDraft((prev) => ({
+                                    ...prev,
+                                    rocaIds: c
+                                      ? [...prev.rocaIds, r.id]
+                                      : prev.rocaIds.filter((id) => id !== r.id),
+                                  }));
+                                }}
+                              />
+                              <span className="text-sm">{r.nome}</span>
+                            </label>
+                          ))}
+                          {pagamentoRocas.length === 0 && (
+                            <p className="text-sm text-muted-foreground px-2 py-1">
+                              Selecione um produtor para listar roças.
+                            </p>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      variant="gradient"
+                      onClick={aplicarFiltrosPagamentoMeeiros}
+                      disabled={fetchingResumoPagamento}
+                    >
+                      {fetchingResumoPagamento ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : null}
+                      Aplicar filtros
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={limparFiltrosPagamentoMeeiros}
+                    >
+                      Limpar filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <Sheet open={pagamentoRelatoriosSheetOpen} onOpenChange={setPagamentoRelatoriosSheetOpen}>
+              <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+                <SheetHeader className="mb-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <FileText className="w-5 h-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">Relatórios</SheetTitle>
+                  </div>
+                  <SheetDescription>Escolha o tipo de relatório.</SheetDescription>
+                </SheetHeader>
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start gap-3 h-auto py-3 px-4 text-left"
+                    onClick={() => {
+                      setPdfPagDataInicial(pagamentoFiltrosAplicados.dataInicial);
+                      setPdfPagDataFinal(pagamentoFiltrosAplicados.dataFinal);
+                      setPdfPagDataPagamento('');
+                      setPdfPagMeeiroId('');
+                      setPagamentoRelatoriosSheetOpen(false);
+                      setPagamentoPdfMeeiroDialogOpen(true);
                     }}
                   >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos os produtores</SelectItem>
-                      {produtores.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.codigo} – {p.nome_razao}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Data inicial</Label>
-                  <Input
-                    type="date"
-                    className="w-[140px]"
-                    value={pagamentoDataInicial}
-                    onChange={(e) => setPagamentoDataInicial(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Data final</Label>
-                  <Input
-                    type="date"
-                    className="w-[140px]"
-                    value={pagamentoDataFinal}
-                    onChange={(e) => setPagamentoDataFinal(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Roças (opcional)</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[220px] justify-between">
-                        <span className="truncate">
-                          {pagamentoRocaIds.length === 0
-                            ? 'Todas as roças'
-                            : `${pagamentoRocaIds.length} roça(s) selecionada(s)`}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[260px] p-2" align="start">
-                      <div className="max-h-[240px] overflow-y-auto space-y-1">
-                        {pagamentoRocas.map((r) => (
-                          <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
-                            <Checkbox
-                              checked={pagamentoRocaIds.includes(r.id)}
-                              onCheckedChange={(c) => {
-                                setPagamentoRocaIds((prev) =>
-                                  c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
-                                );
-                              }}
-                            />
-                            <span className="text-sm">{r.nome}</span>
-                          </label>
-                        ))}
-                        {pagamentoRocas.length === 0 && (
-                          <p className="text-sm text-muted-foreground px-2">Selecione um produtor para listar roças.</p>
-                        )}
+                    <FileText className="w-4 h-4 shrink-0 text-primary" />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="font-medium">Pagamento de produtores (por meeiro)</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        Baixa o PDF PAGAMENTO DE PRODUTORES sem sair desta tela
+                      </span>
+                    </span>
+                  </Button>
+
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-foreground">Relatórios de controle de roça</p>
+                    <p className="text-xs text-muted-foreground">
+                      Período e roças conforme os filtros aplicados acima.
+                    </p>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">Todos os meeiros</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
+                          onClick={async () => {
+                            try {
+                              setPdfRelMeeirosLoading('todos');
+                              await controleRocaService.downloadRelatorioMeeirosPdf({
+                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+                                rocas: pagamentoFiltrosAplicados.rocaIds.length
+                                  ? pagamentoFiltrosAplicados.rocaIds
+                                  : undefined,
+                                filtroPagamento: 'todos',
+                              });
+                              toast.success('PDF baixado');
+                              setPagamentoRelatoriosSheetOpen(false);
+                            } catch (e: any) {
+                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                            } finally {
+                              setPdfRelMeeirosLoading(null);
+                            }
+                          }}
+                        >
+                          {pdfRelMeeirosLoading === 'todos' ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4 shrink-0" />
+                          )}
+                          Baixar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
+                          onClick={async () => {
+                            try {
+                              setPdfRelMeeirosPrintLoading('todos');
+                              await controleRocaService.printRelatorioMeeirosPdf({
+                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+                                rocas: pagamentoFiltrosAplicados.rocaIds.length
+                                  ? pagamentoFiltrosAplicados.rocaIds
+                                  : undefined,
+                                filtroPagamento: 'todos',
+                              });
+                              setPagamentoRelatoriosSheetOpen(false);
+                            } catch (e: any) {
+                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                            } finally {
+                              setPdfRelMeeirosPrintLoading(null);
+                            }
+                          }}
+                        >
+                          {pdfRelMeeirosPrintLoading === 'todos' ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Printer className="w-4 h-4 shrink-0" />
+                          )}
+                          Imprimir
+                        </Button>
                       </div>
-                    </PopoverContent>
-                  </Popover>
+
+                      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">Apenas meeiros pagos</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
+                          onClick={async () => {
+                            try {
+                              setPdfRelMeeirosLoading('pagos');
+                              await controleRocaService.downloadRelatorioMeeirosPdf({
+                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+                                rocas: pagamentoFiltrosAplicados.rocaIds.length
+                                  ? pagamentoFiltrosAplicados.rocaIds
+                                  : undefined,
+                                filtroPagamento: 'pagos',
+                              });
+                              toast.success('PDF baixado');
+                              setPagamentoRelatoriosSheetOpen(false);
+                            } catch (e: any) {
+                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                            } finally {
+                              setPdfRelMeeirosLoading(null);
+                            }
+                          }}
+                        >
+                          {pdfRelMeeirosLoading === 'pagos' ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4 shrink-0" />
+                          )}
+                          Baixar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
+                          onClick={async () => {
+                            try {
+                              setPdfRelMeeirosPrintLoading('pagos');
+                              await controleRocaService.printRelatorioMeeirosPdf({
+                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+                                rocas: pagamentoFiltrosAplicados.rocaIds.length
+                                  ? pagamentoFiltrosAplicados.rocaIds
+                                  : undefined,
+                                filtroPagamento: 'pagos',
+                              });
+                              setPagamentoRelatoriosSheetOpen(false);
+                            } catch (e: any) {
+                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                            } finally {
+                              setPdfRelMeeirosPrintLoading(null);
+                            }
+                          }}
+                        >
+                          {pdfRelMeeirosPrintLoading === 'pagos' ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Printer className="w-4 h-4 shrink-0" />
+                          )}
+                          Imprimir
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">Apenas meeiros não pagos</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
+                          onClick={async () => {
+                            try {
+                              setPdfRelMeeirosLoading('pendentes');
+                              await controleRocaService.downloadRelatorioMeeirosPdf({
+                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+                                rocas: pagamentoFiltrosAplicados.rocaIds.length
+                                  ? pagamentoFiltrosAplicados.rocaIds
+                                  : undefined,
+                                filtroPagamento: 'pendentes',
+                              });
+                              toast.success('PDF baixado');
+                              setPagamentoRelatoriosSheetOpen(false);
+                            } catch (e: any) {
+                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                            } finally {
+                              setPdfRelMeeirosLoading(null);
+                            }
+                          }}
+                        >
+                          {pdfRelMeeirosLoading === 'pendentes' ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4 shrink-0" />
+                          )}
+                          Baixar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
+                          onClick={async () => {
+                            try {
+                              setPdfRelMeeirosPrintLoading('pendentes');
+                              await controleRocaService.printRelatorioMeeirosPdf({
+                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+                                rocas: pagamentoFiltrosAplicados.rocaIds.length
+                                  ? pagamentoFiltrosAplicados.rocaIds
+                                  : undefined,
+                                filtroPagamento: 'pendentes',
+                              });
+                              setPagamentoRelatoriosSheetOpen(false);
+                            } catch (e: any) {
+                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                            } finally {
+                              setPdfRelMeeirosPrintLoading(null);
+                            }
+                          }}
+                        >
+                          {pdfRelMeeirosPrintLoading === 'pendentes' ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : (
+                            <Printer className="w-4 h-4 shrink-0" />
+                          )}
+                          Imprimir
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </SheetContent>
+            </Sheet>
+
+            <Dialog
+              open={pagamentoPdfMeeiroDialogOpen}
+              onOpenChange={(open) => {
+                setPagamentoPdfMeeiroDialogOpen(open);
+                if (!open) {
+                  setPdfPagMeeiroDownloading(false);
+                  setPdfPagMeeiroPrinting(false);
+                }
+              }}
+            >
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Pagamento de produtores (PDF)</DialogTitle>
+                  <DialogDescription>
+                    Selecione o meeiro e confira o período. O arquivo segue o modelo PAGAMENTO DE PRODUTORES.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label>Meeiro</Label>
+                    <Select
+                      value={pdfPagMeeiroId === '' ? '_none' : String(pdfPagMeeiroId)}
+                      onValueChange={(v) => setPdfPagMeeiroId(v === '_none' ? '' : Number(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o meeiro" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Selecione o meeiro</SelectItem>
+                        {[...meeirosParaRelatorio]
+                          .sort((a, b) =>
+                            `${a.codigo ?? ''} ${a.nome ?? ''}`.localeCompare(
+                              `${b.codigo ?? ''} ${b.nome ?? ''}`,
+                            ),
+                          )
+                          .map((m) => (
+                            <SelectItem key={m.id} value={String(m.id)}>
+                              {m.nome} ({m.porcentagem_padrao}%)
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Data inicial</Label>
+                      <Input
+                        type="date"
+                        value={pdfPagDataInicial}
+                        onChange={(e) => setPdfPagDataInicial(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Data final</Label>
+                      <Input
+                        type="date"
+                        value={pdfPagDataFinal}
+                        onChange={(e) => setPdfPagDataFinal(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Pagamento em (opcional)</Label>
+                    <Input
+                      type="date"
+                      value={pdfPagDataPagamento}
+                      onChange={(e) => setPdfPagDataPagamento(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Produtor e roças seguem os filtros já aplicados na tela de pagamento.
+                  </p>
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPagamentoPdfMeeiroDialogOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={pdfPagMeeiroDownloading || pdfPagMeeiroPrinting || pdfPagMeeiroId === ''}
+                    onClick={async () => {
+                      if (pdfPagMeeiroId === '') {
+                        toast.error('Selecione um meeiro');
+                        return;
+                      }
+                      try {
+                        setPdfPagMeeiroPrinting(true);
+                        await controleRocaService.printRelatorioMeeiroPdf({
+                          meeiroId: Number(pdfPagMeeiroId),
+                          dataInicial: pdfPagDataInicial || undefined,
+                          dataFinal: pdfPagDataFinal || undefined,
+                          dataPagamento: pdfPagDataPagamento || undefined,
+                          produtorId:
+                            pagamentoFiltrosAplicados.produtorId === ''
+                              ? undefined
+                              : Number(pagamentoFiltrosAplicados.produtorId),
+                          rocas: pagamentoFiltrosAplicados.rocaIds.length
+                            ? pagamentoFiltrosAplicados.rocaIds
+                            : undefined,
+                        });
+                      } catch (err: any) {
+                        toast.error(
+                          err?.response?.data?.message || err?.message || 'Erro ao abrir PDF',
+                        );
+                      } finally {
+                        setPdfPagMeeiroPrinting(false);
+                      }
+                    }}
+                  >
+                    {pdfPagMeeiroPrinting ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Printer className="w-4 h-4 mr-2" />
+                    )}
+                    Imprimir
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="gradient"
+                    disabled={pdfPagMeeiroDownloading || pdfPagMeeiroPrinting || pdfPagMeeiroId === ''}
+                    onClick={async () => {
+                      if (pdfPagMeeiroId === '') {
+                        toast.error('Selecione um meeiro');
+                        return;
+                      }
+                      try {
+                        setPdfPagMeeiroDownloading(true);
+                        await controleRocaService.downloadRelatorioMeeiroPdf({
+                          meeiroId: Number(pdfPagMeeiroId),
+                          dataInicial: pdfPagDataInicial || undefined,
+                          dataFinal: pdfPagDataFinal || undefined,
+                          dataPagamento: pdfPagDataPagamento || undefined,
+                          produtorId:
+                            pagamentoFiltrosAplicados.produtorId === ''
+                              ? undefined
+                              : Number(pagamentoFiltrosAplicados.produtorId),
+                          rocas: pagamentoFiltrosAplicados.rocaIds.length
+                            ? pagamentoFiltrosAplicados.rocaIds
+                            : undefined,
+                        });
+                        toast.success('PDF baixado');
+                        setPagamentoPdfMeeiroDialogOpen(false);
+                      } catch (err: any) {
+                        toast.error(
+                          err?.response?.data?.message || err?.message || 'Erro ao gerar PDF',
+                        );
+                      } finally {
+                        setPdfPagMeeiroDownloading(false);
+                      }
+                    }}
+                  >
+                    {pdfPagMeeiroDownloading ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             <Tabs value={pagamentoSubTab} onValueChange={(v) => setPagamentoSubTab(v as 'em-aberto' | 'quitados')} className="space-y-4">
-              <TabsList className="bg-muted/50">
-                <TabsTrigger value="em-aberto" className="gap-2">
-                  <Banknote className="w-4 h-4" />
-                  Em aberto
-                  <span className="ml-1 text-xs bg-primary/20 text-primary rounded-full px-2 py-0.5">
-                    {(resumoPagamentoMeeiros?.items ?? []).filter((m) => m.valorLiquido > 0 && !m.jaPago).length}
-                  </span>
-                </TabsTrigger>
-                <TabsTrigger value="quitados" className="gap-2">
-                  <Archive className="w-4 h-4" />
-                  Quitados
-                  <span className="ml-1 text-xs bg-muted-foreground/20 rounded-full px-2 py-0.5">
-                    {(resumoPagamentoMeeiros?.items ?? []).filter((m) => m.jaPago === true).length}
-                  </span>
-                </TabsTrigger>
-              </TabsList>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <TabsList className="bg-muted/50 h-auto w-fit max-w-full flex-wrap justify-start">
+                  <TabsTrigger value="em-aberto" className="gap-2">
+                    <Banknote className="w-4 h-4" />
+                    Em aberto
+                    <span className="ml-1 text-xs bg-primary/20 text-primary rounded-full px-2 py-0.5">
+                      {(resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoEmAberto).length}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value="quitados" className="gap-2">
+                    <Archive className="w-4 h-4" />
+                    Quitados
+                    <span className="ml-1 text-xs bg-muted-foreground/20 rounded-full px-2 py-0.5">
+                      {(resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoQuitado).length}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setPagamentoFiltrosSheetOpen(true)}
+                    style={
+                      pagamentoFiltrosAtivosCount > 0
+                        ? { borderColor: 'var(--primary)', borderWidth: '2px' }
+                        : {}
+                    }
+                  >
+                    <Filter className="w-4 h-4" />
+                    Filtros
+                    {pagamentoFiltrosAtivosCount > 0 && (
+                      <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                        {pagamentoFiltrosAtivosCount}
+                      </span>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setPagamentoRelatoriosSheetOpen(true)}
+                  >
+                    <FileText className="w-4 h-4" />
+                    Relatórios
+                  </Button>
+                </div>
+              </div>
 
               <TabsContent value="em-aberto" className="mt-0">
                 <div className="bg-card border rounded-xl overflow-hidden">
@@ -3499,19 +4146,51 @@ className={
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          const emAberto = (resumoPagamentoMeeiros?.items ?? []).filter((m) => m.valorLiquido > 0 && !m.jaPago);
+                          const emAberto = (resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoEmAberto);
                           if (emAberto.length === 0) {
                             return (
                               <TableRow>
                                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  Nenhum meeiro com valor em aberto no período (ou já pago). Verifique se há lançamentos no período e se as datas incluem os dias dos lançamentos.
+                                  Nenhum meeiro em aberto neste período (valor líquido a pagar ou empréstimo pendente, ainda não quitado no sistema). Verifique filtros, lançamentos e datas.
                                 </TableCell>
                               </TableRow>
                             );
                           }
                           return emAberto.map((m) => (
                             <TableRow key={m.meeiroId}>
-                              <TableCell className="font-medium">{m.nome}</TableCell>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {apenasDividaEmprestimoSemProducaoRemanescente(m) && (
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-amber-400 to-orange-600 p-0 text-white shadow-md ring-2 ring-amber-200/90 transition hover:from-amber-500 hover:to-orange-700 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:from-amber-500 dark:to-orange-600 dark:ring-amber-400/50"
+                                          aria-label="Entenda o saldo: só empréstimo em aberto, sem produção remanescente"
+                                        >
+                                          <AlertTriangle
+                                            className="h-4 w-4 drop-shadow-sm"
+                                            strokeWidth={2.5}
+                                            aria-hidden
+                                          />
+                                        </button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="max-w-md text-sm" align="start" side="bottom">
+                                        <p className="leading-relaxed text-foreground">
+                                          <span className="font-semibold">Só resta empréstimo em aberto.</span>{' '}
+                                          A produção deste período já foi considerada nos pagamentos; o valor final negativo
+                                          indica saldo de dívida, não pagamento em dinheiro. Para abater de novo por aqui, é
+                                          preciso ter{' '}
+                                          <span className="font-semibold">novos lançamentos</span> com valor a receber. Para
+                                          quitar a dívida em dinheiro, use o cadastro do meeiro em{' '}
+                                          <span className="font-semibold">Empréstimos</span>.
+                                        </p>
+                                      </PopoverContent>
+                                    </Popover>
+                                  )}
+                                  <span className="truncate">{m.nome}</span>
+                                </div>
+                              </TableCell>
                               <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
                                 {m.chavePix || '—'}
                               </TableCell>
@@ -3522,6 +4201,14 @@ className={
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  disabled={!podeRegistrarPagamentoMeeiro(m)}
+                                  title={
+                                    !podeRegistrarPagamentoMeeiro(m)
+                                      ? apenasDividaEmprestimoSemProducaoRemanescente(m)
+                                        ? 'Sem produção remanescente. Clique no ícone de alerta (triângulo) ao lado do nome.'
+                                        : 'É necessário valor de produção; se a dívida for maior, use Pagar para abater a produção nos empréstimos.'
+                                      : undefined
+                                  }
                                   onClick={() => {
                                     setMeeiroParaPagar(m);
                                     setFormPagamento({
@@ -3557,20 +4244,20 @@ className={
                         <TableRow className="bg-muted/50">
                           <TableHead>Meeiro</TableHead>
                           <TableHead>Chave PIX</TableHead>
-                          <TableHead className="text-right">Valor a receber</TableHead>
-                          <TableHead className="text-right">Empréstimos em aberto</TableHead>
-                          <TableHead className="text-right">Valor final a pagar</TableHead>
-                          <TableHead className="w-[100px] text-right">Ações</TableHead>
+                          <TableHead className="text-right">Valor total pago</TableHead>
+                          <TableHead className="text-right">Valor (base)</TableHead>
+                          <TableHead className="text-center">Teve empréstimo</TableHead>
+                          <TableHead className="w-[80px] text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          const quitados = (resumoPagamentoMeeiros?.items ?? []).filter((m) => m.jaPago === true);
+                          const quitados = (resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoQuitado);
                           if (quitados.length === 0) {
                             return (
                               <TableRow>
                                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  Nenhum meeiro quitado ainda. Após registrar um pagamento, o meeiro aparecerá aqui.
+                                  Nenhum meeiro totalmente quitado (pagamento registrado e sem empréstimo em aberto). Quem ainda tiver dívida aparece em Em aberto.
                                 </TableCell>
                               </TableRow>
                             );
@@ -3581,14 +4268,27 @@ className={
                               <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
                                 {m.chavePix || '—'}
                               </TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalReceber)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
-                              <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
-                              <TableCell className="text-right">
-                                <Button variant="outline" size="sm" disabled title="Sem valor a pagar">
-                                  Pagar
-                                </Button>
+                              <TableCell className="text-right tabular-nums font-semibold">
+                                {formatCurrency(m.valorTotalPago ?? m.valorLiquido)}
                               </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {formatCurrency(
+                                  m.valorBasePagamento != null ? m.valorBasePagamento : m.totalReceber,
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span
+                                  className={cn(
+                                    'text-xs font-medium px-2 py-1 rounded',
+                                    m.teveEmprestimoNoPagamento
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                                      : 'bg-muted text-muted-foreground',
+                                  )}
+                                >
+                                  {m.teveEmprestimoNoPagamento ? 'Sim' : 'Não'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground text-sm">—</TableCell>
                             </TableRow>
                           ));
                         })()}
@@ -3602,288 +4302,777 @@ className={
 
           {/* Tab Relatório */}
           <TabsContent value="relatorio" className="space-y-4">
-            <div className="bg-card border rounded-xl p-4 flex flex-wrap items-end gap-4">
-              <div className="space-y-2">
-                <Label>Meeiro</Label>
-                <Popover open={relMeeiroPopoverOpen} onOpenChange={(o) => { setRelMeeiroPopoverOpen(o); if (!o) setRelMeeiroSearchTerm(''); }} modal>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={relMeeiroPopoverOpen}
-                      className="w-[260px] justify-between font-normal"
+            <div className="bg-card border rounded-xl p-4 sm:p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de lançamento de produtos</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Filtre por período e roça para baixar o PDF ou imprimir o relatório.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data inicial</Label>
+                    <Input
+                      type="date"
+                      value={relatorioEstoqueDataInicio}
+                      onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
+                      className="h-9 w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data final</Label>
+                    <Input
+                      type="date"
+                      value={relatorioEstoqueDataFim}
+                      onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
+                      className="h-9 w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Roça (opcional)</Label>
+                    <Select
+                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
+                      onValueChange={(v) => setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v))}
                     >
-                      <span className="truncate">
-                        {relMeeiroId === ''
-                          ? 'Selecione o meeiro'
-                          : (() => {
-                              const m = meeirosParaRelatorio.find((x) => Number(x.id) === Number(relMeeiroId));
-                              return m ? `${m.nome ?? ''} (${m.porcentagem_padrao}%)` : 'Selecione o meeiro';
-                            })()}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[260px] p-0" align="start">
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        placeholder="Buscar por código ou nome..."
-                        value={relMeeiroSearchTerm}
-                        onValueChange={setRelMeeiroSearchTerm}
-                        className="h-10"
-                      />
-                      <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
-                        <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
-                        <CommandGroup>
-                          {meeirosRelatorioFiltrados.map((m) => (
-                            <CommandItem
-                              key={m.id}
-                              value={String(m.id)}
-                              onSelect={() => {
-                                setRelMeeiroId(Number(m.id));
-                                setRelMeeiroPopoverOpen(false);
-                                setRelMeeiroSearchTerm('');
-                              }}
-                            >
-                              <Check className={cn('mr-2 h-4 w-4', Number(relMeeiroId) === Number(m.id) ? 'opacity-100' : 'opacity-0')} />
-                              {m.nome} ({m.porcentagem_padrao}%)
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label>Data inicial</Label>
-                <Input
-                  type="date"
-                  value={relDataInicial}
-                  onChange={(e) => setRelDataInicial(e.target.value)}
-                  className="w-[160px]"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Data final</Label>
-                <Input
-                  type="date"
-                  value={relDataFinal}
-                  onChange={(e) => setRelDataFinal(e.target.value)}
-                  className="w-[160px]"
-                />
-              </div>
-              <Button variant="gradient" onClick={runRelatorio} disabled={relLoading}>
-                {relLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <FileText className="w-4 h-4 mr-2" />
-                )}
-                Pré visualização
-              </Button>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (relMeeiroId === '') {
-                      toast.error('Selecione um meeiro');
-                      return;
-                    }
-                    setRelPdfDialogOpen(true);
-                  }}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Gerar relatório em PDF
-                </Button>
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        {rocas.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[160px]"
+                    disabled={relatorioEstoqueLoading !== null}
+                    onClick={async () => {
+                      try {
+                        setRelatorioEstoqueLoading('download');
+                        await controleRocaService.downloadRelatorioLancamentoProdutosPdf(
+                          relatorioEstoqueDataInicio || undefined,
+                          relatorioEstoqueDataFim || undefined,
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
+                        );
+                        toast.success('PDF baixado');
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelatorioEstoqueLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioEstoqueLoading === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[120px]"
+                    disabled={relatorioEstoqueLoading !== null}
+                    onClick={async () => {
+                      try {
+                        setRelatorioEstoqueLoading('print');
+                        await controleRocaService.printRelatorioLancamentoProdutosPdf(
+                          relatorioEstoqueDataInicio || undefined,
+                          relatorioEstoqueDataFim || undefined,
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
+                        );
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelatorioEstoqueLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioEstoqueLoading === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+
+                </div>
               </div>
             </div>
-            {relMeeiroId !== '' && (() => {
-              const meeiroSel = meeirosParaRelatorio.find((m) => Number(m.id) === Number(relMeeiroId));
-              if (!meeiroSel) return null;
-              return (
-                <p className="text-sm text-muted-foreground px-1">
-                  Meeiro selecionado: <span className="font-medium text-foreground">{meeiroSel.nome}</span>
-                </p>
-              );
-            })()}
 
-            {/* Dialog: Imprimir ou Baixar PDF do Relatório por Meeiro */}
-            <Dialog open={relPdfDialogOpen} onOpenChange={setRelPdfDialogOpen}>
-              <DialogContent className="max-w-sm p-0 overflow-hidden">
-                <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
-                  <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                    <FileText className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <DialogTitle className="text-base font-semibold text-foreground">
-                      Relatório por Meeiro
-                    </DialogTitle>
-                    <DialogDescription className="text-xs text-muted-foreground">
-                      Baixar o relatório em PDF ou abrir para impressão.
-                    </DialogDescription>
-                  </div>
-                </DialogHeader>
+            {/* Relatório de lançamentos de meeiros */}
+            <div className="bg-card border rounded-xl p-4 sm:p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de lançamentos de meeiros</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Gera o relatório por meeiro selecionado com os lançamentos do período e permite exportar em PDF.
+                  </p>
+                </div>
+              </div>
 
-                <div className="px-6 py-5">
-                  <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
-                    <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="justify-start gap-2 bg-background hover:bg-accent"
-                        disabled={relPdfLoadingAction !== null}
-                        onClick={async () => {
-                          try {
-                            setRelPdfLoadingAction('download');
-                            await controleRocaService.downloadRelatorioMeeiroPdf({
-                              meeiroId: Number(relMeeiroId),
-                              dataInicial: relDataInicial || undefined,
-                              dataFinal: relDataFinal || undefined,
-                            });
-                            toast.success('PDF baixado');
-                            setRelPdfDialogOpen(false);
-                          } catch (err: any) {
-                            toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
-                          } finally {
-                            setRelPdfLoadingAction(null);
-                          }
-                        }}
-                      >
-                        <Download className="w-4 h-4" />
-                        <span className="text-sm">
-                          {relPdfLoadingAction === 'download' ? 'Baixando...' : 'Baixar PDF'}
-                        </span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="justify-start gap-2 bg-background hover:bg-accent"
-                        disabled={relPdfLoadingAction !== null}
-                        onClick={async () => {
-                          try {
-                            setRelPdfLoadingAction('print');
-                            await controleRocaService.printRelatorioMeeiroPdf({
-                              meeiroId: Number(relMeeiroId),
-                              dataInicial: relDataInicial || undefined,
-                              dataFinal: relDataFinal || undefined,
-                            });
-                            setRelPdfDialogOpen(false);
-                          } catch (err: any) {
-                            toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir relatório.');
-                          } finally {
-                            setRelPdfLoadingAction(null);
-                          }
-                        }}
-                      >
-                        <Printer className="w-4 h-4" />
-                        <span className="text-sm">
-                          {relPdfLoadingAction === 'print' ? 'Abrindo...' : 'Imprimir'}
-                        </span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Relatório de Meeiros (múltiplos) em PDF – período e roças */}
-            <div className="bg-card border rounded-xl p-4 mt-6">
-              <h3 className="text-base font-semibold flex items-center gap-2 mb-2">
-                <FileText className="w-4 h-4 text-primary" />
-                Relatório de Meeiros (PDF)
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Gera PDF com todos os meeiros, totais a receber, empréstimos e valor final. Filtro por período e roças (meeiro pode ter mais de uma roça).
-              </p>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Data inicial</Label>
-                  <Input
-                    type="date"
-                    className="w-[140px]"
-                    value={relMeeirosPdfDataInicial}
-                    onChange={(e) => setRelMeeirosPdfDataInicial(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Data final</Label>
-                  <Input
-                    type="date"
-                    className="w-[140px]"
-                    value={relMeeirosPdfDataFinal}
-                    onChange={(e) => setRelMeeirosPdfDataFinal(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Roças (opcional)</Label>
-                  <Popover>
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5 min-w-[240px]">
+                    <Label className="text-xs font-medium">Meeiro</Label>
+                  <Popover
+                    open={relMeeiroPopoverOpen}
+                    onOpenChange={(o) => {
+                      setRelMeeiroPopoverOpen(o);
+                      if (!o) setRelMeeiroSearchTerm('');
+                    }}
+                    modal
+                  >
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-[220px] justify-between">
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={relMeeiroPopoverOpen}
+                        className="h-9 w-full justify-between font-normal"
+                      >
                         <span className="truncate">
-                          {relMeeirosPdfRocaIds.length === 0
-                            ? 'Todas as roças'
-                            : `${relMeeirosPdfRocaIds.length} roça(s)`}
+                          {relMeeiroId === ''
+                            ? 'Selecione o meeiro'
+                            : (() => {
+                                const m = meeirosParaRelatorio.find((x) => Number(x.id) === Number(relMeeiroId));
+                                return m ? `${m.nome ?? ''} (${m.porcentagem_padrao}%)` : 'Selecione o meeiro';
+                              })()}
                         </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[260px] p-2" align="start">
-                      <div className="max-h-[240px] overflow-y-auto space-y-1">
-                        {rocasParaRelatorioPdf.map((r) => (
-                          <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
-                            <Checkbox
-                              checked={relMeeirosPdfRocaIds.includes(r.id)}
-                              onCheckedChange={(c) => {
-                                setRelMeeirosPdfRocaIds((prev) =>
-                                  c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
-                                );
-                              }}
-                            />
-                            <span className="text-sm">{r.nome}</span>
-                          </label>
-                        ))}
-                      </div>
+                    <PopoverContent className="w-[320px] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar por código ou nome..."
+                          value={relMeeiroSearchTerm}
+                          onValueChange={setRelMeeiroSearchTerm}
+                          className="h-10"
+                        />
+                        <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                          <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {meeirosRelatorioFiltrados.map((m) => (
+                              <CommandItem
+                                key={m.id}
+                                value={String(m.id)}
+                                onSelect={() => {
+                                  setRelMeeiroId(Number(m.id));
+                                  setRelMeeiroPopoverOpen(false);
+                                  setRelMeeiroSearchTerm('');
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    Number(relMeeiroId) === Number(m.id) ? 'opacity-100' : 'opacity-0',
+                                  )}
+                                />
+                                {m.nome} ({m.porcentagem_padrao}%)
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
                     </PopoverContent>
                   </Popover>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data inicial</Label>
+                    <Input
+                      type="date"
+                      value={relDataInicial}
+                      onChange={(e) => setRelDataInicial(e.target.value)}
+                      className="h-9 w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data final</Label>
+                    <Input
+                      type="date"
+                      value={relDataFinal}
+                      onChange={(e) => setRelDataFinal(e.target.value)}
+                      className="h-9 w-full"
+                    />
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={async () => {
-                    try {
-                      await controleRocaService.downloadRelatorioMeeirosPdf({
-                        dataInicial: relMeeirosPdfDataInicial || undefined,
-                        dataFinal: relMeeirosPdfDataFinal || undefined,
-                        rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
-                      });
-                      toast.success('PDF baixado');
-                    } catch (e: any) {
-                      toast.error(e?.response?.data?.message || e?.message || 'Erro ao gerar PDF');
-                    }
-                  }}
-                >
-                  <Download className="w-4 h-4" />
-                  Baixar PDF
-                </Button>
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={async () => {
-                    try {
-                      await controleRocaService.printRelatorioMeeirosPdf({
-                        dataInicial: relMeeirosPdfDataInicial || undefined,
-                        dataFinal: relMeeirosPdfDataFinal || undefined,
-                        rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
-                      });
-                    } catch (e: any) {
-                      toast.error(e?.response?.data?.message || e?.message || 'Erro ao abrir PDF');
-                    }
-                  }}
-                >
-                  <Printer className="w-4 h-4" />
-                  Imprimir
-                </Button>
+
+                <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[160px]"
+                    disabled={relPdfLoadingAction !== null}
+                    onClick={async () => {
+                      if (relMeeiroId === '') {
+                        toast.error('Selecione um meeiro');
+                        return;
+                      }
+                      try {
+                        setRelPdfLoadingAction('download');
+                        await controleRocaService.downloadRelatorioPorMeeiroPdf({
+                          meeiroId: Number(relMeeiroId),
+                          dataInicial: relDataInicial || undefined,
+                          dataFinal: relDataFinal || undefined,
+                        });
+                        toast.success('PDF baixado');
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelPdfLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relPdfLoadingAction === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[120px]"
+                    disabled={relPdfLoadingAction !== null}
+                    onClick={async () => {
+                      if (relMeeiroId === '') {
+                        toast.error('Selecione um meeiro');
+                        return;
+                      }
+                      try {
+                        setRelPdfLoadingAction('print');
+                        await controleRocaService.printRelatorioPorMeeiroPdf({
+                          meeiroId: Number(relMeeiroId),
+                          dataInicial: relDataInicial || undefined,
+                          dataFinal: relDataFinal || undefined,
+                        });
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelPdfLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relPdfLoadingAction === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
+
+              {relMeeiroId !== '' && (() => {
+                const meeiroSel = meeirosParaRelatorio.find((m) => Number(m.id) === Number(relMeeiroId));
+                if (!meeiroSel) return null;
+                return (
+                  <p className="text-sm text-muted-foreground mt-3">
+                    Meeiro selecionado: <span className="font-medium text-foreground">{meeiroSel.nome}</span>
+                  </p>
+                );
+              })()}
+            </div>
+
+            {/* Relatório de Meeiros (múltiplos) em PDF – período e roças */}
+            <div id="relatorio-meeiros-pdf" className="bg-card border rounded-xl p-4 sm:p-5 scroll-mt-24">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de pagamento de meeiro</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Selecione um meeiro e gere o PDF de pagamento no período e roças escolhidos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Meeiro</Label>
+                    <Popover
+                      open={relPagMeeiroPopoverOpen}
+                      onOpenChange={(o) => {
+                        setRelPagMeeiroPopoverOpen(o);
+                        if (!o) setRelPagMeeiroSearchTerm('');
+                      }}
+                      modal
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={relPagMeeiroPopoverOpen}
+                          className="h-9 w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {relPagMeeiroId === ''
+                              ? 'Todos os meeiros'
+                              : (() => {
+                                  const m = meeirosParaRelatorio.find((x) => Number(x.id) === Number(relPagMeeiroId));
+                                  return m ? `${m.nome ?? ''} (${m.porcentagem_padrao}%)` : 'Todos os meeiros';
+                                })()}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[320px] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por código ou nome..."
+                            value={relPagMeeiroSearchTerm}
+                            onValueChange={setRelPagMeeiroSearchTerm}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="todos-meeiros"
+                                onSelect={() => {
+                                  setRelPagMeeiroId('');
+                                  setRelPagMeeiroPopoverOpen(false);
+                                  setRelPagMeeiroSearchTerm('');
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    relPagMeeiroId === '' ? 'opacity-100' : 'opacity-0',
+                                  )}
+                                />
+                                Todos os meeiros
+                              </CommandItem>
+                              {meeirosRelatorioPagFiltrados.map((m) => (
+                                <CommandItem
+                                  key={m.id}
+                                  value={String(m.id)}
+                                  onSelect={() => {
+                                    setRelPagMeeiroId(Number(m.id));
+                                    setRelPagMeeiroPopoverOpen(false);
+                                    setRelPagMeeiroSearchTerm('');
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      Number(relPagMeeiroId) === Number(m.id) ? 'opacity-100' : 'opacity-0',
+                                    )}
+                                  />
+                                  {m.nome} ({m.porcentagem_padrao}%)
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data inicial</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relMeeirosPdfDataInicial}
+                      onChange={(e) => setRelMeeirosPdfDataInicial(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data final</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relMeeirosPdfDataFinal}
+                      onChange={(e) => setRelMeeirosPdfDataFinal(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Roças (opcional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="h-9 w-full justify-between font-normal">
+                          <span className="truncate">
+                            {relMeeirosPdfRocaIds.length === 0
+                              ? 'Todas as roças'
+                              : `${relMeeirosPdfRocaIds.length} roça(s)`}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[260px] p-2" align="start">
+                        <div className="max-h-[240px] overflow-y-auto space-y-1">
+                          {rocasParaRelatorioPdf.map((r) => (
+                            <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
+                              <Checkbox
+                                checked={relMeeirosPdfRocaIds.includes(r.id)}
+                                onCheckedChange={(c) => {
+                                  setRelMeeirosPdfRocaIds((prev) =>
+                                    c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
+                                  );
+                                }}
+                              />
+                              <span className="text-sm">{r.nome}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="gap-2 min-w-[120px]"
+                    disabled={relPagPdfLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelPagPdfLoadingAction('download');
+                        await controleRocaService.downloadRelatorioMeeirosPdf({
+                          meeiroId: relPagMeeiroId === '' ? undefined : Number(relPagMeeiroId),
+                          dataInicial: relMeeirosPdfDataInicial || undefined,
+                          dataFinal: relMeeirosPdfDataFinal || undefined,
+                          rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                        });
+                        toast.success('PDF baixado');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelPagPdfLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relPagPdfLoadingAction === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 min-w-[120px]"
+                    disabled={relPagPdfLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelPagPdfLoadingAction('print');
+                        await controleRocaService.printRelatorioMeeirosPdf({
+                          meeiroId: relPagMeeiroId === '' ? undefined : Number(relPagMeeiroId),
+                          dataInicial: relMeeirosPdfDataInicial || undefined,
+                          dataFinal: relMeeirosPdfDataFinal || undefined,
+                          rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                        });
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelPagPdfLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relPagPdfLoadingAction === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-card border rounded-xl p-4 sm:p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de meeiros pagos</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Gere o PDF dos meeiros com pagamento registrado no período, com opção de filtrar por roças.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Pagamento inicial</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relMeeirosPagosDataPagamentoInicial}
+                      onChange={(e) => setRelMeeirosPagosDataPagamentoInicial(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Pagamento final</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relMeeirosPagosDataPagamentoFinal}
+                      onChange={(e) => setRelMeeirosPagosDataPagamentoFinal(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Lançamento inicial (opcional)</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relMeeirosPagosDataLancamentoInicial}
+                      onChange={(e) => setRelMeeirosPagosDataLancamentoInicial(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Lançamento final (opcional)</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relMeeirosPagosDataLancamentoFinal}
+                      onChange={(e) => setRelMeeirosPagosDataLancamentoFinal(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Roças (opcional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="h-9 w-full justify-between font-normal">
+                          <span className="truncate">
+                            {relMeeirosPagosRocaIds.length === 0
+                              ? 'Todas as roças'
+                              : `${relMeeirosPagosRocaIds.length} roça(s)`}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[260px] p-2" align="start">
+                        <div className="max-h-[240px] overflow-y-auto space-y-1">
+                          {rocasParaRelatorioPdf.map((r) => (
+                            <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
+                              <Checkbox
+                                checked={relMeeirosPagosRocaIds.includes(r.id)}
+                                onCheckedChange={(c) => {
+                                  setRelMeeirosPagosRocaIds((prev) =>
+                                    c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
+                                  );
+                                }}
+                              />
+                              <span className="text-sm">{r.nome}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Opções</Label>
+                    <label className="h-9 border rounded-md px-3 flex items-center gap-2 cursor-pointer bg-background">
+                      <Checkbox
+                        checked={relMeeirosPagosAplicarEmbalagem}
+                        onCheckedChange={(c) => setRelMeeirosPagosAplicarEmbalagem(Boolean(c))}
+                      />
+                      <span className="text-sm">Aplicar embalagem</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="gap-2 min-w-[120px]"
+                    disabled={relMeeirosPagosLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelMeeirosPagosLoadingAction('download');
+                        await controleRocaService.downloadRelatorioMeeirosPagosPdf({
+                          dataPagamentoInicial: relMeeirosPagosDataPagamentoInicial || undefined,
+                          dataPagamentoFinal: relMeeirosPagosDataPagamentoFinal || undefined,
+                          dataLancamentoInicial: relMeeirosPagosDataLancamentoInicial || undefined,
+                          dataLancamentoFinal: relMeeirosPagosDataLancamentoFinal || undefined,
+                          rocas: relMeeirosPagosRocaIds.length ? relMeeirosPagosRocaIds : undefined,
+                          aplicarEmbalagem: relMeeirosPagosAplicarEmbalagem,
+                        });
+                        toast.success('PDF baixado');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelMeeirosPagosLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relMeeirosPagosLoadingAction === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 min-w-[120px]"
+                    disabled={relMeeirosPagosLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelMeeirosPagosLoadingAction('print');
+                        await controleRocaService.printRelatorioMeeirosPagosPdf({
+                          dataPagamentoInicial: relMeeirosPagosDataPagamentoInicial || undefined,
+                          dataPagamentoFinal: relMeeirosPagosDataPagamentoFinal || undefined,
+                          dataLancamentoInicial: relMeeirosPagosDataLancamentoInicial || undefined,
+                          dataLancamentoFinal: relMeeirosPagosDataLancamentoFinal || undefined,
+                          rocas: relMeeirosPagosRocaIds.length ? relMeeirosPagosRocaIds : undefined,
+                          aplicarEmbalagem: relMeeirosPagosAplicarEmbalagem,
+                        });
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelMeeirosPagosLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relMeeirosPagosLoadingAction === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-card border rounded-xl p-4 sm:p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de empréstimos de meeiros</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Exibe os meeiros que pediram empréstimo com data e valor, permitindo exportar em PDF.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data inicial</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relEmprestimosDataInicial}
+                      onChange={(e) => setRelEmprestimosDataInicial(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data final</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={relEmprestimosDataFinal}
+                      onChange={(e) => setRelEmprestimosDataFinal(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Roça (opcional)</Label>
+                    <Select
+                      value={relEmprestimosRocaId === '' ? 'todas' : String(relEmprestimosRocaId)}
+                      onValueChange={(v) => setRelEmprestimosRocaId(v === 'todas' ? '' : Number(v))}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        {rocas.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[160px]"
+                    disabled={relEmprestimosLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelEmprestimosLoadingAction('download');
+                        await controleRocaService.downloadRelatorioEmprestimosMeeirosPdf({
+                          dataInicial: relEmprestimosDataInicial || undefined,
+                          dataFinal: relEmprestimosDataFinal || undefined,
+                          rocas: relEmprestimosRocaId === '' ? undefined : [relEmprestimosRocaId],
+                        });
+                        toast.success('PDF baixado');
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelEmprestimosLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relEmprestimosLoadingAction === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[120px]"
+                    disabled={relEmprestimosLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelEmprestimosLoadingAction('print');
+                        await controleRocaService.printRelatorioEmprestimosMeeirosPdf({
+                          dataInicial: relEmprestimosDataInicial || undefined,
+                          dataFinal: relEmprestimosDataFinal || undefined,
+                          rocas: relEmprestimosRocaId === '' ? undefined : [relEmprestimosRocaId],
+                        });
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || e?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelEmprestimosLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {relEmprestimosLoadingAction === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -5529,20 +6718,43 @@ className={
                       <Banknote className="w-5 h-5 text-primary" />
                       Resumo financeiro
                     </h3>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <Label className="text-muted-foreground">Total a receber</Label>
-                        <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalReceber)}</p>
+                    {detailMeeiro.resumoFinanceiro.jaPago ? (
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <Label className="text-muted-foreground">Valor total pago</Label>
+                          <p className="font-semibold text-base text-primary">
+                            {formatCurrency(detailMeeiro.resumoFinanceiro.valorTotalPago)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Valor (base)</Label>
+                          <p className="font-semibold text-base">
+                            {formatCurrency(detailMeeiro.resumoFinanceiro.valorBasePagamento)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Teve empréstimo</Label>
+                          <p className="font-semibold text-base">
+                            {detailMeeiro.resumoFinanceiro.teveEmprestimoNoPagamento ? 'Sim' : 'Não'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <Label className="text-muted-foreground">Empréstimos em aberto</Label>
-                        <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalEmprestimosAbertos)}</p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <Label className="text-muted-foreground">Total a receber</Label>
+                          <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalReceber)}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Empréstimos em aberto</Label>
+                          <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalEmprestimosAbertos)}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Valor líquido a pagar</Label>
+                          <p className="font-semibold text-base text-primary">{formatCurrency(detailMeeiro.resumoFinanceiro.valorLiquido)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <Label className="text-muted-foreground">Valor líquido a pagar</Label>
-                        <p className="font-semibold text-base text-primary">{formatCurrency(detailMeeiro.resumoFinanceiro.valorLiquido)}</p>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -6014,8 +7226,21 @@ className={
                   </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-muted-foreground">Valor final a pagar</span>
-                    <span className="font-semibold text-primary">{formatCurrency(meeiroParaPagar.valorLiquido)}</span>
+                    <span
+                      className={cn(
+                        'font-semibold',
+                        meeiroParaPagar.valorLiquido < 0 ? 'text-amber-700 dark:text-amber-300' : 'text-primary',
+                      )}
+                    >
+                      {formatCurrency(meeiroParaPagar.valorLiquido)}
+                    </span>
                   </div>
+                  {meeiroParaPagar.valorLiquido < 0 && (
+                    <p className="text-xs text-muted-foreground leading-snug">
+                      Não há pagamento em dinheiro: o valor da produção será abatido nos empréstimos (ordem de cadastro). O
+                      saldo de empréstimo que restar permanece em aberto.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Forma de pagamento</Label>
