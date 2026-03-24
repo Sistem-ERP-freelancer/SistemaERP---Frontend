@@ -156,6 +156,13 @@ function apenasDividaEmprestimoSemProducaoRemanescente(m: ResumoPagamentoMeeiro)
   return (m.totalReceber ?? 0) <= 0 && (m.totalEmprestimosAbertos ?? 0) > 0;
 }
 
+/** Filtro local da tabela de pagamento por nome do meeiro. */
+function meeiroPagamentoMatchesBusca(m: ResumoPagamentoMeeiro, busca: string): boolean {
+  const t = busca.trim().toLowerCase();
+  if (!t) return true;
+  return (m.nome ?? '').toLowerCase().includes(t);
+}
+
 /** Retorna a data de hoje no fuso local em YYYY-MM-DD (evita deslocamento de 1 dia do toISOString/UTC). */
 function getDataHojeLocal(): string {
   const d = new Date();
@@ -1335,6 +1342,12 @@ export default function ControleRoca() {
   const [relMeeirosPdfDataInicial, setRelMeeirosPdfDataInicial] = useState(() => new Date().toISOString().slice(0, 10));
   const [relMeeirosPdfDataFinal, setRelMeeirosPdfDataFinal] = useState(() => new Date().toISOString().slice(0, 10));
   const [relMeeirosPdfRocaIds, setRelMeeirosPdfRocaIds] = useState<number[]>([]);
+  const [relMeeirosPdfRocaBusca, setRelMeeirosPdfRocaBusca] = useState('');
+  const rocasParaRelatorioPdfFiltradas = useMemo(() => {
+    const t = relMeeirosPdfRocaBusca.trim().toLowerCase();
+    if (!t) return rocasParaRelatorioPdf;
+    return rocasParaRelatorioPdf.filter((r) => (r.nome ?? '').toLowerCase().includes(t));
+  }, [rocasParaRelatorioPdf, relMeeirosPdfRocaBusca]);
   const [pagamentoFiltrosDraft, setPagamentoFiltrosDraft] = useState<PagamentoMeeirosFiltros>(() =>
     createDefaultPagamentoMeeirosFiltros(),
   );
@@ -1389,6 +1402,7 @@ export default function ControleRoca() {
     );
   }, [meeirosParaRelatorio, pagamentoFiltrosDraft.produtorId, pagamentoDraftMeeiroSearch]);
   const [pagamentoSubTab, setPagamentoSubTab] = useState<'em-aberto' | 'quitados'>('em-aberto');
+  const [pagamentoBuscaMeeiro, setPagamentoBuscaMeeiro] = useState('');
   const [openPagarModal, setOpenPagarModal] = useState(false);
   const [meeiroParaPagar, setMeeiroParaPagar] = useState<ResumoPagamentoMeeiro | null>(null);
   const [formPagamento, setFormPagamento] = useState({ formaPagamento: 'PIX', contaCaixa: '', dataPagamento: '', observacao: '' });
@@ -4395,8 +4409,8 @@ className={
             </Dialog>
 
             <Tabs value={pagamentoSubTab} onValueChange={(v) => setPagamentoSubTab(v as 'em-aberto' | 'quitados')} className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                <TabsList className="bg-muted/50 h-auto w-fit max-w-full flex-wrap justify-start">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+                <TabsList className="bg-muted/50 h-auto w-fit max-w-full flex-wrap justify-start shrink-0">
                   <TabsTrigger value="em-aberto" className="gap-2">
                     <Banknote className="w-4 h-4" />
                     Em aberto
@@ -4412,6 +4426,20 @@ className={
                     </span>
                   </TabsTrigger>
                 </TabsList>
+                <div className="relative w-full min-w-0 flex-1 lg:max-w-md">
+                  <Search
+                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                    aria-hidden
+                  />
+                  <Input
+                    type="search"
+                    placeholder="Buscar por meeiro..."
+                    value={pagamentoBuscaMeeiro}
+                    onChange={(e) => setPagamentoBuscaMeeiro(e.target.value)}
+                    className="h-9 pl-9"
+                    aria-label="Buscar meeiro na lista de pagamento"
+                  />
+                </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <Button
                     type="button"
@@ -4480,12 +4508,27 @@ className={
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          const emAberto = (resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoEmAberto);
-                          if (emAberto.length === 0) {
+                          const emAbertoTodos = (resumoPagamentoMeeiros?.items ?? []).filter(
+                            isMeeiroPagamentoEmAberto,
+                          );
+                          const emAberto = emAbertoTodos.filter((m) =>
+                            meeiroPagamentoMatchesBusca(m, pagamentoBuscaMeeiro),
+                          );
+                          if (emAbertoTodos.length === 0) {
                             return (
                               <TableRow>
                                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                                   Nenhum meeiro em aberto neste período (valor líquido a pagar ou empréstimo pendente, ainda não quitado no sistema). Verifique filtros, lançamentos e datas.
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
+                          if (emAberto.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                  Nenhum meeiro corresponde à busca &quot;{pagamentoBuscaMeeiro.trim()}&quot;. Ajuste o
+                                  texto ou limpe o campo.
                                 </TableCell>
                               </TableRow>
                             );
@@ -4586,12 +4629,27 @@ className={
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          const quitados = (resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoQuitado);
-                          if (quitados.length === 0) {
+                          const quitadosTodos = (resumoPagamentoMeeiros?.items ?? []).filter(
+                            isMeeiroPagamentoQuitado,
+                          );
+                          const quitados = quitadosTodos.filter((m) =>
+                            meeiroPagamentoMatchesBusca(m, pagamentoBuscaMeeiro),
+                          );
+                          if (quitadosTodos.length === 0) {
                             return (
                               <TableRow>
                                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                                   Nenhum meeiro totalmente quitado (pagamento registrado e sem empréstimo em aberto). Quem ainda tiver dívida aparece em Em aberto.
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
+                          if (quitados.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                  Nenhum meeiro corresponde à busca &quot;{pagamentoBuscaMeeiro.trim()}&quot;. Ajuste o
+                                  texto ou limpe o campo.
                                 </TableCell>
                               </TableRow>
                             );
@@ -4644,7 +4702,7 @@ className={
                 <div>
                   <h3 className="text-base font-semibold leading-tight">Notas de lançamento</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Produto, quantidades, valores e roça de origem (PDF). Os filtros abaixo são os mesmos do relatório
+                    Produto, quantidades, preço unitário e total (PDF). Os filtros abaixo são os mesmos do relatório
                     geral seguinte e da sidebar de lançamentos.
                   </p>
                 </div>
@@ -4654,67 +4712,34 @@ className={
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Produtor</Label>
-                    <Select
-                      value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
-                      onValueChange={(v) => {
-                        setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                    <RelatorioTabComboProdutor
+                      value={relatorioSheetProdutorId}
+                      onChange={(id) => {
+                        setRelatorioSheetProdutorId(id);
                         setRelatorioEstoqueRocaId('');
                         setRelatorioSheetProdutoId('');
                       }}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os produtores</SelectItem>
-                        {produtoresRelatorioOrdenados.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      produtores={produtoresRelatorioOrdenados}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Roça (opcional)</Label>
-                    <Select
-                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
-                      onValueChange={(v) => {
-                        setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                    <RelatorioTabComboRoca
+                      value={relatorioEstoqueRocaId}
+                      onChange={(id) => {
+                        setRelatorioEstoqueRocaId(id);
                         setRelatorioSheetProdutoId('');
                       }}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
-                        {rocasRelatorioFiltros.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>
-                            {r.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      rocas={rocasRelatorioFiltros}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Produto (opcional)</Label>
-                    <Select
-                      value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
-                      onValueChange={(v) => setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os produtos</SelectItem>
-                        {produtosRelatorioFiltrosOrdenados.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <RelatorioTabComboProduto
+                      value={relatorioSheetProdutoId}
+                      onChange={setRelatorioSheetProdutoId}
+                      produtos={produtosRelatorioFiltrosOrdenados}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Data inicial</Label>
@@ -4820,69 +4845,34 @@ className={
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Produtor</Label>
-                    <Select
-                      value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
-                      onValueChange={(v) => {
-                        setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                    <RelatorioTabComboProdutor
+                      value={relatorioSheetProdutorId}
+                      onChange={(id) => {
+                        setRelatorioSheetProdutorId(id);
                         setRelatorioEstoqueRocaId('');
                         setRelatorioSheetProdutoId('');
                       }}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os produtores</SelectItem>
-                        {produtoresRelatorioOrdenados.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      produtores={produtoresRelatorioOrdenados}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Roça (opcional)</Label>
-                    <Select
-                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
-                      onValueChange={(v) => {
-                        setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                    <RelatorioTabComboRoca
+                      value={relatorioEstoqueRocaId}
+                      onChange={(id) => {
+                        setRelatorioEstoqueRocaId(id);
                         setRelatorioSheetProdutoId('');
                       }}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
-                        {rocasRelatorioFiltros.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>
-                            {r.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      rocas={rocasRelatorioFiltros}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Produto (opcional)</Label>
-                    <Select
-                      value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
-                      onValueChange={(v) =>
-                        setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))
-                      }
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os produtos</SelectItem>
-                        {produtosRelatorioFiltrosOrdenados.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <RelatorioTabComboProduto
+                      value={relatorioSheetProdutoId}
+                      onChange={setRelatorioSheetProdutoId}
+                      produtos={produtosRelatorioFiltrosOrdenados}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Data inicial</Label>
@@ -5268,7 +5258,11 @@ className={
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Roças (opcional)</Label>
-                    <Popover>
+                    <Popover
+                      onOpenChange={(open) => {
+                        if (!open) setRelMeeirosPdfRocaBusca('');
+                      }}
+                    >
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="h-9 w-full justify-between font-normal">
                           <span className="truncate">
@@ -5279,21 +5273,41 @@ className={
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[260px] p-2" align="start">
-                        <div className="max-h-[240px] overflow-y-auto space-y-1">
-                          {rocasParaRelatorioPdf.map((r) => (
-                            <label key={r.id} className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50">
-                              <Checkbox
-                                checked={relMeeirosPdfRocaIds.includes(r.id)}
-                                onCheckedChange={(c) => {
-                                  setRelMeeirosPdfRocaIds((prev) =>
-                                    c ? [...prev, r.id] : prev.filter((id) => id !== r.id)
-                                  );
-                                }}
-                              />
-                              <span className="text-sm">{r.nome}</span>
-                            </label>
-                          ))}
+                      <PopoverContent className="w-[280px] p-0" align="start">
+                        <div className="border-b p-2">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                            <Input
+                              type="search"
+                              placeholder="Buscar roça..."
+                              value={relMeeirosPdfRocaBusca}
+                              onChange={(e) => setRelMeeirosPdfRocaBusca(e.target.value)}
+                              className="h-9 pl-8"
+                              aria-label="Filtrar lista de roças"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-[220px] overflow-y-auto space-y-1 p-2">
+                          {rocasParaRelatorioPdfFiltradas.length === 0 ? (
+                            <p className="text-sm text-muted-foreground px-1 py-2">Nenhuma roça encontrada.</p>
+                          ) : (
+                            rocasParaRelatorioPdfFiltradas.map((r) => (
+                              <label
+                                key={r.id}
+                                className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50"
+                              >
+                                <Checkbox
+                                  checked={relMeeirosPdfRocaIds.includes(r.id)}
+                                  onCheckedChange={(c) => {
+                                    setRelMeeirosPdfRocaIds((prev) =>
+                                      c ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                                    );
+                                  }}
+                                />
+                                <span className="text-sm">{r.nome}</span>
+                              </label>
+                            ))
+                          )}
                         </div>
                       </PopoverContent>
                     </Popover>
@@ -5395,22 +5409,11 @@ className={
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Roça (opcional)</Label>
-                    <Select
-                      value={relEmprestimosRocaId === '' ? 'todas' : String(relEmprestimosRocaId)}
-                      onValueChange={(v) => setRelEmprestimosRocaId(v === 'todas' ? '' : Number(v))}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
-                        {rocas.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>
-                            {r.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <RelatorioTabComboRoca
+                      value={relEmprestimosRocaId}
+                      onChange={setRelEmprestimosRocaId}
+                      rocas={rocas}
+                    />
                   </div>
                 </div>
 
@@ -8241,7 +8244,7 @@ className={
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-foreground">Notas de lançamento</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Nome do produto, quantidade, preço unitário (média ponderada), valor total e roça. Os filtros
+                      Nome do produto, quantidade, preço unitário (média ponderada) e valor total. Os filtros
                       abaixo são os mesmos do relatório geral (bloco seguinte) — alterar em qualquer seção atualiza os
                       dois.
                     </p>
@@ -8253,67 +8256,34 @@ className={
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1.5 min-w-[180px] flex-1">
                         <Label className="text-xs text-muted-foreground">Produtor</Label>
-                        <Select
-                          value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
-                          onValueChange={(v) => {
-                            setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                        <RelatorioTabComboProdutor
+                          value={relatorioSheetProdutorId}
+                          onChange={(id) => {
+                            setRelatorioSheetProdutorId(id);
                             setRelatorioEstoqueRocaId('');
                             setRelatorioSheetProdutoId('');
                           }}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Todos os produtores" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos os produtores</SelectItem>
-                            {produtoresRelatorioOrdenados.map((p) => (
-                              <SelectItem key={p.id} value={String(p.id)}>
-                                {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          produtores={produtoresRelatorioOrdenados}
+                        />
                       </div>
                       <div className="space-y-1.5 min-w-[160px] flex-1">
                         <Label className="text-xs text-muted-foreground">Roça</Label>
-                        <Select
-                          value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
-                          onValueChange={(v) => {
-                            setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                        <RelatorioTabComboRoca
+                          value={relatorioEstoqueRocaId}
+                          onChange={(id) => {
+                            setRelatorioEstoqueRocaId(id);
                             setRelatorioSheetProdutoId('');
                           }}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Todas as roças" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todas">Todas as roças</SelectItem>
-                            {rocasRelatorioFiltros.map((r) => (
-                              <SelectItem key={r.id} value={String(r.id)}>
-                                {r.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          rocas={rocasRelatorioFiltros}
+                        />
                       </div>
                       <div className="space-y-1.5 min-w-[180px] flex-1">
                         <Label className="text-xs text-muted-foreground">Produto</Label>
-                        <Select
-                          value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
-                          onValueChange={(v) => setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Todos os produtos" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos os produtos</SelectItem>
-                            {produtosRelatorioFiltrosOrdenados.map((p) => (
-                              <SelectItem key={p.id} value={String(p.id)}>
-                                {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <RelatorioTabComboProduto
+                          value={relatorioSheetProdutoId}
+                          onChange={setRelatorioSheetProdutoId}
+                          produtos={produtosRelatorioFiltrosOrdenados}
+                        />
                       </div>
                       <div className="space-y-1.5 w-[140px]">
                         <Label className="text-xs text-muted-foreground">Data inicial</Label>
@@ -8419,67 +8389,34 @@ className={
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="space-y-1.5 min-w-[180px] flex-1">
                         <Label className="text-xs text-muted-foreground">Produtor</Label>
-                        <Select
-                          value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
-                          onValueChange={(v) => {
-                            setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                        <RelatorioTabComboProdutor
+                          value={relatorioSheetProdutorId}
+                          onChange={(id) => {
+                            setRelatorioSheetProdutorId(id);
                             setRelatorioEstoqueRocaId('');
                             setRelatorioSheetProdutoId('');
                           }}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Todos os produtores" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos os produtores</SelectItem>
-                            {produtoresRelatorioOrdenados.map((p) => (
-                              <SelectItem key={p.id} value={String(p.id)}>
-                                {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          produtores={produtoresRelatorioOrdenados}
+                        />
                       </div>
                       <div className="space-y-1.5 min-w-[160px] flex-1">
                         <Label className="text-xs text-muted-foreground">Roça</Label>
-                        <Select
-                          value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
-                          onValueChange={(v) => {
-                            setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                        <RelatorioTabComboRoca
+                          value={relatorioEstoqueRocaId}
+                          onChange={(id) => {
+                            setRelatorioEstoqueRocaId(id);
                             setRelatorioSheetProdutoId('');
                           }}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Todas as roças" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todas">Todas as roças</SelectItem>
-                            {rocasRelatorioFiltros.map((r) => (
-                              <SelectItem key={r.id} value={String(r.id)}>
-                                {r.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          rocas={rocasRelatorioFiltros}
+                        />
                       </div>
                       <div className="space-y-1.5 min-w-[180px] flex-1">
                         <Label className="text-xs text-muted-foreground">Produto</Label>
-                        <Select
-                          value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
-                          onValueChange={(v) => setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Todos os produtos" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos os produtos</SelectItem>
-                            {produtosRelatorioFiltrosOrdenados.map((p) => (
-                              <SelectItem key={p.id} value={String(p.id)}>
-                                {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <RelatorioTabComboProduto
+                          value={relatorioSheetProdutoId}
+                          onChange={setRelatorioSheetProdutoId}
+                          produtos={produtosRelatorioFiltrosOrdenados}
+                        />
                       </div>
                       <div className="space-y-1.5 w-[140px]">
                         <Label className="text-xs text-muted-foreground">Data inicial</Label>
@@ -8570,6 +8507,265 @@ className={
         </Sheet>
       </div>
     </AppLayout>
+  );
+}
+
+type RelTabProdutorOpt = { id: number; codigo?: string | null; nome_razao?: string | null };
+type RelTabRocaOpt = { id: number; nome?: string | null };
+type RelTabProdutoOpt = { id: number; codigo?: string | null; nome?: string | null };
+
+function RelatorioTabComboProdutor({
+  value,
+  onChange,
+  produtores,
+}: {
+  value: number | '';
+  onChange: (id: number | '') => void;
+  produtores: RelTabProdutorOpt[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return produtores;
+    return produtores.filter((p) => {
+      const label = `${p.codigo ?? ''} ${p.nome_razao ?? ''}`.toLowerCase();
+      return label.includes(t);
+    });
+  }, [produtores, q]);
+  const label =
+    value === ''
+      ? 'Todos os produtores'
+      : (() => {
+          const p = produtores.find((x) => x.id === value);
+          if (!p) return 'Todos os produtores';
+          return p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id));
+        })();
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQ('');
+      }}
+      modal
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between font-normal"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Buscar produtor..." value={q} onValueChange={setQ} className="h-10" />
+          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+            <CommandEmpty>Nenhum produtor encontrado.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__todos"
+                onSelect={() => {
+                  onChange('');
+                  setOpen(false);
+                  setQ('');
+                }}
+              >
+                <Check className={cn('mr-2 h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
+                Todos os produtores
+              </CommandItem>
+              {filtered.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={`p-${p.id}`}
+                  onSelect={() => {
+                    onChange(p.id);
+                    setOpen(false);
+                    setQ('');
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                  {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function RelatorioTabComboRoca({
+  value,
+  onChange,
+  rocas,
+  todosLabel = 'Todas as roças',
+  searchPlaceholder = 'Buscar roça...',
+}: {
+  value: number | '';
+  onChange: (id: number | '') => void;
+  rocas: RelTabRocaOpt[];
+  todosLabel?: string;
+  searchPlaceholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return rocas;
+    return rocas.filter((r) => (r.nome ?? '').toLowerCase().includes(t));
+  }, [rocas, q]);
+  const label =
+    value === ''
+      ? todosLabel
+      : (rocas.find((r) => r.id === value)?.nome ?? todosLabel);
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQ('');
+      }}
+      modal
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between font-normal"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={searchPlaceholder} value={q} onValueChange={setQ} className="h-10" />
+          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+            <CommandEmpty>Nenhuma roça encontrada.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__todas"
+                onSelect={() => {
+                  onChange('');
+                  setOpen(false);
+                  setQ('');
+                }}
+              >
+                <Check className={cn('mr-2 h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
+                {todosLabel}
+              </CommandItem>
+              {filtered.map((r) => (
+                <CommandItem
+                  key={r.id}
+                  value={`r-${r.id}`}
+                  onSelect={() => {
+                    onChange(r.id);
+                    setOpen(false);
+                    setQ('');
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === r.id ? 'opacity-100' : 'opacity-0')} />
+                  {r.nome ?? String(r.id)}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function RelatorioTabComboProduto({
+  value,
+  onChange,
+  produtos,
+}: {
+  value: number | '';
+  onChange: (id: number | '') => void;
+  produtos: RelTabProdutoOpt[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return produtos;
+    return produtos.filter((p) => {
+      const label = `${p.codigo ?? ''} ${p.nome ?? ''}`.toLowerCase();
+      return label.includes(t);
+    });
+  }, [produtos, q]);
+  const label =
+    value === ''
+      ? 'Todos os produtos'
+      : (() => {
+          const p = produtos.find((x) => x.id === value);
+          if (!p) return 'Todos os produtos';
+          return p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id));
+        })();
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQ('');
+      }}
+      modal
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between font-normal"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Buscar produto..." value={q} onValueChange={setQ} className="h-10" />
+          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__todos"
+                onSelect={() => {
+                  onChange('');
+                  setOpen(false);
+                  setQ('');
+                }}
+              >
+                <Check className={cn('mr-2 h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
+                Todos os produtos
+              </CommandItem>
+              {filtered.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={`prod-${p.id}`}
+                  onSelect={() => {
+                    onChange(p.id);
+                    setOpen(false);
+                    setQ('');
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                  {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
