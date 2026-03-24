@@ -77,10 +77,11 @@ class ControleRocaService {
   // Meeiros
   async listarMeeiros(
     produtorId?: number,
-    opts?: { comEmprestimos?: boolean; page?: number; limit?: number }
+    opts?: { comEmprestimos?: boolean; page?: number; limit?: number; rocaId?: number }
   ): Promise<MeeiroRoca[]> {
     const params = new URLSearchParams();
     if (produtorId != null) params.set('produtorId', String(produtorId));
+    if (opts?.rocaId != null) params.set('rocaId', String(opts.rocaId));
     if (opts?.comEmprestimos === true) params.set('comEmprestimos', 'true');
     if (opts?.page != null) params.set('page', String(opts.page));
     if (opts?.limit != null) params.set('limit', String(opts.limit));
@@ -152,6 +153,7 @@ class ControleRocaService {
   // Pagamentos de meeiros
   async listarResumoPagamentoMeeiros(params?: {
     produtorId?: number;
+    meeiroId?: number;
     dataInicial?: string;
     dataFinal?: string;
     rocas?: number[];
@@ -162,6 +164,7 @@ class ControleRocaService {
   }): Promise<ResumoPagamentoMeeirosResponse> {
     const search = new URLSearchParams();
     if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
+    if (params?.meeiroId != null) search.set('meeiroId', String(params.meeiroId));
     if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
     if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
     if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
@@ -545,11 +548,15 @@ class ControleRocaService {
     data_inicial?: string;
     data_final?: string;
     rocaId?: number;
+    produtorId?: number;
+    produtoId?: number;
   }): Promise<RelatorioLancamentoProdutosLinha[]> {
     const q = new URLSearchParams();
     if (params?.data_inicial) q.set('data_inicial', params.data_inicial);
     if (params?.data_final) q.set('data_final', params.data_final);
     if (params?.rocaId != null) q.set('rocaId', String(params.rocaId));
+    if (params?.produtorId != null) q.set('produtorId', String(params.produtorId));
+    if (params?.produtoId != null) q.set('produtoId', String(params.produtoId));
     const query = q.toString();
     return apiClient.get<RelatorioLancamentoProdutosLinha[]>(
       `${BASE}/relatorio/lancamento-produtos${query ? `?${query}` : ''}`
@@ -559,12 +566,16 @@ class ControleRocaService {
   async downloadRelatorioLancamentoProdutosPdf(
     dataInicial?: string,
     dataFinal?: string,
-    rocaId?: number
+    rocaId?: number,
+    produtorId?: number,
+    produtoId?: number
   ): Promise<void> {
     const q = new URLSearchParams();
     if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
     if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
     if (rocaId != null) q.set('rocaId', String(rocaId));
+    if (produtorId != null) q.set('produtorId', String(produtorId));
+    if (produtoId != null) q.set('produtoId', String(produtoId));
     const query = q.toString();
     const blob = await apiClient.getBlob(
       `${BASE}/relatorio/lancamento-produtos/pdf${query ? `?${query}` : ''}`
@@ -582,15 +593,90 @@ class ControleRocaService {
   async printRelatorioLancamentoProdutosPdf(
     dataInicial?: string,
     dataFinal?: string,
-    rocaId?: number
+    rocaId?: number,
+    produtorId?: number,
+    produtoId?: number
   ): Promise<void> {
     const q = new URLSearchParams();
     if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
     if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
     if (rocaId != null) q.set('rocaId', String(rocaId));
+    if (produtorId != null) q.set('produtorId', String(produtorId));
+    if (produtoId != null) q.set('produtoId', String(produtoId));
     const query = q.toString();
     const blob = await apiClient.getBlob(
       `${BASE}/relatorio/lancamento-produtos/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
+
+  /** Produto (nome), quantidade total e roça de origem — uma linha por produto + roça. */
+  async getRelatorioProdutoPorOrigem(params?: {
+    data_inicial?: string;
+    data_final?: string;
+    rocaId?: number;
+    produtorId?: number;
+    produtoId?: number;
+  }): Promise<RelatorioProdutoPorOrigemLinha[]> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial) q.set('data_inicial', params.data_inicial);
+    if (params?.data_final) q.set('data_final', params.data_final);
+    if (params?.rocaId != null) q.set('rocaId', String(params.rocaId));
+    if (params?.produtorId != null) q.set('produtorId', String(params.produtorId));
+    if (params?.produtoId != null) q.set('produtoId', String(params.produtoId));
+    const query = q.toString();
+    return apiClient.get<RelatorioProdutoPorOrigemLinha[]>(
+      `${BASE}/relatorio/produto-por-origem${query ? `?${query}` : ''}`
+    );
+  }
+
+  async downloadRelatorioProdutoPorOrigemPdf(
+    dataInicial?: string,
+    dataFinal?: string,
+    rocaId?: number,
+    produtorId?: number,
+    produtoId?: number
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
+    if (rocaId != null) q.set('rocaId', String(rocaId));
+    if (produtorId != null) q.set('produtorId', String(produtorId));
+    if (produtoId != null) q.set('produtoId', String(produtoId));
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorio/produto-por-origem/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-produto-origem-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async printRelatorioProdutoPorOrigemPdf(
+    dataInicial?: string,
+    dataFinal?: string,
+    rocaId?: number,
+    produtorId?: number,
+    produtoId?: number
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
+    if (rocaId != null) q.set('rocaId', String(rocaId));
+    if (produtorId != null) q.set('produtorId', String(produtorId));
+    if (produtoId != null) q.set('produtoId', String(produtoId));
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorio/produto-por-origem/pdf${query ? `?${query}` : ''}`
     );
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
@@ -610,6 +696,16 @@ export interface RelatorioLancamentoProdutosLinha {
   valor_total_lancado: number;
   total_pagar_meeiros: number;
   estoque_atual: number;
+}
+
+export interface RelatorioProdutoPorOrigemLinha {
+  nome_produto: string;
+  total_quantidade: number;
+  /** Média ponderada: valor_total / total_quantidade (alinha com Σ(qtd×preço) dos itens). */
+  preco_unitario: number;
+  /** Soma dos valor_total dos itens (= Σ quantidade × preço por lançamento). */
+  valor_total: number;
+  origem_roca: string;
 }
 
 export const controleRocaService = new ControleRocaService();

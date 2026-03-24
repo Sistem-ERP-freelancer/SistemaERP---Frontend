@@ -57,6 +57,7 @@ import {
     Sheet,
     SheetContent,
     SheetDescription,
+    SheetFooter,
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
@@ -74,7 +75,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { cleanDocument, formatCPF, formatTelefone } from '@/lib/validators';
 import { ConsultaCnpjResponse } from '@/services/cnpj.service';
-import { controleRocaService, type RelatorioLancamentoProdutosLinha } from '@/services/controle-roca.service';
+import { controleRocaService } from '@/services/controle-roca.service';
 import { produtosService } from '@/services/produtos.service';
 import type {
     CreateLancamentoProducaoRocaDto,
@@ -105,6 +106,7 @@ import {
     Download,
     Eye,
     FileText,
+    Files,
     Filter,
     Hash,
     Loader2,
@@ -169,6 +171,7 @@ type PagamentoMeeirosFiltros = {
   dataInicial: string;
   dataFinal: string;
   produtorId: number | '';
+  meeiroId: number | '';
   rocaIds: number[];
 };
 
@@ -177,6 +180,7 @@ function createDefaultPagamentoMeeirosFiltros(): PagamentoMeeirosFiltros {
     dataInicial: getPrimeiroDiaMesLocal(),
     dataFinal: getDataHojeLocal(),
     produtorId: '',
+    meeiroId: '',
     rocaIds: [],
   };
 }
@@ -392,15 +396,45 @@ export default function ControleRoca() {
 
   // Meeiros
   const [produtorIdMeeiros, setProdutorIdMeeiros] = useState<number | ''>('');
+  const [rocaIdMeeiros, setRocaIdMeeiros] = useState<number | ''>('');
   const [apenasComEmprestimosMeeiros, setApenasComEmprestimosMeeiros] = useState(false);
   const [filtroMeeiroProdutorSearch, setFiltroMeeiroProdutorSearch] = useState('');
   const [filtroMeeiroProdutorOpen, setFiltroMeeiroProdutorOpen] = useState(false);
+  const [filtroMeeiroRocaSearch, setFiltroMeeiroRocaSearch] = useState('');
+  const [filtroMeeiroRocaOpen, setFiltroMeeiroRocaOpen] = useState(false);
+  const { data: meeiroFiltroRocas = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas', 'meeiros-tab-filtro', produtorIdMeeiros],
+    queryFn: () =>
+      controleRocaService.listarRocas(produtorIdMeeiros === '' ? undefined : Number(produtorIdMeeiros)),
+    enabled: tab === 'meeiros',
+  });
+  const rocasFiltroMeeiroOrdenadas = useMemo(() => {
+    const term = filtroMeeiroRocaSearch.trim().toLowerCase();
+    const sorted = [...meeiroFiltroRocas].sort((a, b) =>
+      (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' }),
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (r) =>
+        (r.nome ?? '').toLowerCase().includes(term) || (r.codigo ?? '').toLowerCase().includes(term),
+    );
+  }, [meeiroFiltroRocas, filtroMeeiroRocaSearch]);
+  const meeirosFiltrosAtivosCount = useMemo(() => {
+    let n = 0;
+    if (produtorIdMeeiros !== '') n++;
+    if (rocaIdMeeiros !== '') n++;
+    if (apenasComEmprestimosMeeiros) n++;
+    return n;
+  }, [produtorIdMeeiros, rocaIdMeeiros, apenasComEmprestimosMeeiros]);
   const { data: meeiros = [], isLoading: loadingMeeiros } = useQuery({
-    queryKey: ['controle-roca', 'meeiros', produtorIdMeeiros, apenasComEmprestimosMeeiros],
+    queryKey: ['controle-roca', 'meeiros', produtorIdMeeiros, rocaIdMeeiros, apenasComEmprestimosMeeiros],
     queryFn: () =>
       controleRocaService.listarMeeiros(
         produtorIdMeeiros === '' ? undefined : Number(produtorIdMeeiros),
-        { comEmprestimos: apenasComEmprestimosMeeiros }
+        {
+          comEmprestimos: apenasComEmprestimosMeeiros,
+          rocaId: rocaIdMeeiros === '' ? undefined : Number(rocaIdMeeiros),
+        },
       ),
   });
   const produtoresFiltroRocaOrdenados = useMemo(() => {
@@ -855,12 +889,45 @@ export default function ControleRoca() {
     );
   }, [editLancamento, editLancamentoId]);
   const [openLancamento, setOpenLancamento] = useState(false);
-  const [relatorioEstoqueOpen, setRelatorioEstoqueOpen] = useState(false);
   const [relatorioEstoqueDataInicio, setRelatorioEstoqueDataInicio] = useState(() => getDataHojeLocal());
   const [relatorioEstoqueDataFim, setRelatorioEstoqueDataFim] = useState(() => getDataHojeLocal());
   const [relatorioEstoqueRocaId, setRelatorioEstoqueRocaId] = useState<number | ''>('');
-  const [relatorioEstoqueLoading, setRelatorioEstoqueLoading] = useState<'download' | 'print' | 'preview' | null>(null);
-  const [relatorioEstoqueDados, setRelatorioEstoqueDados] = useState<RelatorioLancamentoProdutosLinha[] | null>(null);
+  const [relatorioSheetProdutorId, setRelatorioSheetProdutorId] = useState<number | ''>('');
+  const [relatorioSheetProdutoId, setRelatorioSheetProdutoId] = useState<number | ''>('');
+  const [relatorioEstoqueLoading, setRelatorioEstoqueLoading] = useState<'download' | 'print' | null>(null);
+  const [relatorioProdutoOrigemLoading, setRelatorioProdutoOrigemLoading] = useState<'download' | 'print' | null>(
+    null
+  );
+  /** Painel com todos os relatórios voltados a lançamentos (produtos e meeiros). */
+  const [relLancamentosSheetOpen, setRelLancamentosSheetOpen] = useState(false);
+  const { data: rocasRelatorioFiltros = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas', 'relatorios-lancamento', relatorioSheetProdutorId],
+    queryFn: () =>
+      controleRocaService.listarRocas(
+        relatorioSheetProdutorId === '' ? undefined : Number(relatorioSheetProdutorId),
+      ),
+  });
+  /** Produtos do filtro: pelo produtor escolhido ou, se só houver roça, pelo produtor daquela roça. */
+  const produtorIdCatalogoRelatorioLancamento = useMemo(() => {
+    if (relatorioSheetProdutorId !== '') return Number(relatorioSheetProdutorId);
+    if (relatorioEstoqueRocaId === '') return undefined;
+    const roca = rocasRelatorioFiltros.find((r) => r.id === Number(relatorioEstoqueRocaId));
+    return roca?.produtorId;
+  }, [relatorioSheetProdutorId, relatorioEstoqueRocaId, rocasRelatorioFiltros]);
+  const { data: produtosRelatorioFiltros = [] } = useQuery({
+    queryKey: ['controle-roca', 'produtos', 'relatorios-lancamento', produtorIdCatalogoRelatorioLancamento],
+    queryFn: () =>
+      controleRocaService.listarProdutosRoca(
+        produtorIdCatalogoRelatorioLancamento === undefined ? undefined : produtorIdCatalogoRelatorioLancamento,
+      ),
+  });
+  const produtosRelatorioFiltrosOrdenados = useMemo(
+    () =>
+      [...produtosRelatorioFiltros].sort((a, b) =>
+        (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' }),
+      ),
+    [produtosRelatorioFiltros],
+  );
   const [produtoPreselecionadoLancamento, setProdutoPreselecionadoLancamento] = useState<{
     id: number;
     nome: string;
@@ -958,6 +1025,16 @@ export default function ControleRoca() {
         (p.codigo ?? '').toLowerCase().includes(term)
     );
   }, [produtores, filtroProdutorSearch]);
+
+  const produtoresRelatorioOrdenados = useMemo(
+    () =>
+      [...produtores].sort((a, b) =>
+        (a.nome_razao ?? a.codigo ?? '').localeCompare(b.nome_razao ?? b.codigo ?? '', 'pt-BR', {
+          sensitivity: 'base',
+        }),
+      ),
+    [produtores],
+  );
 
   const produtosFiltroOrdenados = useMemo(() => {
     const term = filtroProdutoSearch.trim().toLowerCase();
@@ -1265,26 +1342,52 @@ export default function ControleRoca() {
     createDefaultPagamentoMeeirosFiltros(),
   );
   const [pagamentoFiltrosSheetOpen, setPagamentoFiltrosSheetOpen] = useState(false);
-  const [pagamentoRelatoriosSheetOpen, setPagamentoRelatoriosSheetOpen] = useState(false);
+  /** Sidebar "Pagamento de meeiro" — PDF consolidado (endpoint relatorios/meeiros/pdf). */
+  const [relPagamentoMeeiroSheetOpen, setRelPagamentoMeeiroSheetOpen] = useState(false);
+  const [relPagMeeiroFiltroId, setRelPagMeeiroFiltroId] = useState<number | ''>('');
+  const [relPagRocaFiltroId, setRelPagRocaFiltroId] = useState<number | ''>('');
+  const [relPagDataInicial, setRelPagDataInicial] = useState('');
+  const [relPagDataFinal, setRelPagDataFinal] = useState('');
+  const [relPagMeeiroComboOpen, setRelPagMeeiroComboOpen] = useState(false);
+  const [relPagMeeiroComboSearch, setRelPagMeeiroComboSearch] = useState('');
+  const [relPagRocaComboOpen, setRelPagRocaComboOpen] = useState(false);
+  const [relPagRocaComboSearch, setRelPagRocaComboSearch] = useState('');
+  const [relPagPdfLoading, setRelPagPdfLoading] = useState<null | 'download' | 'print'>(null);
   const [pagamentoPdfMeeiroDialogOpen, setPagamentoPdfMeeiroDialogOpen] = useState(false);
   const [pdfPagMeeiroId, setPdfPagMeeiroId] = useState<number | ''>('');
   const [pdfPagDataInicial, setPdfPagDataInicial] = useState('');
   const [pdfPagDataFinal, setPdfPagDataFinal] = useState('');
   const [pdfPagDataPagamento, setPdfPagDataPagamento] = useState('');
+  /** Roças enviadas na query do PDF (independente do rascunho dos filtros da tela). */
+  const [pdfPagRocaIds, setPdfPagRocaIds] = useState<number[]>([]);
   const [pdfPagMeeiroDownloading, setPdfPagMeeiroDownloading] = useState(false);
   const [pdfPagMeeiroPrinting, setPdfPagMeeiroPrinting] = useState(false);
-  const [pdfRelMeeirosLoading, setPdfRelMeeirosLoading] = useState<
-    null | 'todos' | 'pagos' | 'pendentes'
-  >(null);
-  const [pdfRelMeeirosPrintLoading, setPdfRelMeeirosPrintLoading] = useState<
-    null | 'todos' | 'pagos' | 'pendentes'
-  >(null);
   const pagamentoFiltrosAtivosCount = useMemo(() => {
     let n = 0;
     if (pagamentoFiltrosAplicados.produtorId !== '') n++;
+    if (pagamentoFiltrosAplicados.meeiroId !== '') n++;
     if (pagamentoFiltrosAplicados.rocaIds.length > 0) n++;
     return n;
   }, [pagamentoFiltrosAplicados]);
+  const [pagamentoDraftMeeiroSearch, setPagamentoDraftMeeiroSearch] = useState('');
+  const [pagamentoDraftMeeiroOpen, setPagamentoDraftMeeiroOpen] = useState(false);
+  const meeirosOpcoesFiltroPagamento = useMemo(() => {
+    const term = pagamentoDraftMeeiroSearch.trim().toLowerCase();
+    let list = meeirosParaRelatorio;
+    if (pagamentoFiltrosDraft.produtorId !== '') {
+      list = list.filter((m) => m.produtorId === Number(pagamentoFiltrosDraft.produtorId));
+    }
+    const sorted = [...list].sort((a, b) =>
+      `${a.codigo ?? ''} ${a.nome ?? ''}`.localeCompare(`${b.codigo ?? ''} ${b.nome ?? ''}`, 'pt-BR', {
+        sensitivity: 'base',
+      }),
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (m) =>
+        (m.nome ?? '').toLowerCase().includes(term) || (m.codigo ?? '').toLowerCase().includes(term),
+    );
+  }, [meeirosParaRelatorio, pagamentoFiltrosDraft.produtorId, pagamentoDraftMeeiroSearch]);
   const [pagamentoSubTab, setPagamentoSubTab] = useState<'em-aberto' | 'quitados'>('em-aberto');
   const [openPagarModal, setOpenPagarModal] = useState(false);
   const [meeiroParaPagar, setMeeiroParaPagar] = useState<ResumoPagamentoMeeiro | null>(null);
@@ -1322,6 +1425,22 @@ export default function ControleRoca() {
         (m.nome ?? '').toLowerCase().includes(term)
     );
   }, [meeirosParaRelatorio, relPagMeeiroSearchTerm]);
+  const meeirosRelPagamentoMeeiroSheet = useMemo(() => {
+    const term = relPagMeeiroComboSearch.trim().toLowerCase();
+    const sorted = [...meeirosParaRelatorio].sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' }),
+    );
+    if (!term) return sorted;
+    return sorted.filter((m) => (m.nome ?? '').toLowerCase().includes(term));
+  }, [meeirosParaRelatorio, relPagMeeiroComboSearch]);
+  const rocasRelPagamentoMeeiroSheet = useMemo(() => {
+    const term = relPagRocaComboSearch.trim().toLowerCase();
+    const sorted = [...rocasParaFiltroLancamento].sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' }),
+    );
+    if (!term) return sorted;
+    return sorted.filter((r) => (r.nome ?? '').toLowerCase().includes(term));
+  }, [rocasParaFiltroLancamento, relPagRocaComboSearch]);
   const runRelatorio = () => {
     if (relMeeiroId === '') {
       toast.error('Selecione um meeiro');
@@ -1351,6 +1470,16 @@ export default function ControleRoca() {
       ),
     enabled: tab === 'pagamento-meeiros',
   });
+  const { data: pdfPagDialogRocas = [] } = useQuery({
+    queryKey: ['controle-roca', 'rocas', 'pdf-pagamento-meeiro', pagamentoFiltrosAplicados.produtorId],
+    queryFn: () =>
+      controleRocaService.listarRocas(
+        pagamentoFiltrosAplicados.produtorId === ''
+          ? undefined
+          : Number(pagamentoFiltrosAplicados.produtorId),
+      ),
+    enabled: tab === 'pagamento-meeiros' && pagamentoPdfMeeiroDialogOpen,
+  });
   const {
     data: resumoPagamentoMeeiros,
     isLoading: loadingResumoPagamento,
@@ -1362,6 +1491,7 @@ export default function ControleRoca() {
       pagamentoFiltrosAplicados.dataInicial,
       pagamentoFiltrosAplicados.dataFinal,
       pagamentoFiltrosAplicados.produtorId,
+      pagamentoFiltrosAplicados.meeiroId,
       pagamentoFiltrosAplicados.rocaIds,
     ],
     queryFn: () =>
@@ -1372,6 +1502,10 @@ export default function ControleRoca() {
           pagamentoFiltrosAplicados.produtorId === ''
             ? undefined
             : Number(pagamentoFiltrosAplicados.produtorId),
+        meeiroId:
+          pagamentoFiltrosAplicados.meeiroId === ''
+            ? undefined
+            : Number(pagamentoFiltrosAplicados.meeiroId),
         rocas: pagamentoFiltrosAplicados.rocaIds.length
           ? pagamentoFiltrosAplicados.rocaIds
           : undefined,
@@ -1456,7 +1590,7 @@ export default function ControleRoca() {
             </TabsTrigger>
             <TabsTrigger value="relatorio" className="gap-1">
               <FileText className="w-4 h-4" />
-              Relatórios de controle de roça
+              Notas de lançamento
             </TabsTrigger>
           </TabsList>
 
@@ -1828,16 +1962,16 @@ export default function ControleRoca() {
                   className="gap-2"
                   onClick={() => setFiltrosMeeiroOpen(true)}
                   style={
-                    produtorIdMeeiros !== ''
+                    meeirosFiltrosAtivosCount > 0
                       ? { borderColor: 'var(--primary)', borderWidth: '2px' }
                       : {}
                   }
                 >
                   <Filter className="w-4 h-4" />
                   Filtros
-                  {produtorIdMeeiros !== '' && (
+                  {meeirosFiltrosAtivosCount > 0 && (
                     <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
-                      1
+                      {meeirosFiltrosAtivosCount}
                     </span>
                   )}
                 </Button>
@@ -1850,7 +1984,7 @@ export default function ControleRoca() {
                         </div>
                         <SheetTitle className="text-xl">Filtros de meeiros</SheetTitle>
                       </div>
-                      <SheetDescription>Refine por produtor</SheetDescription>
+                      <SheetDescription>Refine por produtor, roça e empréstimos</SheetDescription>
                     </SheetHeader>
                     <div className="space-y-6">
                       <div className="space-y-3">
@@ -1889,6 +2023,7 @@ export default function ControleRoca() {
                                     value="todos"
                                     onSelect={() => {
                                       setProdutorIdMeeiros('');
+                                      setRocaIdMeeiros('');
                                       setFiltroMeeiroProdutorOpen(false);
                                     }}
                                   >
@@ -1901,6 +2036,7 @@ export default function ControleRoca() {
                                       value={String(p.id)}
                                       onSelect={() => {
                                         setProdutorIdMeeiros(p.id);
+                                        setRocaIdMeeiros('');
                                         setFiltroMeeiroProdutorOpen(false);
                                       }}
                                     >
@@ -1914,6 +2050,72 @@ export default function ControleRoca() {
                           </PopoverContent>
                         </Popover>
                       </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-sm font-semibold">Roça (opcional)</Label>
+                        <Popover open={filtroMeeiroRocaOpen} onOpenChange={(o) => { setFiltroMeeiroRocaOpen(o); if (!o) setFiltroMeeiroRocaSearch(''); }} modal>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={filtroMeeiroRocaOpen}
+                              className="w-full justify-between font-normal"
+                            >
+                              <span className="truncate">
+                                {rocaIdMeeiros === ''
+                                  ? 'Todas as roças'
+                                  : (() => {
+                                      const r = meeiroFiltroRocas.find((x) => x.id === rocaIdMeeiros);
+                                      return r ? `${r.codigo ?? ''} – ${r.nome}`.trim() : 'Todas as roças';
+                                    })()}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Buscar roça..."
+                                value={filtroMeeiroRocaSearch}
+                                onValueChange={setFiltroMeeiroRocaSearch}
+                                className="h-10"
+                              />
+                              <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                                <CommandEmpty>Nenhuma roça encontrada.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="todas"
+                                    onSelect={() => {
+                                      setRocaIdMeeiros('');
+                                      setFiltroMeeiroRocaOpen(false);
+                                    }}
+                                  >
+                                    <Check className={cn('mr-2 h-4 w-4', rocaIdMeeiros === '' ? 'opacity-100' : 'opacity-0')} />
+                                    Todas as roças
+                                  </CommandItem>
+                                  {rocasFiltroMeeiroOrdenadas.map((r) => (
+                                    <CommandItem
+                                      key={r.id}
+                                      value={String(r.id)}
+                                      onSelect={() => {
+                                        setRocaIdMeeiros(r.id);
+                                        setFiltroMeeiroRocaOpen(false);
+                                      }}
+                                    >
+                                      <Check className={cn('mr-2 h-4 w-4', rocaIdMeeiros === r.id ? 'opacity-100' : 'opacity-0')} />
+                                      {r.codigo ? `${r.codigo} – ${r.nome}` : r.nome}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs text-muted-foreground">
+                          Lista só meeiros com lançamento na roça. O valor “a receber” considera apenas essa roça.
+                        </p>
+                      </div>
+
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="filtro-com-emprestimos"
@@ -2646,16 +2848,10 @@ className={
                 <Button
                   variant="outline"
                   className="shrink-0 gap-2"
-                  onClick={() => {
-                    const hoje = getDataHojeLocal();
-                    setRelatorioEstoqueDataInicio(hoje);
-                    setRelatorioEstoqueDataFim(hoje);
-                    setRelatorioEstoqueDados(null);
-                    setRelatorioEstoqueOpen(true);
-                  }}
+                  onClick={() => setRelLancamentosSheetOpen(true)}
                 >
-                  <FileText className="w-4 h-4" />
-                  Relatório de Lançamento de Produtos
+                  <Files className="w-4 h-4" />
+                  Relatórios de lançamento
                 </Button>
                 <Button
                   variant="gradient"
@@ -3516,7 +3712,7 @@ className={
                     <SheetTitle className="text-xl">Filtros</SheetTitle>
                   </div>
                   <SheetDescription>
-                    Refine o período, o produtor e as roças. Os totais vêm dos lançamentos no intervalo
+                    Refine o período, produtor, meeiro e roças. Os totais vêm dos lançamentos no intervalo
                     (participação de cada meeiro).
                   </SheetDescription>
                 </SheetHeader>
@@ -3530,6 +3726,7 @@ className={
                         setPagamentoFiltrosDraft((prev) => ({
                           ...prev,
                           produtorId: v === 'todos' ? '' : Number(v),
+                          meeiroId: '',
                           rocaIds: [],
                         }));
                       }}
@@ -3546,6 +3743,87 @@ className={
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Meeiro (opcional)</Label>
+                    <Popover
+                      open={pagamentoDraftMeeiroOpen}
+                      onOpenChange={(o) => {
+                        setPagamentoDraftMeeiroOpen(o);
+                        if (!o) setPagamentoDraftMeeiroSearch('');
+                      }}
+                      modal
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={pagamentoDraftMeeiroOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {pagamentoFiltrosDraft.meeiroId === ''
+                              ? 'Todos os meeiros'
+                              : (() => {
+                                  const mm = meeirosParaRelatorio.find(
+                                    (x) => x.id === pagamentoFiltrosDraft.meeiroId,
+                                  );
+                                  return mm ? `${mm.nome} (${mm.codigo})` : 'Todos os meeiros';
+                                })()}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar meeiro..."
+                            value={pagamentoDraftMeeiroSearch}
+                            onValueChange={setPagamentoDraftMeeiroSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="todos"
+                                onSelect={() => {
+                                  setPagamentoFiltrosDraft((prev) => ({ ...prev, meeiroId: '' }));
+                                  setPagamentoDraftMeeiroOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    pagamentoFiltrosDraft.meeiroId === '' ? 'opacity-100' : 'opacity-0',
+                                  )}
+                                />
+                                Todos os meeiros
+                              </CommandItem>
+                              {meeirosOpcoesFiltroPagamento.map((mm) => (
+                                <CommandItem
+                                  key={mm.id}
+                                  value={String(mm.id)}
+                                  onSelect={() => {
+                                    setPagamentoFiltrosDraft((prev) => ({ ...prev, meeiroId: mm.id }));
+                                    setPagamentoDraftMeeiroOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      pagamentoFiltrosDraft.meeiroId === mm.id ? 'opacity-100' : 'opacity-0',
+                                    )}
+                                  />
+                                  {mm.nome} ({mm.codigo})
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <Separator />
@@ -3614,7 +3892,7 @@ className={
                           ))}
                           {pagamentoRocas.length === 0 && (
                             <p className="text-sm text-muted-foreground px-2 py-1">
-                              Selecione um produtor para listar roças.
+                              Nenhuma roça encontrada. Cadastre roças ou ajuste o produtor.
                             </p>
                           )}
                         </div>
@@ -3650,254 +3928,262 @@ className={
               </SheetContent>
             </Sheet>
 
-            <Sheet open={pagamentoRelatoriosSheetOpen} onOpenChange={setPagamentoRelatoriosSheetOpen}>
-              <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
-                <SheetHeader className="mb-6">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <FileText className="w-5 h-5 text-primary" />
-                    </div>
-                    <SheetTitle className="text-xl">Relatórios</SheetTitle>
-                  </div>
-                  <SheetDescription>Escolha o tipo de relatório.</SheetDescription>
+            <Sheet open={relPagamentoMeeiroSheetOpen} onOpenChange={setRelPagamentoMeeiroSheetOpen}>
+              <SheetContent
+                side="right"
+                className="w-[400px] sm:w-[540px] overflow-y-auto flex flex-col gap-0"
+              >
+                <SheetHeader className="space-y-1 text-left pb-4 border-b border-border/60">
+                  <SheetTitle className="text-xl">Pagamento de meeiro</SheetTitle>
+                  <SheetDescription>
+                    Filtros opcionais. Sem meeiro ou roça, o PDF inclui todos os meeiros e todas as roças do seu
+                    ambiente. Período em branco considera todas as datas com base nas regras do relatório.
+                  </SheetDescription>
                 </SheetHeader>
-                <div className="space-y-3">
+                <div className="flex-1 space-y-5 py-5">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Meeiro (opcional)</Label>
+                    <Popover
+                      open={relPagMeeiroComboOpen}
+                      onOpenChange={(o) => {
+                        setRelPagMeeiroComboOpen(o);
+                        if (!o) setRelPagMeeiroComboSearch('');
+                      }}
+                      modal
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={relPagMeeiroComboOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {relPagMeeiroFiltroId === ''
+                              ? 'Todos os meeiros'
+                              : (meeirosParaRelatorio.find((m) => m.id === relPagMeeiroFiltroId)?.nome ??
+                                'Todos os meeiros')}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome..."
+                            value={relPagMeeiroComboSearch}
+                            onValueChange={setRelPagMeeiroComboSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="__todos"
+                                onSelect={() => {
+                                  setRelPagMeeiroFiltroId('');
+                                  setRelPagMeeiroComboOpen(false);
+                                  setRelPagMeeiroComboSearch('');
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    relPagMeeiroFiltroId === '' ? 'opacity-100' : 'opacity-0',
+                                  )}
+                                />
+                                Todos os meeiros
+                              </CommandItem>
+                              {meeirosRelPagamentoMeeiroSheet.map((m) => (
+                                <CommandItem
+                                  key={m.id}
+                                  value={`m-${m.id}`}
+                                  onSelect={() => {
+                                    setRelPagMeeiroFiltroId(m.id);
+                                    setRelPagMeeiroComboOpen(false);
+                                    setRelPagMeeiroComboSearch('');
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      relPagMeeiroFiltroId === m.id ? 'opacity-100' : 'opacity-0',
+                                    )}
+                                  />
+                                  {m.nome ?? '—'}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Roça (opcional)</Label>
+                    <Popover
+                      open={relPagRocaComboOpen}
+                      onOpenChange={(o) => {
+                        setRelPagRocaComboOpen(o);
+                        if (!o) setRelPagRocaComboSearch('');
+                      }}
+                      modal
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={relPagRocaComboOpen}
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {relPagRocaFiltroId === ''
+                              ? 'Todas as roças'
+                              : (rocasParaFiltroLancamento.find((r) => r.id === relPagRocaFiltroId)?.nome ??
+                                'Todas as roças')}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar por nome..."
+                            value={relPagRocaComboSearch}
+                            onValueChange={setRelPagRocaComboSearch}
+                            className="h-10"
+                          />
+                          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                            <CommandEmpty>Nenhuma roça encontrada.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="__todas"
+                                onSelect={() => {
+                                  setRelPagRocaFiltroId('');
+                                  setRelPagRocaComboOpen(false);
+                                  setRelPagRocaComboSearch('');
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    relPagRocaFiltroId === '' ? 'opacity-100' : 'opacity-0',
+                                  )}
+                                />
+                                Todas as roças
+                              </CommandItem>
+                              {rocasRelPagamentoMeeiroSheet.map((r) => (
+                                <CommandItem
+                                  key={r.id}
+                                  value={`r-${r.id}`}
+                                  onSelect={() => {
+                                    setRelPagRocaFiltroId(r.id);
+                                    setRelPagRocaComboOpen(false);
+                                    setRelPagRocaComboSearch('');
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      relPagRocaFiltroId === r.id ? 'opacity-100' : 'opacity-0',
+                                    )}
+                                  />
+                                  {r.nome ?? '—'}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Data inicial</Label>
+                      <Input
+                        type="date"
+                        value={relPagDataInicial}
+                        onChange={(e) => setRelPagDataInicial(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Data final</Label>
+                      <Input
+                        type="date"
+                        value={relPagDataFinal}
+                        onChange={(e) => setRelPagDataFinal(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 pt-4 mt-auto border-t border-border/60">
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full justify-start gap-3 h-auto py-3 px-4 text-left"
-                    onClick={() => {
-                      setPdfPagDataInicial(pagamentoFiltrosAplicados.dataInicial);
-                      setPdfPagDataFinal(pagamentoFiltrosAplicados.dataFinal);
-                      setPdfPagDataPagamento('');
-                      setPdfPagMeeiroId('');
-                      setPagamentoRelatoriosSheetOpen(false);
-                      setPagamentoPdfMeeiroDialogOpen(true);
+                    className="gap-2 w-full"
+                    disabled={relPagPdfLoading !== null}
+                    onClick={async () => {
+                      try {
+                        setRelPagPdfLoading('print');
+                        await controleRocaService.printRelatorioMeeirosPdf({
+                          meeiroId:
+                            relPagMeeiroFiltroId === '' ? undefined : Number(relPagMeeiroFiltroId),
+                          dataInicial: relPagDataInicial.trim() || undefined,
+                          dataFinal: relPagDataFinal.trim() || undefined,
+                          rocas:
+                            relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                          filtroPagamento: 'todos',
+                        });
+                        setRelPagamentoMeeiroSheetOpen(false);
+                      } catch (e: any) {
+                        toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelPagPdfLoading(null);
+                      }
                     }}
                   >
-                    <FileText className="w-4 h-4 shrink-0 text-primary" />
-                    <span className="flex flex-col gap-0.5">
-                      <span className="font-medium">Pagamento de produtores (por meeiro)</span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        Baixa o PDF PAGAMENTO DE PRODUTORES sem sair desta tela
-                      </span>
-                    </span>
+                    {relPagPdfLoading === 'print' ? (
+                      <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4 shrink-0" />
+                    )}
+                    Imprimir PDF
                   </Button>
-
-                  <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-                    <p className="text-xs font-semibold text-foreground">Relatórios de controle de roça</p>
-                    <p className="text-xs text-muted-foreground">
-                      Período e roças conforme os filtros aplicados acima.
-                    </p>
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">Todos os meeiros</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
-                          onClick={async () => {
-                            try {
-                              setPdfRelMeeirosLoading('todos');
-                              await controleRocaService.downloadRelatorioMeeirosPdf({
-                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-                                rocas: pagamentoFiltrosAplicados.rocaIds.length
-                                  ? pagamentoFiltrosAplicados.rocaIds
-                                  : undefined,
-                                filtroPagamento: 'todos',
-                              });
-                              toast.success('PDF baixado');
-                              setPagamentoRelatoriosSheetOpen(false);
-                            } catch (e: any) {
-                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
-                            } finally {
-                              setPdfRelMeeirosLoading(null);
-                            }
-                          }}
-                        >
-                          {pdfRelMeeirosLoading === 'todos' ? (
-                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          ) : (
-                            <Download className="w-4 h-4 shrink-0" />
-                          )}
-                          Baixar
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
-                          onClick={async () => {
-                            try {
-                              setPdfRelMeeirosPrintLoading('todos');
-                              await controleRocaService.printRelatorioMeeirosPdf({
-                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-                                rocas: pagamentoFiltrosAplicados.rocaIds.length
-                                  ? pagamentoFiltrosAplicados.rocaIds
-                                  : undefined,
-                                filtroPagamento: 'todos',
-                              });
-                              setPagamentoRelatoriosSheetOpen(false);
-                            } catch (e: any) {
-                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
-                            } finally {
-                              setPdfRelMeeirosPrintLoading(null);
-                            }
-                          }}
-                        >
-                          {pdfRelMeeirosPrintLoading === 'todos' ? (
-                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          ) : (
-                            <Printer className="w-4 h-4 shrink-0" />
-                          )}
-                          Imprimir
-                        </Button>
-                      </div>
-
-                      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">Apenas meeiros pagos</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
-                          onClick={async () => {
-                            try {
-                              setPdfRelMeeirosLoading('pagos');
-                              await controleRocaService.downloadRelatorioMeeirosPdf({
-                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-                                rocas: pagamentoFiltrosAplicados.rocaIds.length
-                                  ? pagamentoFiltrosAplicados.rocaIds
-                                  : undefined,
-                                filtroPagamento: 'pagos',
-                              });
-                              toast.success('PDF baixado');
-                              setPagamentoRelatoriosSheetOpen(false);
-                            } catch (e: any) {
-                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
-                            } finally {
-                              setPdfRelMeeirosLoading(null);
-                            }
-                          }}
-                        >
-                          {pdfRelMeeirosLoading === 'pagos' ? (
-                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          ) : (
-                            <Download className="w-4 h-4 shrink-0" />
-                          )}
-                          Baixar
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
-                          onClick={async () => {
-                            try {
-                              setPdfRelMeeirosPrintLoading('pagos');
-                              await controleRocaService.printRelatorioMeeirosPdf({
-                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-                                rocas: pagamentoFiltrosAplicados.rocaIds.length
-                                  ? pagamentoFiltrosAplicados.rocaIds
-                                  : undefined,
-                                filtroPagamento: 'pagos',
-                              });
-                              setPagamentoRelatoriosSheetOpen(false);
-                            } catch (e: any) {
-                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
-                            } finally {
-                              setPdfRelMeeirosPrintLoading(null);
-                            }
-                          }}
-                        >
-                          {pdfRelMeeirosPrintLoading === 'pagos' ? (
-                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          ) : (
-                            <Printer className="w-4 h-4 shrink-0" />
-                          )}
-                          Imprimir
-                        </Button>
-                      </div>
-
-                      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">Apenas meeiros não pagos</span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
-                          onClick={async () => {
-                            try {
-                              setPdfRelMeeirosLoading('pendentes');
-                              await controleRocaService.downloadRelatorioMeeirosPdf({
-                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-                                rocas: pagamentoFiltrosAplicados.rocaIds.length
-                                  ? pagamentoFiltrosAplicados.rocaIds
-                                  : undefined,
-                                filtroPagamento: 'pendentes',
-                              });
-                              toast.success('PDF baixado');
-                              setPagamentoRelatoriosSheetOpen(false);
-                            } catch (e: any) {
-                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
-                            } finally {
-                              setPdfRelMeeirosLoading(null);
-                            }
-                          }}
-                        >
-                          {pdfRelMeeirosLoading === 'pendentes' ? (
-                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          ) : (
-                            <Download className="w-4 h-4 shrink-0" />
-                          )}
-                          Baixar
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={pdfRelMeeirosLoading !== null || pdfRelMeeirosPrintLoading !== null}
-                          onClick={async () => {
-                            try {
-                              setPdfRelMeeirosPrintLoading('pendentes');
-                              await controleRocaService.printRelatorioMeeirosPdf({
-                                dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-                                dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-                                rocas: pagamentoFiltrosAplicados.rocaIds.length
-                                  ? pagamentoFiltrosAplicados.rocaIds
-                                  : undefined,
-                                filtroPagamento: 'pendentes',
-                              });
-                              setPagamentoRelatoriosSheetOpen(false);
-                            } catch (e: any) {
-                              toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
-                            } finally {
-                              setPdfRelMeeirosPrintLoading(null);
-                            }
-                          }}
-                        >
-                          {pdfRelMeeirosPrintLoading === 'pendentes' ? (
-                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          ) : (
-                            <Printer className="w-4 h-4 shrink-0" />
-                          )}
-                          Imprimir
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="gradient"
+                    className="gap-2 w-full"
+                    disabled={relPagPdfLoading !== null}
+                    onClick={async () => {
+                      try {
+                        setRelPagPdfLoading('download');
+                        await controleRocaService.downloadRelatorioMeeirosPdf({
+                          meeiroId:
+                            relPagMeeiroFiltroId === '' ? undefined : Number(relPagMeeiroFiltroId),
+                          dataInicial: relPagDataInicial.trim() || undefined,
+                          dataFinal: relPagDataFinal.trim() || undefined,
+                          rocas:
+                            relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                          filtroPagamento: 'todos',
+                        });
+                        toast.success('PDF baixado');
+                        setRelPagamentoMeeiroSheetOpen(false);
+                      } catch (e: any) {
+                        toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelPagPdfLoading(null);
+                      }
+                    }}
+                  >
+                    {relPagPdfLoading === 'download' ? (
+                      <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 shrink-0" />
+                    )}
+                    Baixar PDF
+                  </Button>
                 </div>
               </SheetContent>
             </Sheet>
@@ -3916,7 +4202,8 @@ className={
                 <DialogHeader>
                   <DialogTitle>Pagamento de produtores (PDF)</DialogTitle>
                   <DialogDescription>
-                    Selecione o meeiro e confira o período. O arquivo segue o modelo PAGAMENTO DE PRODUTORES.
+                    Selecione o meeiro, opcionalmente as roças e confira o período. O PDF inclui linha para assinatura
+                    do meeiro. Produtor segue o filtro já aplicado na tela de pagamento.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
@@ -3945,6 +4232,48 @@ className={
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Roças (opcional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between font-normal">
+                          <span className="truncate">
+                            {pdfPagRocaIds.length === 0
+                              ? 'Todas as roças'
+                              : `${pdfPagRocaIds.length} roça(s) selecionada(s)`}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
+                        <div className="max-h-[240px] overflow-y-auto space-y-1">
+                          {pdfPagDialogRocas.map((r) => (
+                            <label
+                              key={r.id}
+                              className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50"
+                            >
+                              <Checkbox
+                                checked={pdfPagRocaIds.includes(r.id)}
+                                onCheckedChange={(c) => {
+                                  setPdfPagRocaIds((prev) =>
+                                    c ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                                  );
+                                }}
+                              />
+                              <span className="text-sm">{r.nome}</span>
+                            </label>
+                          ))}
+                          {pdfPagDialogRocas.length === 0 && (
+                            <p className="text-sm text-muted-foreground px-2 py-1">
+                              {pagamentoFiltrosAplicados.produtorId === ''
+                                ? 'Nenhuma roça encontrada.'
+                                : 'Nenhuma roça para este produtor.'}
+                            </p>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">Data inicial</Label>
@@ -3972,7 +4301,7 @@ className={
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Produtor e roças seguem os filtros já aplicados na tela de pagamento.
+                    O produtor é o do filtro aplicado na tela; as roças acima refinam só este PDF.
                   </p>
                 </div>
                 <DialogFooter className="gap-2 sm:gap-0">
@@ -4003,9 +4332,7 @@ className={
                             pagamentoFiltrosAplicados.produtorId === ''
                               ? undefined
                               : Number(pagamentoFiltrosAplicados.produtorId),
-                          rocas: pagamentoFiltrosAplicados.rocaIds.length
-                            ? pagamentoFiltrosAplicados.rocaIds
-                            : undefined,
+                          rocas: pdfPagRocaIds.length ? pdfPagRocaIds : undefined,
                         });
                       } catch (err: any) {
                         toast.error(
@@ -4043,9 +4370,7 @@ className={
                             pagamentoFiltrosAplicados.produtorId === ''
                               ? undefined
                               : Number(pagamentoFiltrosAplicados.produtorId),
-                          rocas: pagamentoFiltrosAplicados.rocaIds.length
-                            ? pagamentoFiltrosAplicados.rocaIds
-                            : undefined,
+                          rocas: pdfPagRocaIds.length ? pdfPagRocaIds : undefined,
                         });
                         toast.success('PDF baixado');
                         setPagamentoPdfMeeiroDialogOpen(false);
@@ -4111,7 +4436,23 @@ className={
                     type="button"
                     variant="outline"
                     className="gap-2"
-                    onClick={() => setPagamentoRelatoriosSheetOpen(true)}
+                    onClick={() => {
+                      setRelPagMeeiroFiltroId(
+                        pagamentoFiltrosAplicados.meeiroId === ''
+                          ? ''
+                          : Number(pagamentoFiltrosAplicados.meeiroId),
+                      );
+                      setRelPagRocaFiltroId(
+                        pagamentoFiltrosAplicados.rocaIds.length === 1
+                          ? Number(pagamentoFiltrosAplicados.rocaIds[0])
+                          : '',
+                      );
+                      setRelPagDataInicial(pagamentoFiltrosAplicados.dataInicial);
+                      setRelPagDataFinal(pagamentoFiltrosAplicados.dataFinal);
+                      setRelPagMeeiroComboSearch('');
+                      setRelPagRocaComboSearch('');
+                      setRelPagamentoMeeiroSheetOpen(true);
+                    }}
                   >
                     <FileText className="w-4 h-4" />
                     Relatórios
@@ -4295,21 +4636,254 @@ className={
 
           {/* Tab Relatório */}
           <TabsContent value="relatorio" className="space-y-4">
-            <div className="bg-card border rounded-xl p-4 sm:p-5">
+            <div id="rel-notas-lancamento" className="bg-card border rounded-xl p-4 sm:p-5 scroll-mt-24">
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4 text-primary" />
+                  <ClipboardList className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold leading-tight">Relatório de lançamento de produtos</h3>
+                  <h3 className="text-base font-semibold leading-tight">Notas de lançamento</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Filtre por período e roça para baixar o PDF ou imprimir o relatório.
+                    Produto, quantidades, valores e roça de origem (PDF). Os filtros abaixo são os mesmos do relatório
+                    geral seguinte e da sidebar de lançamentos.
                   </p>
                 </div>
               </div>
 
               <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Produtor</Label>
+                    <Select
+                      value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
+                      onValueChange={(v) => {
+                        setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                        setRelatorioEstoqueRocaId('');
+                        setRelatorioSheetProdutoId('');
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtores</SelectItem>
+                        {produtoresRelatorioOrdenados.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Roça (opcional)</Label>
+                    <Select
+                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
+                      onValueChange={(v) => {
+                        setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                        setRelatorioSheetProdutoId('');
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        {rocasRelatorioFiltros.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Produto (opcional)</Label>
+                    <Select
+                      value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
+                      onValueChange={(v) => setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtos</SelectItem>
+                        {produtosRelatorioFiltrosOrdenados.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data inicial</Label>
+                    <Input
+                      type="date"
+                      value={relatorioEstoqueDataInicio}
+                      onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
+                      className="h-9 w-full"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Data final</Label>
+                    <Input
+                      type="date"
+                      value={relatorioEstoqueDataFim}
+                      onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
+                      className="h-9 w-full"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[160px]"
+                    disabled={
+                      relatorioProdutoOrigemLoading !== null || relatorioEstoqueLoading !== null
+                    }
+                    onClick={async () => {
+                      try {
+                        setRelatorioProdutoOrigemLoading('download');
+                        await controleRocaService.downloadRelatorioProdutoPorOrigemPdf(
+                          relatorioEstoqueDataInicio || undefined,
+                          relatorioEstoqueDataFim || undefined,
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                          relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                          relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                        );
+                        toast.success('PDF baixado');
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelatorioProdutoOrigemLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioProdutoOrigemLoading === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[120px]"
+                    disabled={
+                      relatorioProdutoOrigemLoading !== null || relatorioEstoqueLoading !== null
+                    }
+                    onClick={async () => {
+                      try {
+                        setRelatorioProdutoOrigemLoading('print');
+                        await controleRocaService.printRelatorioProdutoPorOrigemPdf(
+                          relatorioEstoqueDataInicio || undefined,
+                          relatorioEstoqueDataFim || undefined,
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                          relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                          relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                        );
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelatorioProdutoOrigemLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioProdutoOrigemLoading === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div id="rel-lancamento-produtos" className="bg-card border rounded-xl p-4 sm:p-5 scroll-mt-24">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório geral de lançamento</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Período, produtor, roça e produto (opcionais). Mesmos filtros das Notas de lançamento acima e da
+                    sidebar de lançamentos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Produtor</Label>
+                    <Select
+                      value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
+                      onValueChange={(v) => {
+                        setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                        setRelatorioEstoqueRocaId('');
+                        setRelatorioSheetProdutoId('');
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtores</SelectItem>
+                        {produtoresRelatorioOrdenados.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Roça (opcional)</Label>
+                    <Select
+                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
+                      onValueChange={(v) => {
+                        setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                        setRelatorioSheetProdutoId('');
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        {rocasRelatorioFiltros.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Produto (opcional)</Label>
+                    <Select
+                      value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
+                      onValueChange={(v) =>
+                        setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))
+                      }
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os produtos</SelectItem>
+                        {produtosRelatorioFiltrosOrdenados.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Data inicial</Label>
                     <Input
@@ -4329,40 +4903,24 @@ className={
                       className="h-9 w-full"
                     />
                   </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Roça (opcional)</Label>
-                    <Select
-                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
-                      onValueChange={(v) => setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v))}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
-                        {rocas.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>
-                            {r.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-2 mt-4 pt-3 border-t border-border/60">
                   <Button
                     variant="outline"
                     className="gap-2 h-9 min-w-[160px]"
-                    disabled={relatorioEstoqueLoading !== null}
+                    disabled={
+                      relatorioEstoqueLoading !== null || relatorioProdutoOrigemLoading !== null
+                    }
                     onClick={async () => {
                       try {
                         setRelatorioEstoqueLoading('download');
                         await controleRocaService.downloadRelatorioLancamentoProdutosPdf(
                           relatorioEstoqueDataInicio || undefined,
                           relatorioEstoqueDataFim || undefined,
-                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                          relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                          relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId
                         );
                         toast.success('PDF baixado');
                       } catch (err: any) {
@@ -4383,14 +4941,18 @@ className={
                   <Button
                     variant="outline"
                     className="gap-2 h-9 min-w-[120px]"
-                    disabled={relatorioEstoqueLoading !== null}
+                    disabled={
+                      relatorioEstoqueLoading !== null || relatorioProdutoOrigemLoading !== null
+                    }
                     onClick={async () => {
                       try {
                         setRelatorioEstoqueLoading('print');
                         await controleRocaService.printRelatorioLancamentoProdutosPdf(
                           relatorioEstoqueDataInicio || undefined,
                           relatorioEstoqueDataFim || undefined,
-                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                          relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                          relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId
                         );
                       } catch (err: any) {
                         toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
@@ -4412,7 +4974,7 @@ className={
             </div>
 
             {/* Relatório de lançamentos de meeiros */}
-            <div className="bg-card border rounded-xl p-4 sm:p-5">
+            <div id="rel-lancamentos-meeiros" className="bg-card border rounded-xl p-4 sm:p-5 scroll-mt-24">
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <FileText className="w-4 h-4 text-primary" />
@@ -7639,186 +8201,373 @@ className={
           </DialogContent>
         </Dialog>
 
-        {/* Dialog: Relatório de Lançamento de Produtos (apenas produtos com lançamento no período) */}
-        <Dialog open={relatorioEstoqueOpen} onOpenChange={setRelatorioEstoqueOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
-            <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
-                  <FileText className="w-6 h-6" />
+        {/* Sidebar: todos os relatórios vinculados a lançamentos (filtros + lista por relatório) */}
+        <Sheet
+          open={relLancamentosSheetOpen}
+          onOpenChange={(open) => {
+            setRelLancamentosSheetOpen(open);
+            if (open) {
+              const hoje = getDataHojeLocal();
+              setRelatorioEstoqueDataInicio(hoje);
+              setRelatorioEstoqueDataFim(hoje);
+            }
+          }}
+        >
+          <SheetContent
+            side="right"
+            className="flex h-full max-h-[100dvh] w-full flex-col overflow-hidden p-0 gap-0 sm:max-w-2xl lg:max-w-3xl [&>button]:z-50"
+          >
+            <div className="px-6 pt-6 pb-4 border-b shrink-0">
+              <SheetHeader className="space-y-3 text-left">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+                    <Files className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 space-y-1 pr-8">
+                    <SheetTitle className="text-xl leading-tight">Relatórios de lançamento</SheetTitle>
+                    <SheetDescription>
+                      Filtros: período, produtor, roça, produto (opcionais). Os dois relatórios usam os mesmos filtros.
+                      Exporte em PDF ou imprima.
+                    </SheetDescription>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <DialogTitle className="text-lg">Relatório de Lançamento de Produtos</DialogTitle>
-                  <DialogDescription className="mt-1 text-muted-foreground">
-                    Produtos com lançamento no período. Escolha as datas, visualize e exporte em PDF ou imprima.
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
+              </SheetHeader>
+            </div>
 
-            <div className="px-6 pb-4 shrink-0">
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <p className="text-sm font-medium text-foreground mb-3">Filtros</p>
-                <div className="flex flex-wrap items-end gap-3 sm:gap-4">
-                  <div className="space-y-1.5 min-w-[180px]">
-                    <Label className="text-xs text-muted-foreground">Roça</Label>
-                    <Select
-                      value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
-                      onValueChange={(v) => setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v))}
+            <div className="min-h-0 flex-1 space-y-8 overflow-y-auto overscroll-contain px-6 py-5 pb-8">
+              <section className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/30 flex items-start gap-3">
+                  <ClipboardList className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground">Notas de lançamento</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Nome do produto, quantidade, preço unitário (média ponderada), valor total e roça. Os filtros
+                      abaixo são os mesmos do relatório geral (bloco seguinte) — alterar em qualquer seção atualiza os
+                      dois.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="rounded-lg border bg-muted/25 p-3">
+                    <p className="text-xs font-medium text-foreground mb-2">Filtros</p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Produtor</Label>
+                        <Select
+                          value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
+                          onValueChange={(v) => {
+                            setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                            setRelatorioEstoqueRocaId('');
+                            setRelatorioSheetProdutoId('');
+                          }}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Todos os produtores" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os produtores</SelectItem>
+                            {produtoresRelatorioOrdenados.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 min-w-[160px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Roça</Label>
+                        <Select
+                          value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
+                          onValueChange={(v) => {
+                            setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                            setRelatorioSheetProdutoId('');
+                          }}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Todas as roças" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todas">Todas as roças</SelectItem>
+                            {rocasRelatorioFiltros.map((r) => (
+                              <SelectItem key={r.id} value={String(r.id)}>
+                                {r.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Produto</Label>
+                        <Select
+                          value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
+                          onValueChange={(v) => setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Todos os produtos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os produtos</SelectItem>
+                            {produtosRelatorioFiltrosOrdenados.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Data inicial</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={relatorioEstoqueDataInicio}
+                          onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5 w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Data final</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={relatorioEstoqueDataFim}
+                          onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="gradient"
+                      size="sm"
+                      className="gap-2"
+                      disabled={relatorioProdutoOrigemLoading !== null || relatorioEstoqueLoading !== null}
+                      onClick={async () => {
+                        try {
+                          setRelatorioProdutoOrigemLoading('download');
+                          await controleRocaService.downloadRelatorioProdutoPorOrigemPdf(
+                            relatorioEstoqueDataInicio || undefined,
+                            relatorioEstoqueDataFim || undefined,
+                            relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                            relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                            relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId
+                          );
+                          toast.success('Relatório baixado.');
+                          setRelLancamentosSheetOpen(false);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Erro ao gerar PDF.');
+                        } finally {
+                          setRelatorioProdutoOrigemLoading(null);
+                        }
+                      }}
                     >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
-                        {rocasParaFiltroLancamento.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>{r.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {relatorioProdutoOrigemLoading === 'download' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Baixar PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={relatorioProdutoOrigemLoading !== null || relatorioEstoqueLoading !== null}
+                      onClick={async () => {
+                        try {
+                          setRelatorioProdutoOrigemLoading('print');
+                          await controleRocaService.printRelatorioProdutoPorOrigemPdf(
+                            relatorioEstoqueDataInicio || undefined,
+                            relatorioEstoqueDataFim || undefined,
+                            relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                            relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                            relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId
+                          );
+                          setRelLancamentosSheetOpen(false);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Erro ao abrir PDF.');
+                        } finally {
+                          setRelatorioProdutoOrigemLoading(null);
+                        }
+                      }}
+                    >
+                      {relatorioProdutoOrigemLoading === 'print' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Printer className="w-4 h-4" />
+                      )}
+                      Imprimir
+                    </Button>
                   </div>
-                  <div className="space-y-1.5 w-[140px]">
-                    <Label className="text-xs text-muted-foreground">Data inicial</Label>
-                    <Input
-                      type="date"
-                      className="h-9"
-                      value={relatorioEstoqueDataInicio}
-                      onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5 w-[140px]">
-                    <Label className="text-xs text-muted-foreground">Data final</Label>
-                    <Input
-                      type="date"
-                      className="h-9"
-                      value={relatorioEstoqueDataFim}
-                      onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    variant="gradient"
-                    size="sm"
-                    className="h-9 gap-2 shrink-0"
-                    disabled={relatorioEstoqueLoading !== null}
-                    onClick={async () => {
-                      try {
-                        setRelatorioEstoqueLoading('preview');
-                        const dados = await controleRocaService.getRelatorioLancamentoProdutos({
-                          data_inicial: relatorioEstoqueDataInicio || undefined,
-                          data_final: relatorioEstoqueDataFim || undefined,
-                          rocaId: relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
-                        });
-                        setRelatorioEstoqueDados(dados);
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : 'Erro ao carregar relatório.');
-                        setRelatorioEstoqueDados(null);
-                      } finally {
-                        setRelatorioEstoqueLoading(null);
-                      }
-                    }}
-                  >
-                    {relatorioEstoqueLoading === 'preview' ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                    Visualizar
-                  </Button>
                 </div>
-              </div>
+              </section>
+
+
+              <section className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/30 flex items-start gap-3">
+                  <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground">Relatório geral de lançamento</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Produtos com lançamento no período. Exporte em PDF ou imprima. Mesmos filtros das Notas de lançamento
+                      acima.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="rounded-lg border bg-muted/25 p-3">
+                    <p className="text-xs font-medium text-foreground mb-2">Filtros dos relatórios</p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Produtor</Label>
+                        <Select
+                          value={relatorioSheetProdutorId === '' ? 'todos' : String(relatorioSheetProdutorId)}
+                          onValueChange={(v) => {
+                            setRelatorioSheetProdutorId(v === 'todos' ? '' : Number(v));
+                            setRelatorioEstoqueRocaId('');
+                            setRelatorioSheetProdutoId('');
+                          }}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Todos os produtores" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os produtores</SelectItem>
+                            {produtoresRelatorioOrdenados.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.codigo ? `${p.codigo} – ${p.nome_razao}` : (p.nome_razao ?? String(p.id))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 min-w-[160px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Roça</Label>
+                        <Select
+                          value={relatorioEstoqueRocaId === '' ? 'todas' : String(relatorioEstoqueRocaId)}
+                          onValueChange={(v) => {
+                            setRelatorioEstoqueRocaId(v === 'todas' ? '' : Number(v));
+                            setRelatorioSheetProdutoId('');
+                          }}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Todas as roças" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todas">Todas as roças</SelectItem>
+                            {rocasRelatorioFiltros.map((r) => (
+                              <SelectItem key={r.id} value={String(r.id)}>
+                                {r.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Produto</Label>
+                        <Select
+                          value={relatorioSheetProdutoId === '' ? 'todos' : String(relatorioSheetProdutoId)}
+                          onValueChange={(v) => setRelatorioSheetProdutoId(v === 'todos' ? '' : Number(v))}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Todos os produtos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todos">Todos os produtos</SelectItem>
+                            {produtosRelatorioFiltrosOrdenados.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5 w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Data inicial</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={relatorioEstoqueDataInicio}
+                          onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5 w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Data final</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={relatorioEstoqueDataFim}
+                          onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="gradient"
+                      size="sm"
+                      className="gap-2"
+                      disabled={relatorioEstoqueLoading !== null || relatorioProdutoOrigemLoading !== null}
+                      onClick={async () => {
+                        try {
+                          setRelatorioEstoqueLoading('download');
+                          await controleRocaService.downloadRelatorioLancamentoProdutosPdf(
+                            relatorioEstoqueDataInicio || undefined,
+                            relatorioEstoqueDataFim || undefined,
+                            relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                            relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                            relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId
+                          );
+                          toast.success('Relatório baixado.');
+                          setRelLancamentosSheetOpen(false);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Erro ao gerar PDF.');
+                        } finally {
+                          setRelatorioEstoqueLoading(null);
+                        }
+                      }}
+                    >
+                      <Download className="w-4 h-4" />
+                      Baixar PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={relatorioEstoqueLoading !== null || relatorioProdutoOrigemLoading !== null}
+                      onClick={async () => {
+                        try {
+                          setRelatorioEstoqueLoading('print');
+                          await controleRocaService.printRelatorioLancamentoProdutosPdf(
+                            relatorioEstoqueDataInicio || undefined,
+                            relatorioEstoqueDataFim || undefined,
+                            relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                            relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                            relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId
+                          );
+                          setRelLancamentosSheetOpen(false);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Erro ao abrir PDF.');
+                        } finally {
+                          setRelatorioEstoqueLoading(null);
+                        }
+                      }}
+                    >
+                      <Printer className="w-4 h-4" />
+                      Imprimir
+                    </Button>
+                  </div>
+                </div>
+              </section>
             </div>
 
-            <div className="px-6 pb-4 overflow-y-auto min-h-0 flex-1">
-              {relatorioEstoqueDados ? (
-                <div className="rounded-xl border overflow-hidden shadow-sm">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableHead className="font-semibold">Código</TableHead>
-                        <TableHead className="font-semibold">Produto</TableHead>
-                        <TableHead className="font-semibold">Roça</TableHead>
-                        <TableHead className="text-right font-semibold">Qtde lançada</TableHead>
-                        <TableHead className="text-right font-semibold">Valor total lançado</TableHead>
-                        <TableHead className="text-right font-semibold">Total pagar meeiros</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {relatorioEstoqueDados.map((row, i) => (
-                        <TableRow key={`${row.produto_id}-${row.roca_nome}`} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
-                          <TableCell className="font-mono text-sm">{row.codigo}</TableCell>
-                          <TableCell>{row.nome}</TableCell>
-                          <TableCell>{row.roca_nome || '-'}</TableCell>
-                          <TableCell className="text-right tabular-nums">{row.qtde_lancada.toLocaleString('pt-BR')}</TableCell>
-                          <TableCell className="text-right tabular-nums">{row.valor_total_lancado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="text-right tabular-nums font-medium">{row.total_pagar_meeiros.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed bg-muted/20 flex flex-col items-center justify-center py-12 px-4 text-center">
-                  <FileText className="w-10 h-10 text-muted-foreground/50 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground">Nenhum dado carregado</p>
-                  <p className="text-xs text-muted-foreground mt-1">Defina o período e a roça (se quiser) e clique em Visualizar.</p>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="px-6 py-4 border-t bg-muted/20 gap-2 shrink-0">
-              <Button
-                variant="gradient"
-                className="gap-2"
-                disabled={relatorioEstoqueLoading !== null}
-                onClick={async () => {
-                  try {
-                    setRelatorioEstoqueLoading('download');
-                    await controleRocaService.downloadRelatorioLancamentoProdutosPdf(
-                      relatorioEstoqueDataInicio || undefined,
-                      relatorioEstoqueDataFim || undefined,
-                      relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
-                    );
-                    toast.success('Relatório baixado.');
-                    setRelatorioEstoqueOpen(false);
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Erro ao gerar PDF.');
-                  } finally {
-                    setRelatorioEstoqueLoading(null);
-                  }
-                }}
-              >
-                <Download className="w-4 h-4" />
-                Baixar PDF
+            <SheetFooter className="relative z-10 shrink-0 border-t border-border bg-background px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:justify-start">
+              <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={() => setRelLancamentosSheetOpen(false)}>
+                Fechar painel
               </Button>
-              <Button
-                variant="outline"
-                className="gap-2"
-                disabled={relatorioEstoqueLoading !== null}
-                onClick={async () => {
-                  try {
-                    setRelatorioEstoqueLoading('print');
-                    await controleRocaService.printRelatorioLancamentoProdutosPdf(
-                      relatorioEstoqueDataInicio || undefined,
-                      relatorioEstoqueDataFim || undefined,
-                      relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId
-                    );
-                    setRelatorioEstoqueOpen(false);
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Erro ao abrir PDF.');
-                  } finally {
-                    setRelatorioEstoqueLoading(null);
-                  }
-                }}
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir
-              </Button>
-              <Button variant="ghost" onClick={() => setRelatorioEstoqueOpen(false)}>
-                Fechar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </div>
     </AppLayout>
   );
