@@ -12,6 +12,8 @@ import type {
     MeeiroRoca,
     ProdutoRoca,
     ProdutorRoca,
+    RegistrarPagamentoMeeiroDto,
+    RegistrarPagamentoMeeiroResponse,
     RelatorioMeeiroResponse,
     ResumoPagamentoMeeirosResponse,
     Roca,
@@ -178,20 +180,13 @@ class ControleRocaService {
     );
   }
 
-  async registrarPagamentoMeeiro(data: {
-    meeiroId: number;
-    formaPagamento: string;
-    contaCaixa?: string;
-    dataPagamento: string;
-    observacao?: string;
-  }): Promise<{
-    pagamento: any;
-    totalReceber: number;
-    totalEmprestimos: number;
-    valorLiquido: number;
-    emprestimosLiquidados: Array<{ id: number; valor: number }>;
-  }> {
-    return apiClient.post(`${BASE}/pagamentos-meeiros`, data);
+  async registrarPagamentoMeeiro(
+    data: RegistrarPagamentoMeeiroDto
+  ): Promise<RegistrarPagamentoMeeiroResponse> {
+    return apiClient.post<RegistrarPagamentoMeeiroResponse>(
+      `${BASE}/pagamentos-meeiros`,
+      data
+    );
   }
 
   /** Relatório de Meeiros (múltiplos) em PDF – filtro por período e roças. */

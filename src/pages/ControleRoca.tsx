@@ -131,23 +131,31 @@ import { toast } from 'sonner';
 /** Pendência em aberto: ainda há empréstimo em aberto, ou valor líquido sem pagamento quitado. */
 function isMeeiroPagamentoEmAberto(m: ResumoPagamentoMeeiro): boolean {
   if ((m.totalEmprestimosAbertos ?? 0) > 0) return true;
-  if (m.jaPago) return false;
-  return (m.valorLiquido ?? 0) > 0;
+  // Se entrou nova produção (totalReceber > 0), deve aparecer em "Em aberto"
+  // mesmo que já exista pagamento anterior registrado.
+  if ((m.totalReceber ?? 0) > 0) return true;
+  return false;
 }
 
 /** Quitado: já houve pagamento registrado e não restou empréstimo em aberto. */
 function isMeeiroPagamentoQuitado(m: ResumoPagamentoMeeiro): boolean {
-  return m.jaPago === true && (m.totalEmprestimosAbertos ?? 0) === 0;
+  return (
+    m.jaPago === true &&
+    (m.totalEmprestimosAbertos ?? 0) === 0 &&
+    (m.totalReceber ?? 0) === 0
+  );
 }
 
 /** Permite registrar liquidação (dinheiro ou abate da produção na dívida). */
 function podeRegistrarPagamentoMeeiro(m: ResumoPagamentoMeeiro): boolean {
-  if ((m.totalReceber ?? 0) <= 0) return false;
-  const vl = m.valorLiquido ?? 0;
+  const tr = m.totalReceber ?? 0;
   const emp = m.totalEmprestimosAbertos ?? 0;
+  if (tr <= 0 && emp <= 0) return false;
+  const vl = m.valorLiquido ?? 0;
   if (vl > 0) return true;
   if (vl < 0 && emp > 0) return true;
   if (vl === 0 && emp > 0) return true;
+  if (tr > 0) return true;
   return false;
 }
 
@@ -184,8 +192,9 @@ type PagamentoMeeirosFiltros = {
 
 function createDefaultPagamentoMeeirosFiltros(): PagamentoMeeirosFiltros {
   return {
-    dataInicial: getPrimeiroDiaMesLocal(),
-    dataFinal: getDataHojeLocal(),
+    // Sem datas por padrão: evita esconder meeiros com lançamentos fora do mês corrente.
+    dataInicial: '',
+    dataFinal: '',
     produtorId: '',
     meeiroId: '',
     rocaIds: [],
@@ -1405,7 +1414,13 @@ export default function ControleRoca() {
   const [pagamentoBuscaMeeiro, setPagamentoBuscaMeeiro] = useState('');
   const [openPagarModal, setOpenPagarModal] = useState(false);
   const [meeiroParaPagar, setMeeiroParaPagar] = useState<ResumoPagamentoMeeiro | null>(null);
-  const [formPagamento, setFormPagamento] = useState({ formaPagamento: 'PIX', contaCaixa: '', dataPagamento: '', observacao: '' });
+  const [formPagamento, setFormPagamento] = useState({
+    formaPagamento: 'PIX',
+    contaCaixa: '',
+    dataPagamento: '',
+    observacao: '',
+    valorAbaterEmprestimo: '',
+  });
   const [relResult, setRelResult] = useState<RelatorioMeeiroResponse | null>(null);
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
@@ -4593,6 +4608,7 @@ className={
                                       contaCaixa: '',
                                       dataPagamento: getDataHojeLocal(),
                                       observacao: '',
+                                      valorAbaterEmprestimo: '',
                                     });
                                     setOpenPagarModal(true);
                                   }}
@@ -4619,12 +4635,11 @@ className={
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead>Meeiro</TableHead>
-                          <TableHead>Chave PIX</TableHead>
-                          <TableHead className="text-right">Valor total pago</TableHead>
-                          <TableHead className="text-right">Valor (base)</TableHead>
-                          <TableHead className="text-center">Teve empréstimo</TableHead>
-                          <TableHead className="w-[80px] text-right">Ações</TableHead>
+                          <TableHead className="w-[220px]">Meeiro</TableHead>
+                          <TableHead className="w-[220px]">Chave PIX</TableHead>
+                          <TableHead className="w-[180px] text-right">Valor total pago</TableHead>
+                          <TableHead className="w-[140px] text-center">Teve empréstimo</TableHead>
+                          <TableHead className="w-[120px] text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -4657,16 +4672,11 @@ className={
                           return quitados.map((m) => (
                             <TableRow key={m.meeiroId}>
                               <TableCell className="font-medium">{m.nome}</TableCell>
-                              <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
+                              <TableCell className="font-mono text-sm max-w-[220px] truncate" title={m.chavePix ?? undefined}>
                                 {m.chavePix || '—'}
                               </TableCell>
                               <TableCell className="text-right tabular-nums font-semibold">
                                 {formatCurrency(m.valorTotalPago ?? m.valorLiquido)}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {formatCurrency(
-                                  m.valorBasePagamento != null ? m.valorBasePagamento : m.totalReceber,
-                                )}
                               </TableCell>
                               <TableCell className="text-center">
                                 <span
@@ -4680,7 +4690,20 @@ className={
                                   {m.teveEmprestimoNoPagamento ? 'Sim' : 'Não'}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-right text-muted-foreground text-sm">—</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={() => {
+                                    setDetailMeeiroId(m.meeiroId);
+                                    setOpenDetailMeeiro(true);
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  Ver detalhes
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           ));
                         })()}
@@ -7118,17 +7141,11 @@ className={
                       Resumo financeiro
                     </h3>
                     {detailMeeiro.resumoFinanceiro.jaPago ? (
-                      <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <Label className="text-muted-foreground">Valor total pago</Label>
                           <p className="font-semibold text-base text-primary">
                             {formatCurrency(detailMeeiro.resumoFinanceiro.valorTotalPago)}
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="text-muted-foreground">Valor (base)</Label>
-                          <p className="font-semibold text-base">
-                            {formatCurrency(detailMeeiro.resumoFinanceiro.valorBasePagamento)}
                           </p>
                         </div>
                         <div>
@@ -7623,24 +7640,84 @@ className={
                     <span className="text-muted-foreground">Empréstimos em aberto</span>
                     <span>{formatCurrency(meeiroParaPagar.totalEmprestimosAbertos)}</span>
                   </div>
+                  {(() => {
+                    const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                    const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
+                    const maxAbater = Math.max(0, totalEmp);
+                    const vRaw = formPagamento.valorAbaterEmprestimo;
+                    const v = vRaw === '' ? 0 : Number(vRaw);
+                    const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
+                    if (totalEmp <= 0) return null;
+                    return (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Abater do empréstimo (neste pagamento)</span>
+                        <span className="font-medium">{formatCurrency(vSafe)}</span>
+                      </div>
+                    );
+                  })()}
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-muted-foreground">Valor final a pagar</span>
                     <span
                       className={cn(
                         'font-semibold',
-                        meeiroParaPagar.valorLiquido < 0 ? 'text-amber-700 dark:text-amber-300' : 'text-primary',
+                        (() => {
+                          const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                          const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
+                          const maxAbater = Math.max(0, totalEmp);
+                          const vRaw = formPagamento.valorAbaterEmprestimo;
+                          const v = vRaw === '' ? 0 : Number(vRaw);
+                          const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
+                          const final = Math.max(0, totalReceber - vSafe);
+                          return final < 0 ? 'text-amber-700 dark:text-amber-300' : 'text-primary';
+                        })(),
                       )}
                     >
-                      {formatCurrency(meeiroParaPagar.valorLiquido)}
+                      {(() => {
+                        const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                        const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
+                        const maxAbater = Math.max(0, totalEmp);
+                        const vRaw = formPagamento.valorAbaterEmprestimo;
+                        const v = vRaw === '' ? 0 : Number(vRaw);
+                        const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
+                        return formatCurrency(Math.max(0, totalReceber - vSafe));
+                      })()}
                     </span>
                   </div>
-                  {meeiroParaPagar.valorLiquido < 0 && (
+                  {(meeiroParaPagar.totalEmprestimosAbertos ?? 0) > 0 && (
                     <p className="text-xs text-muted-foreground leading-snug">
-                      Não há pagamento em dinheiro: o valor da produção será abatido nos empréstimos (ordem de cadastro). O
-                      saldo de empréstimo que restar permanece em aberto.
+                      Informe quanto deseja <span className="font-medium">abater do empréstimo</span> agora. O restante do
+                      empréstimo permanece em aberto.
                     </p>
                   )}
                 </div>
+                {(() => {
+                  const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                  const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
+                  const maxAbater = Math.max(0, totalEmp);
+                  if (totalEmp <= 0) return null;
+                  return (
+                    <div className="space-y-2">
+                      <Label>Valor a abater do empréstimo (opcional)</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={maxAbater}
+                        step="0.01"
+                        placeholder={`Máx: ${formatCurrency(maxAbater)}`}
+                        value={formPagamento.valorAbaterEmprestimo}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          // mantém string para UX; valida/clampa no submit e no resumo acima
+                          setFormPagamento((p) => ({ ...p, valorAbaterEmprestimo: raw }));
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Máximo permitido neste pagamento: <span className="font-medium">{formatCurrency(maxAbater)}</span>
+                      </p>
+                    </div>
+                  );
+                })()}
                 <div className="space-y-2">
                   <Label>Forma de pagamento</Label>
                   <Select
@@ -7692,12 +7769,19 @@ className={
                 disabled={registrarPagamento.isPending || !meeiroParaPagar || !formPagamento.dataPagamento}
                 onClick={() => {
                   if (!meeiroParaPagar || !formPagamento.dataPagamento) return;
+                  const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                  const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
+                  const maxAbater = Math.max(0, totalEmp);
+                  const vRaw = formPagamento.valorAbaterEmprestimo;
+                  const v = vRaw === '' ? 0 : Number(vRaw);
+                  const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
                   registrarPagamento.mutate({
                     meeiroId: meeiroParaPagar.meeiroId,
                     formaPagamento: formPagamento.formaPagamento,
                     contaCaixa: formPagamento.contaCaixa?.trim() || undefined,
                     dataPagamento: formPagamento.dataPagamento,
                     observacao: formPagamento.observacao?.trim() || undefined,
+                    ...(vSafe > 0 ? { valorAbaterEmprestimo: vSafe } : {}),
                   });
                 }}
               >

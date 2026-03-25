@@ -178,6 +178,32 @@ export interface ResumoPagamentoMeeirosResponse {
   limit: number;
 }
 
+/** Payload para registrar pagamento de meeiro. */
+export interface RegistrarPagamentoMeeiroDto {
+  meeiroId: number;
+  formaPagamento: string;
+  contaCaixa?: string;
+  dataPagamento: string;
+  observacao?: string;
+  /** Valor digitado pelo usuário para abater dos empréstimos em aberto. */
+  valorAbaterEmprestimo?: number;
+}
+
+export interface RegistrarPagamentoMeeiroResponse {
+  meeiroId: number;
+  nome: string;
+  dataPagamento: string;
+  formaPagamento: string;
+  contaCaixa: string | null;
+  observacao: string | null;
+  totalReceber: number;
+  totalEmprestimos: number;
+  valorAbaterEmprestimo: number;
+  totalEmprestimosAbertosApos: number;
+  valorLiquido: number;
+  emprestimosLiquidados: Array<{ id: number; valor: number }>;
+}
+
 export type UnidadeMedidaRoca = 'UN' | 'KG' | 'LT' | 'CX' | 'SC' | 'ARROBA';
 
 export interface ProdutoRoca {
