@@ -125,7 +125,7 @@ import {
     Users,
     X,
 } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 /** Pendência em aberto: ainda há empréstimo em aberto, ou valor líquido sem pagamento quitado. */
@@ -1370,6 +1370,12 @@ export default function ControleRoca() {
   const [relPagRocaFiltroId, setRelPagRocaFiltroId] = useState<number | ''>('');
   const [relPagDataInicial, setRelPagDataInicial] = useState('');
   const [relPagDataFinal, setRelPagDataFinal] = useState('');
+  const [relPagFiltroPagamento, setRelPagFiltroPagamento] = useState<'todos' | 'pagos' | 'pendentes'>('todos');
+  const onRelPagFiltroPagamentoChange = useCallback((value: string) => {
+    if (value === 'todos' || value === 'pagos' || value === 'pendentes') {
+      setRelPagFiltroPagamento(value);
+    }
+  }, []);
   const [relPagMeeiroComboOpen, setRelPagMeeiroComboOpen] = useState(false);
   const [relPagMeeiroComboSearch, setRelPagMeeiroComboSearch] = useState('');
   const [relPagRocaComboOpen, setRelPagRocaComboOpen] = useState(false);
@@ -4146,6 +4152,20 @@ className={
                       />
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Status no relatório</Label>
+                    <Select value={relPagFiltroPagamento} onValueChange={onRelPagFiltroPagamentoChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="pagos">Quitados</SelectItem>
+                        <SelectItem value="pendentes">Pendentes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2 pt-4 mt-auto border-t border-border/60">
                   <Button
@@ -4163,7 +4183,7 @@ className={
                           dataFinal: relPagDataFinal.trim() || undefined,
                           rocas:
                             relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
-                          filtroPagamento: 'todos',
+                          filtroPagamento: relPagFiltroPagamento,
                         });
                         setRelPagamentoMeeiroSheetOpen(false);
                       } catch (e: any) {
@@ -4195,7 +4215,7 @@ className={
                           dataFinal: relPagDataFinal.trim() || undefined,
                           rocas:
                             relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
-                          filtroPagamento: 'todos',
+                          filtroPagamento: relPagFiltroPagamento,
                         });
                         toast.success('PDF baixado');
                         setRelPagamentoMeeiroSheetOpen(false);
@@ -4492,6 +4512,13 @@ className={
                       );
                       setRelPagDataInicial(pagamentoFiltrosAplicados.dataInicial);
                       setRelPagDataFinal(pagamentoFiltrosAplicados.dataFinal);
+                      setRelPagFiltroPagamento(
+                        pagamentoSubTab === 'quitados'
+                          ? 'pagos'
+                          : pagamentoSubTab === 'em-aberto'
+                            ? 'pendentes'
+                            : 'todos',
+                      );
                       setRelPagMeeiroComboSearch('');
                       setRelPagRocaComboSearch('');
                       setRelPagamentoMeeiroSheetOpen(true);
@@ -5280,6 +5307,19 @@ className={
                     />
                   </div>
                   <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Status</Label>
+                    <Select value={relPagFiltroPagamento} onValueChange={onRelPagFiltroPagamentoChange}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="pagos">Quitados</SelectItem>
+                        <SelectItem value="pendentes">Pendentes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Roças (opcional)</Label>
                     <Popover
                       onOpenChange={(open) => {
@@ -5350,6 +5390,7 @@ className={
                           dataInicial: relMeeirosPdfDataInicial || undefined,
                           dataFinal: relMeeirosPdfDataFinal || undefined,
                           rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                          filtroPagamento: relPagFiltroPagamento,
                         });
                         toast.success('PDF baixado');
                       } catch (e: any) {
@@ -5378,6 +5419,7 @@ className={
                           dataInicial: relMeeirosPdfDataInicial || undefined,
                           dataFinal: relMeeirosPdfDataFinal || undefined,
                           rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                          filtroPagamento: relPagFiltroPagamento,
                         });
                       } catch (e: any) {
                         toast.error(e?.response?.data?.message || e?.message || 'Erro ao abrir PDF');
