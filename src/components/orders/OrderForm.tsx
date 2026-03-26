@@ -127,6 +127,10 @@ export function OrderForm({
     { produto_id: 0, quantidade: '', preco_unitario: '', desconto: '' },
   ]);
 
+  // Busca dentro do dropdown de produtos no formulário do pedido.
+  // (Um único estado serve porque o usuário normalmente abre apenas um seletor por vez.)
+  const [produtoSearch, setProdutoSearch] = useState('');
+
   const itensSectionRef = useRef<HTMLDivElement>(null);
   const resumoItensRef = useRef<HTMLDivElement>(null);
   const addItemButtonRef = useRef<HTMLDivElement>(null);
@@ -153,6 +157,18 @@ export function OrderForm({
     tipo === 'COMPRA' && !fornecedorId
       ? 'Selecione o fornecedor primeiro'
       : 'Selecione um produto';
+
+  const produtosOrdenados = [...produtosParaExibir].sort((a, b) =>
+    (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }),
+  );
+  const termoProduto = produtoSearch.trim().toLowerCase();
+  const produtosFiltrados = termoProduto
+    ? produtosOrdenados.filter((p) => {
+        const nome = (p.nome || '').toLowerCase();
+        const sku = (p.sku || '').toLowerCase();
+        return nome.includes(termoProduto) || sku.includes(termoProduto);
+      })
+    : produtosOrdenados;
 
   // Preencher condicoesPagamento e aplicar condição padrão ao selecionar cliente
   useEffect(() => {
@@ -762,16 +778,33 @@ export function OrderForm({
                         />
                       </SelectTrigger>
                       <SelectContent>
+                        <div className="px-2 py-2">
+                          <Input
+                            placeholder="Buscar produto..."
+                            value={produtoSearch}
+                            onChange={(e) => setProdutoSearch(e.target.value)}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          />
+                        </div>
                         {produtosParaExibir.length === 0 ? (
                           <div className="py-4 px-2 text-sm text-muted-foreground text-center">
                             Nenhum produto cadastrado
                           </div>
                         ) : (
-                          produtosParaExibir.map((produto) => (
-                            <SelectItem key={produto.id} value={produto.id.toString()}>
-                              {produto.nome}
-                            </SelectItem>
-                          ))
+                          produtosFiltrados.length === 0 ? (
+                            <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                              Nenhum produto encontrado
+                            </div>
+                          ) : (
+                            produtosFiltrados.map((produto) => (
+                              <SelectItem
+                                key={produto.id}
+                                value={produto.id.toString()}
+                              >
+                                {produto.nome}
+                              </SelectItem>
+                            ))
+                          )
                         )}
                       </SelectContent>
                     </Select>
