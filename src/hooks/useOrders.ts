@@ -253,7 +253,12 @@ export function useOrders() {
         // Mas vamos validar apenas para garantir que não há produtos inválidos
         const produtosValidos = produtos.filter((p: any) => {
           const temId = p && p.id !== undefined && p.id !== null;
-          const temPreco = p.preco_venda !== undefined && p.preco_venda !== null && Number(p.preco_venda) > 0;
+          // Alguns produtos cadastrados via Controle de Roça podem ter preco_venda = 0.
+          // Ainda assim eles precisam aparecer no formulário para o usuário informar o preco_unitario.
+          const temPreco =
+            p.preco_venda !== undefined &&
+            p.preco_venda !== null &&
+            !Number.isNaN(Number(p.preco_venda));
           
           if (!temId || !temPreco) {
             if (import.meta.env.DEV) {
