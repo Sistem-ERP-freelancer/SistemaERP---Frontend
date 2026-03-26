@@ -452,6 +452,19 @@ export function OrderForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Se não existir cadastro para o tipo de pedido, avisar o usuário e evitar envio vazio.
+    // (Para edição, mantemos a lógica atual, pois o pedido pode vir com IDs já preenchidos.)
+    if (!order) {
+      if (tipo === 'VENDA' && clientes.length === 0) {
+        toast.error('Nenhum cliente cadastrado. Cadastre um cliente para criar uma venda.');
+        return;
+      }
+      if (tipo === 'COMPRA' && fornecedores.length === 0) {
+        toast.error('Nenhum fornecedor cadastrado. Cadastre um fornecedor para criar uma compra.');
+        return;
+      }
+    }
+
     // Validação: forma de pagamento é obrigatória
     if (!formaPagamentoSelecionada) {
       toast.error('Selecione a Forma de Pagamento.');
@@ -675,13 +688,26 @@ export function OrderForm({
                       <SelectValue placeholder="Selecione um cliente" />
                     </SelectTrigger>
                     <SelectContent>
-                      {clientes.map((cliente) => (
-                        <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                          {cliente.nome_fantasia || cliente.nome_razao || cliente.nome}
-                            </SelectItem>
-                      ))}
+                      {clientes.length === 0 ? (
+                        <div className="py-4 px-2 text-sm text-destructive text-center">
+                          Nenhum cliente cadastrado
+                        </div>
+                      ) : (
+                        clientes.map((cliente) => (
+                          <SelectItem key={cliente.id} value={cliente.id.toString()}>
+                            {cliente.nome_fantasia || cliente.nome_razao || cliente.nome}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {clientes.length === 0 && (
+                    <Alert className="mt-3 border-destructive/50 bg-destructive/5">
+                      <AlertDescription>
+                        Para criar um pedido de <b>VENDA</b>, é necessário cadastrar um cliente.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {clienteId && (limiteCredito || dadosClientePedido?.cliente?.limite_credito != null) && (
                     <Alert className="mt-3">
                       <Info className="h-4 w-4" />
@@ -715,13 +741,26 @@ export function OrderForm({
                       <SelectValue placeholder="Selecione um fornecedor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {fornecedores.map((fornecedor) => (
-                        <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                          {fornecedor.nome_fantasia || fornecedor.nome_razao}
+                      {fornecedores.length === 0 ? (
+                        <div className="py-4 px-2 text-sm text-destructive text-center">
+                          Nenhum fornecedor cadastrado
+                        </div>
+                      ) : (
+                        fornecedores.map((fornecedor) => (
+                          <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                            {fornecedor.nome_fantasia || fornecedor.nome_razao}
                           </SelectItem>
-                      ))}
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {fornecedores.length === 0 && (
+                    <Alert className="mt-3 border-destructive/50 bg-destructive/5">
+                      <AlertDescription>
+                        Para criar um pedido de <b>COMPRA</b>, é necessário cadastrar um fornecedor.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               )}
 
