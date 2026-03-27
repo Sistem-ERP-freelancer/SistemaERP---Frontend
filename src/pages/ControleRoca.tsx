@@ -1348,8 +1348,9 @@ export default function ControleRoca() {
   const [relPagMeeiroPopoverOpen, setRelPagMeeiroPopoverOpen] = useState(false);
   const [relDataInicial, setRelDataInicial] = useState('');
   const [relDataFinal, setRelDataFinal] = useState('');
-  const [relMeeirosPdfDataInicial, setRelMeeirosPdfDataInicial] = useState(() => new Date().toISOString().slice(0, 10));
-  const [relMeeirosPdfDataFinal, setRelMeeirosPdfDataFinal] = useState(() => new Date().toISOString().slice(0, 10));
+  /** Vazio por padrão: o backend gera o PDF em lista (“comissão”). Datas preenchidas → recibo detalhado com lançamentos. */
+  const [relMeeirosPdfDataInicial, setRelMeeirosPdfDataInicial] = useState('');
+  const [relMeeirosPdfDataFinal, setRelMeeirosPdfDataFinal] = useState('');
   const [relMeeirosPdfRocaIds, setRelMeeirosPdfRocaIds] = useState<number[]>([]);
   const [relMeeirosPdfRocaBusca, setRelMeeirosPdfRocaBusca] = useState('');
   const rocasParaRelatorioPdfFiltradas = useMemo(() => {
@@ -5201,7 +5202,8 @@ className={
                 <div>
                   <h3 className="text-base font-semibold leading-tight">Relatório de pagamento de meeiro</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Selecione um meeiro e gere o PDF de pagamento no período e roças escolhidos.
+                    Sem datas (e sem meeiro): PDF em lista consolidada. Com data inicial e final: PDF detalhado com lançamentos.
+                    Roças e status são opcionais.
                   </p>
                 </div>
               </div>
