@@ -424,14 +424,46 @@ class ApiClient {
    */
   async getBlob(endpoint: string): Promise<Blob> {
     const url = `${this.baseURL}${endpoint}`;
+    const tokenValidation = this.validateTokenBeforeRequest();
+    if (!tokenValidation.valid) {
+      const error = new Error(tokenValidation.error || 'Token inválido ou expirado') as any;
+      error.response = { status: 401, data: { message: tokenValidation.error } };
+      throw error;
+    }
     const token = localStorage.getItem('access_token');
     const headers: HeadersInit = {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
-    const response = await fetch(url, { method: 'GET', headers });
+    const response = await fetchWithOptionalRetry(url, { method: 'GET', headers }, endpoint);
     if (!response.ok) {
-      const error = new Error(response.statusText || 'Erro ao baixar arquivo') as any;
-      error.response = { status: response.status };
+      let message = response.statusText || 'Erro ao baixar arquivo';
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const j = await response.json();
+          message =
+            (typeof j?.message === 'string' && j.message) ||
+            (Array.isArray(j?.message) ? j.message.join(', ') : null) ||
+            message;
+        } else {
+          const text = await response.text();
+          if (text) {
+            try {
+              const j = JSON.parse(text);
+              message =
+                (typeof j?.message === 'string' && j.message) ||
+                (Array.isArray(j?.message) ? j.message.join(', ') : null) ||
+                text;
+            } catch {
+              message = text;
+            }
+          }
+        }
+      } catch {
+        /* mantém message */
+      }
+      const error = new Error(message) as any;
+      error.response = { status: response.status, data: { message } };
       throw error;
     }
     return response.blob();

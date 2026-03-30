@@ -1381,7 +1381,9 @@ export default function ControleRoca() {
   const [relPagMeeiroComboSearch, setRelPagMeeiroComboSearch] = useState('');
   const [relPagRocaComboOpen, setRelPagRocaComboOpen] = useState(false);
   const [relPagRocaComboSearch, setRelPagRocaComboSearch] = useState('');
-  const [relPagPdfLoading, setRelPagPdfLoading] = useState<null | 'download' | 'print'>(null);
+  const [relPagPdfLoading, setRelPagPdfLoading] = useState<
+    null | 'download' | 'print' | 'download-recibos' | 'print-recibos'
+  >(null);
   const [pagamentoPdfMeeiroDialogOpen, setPagamentoPdfMeeiroDialogOpen] = useState(false);
   const [pdfPagMeeiroId, setPdfPagMeeiroId] = useState<number | ''>('');
   const [pdfPagDataInicial, setPdfPagDataInicial] = useState('');
@@ -1432,7 +1434,9 @@ export default function ControleRoca() {
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
   const [relPdfLoadingAction, setRelPdfLoadingAction] = useState<'download' | 'print' | null>(null);
-  const [relPagPdfLoadingAction, setRelPagPdfLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [relPagPdfLoadingAction, setRelPagPdfLoadingAction] = useState<
+    null | 'download' | 'print' | 'download-recibos' | 'print-recibos'
+  >(null);
   const [relEmprestimosDataInicial, setRelEmprestimosDataInicial] = useState('');
   const [relEmprestimosDataFinal, setRelEmprestimosDataFinal] = useState('');
   const [relEmprestimosRocaId, setRelEmprestimosRocaId] = useState<number | ''>('');
@@ -4167,6 +4171,87 @@ className={
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {relPagMeeiroFiltroId === '' && (
+                    <>
+                      <Separator />
+                      <div className="rounded-lg border border-dashed border-border bg-muted/25 p-3 space-y-3">
+                        <div>
+                          <p className="text-sm font-medium">Todos os recibos em um PDF</p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                            Um arquivo com recibo detalhado por meeiro (cada um em páginas separadas). Usa o período,
+                            a roça e o status selecionados acima. Com status &quot;Todos&quot;, a API trata como
+                            pendentes neste modo.
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="gap-2 w-full"
+                            disabled={relPagPdfLoading !== null}
+                            onClick={async () => {
+                              try {
+                                setRelPagPdfLoading('print-recibos');
+                                await controleRocaService.printRelatorioMeeirosPdf({
+                                  layout: 'recibos',
+                                  dataInicial: relPagDataInicial.trim() || undefined,
+                                  dataFinal: relPagDataFinal.trim() || undefined,
+                                  rocas:
+                                    relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                                  filtroPagamento: relPagFiltroPagamento,
+                                });
+                                setRelPagamentoMeeiroSheetOpen(false);
+                              } catch (e: any) {
+                                toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                              } finally {
+                                setRelPagPdfLoading(null);
+                              }
+                            }}
+                          >
+                            {relPagPdfLoading === 'print-recibos' ? (
+                              <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                            ) : (
+                              <Printer className="w-4 h-4 shrink-0" />
+                            )}
+                            Imprimir todos os recibos
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="gap-2 w-full"
+                            disabled={relPagPdfLoading !== null}
+                            onClick={async () => {
+                              try {
+                                setRelPagPdfLoading('download-recibos');
+                                await controleRocaService.downloadRelatorioMeeirosPdf({
+                                  layout: 'recibos',
+                                  dataInicial: relPagDataInicial.trim() || undefined,
+                                  dataFinal: relPagDataFinal.trim() || undefined,
+                                  rocas:
+                                    relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                                  filtroPagamento: relPagFiltroPagamento,
+                                });
+                                toast.success('PDF baixado');
+                                setRelPagamentoMeeiroSheetOpen(false);
+                              } catch (e: any) {
+                                toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                              } finally {
+                                setRelPagPdfLoading(null);
+                              }
+                            }}
+                          >
+                            {relPagPdfLoading === 'download-recibos' ? (
+                              <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                            ) : (
+                              <Download className="w-4 h-4 shrink-0" />
+                            )}
+                            Baixar todos os recibos (1 PDF)
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2 pt-4 mt-auto border-t border-border/60">
                   <Button
@@ -5202,8 +5287,9 @@ className={
                 <div>
                   <h3 className="text-base font-semibold leading-tight">Relatório de pagamento de meeiro</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Sem datas (e sem meeiro): PDF em lista consolidada. Com data inicial e final: PDF detalhado com lançamentos.
-                    Roças e status são opcionais.
+                    Sem meeiro e sem datas: PDF em lista consolidada. Com um meeiro e período: recibo detalhado. Com
+                    &quot;Todos os meeiros&quot;, use os botões <span className="font-medium">Recibos (1 PDF)</span> para
+                    um único arquivo com recibo por meeiro (páginas separadas). Roças e status são opcionais.
                   </p>
                 </div>
               </div>
@@ -5437,6 +5523,67 @@ className={
                     )}
                     Imprimir
                   </Button>
+                  {relPagMeeiroId === '' && (
+                    <>
+                      <Button
+                        variant="secondary"
+                        className="gap-2 min-w-[120px]"
+                        disabled={relPagPdfLoadingAction !== null}
+                        onClick={async () => {
+                          try {
+                            setRelPagPdfLoadingAction('download-recibos');
+                            await controleRocaService.downloadRelatorioMeeirosPdf({
+                              layout: 'recibos',
+                              dataInicial: relMeeirosPdfDataInicial || undefined,
+                              dataFinal: relMeeirosPdfDataFinal || undefined,
+                              rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                              filtroPagamento: relPagFiltroPagamento,
+                            });
+                            toast.success('PDF baixado');
+                          } catch (e: any) {
+                            toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                          } finally {
+                            setRelPagPdfLoadingAction(null);
+                          }
+                        }}
+                      >
+                        {relPagPdfLoadingAction === 'download-recibos' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                        Recibos (1 PDF)
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="gap-2 min-w-[120px]"
+                        disabled={relPagPdfLoadingAction !== null}
+                        onClick={async () => {
+                          try {
+                            setRelPagPdfLoadingAction('print-recibos');
+                            await controleRocaService.printRelatorioMeeirosPdf({
+                              layout: 'recibos',
+                              dataInicial: relMeeirosPdfDataInicial || undefined,
+                              dataFinal: relMeeirosPdfDataFinal || undefined,
+                              rocas: relMeeirosPdfRocaIds.length ? relMeeirosPdfRocaIds : undefined,
+                              filtroPagamento: relPagFiltroPagamento,
+                            });
+                          } catch (e: any) {
+                            toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                          } finally {
+                            setRelPagPdfLoadingAction(null);
+                          }
+                        }}
+                      >
+                        {relPagPdfLoadingAction === 'print-recibos' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Printer className="w-4 h-4" />
+                        )}
+                        Imprimir recibos
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

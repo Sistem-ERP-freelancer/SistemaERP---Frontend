@@ -197,15 +197,13 @@ class ControleRocaService {
     rocas?: number[];
     /** pagos = com registro de pagamento; pendentes = sem pagamento e valor a pagar; todos = todos */
     filtroPagamento?: 'todos' | 'pagos' | 'pendentes';
+    /**
+     * Sem meeiro: `recibos` = um único PDF com recibo detalhado por meeiro (cada um em páginas novas).
+     * Ignora `meeiroId` se for enviado.
+     */
+    layout?: 'recibos';
   }): Promise<void> {
-    const search = new URLSearchParams();
-    if (params?.meeiroId != null) search.set('meeiroId', String(params.meeiroId));
-    if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
-    if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
-    if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
-    if (params?.filtroPagamento && params.filtroPagamento !== 'todos') {
-      search.set('filtroPagamento', params.filtroPagamento);
-    }
+    const search = this.buildRelatorioMeeirosPdfSearchParams(params);
     const q = search.toString() ? `?${search.toString()}` : '';
     const blob = await apiClient.getBlob(
       `${BASE}/relatorios/meeiros/pdf${q}`
@@ -213,13 +211,17 @@ class ControleRocaService {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
+    const hoje = new Date().toISOString().split('T')[0];
     const sfx =
       params?.filtroPagamento === 'pagos'
         ? '-pagos'
         : params?.filtroPagamento === 'pendentes'
           ? '-pendentes'
           : '';
-    a.download = `relatorio-meeiros${sfx}-${new Date().toISOString().split('T')[0]}.pdf`;
+    a.download =
+      params?.layout === 'recibos'
+        ? `recibos-meeiros${sfx}-${hoje}.pdf`
+        : `relatorio-meeiros${sfx}-${hoje}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -232,15 +234,9 @@ class ControleRocaService {
     dataFinal?: string;
     rocas?: number[];
     filtroPagamento?: 'todos' | 'pagos' | 'pendentes';
+    layout?: 'recibos';
   }): Promise<void> {
-    const search = new URLSearchParams();
-    if (params?.meeiroId != null) search.set('meeiroId', String(params.meeiroId));
-    if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
-    if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
-    if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
-    if (params?.filtroPagamento && params.filtroPagamento !== 'todos') {
-      search.set('filtroPagamento', params.filtroPagamento);
-    }
+    const search = this.buildRelatorioMeeirosPdfSearchParams(params);
     const q = search.toString() ? `?${search.toString()}` : '';
     const blob = await apiClient.getBlob(
       `${BASE}/relatorios/meeiros/pdf${q}`
@@ -250,6 +246,29 @@ class ControleRocaService {
     if (!win) {
       throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
     }
+  }
+
+  private buildRelatorioMeeirosPdfSearchParams(params?: {
+    meeiroId?: number;
+    dataInicial?: string;
+    dataFinal?: string;
+    rocas?: number[];
+    filtroPagamento?: 'todos' | 'pagos' | 'pendentes';
+    layout?: 'recibos';
+  }): URLSearchParams {
+    const search = new URLSearchParams();
+    const layoutRecibos = params?.layout === 'recibos';
+    if (!layoutRecibos && params?.meeiroId != null) {
+      search.set('meeiroId', String(params.meeiroId));
+    }
+    if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
+    if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
+    if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
+    if (params?.filtroPagamento && params.filtroPagamento !== 'todos') {
+      search.set('filtroPagamento', params.filtroPagamento);
+    }
+    if (layoutRecibos) search.set('layout', 'recibos');
+    return search;
   }
 
   // Produtos da roça
