@@ -96,6 +96,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle,
     Archive,
+    BarChart3,
     Banknote,
     Building2,
     Calendar,
@@ -119,13 +120,24 @@ import {
     Printer,
     Search,
     Sprout,
+    TrendingUp,
     Trash2,
     User,
     UserX,
+    Wallet,
     Users,
     X,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { toast } from 'sonner';
 
 /** Pendência em aberto: ainda há empréstimo em aberto, ou valor líquido sem pagamento quitado. */
@@ -205,7 +217,10 @@ const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
 
 export default function ControleRoca() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState('produtores');
+  const [tab, setTab] = useState('dashboard');
+  const [dashboardMes, setDashboardMes] = useState('all');
+  /** Filtro do dashboard por roça (vazio = todas). */
+  const [dashboardRocaId, setDashboardRocaId] = useState<number | ''>('');
 
   // Busca e painéis de filtro (layout igual ao de Lançamentos)
   const [searchProdutor, setSearchProdutor] = useState('');
@@ -452,6 +467,15 @@ export default function ControleRoca() {
           rocaId: rocaIdMeeiros === '' ? undefined : Number(rocaIdMeeiros),
         },
       ),
+  });
+  /** Lista de meeiros para métricas do dashboard (independe dos filtros da aba Meeiros). */
+  const { data: meeirosDashboard = [] } = useQuery({
+    queryKey: ['controle-roca', 'meeiros', 'dashboard', dashboardRocaId],
+    queryFn: () =>
+      dashboardRocaId === ''
+        ? controleRocaService.listarMeeiros()
+        : controleRocaService.listarMeeiros(undefined, { rocaId: Number(dashboardRocaId) }),
+    enabled: tab === 'dashboard',
   });
   const produtoresFiltroRocaOrdenados = useMemo(() => {
     const term = filtroRocaProdutorSearch.trim().toLowerCase();
@@ -1589,6 +1613,183 @@ export default function ControleRoca() {
     },
   });
 
+  const totalProdutoresAtivos = useMemo(
+    () => produtores.filter((p) => p.ativo !== false).length,
+    [produtores]
+  );
+  const totalRocasAtivas = useMemo(
+    () => rocas.filter((r) => r.ativo !== false).length,
+    [rocas]
+  );
+  const valorMedioLancamento = useMemo(
+    () => (filteredLancamentos.length ? valorTotalFiltrado / filteredLancamentos.length : 0),
+    [filteredLancamentos.length, valorTotalFiltrado]
+  );
+  const lancamentosPorRocaDashboard = useMemo(
+    () =>
+      dashboardRocaId === ''
+        ? filteredLancamentos
+        : filteredLancamentos.filter((l) => Number(l.rocaId) === Number(dashboardRocaId)),
+    [dashboardRocaId, filteredLancamentos]
+  );
+  const rocasDashboardSelectOrdenadas = useMemo(
+    () =>
+      [...rocasParaFiltroLancamento].sort((a, b) =>
+        String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR', { sensitivity: 'base' })
+      ),
+    [rocasParaFiltroLancamento]
+  );
+  const mesesDisponiveisDashboard = useMemo(() => {
+    const meses = new Set<string>();
+    lancamentosPorRocaDashboard.forEach((l) => {
+      const data = String(l.data ?? '');
+      if (data.length >= 7) meses.add(data.slice(0, 7));
+    });
+    return Array.from(meses)
+      .sort((a, b) => b.localeCompare(a))
+      .map((mes) => ({
+        value: mes,
+        label: `${mes.slice(5, 7)}/${mes.slice(0, 4)}`,
+      }));
+  }, [lancamentosPorRocaDashboard]);
+  const lancamentosDashboardFiltrados = useMemo(
+    () =>
+      dashboardMes === 'all'
+        ? lancamentosPorRocaDashboard
+        : lancamentosPorRocaDashboard.filter((l) => String(l.data ?? '').startsWith(dashboardMes)),
+    [dashboardMes, lancamentosPorRocaDashboard]
+  );
+  const somaQuantidadeDashboard = useMemo(
+    () =>
+      lancamentosDashboardFiltrados.reduce((acc, l) => {
+        const itens = l.itens ?? [];
+        return acc + itens.reduce((s, i) => s + (Number(i.quantidade) || 0), 0);
+      }, 0),
+    [lancamentosDashboardFiltrados]
+  );
+  const valorTotalDashboardParcial = useMemo(
+    () =>
+      lancamentosDashboardFiltrados.reduce((acc, l) => acc + (Number(l.total_geral) || 0), 0),
+    [lancamentosDashboardFiltrados]
+  );
+  const valorMedioDashboard = useMemo(
+    () =>
+      lancamentosDashboardFiltrados.length > 0
+        ? valorTotalDashboardParcial / lancamentosDashboardFiltrados.length
+        : 0,
+    [lancamentosDashboardFiltrados.length, valorTotalDashboardParcial]
+  );
+  const mesReferenciaMetricas = useMemo(() => {
+    if (dashboardMes !== 'all') return dashboardMes;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, [dashboardMes]);
+  const lancamentosMesReferencia = useMemo(
+    () =>
+      lancamentosPorRocaDashboard.filter((l) =>
+        String(l.data ?? '').startsWith(mesReferenciaMetricas)
+      ),
+    [lancamentosPorRocaDashboard, mesReferenciaMetricas]
+  );
+  const metricasProducaoMensal = useMemo(() => {
+    const quantidade = lancamentosMesReferencia.reduce((acc, l) => {
+      const qtd = (l.itens ?? []).reduce((s, item) => s + (Number(item.quantidade) || 0), 0);
+      return acc + qtd;
+    }, 0);
+    const valor = lancamentosMesReferencia.reduce((acc, l) => acc + (Number(l.total_geral) || 0), 0);
+    const ticketMedio = lancamentosMesReferencia.length > 0 ? valor / lancamentosMesReferencia.length : 0;
+    return { quantidade, valor, ticketMedio, totalLancamentos: lancamentosMesReferencia.length };
+  }, [lancamentosMesReferencia]);
+  const ultimosLancamentosDashboard = useMemo(
+    () =>
+      [...lancamentosDashboardFiltrados]
+        .sort((a, b) => String(b.data ?? '').localeCompare(String(a.data ?? '')))
+        .slice(0, 5),
+    [lancamentosDashboardFiltrados]
+  );
+  const resumoRocasDashboard = useMemo(() => {
+    const mapa = new Map<
+      number,
+      { rocaId: number; lancamentos: number; quantidade: number; valor: number; ultimaData: string }
+    >();
+    lancamentosDashboardFiltrados.forEach((l) => {
+      const id = Number(l.rocaId);
+      const atual = mapa.get(id) ?? {
+        rocaId: id,
+        lancamentos: 0,
+        quantidade: 0,
+        valor: 0,
+        ultimaData: String(l.data ?? ''),
+      };
+      atual.lancamentos += 1;
+      atual.quantidade += (l.itens ?? []).reduce((s, item) => s + (Number(item.quantidade) || 0), 0);
+      atual.valor += Number(l.total_geral) || 0;
+      const data = String(l.data ?? '');
+      if (data > atual.ultimaData) atual.ultimaData = data;
+      mapa.set(id, atual);
+    });
+
+    return Array.from(mapa.values())
+      .map((item) => {
+        const roca =
+          rocasParaFiltroLancamento.find((r) => r.id === item.rocaId) ||
+          rocas.find((r) => r.id === item.rocaId) ||
+          rocasParaLancamento.find((r) => r.id === item.rocaId);
+        const produtor = produtores.find((p) => p.id === roca?.produtorId);
+        return {
+          ...item,
+          codigo: roca?.codigo ?? `R${item.rocaId}`,
+          nome: roca?.nome ?? `Roça ${item.rocaId}`,
+          produtor: produtor?.nome_razao ?? '—',
+        };
+      })
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 8);
+  }, [lancamentosDashboardFiltrados, produtores, rocas, rocasParaFiltroLancamento, rocasParaLancamento]);
+  const producaoMensalDashboard = useMemo(() => {
+    if (dashboardMes !== 'all') {
+      const mapaDia = new Map<string, { periodo: string; quantidade: number; valor: number }>();
+      lancamentosDashboardFiltrados.forEach((l) => {
+        const data = String(l.data ?? '');
+        const chave = data.length >= 10 ? data.slice(0, 10) : 'sem-data';
+        const atual = mapaDia.get(chave) ?? { periodo: chave, quantidade: 0, valor: 0 };
+        const qtd = (l.itens ?? []).reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
+        atual.quantidade += qtd;
+        atual.valor += Number(l.total_geral) || 0;
+        mapaDia.set(chave, atual);
+      });
+
+      return Array.from(mapaDia.values())
+        .sort((a, b) => a.periodo.localeCompare(b.periodo))
+        .map((item) => ({
+          ...item,
+          label:
+            item.periodo === 'sem-data'
+              ? 'Sem data'
+              : `${item.periodo.slice(8, 10)}/${item.periodo.slice(5, 7)}`,
+        }));
+    }
+
+    const mapa = new Map<string, { periodo: string; quantidade: number; valor: number }>();
+    lancamentosDashboardFiltrados.forEach((l) => {
+      const data = String(l.data ?? '');
+      const chave = data.length >= 7 ? data.slice(0, 7) : 'sem-data';
+      const atual = mapa.get(chave) ?? { periodo: chave, quantidade: 0, valor: 0 };
+      const qtd = (l.itens ?? []).reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
+      atual.quantidade += qtd;
+      atual.valor += Number(l.total_geral) || 0;
+      mapa.set(chave, atual);
+    });
+
+    return Array.from(mapa.values())
+      .sort((a, b) => a.periodo.localeCompare(b.periodo))
+      .slice(-6)
+      .map((item) => ({
+        ...item,
+        label: item.periodo === 'sem-data' ? 'Sem data' : item.periodo.slice(5, 7) + '/' + item.periodo.slice(0, 4),
+      }));
+  }, [dashboardMes, lancamentosDashboardFiltrados]);
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -1604,6 +1805,10 @@ export default function ControleRoca() {
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-4">
           <TabsList className="flex flex-wrap h-auto gap-1 overflow-x-auto overflow-y-hidden -mx-1 px-1 w-full sm:w-auto">
+            <TabsTrigger value="dashboard" className="gap-1">
+              <BarChart3 className="w-4 h-4" />
+              Dashboard
+            </TabsTrigger>
             <TabsTrigger value="produtores" className="gap-1">
               <User className="w-4 h-4" />
               Produtores
@@ -1633,6 +1838,315 @@ export default function ControleRoca() {
               Notas de lançamento
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard" className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <div className="w-full sm:max-w-xs sm:shrink-0">
+                <Label className="mb-1.5 block text-xs font-medium text-muted-foreground sm:sr-only">
+                  Roça no dashboard
+                </Label>
+                <Select
+                  value={dashboardRocaId === '' ? 'all' : String(dashboardRocaId)}
+                  onValueChange={(v) => {
+                    setDashboardRocaId(v === 'all' ? '' : Number(v));
+                    setDashboardMes('all');
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todas as roças" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as roças</SelectItem>
+                    {rocasDashboardSelectOrdenadas.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {(r.codigo ? `${r.codigo} – ` : '') + (r.nome ?? `Roça ${r.id}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Produtores ativos</p>
+                  <User className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <p className="mt-2 text-2xl font-semibold">{totalProdutoresAtivos}</p>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Roças ativas</p>
+                  <Sprout className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <p className="mt-2 text-2xl font-semibold">{totalRocasAtivas}</p>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Lançamentos filtrados</p>
+                  <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <p className="mt-2 text-2xl font-semibold">{lancamentosDashboardFiltrados.length}</p>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Valor total filtrado</p>
+                  <Wallet className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <p className="mt-2 text-2xl font-semibold">
+                  {formatCurrency(valorTotalDashboardParcial)}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              <div className="rounded-xl border bg-card p-4 xl:col-span-2">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-foreground">Visão geral da produção</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Resumo rápido para acompanhar o status operacional da roça.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setTab('lancamentos')}>
+                    Ver lançamentos
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">Quantidade total (itens)</p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {somaQuantidadeDashboard.toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">Valor médio por lançamento</p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {formatCurrency(valorMedioDashboard)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">Meeiros cadastrados</p>
+                    <p className="mt-1 text-lg font-semibold">{meeirosDashboard.length}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <h3 className="font-semibold text-foreground">Ações rápidas</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Acesse rapidamente os principais cadastros.
+                </p>
+                <div className="mt-4 grid gap-2">
+                  <Button variant="gradient" className="justify-start" onClick={() => setTab('lancamentos')}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Novo Lançamento
+                  </Button>
+                  <Button variant="outline" className="justify-start" onClick={() => setTab('produtores')}>
+                    <User className="mr-2 h-4 w-4" />
+                    Ir para Produtores
+                  </Button>
+                  <Button variant="outline" className="justify-start" onClick={() => setTab('rocas')}>
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Ir para Roças
+                  </Button>
+                  <Button variant="outline" className="justify-start" onClick={() => setTab('meeiros')}>
+                    <Users className="mr-2 h-4 w-4" />
+                    Ir para Meeiros
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card p-4">
+              <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="font-semibold text-foreground">Produção por período</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {dashboardMes === 'all'
+                      ? 'Últimos 6 meses com quantidade total e valor consolidado.'
+                      : 'Evolução diária do mês selecionado.'}{' '}
+                    Roça, mês, resumo das roças e últimos lançamentos seguem estes filtros.
+                  </p>
+                </div>
+                <div className="w-full md:w-[220px] md:shrink-0">
+                  <Select value={dashboardMes} onValueChange={setDashboardMes}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filtrar por mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os meses</SelectItem>
+                      {mesesDisponiveisDashboard.map((mes) => (
+                        <SelectItem key={mes.value} value={mes.value}>
+                          {mes.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {producaoMensalDashboard.length === 0 ? (
+                <div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+                  Sem dados para exibir no gráfico.
+                </div>
+              ) : (
+                <div className="h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={producaoMensalDashboard}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="label" />
+                      <YAxis />
+                      <Tooltip
+                        formatter={(value: number, name: string) => {
+                          if (name === 'valor') return [formatCurrency(Number(value) || 0), 'Valor total'];
+                          return [Number(value).toLocaleString('pt-BR'), 'Quantidade'];
+                        }}
+                      />
+                      <Bar dataKey="quantidade" name="quantidade" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="valor" name="valor" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border bg-card p-4">
+                <p className="text-sm text-muted-foreground">Produção do mês (quantidade)</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {metricasProducaoMensal.quantidade.toLocaleString('pt-BR')}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Referência: {mesReferenciaMetricas.slice(5, 7)}/{mesReferenciaMetricas.slice(0, 4)}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <p className="text-sm text-muted-foreground">Produção do mês (valor)</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {formatCurrency(metricasProducaoMensal.valor)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Referência: {mesReferenciaMetricas.slice(5, 7)}/{mesReferenciaMetricas.slice(0, 4)}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <p className="text-sm text-muted-foreground">Ticket médio (mês)</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {formatCurrency(metricasProducaoMensal.ticketMedio)}
+                </p>
+              </div>
+              <div className="rounded-xl border bg-card p-4">
+                <p className="text-sm text-muted-foreground">Lançamentos no mês</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {metricasProducaoMensal.totalLancamentos.toLocaleString('pt-BR')}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">Resumo das roças</h3>
+                <Button variant="ghost" size="sm" onClick={() => setTab('rocas')}>
+                  Ver cadastro de roças
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Roça</TableHead>
+                      <TableHead>Produtor</TableHead>
+                      <TableHead className="text-right">Lançamentos</TableHead>
+                      <TableHead className="text-right">Quantidade</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Último lançamento</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumoRocasDashboard.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                          Nenhum resumo de roça para o filtro selecionado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      resumoRocasDashboard.map((r) => (
+                        <TableRow key={r.rocaId}>
+                          <TableCell className="font-medium">{r.codigo}</TableCell>
+                          <TableCell>{r.nome}</TableCell>
+                          <TableCell>{r.produtor}</TableCell>
+                          <TableCell className="text-right">{r.lancamentos}</TableCell>
+                          <TableCell className="text-right">
+                            {r.quantidade.toLocaleString('pt-BR')}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(r.valor)}</TableCell>
+                          <TableCell className="text-right">
+                            {r.ultimaData ? formatDate(r.ultimaData) : '—'}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">Ultimos lançamentos</h3>
+                <Button variant="ghost" size="sm" onClick={() => setTab('lancamentos')}>
+                  Ver todos
+                </Button>
+              </div>
+              {loadingLancamentos ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Roça</TableHead>
+                        <TableHead>Produtos</TableHead>
+                        <TableHead className="text-right">Valor total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ultimosLancamentosDashboard.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                            Nenhum lançamento encontrado.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        ultimosLancamentosDashboard.map((l) => {
+                          const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
+                          const produtos = (l.itens ?? []).map((item) => item.produto).filter(Boolean);
+                          return (
+                            <TableRow key={l.id}>
+                              <TableCell>{formatDate(l.data)}</TableCell>
+                              <TableCell>{roca?.nome ?? `ID ${l.rocaId}`}</TableCell>
+                              <TableCell className="max-w-[320px] truncate">
+                                {produtos.length ? produtos.join(', ') : '—'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatCurrency(Number(l.total_geral) || 0)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           {/* Tab Produtores */}
           <TabsContent value="produtores" className="space-y-4">
