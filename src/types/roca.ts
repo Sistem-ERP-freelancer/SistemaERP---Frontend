@@ -44,6 +44,19 @@ export interface Roca {
   ativo?: boolean;
   criadoEm?: string;
   atualizadoEm?: string;
+  /** Mudas plantadas (cadastro). */
+  quantidadeMudasPlantadas?: number | null;
+  dataPlantio?: string | null;
+  dataInicioColheita?: string | null;
+  /** Soma da quantidade colhida nos lançamentos ativos. */
+  quantidadeColhidaTotal?: number;
+  quantidadePesColhidosTotal?: number;
+  /** quantidadeColhidaTotal / quantidadePesColhidosTotal (calculado no backend). */
+  quantidadeColhidaPorPe?: number | null;
+  /** Divisor usado em quantidadeColhidaPorPe (pés nos lançamentos ou mudas do cadastro). */
+  denominadorProdutividade?: number | null;
+  /** De onde veio o divisor do cálculo de produtividade. */
+  origemDenominadorProdutividade?: 'LANCAMENTOS' | 'MUDAS_CADASTRO' | null;
 }
 
 export interface CreateRocaDto {
@@ -52,6 +65,9 @@ export interface CreateRocaDto {
   nome: string;
   localizacao?: string;
   produtorId: number;
+  quantidadeMudasPlantadas?: number;
+  dataPlantio?: string;
+  dataInicioColheita?: string;
 }
 
 /** Resposta do GET /rocas/:id (detalhes com produtor) */
@@ -68,6 +84,9 @@ export interface UpdateRocaDto {
   produtorId?: number;
   /** Se false, desativa a roça (não aparece na listagem). */
   ativo?: boolean;
+  quantidadeMudasPlantadas?: number | null;
+  dataPlantio?: string | null;
+  dataInicioColheita?: string | null;
 }
 
 export interface MeeiroRoca {
@@ -235,6 +254,8 @@ export interface LancamentoProducaoRocaProdutoDto {
   produtoId: number;
   quantidade: number;
   preco_unitario: number;
+  /** Pés colhidos neste item (denominador da produtividade por pé na roça). */
+  quantidadePesColhidos?: number;
   /** Porcentagem por meeiro sobre o valor deste produto (qtd × preço). */
   meeiros: LancamentoProducaoRocaMeeiroDto[];
 }
@@ -251,6 +272,7 @@ export interface LancamentoItemRoca {
   produto: string;
   unidade_medida?: string;
   quantidade: number;
+  quantidadePesColhidos?: number | null;
   preco_unitario?: number;
   valor_total?: number;
   /** Meeiros e porcentagem/valor da parte sobre este item */

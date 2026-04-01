@@ -194,6 +194,29 @@ function getPrimeiroDiaMesLocal(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+/** Total colhido nos lançamentos ativos (soma das quantidades dos itens). */
+function formatQuantidadeColhida(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+}
+
+/** Exibe quantidade colhida por pé (razão dos lançamentos). */
+function formatColhidaPorPe(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+}
+
+function formatDataIsoPt(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const s = String(iso).slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  return String(iso);
+}
+
 type PagamentoMeeirosFiltros = {
   dataInicial: string;
   dataFinal: string;
@@ -331,6 +354,9 @@ export default function ControleRoca() {
     nome: '',
     localizacao: '',
     produtorId: 0,
+    quantidadeMudasPlantadas: undefined,
+    dataPlantio: undefined,
+    dataInicioColheita: undefined,
   });
   const createRoca = useMutation({
     mutationFn: (data: CreateRocaDto) => controleRocaService.criarRoca(data),
@@ -338,7 +364,15 @@ export default function ControleRoca() {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
       toast.success('Roça cadastrada com sucesso');
       setOpenRoca(false);
-      setFormRoca({ codigo: '', nome: '', localizacao: '', produtorId: 0 });
+      setFormRoca({
+        codigo: '',
+        nome: '',
+        localizacao: '',
+        produtorId: 0,
+        quantidadeMudasPlantadas: undefined,
+        dataPlantio: undefined,
+        dataInicioColheita: undefined,
+      });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao cadastrar roça');
@@ -356,13 +390,21 @@ export default function ControleRoca() {
   const [editRoca, setEditRoca] = useState<RocaDetalhes | null>(null);
   const [openEditRoca, setOpenEditRoca] = useState(false);
   const [formEditRoca, setFormEditRoca] = useState<
-    UpdateRocaDto & { nome: string }
+    UpdateRocaDto & {
+      nome: string;
+      quantidadeMudasPlantadas?: number | null;
+      dataPlantio?: string | null;
+      dataInicioColheita?: string | null;
+    }
   >({
     codigo: '',
     nome: '',
     localizacao: '',
     produtorId: 0,
     ativo: true,
+    quantidadeMudasPlantadas: null,
+    dataPlantio: null,
+    dataInicioColheita: null,
   });
 
   const updateRoca = useMutation({
@@ -887,6 +929,7 @@ export default function ControleRoca() {
       produtoId: number;
       quantidade: number;
       preco_unitario: number;
+      quantidadePesColhidos?: number | null;
       nome?: string;
       meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
     }[]
@@ -919,6 +962,8 @@ export default function ControleRoca() {
         produtoId: item.produtoId ?? 0,
         quantidade: item.quantidade,
         preco_unitario: item.preco_unitario ?? 0,
+        quantidadePesColhidos:
+          item.quantidadePesColhidos != null ? Number(item.quantidadePesColhidos) : null,
         nome: item.produto,
         meeiros: (item.meeiros ?? []).map((m) => ({
           meeiroId: m.meeiroId,
@@ -985,6 +1030,7 @@ export default function ControleRoca() {
       produtoId: number;
       quantidade: number;
       preco_unitario: number;
+      quantidadePesColhidos?: number | null;
       nome?: string;
       meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
     }[]
@@ -1303,7 +1349,12 @@ export default function ControleRoca() {
     );
   };
 
-  const handleAddProdutoLanc = (produtoId: number, qtd: number, preco: number) => {
+  const handleAddProdutoLanc = (
+    produtoId: number,
+    qtd: number,
+    preco: number,
+    quantidadePesColhidos?: number | null,
+  ) => {
     const p = produtosDisponiveisLancamento.find(
       (x) => Number(x.id) === Number(produtoId)
     ) as { id: number; nome?: string; unidade_medida?: string } | undefined;
@@ -1316,12 +1367,17 @@ export default function ControleRoca() {
       nome: m.nome,
       porcentagem: m.porcentagem_padrao,
     }));
+    const pes =
+      quantidadePesColhidos != null
+        ? Math.max(0, Math.floor(Number(quantidadePesColhidos)))
+        : null;
     setLancProdutos((prev) => [
       ...prev,
       {
         produtoId: Number(p.id),
         quantidade: qtd,
         preco_unitario: preco,
+        quantidadePesColhidos: pes,
         nome: p.nome ?? '—',
         meeiros: meeirosDoProduto,
       },
@@ -1355,6 +1411,14 @@ export default function ControleRoca() {
         produtoId: p.produtoId,
         quantidade: p.quantidade,
         preco_unitario: p.preco_unitario,
+        ...(p.quantidadePesColhidos != null
+          ? {
+              quantidadePesColhidos: Math.max(
+                0,
+                Math.floor(Number(p.quantidadePesColhidos)),
+              ),
+            }
+          : {}),
         meeiros: p.meeiros.map((m) => ({
           meeiroId: m.meeiroId,
           porcentagem: Number(m.porcentagem ?? 0),
@@ -1790,6 +1854,19 @@ export default function ControleRoca() {
       }));
   }, [dashboardMes, lancamentosDashboardFiltrados]);
 
+  /** Roças com plantio/produtividade para o dashboard (filtra pela roça do topo, se houver). */
+  const rocasPlantioDashboard = useMemo(() => {
+    let list = rocasParaFiltroLancamento.filter((r) => r.ativo !== false);
+    if (dashboardRocaId !== '') {
+      list = list.filter((r) => Number(r.id) === Number(dashboardRocaId));
+    }
+    return [...list].sort((a, b) =>
+      String(a.nome ?? a.codigo ?? '').localeCompare(String(b.nome ?? b.codigo ?? ''), 'pt-BR', {
+        sensitivity: 'base',
+      }),
+    );
+  }, [rocasParaFiltroLancamento, dashboardRocaId]);
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -1901,11 +1978,13 @@ export default function ControleRoca() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-3">
-              <div className="rounded-xl border bg-card p-4 xl:col-span-2">
-                <div className="mb-4 flex items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-foreground">Visão geral da produção</h3>
-                    <p className="text-sm text-muted-foreground">
+              <div className="rounded-xl border bg-card px-5 py-6 sm:px-6 sm:py-7 xl:col-span-2">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div className="space-y-2 pr-2">
+                    <h3 className="font-semibold text-foreground text-lg leading-snug">
+                      Visão geral da produção
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Resumo rápido para acompanhar o status operacional da roça.
                     </p>
                   </div>
@@ -1916,13 +1995,13 @@ export default function ControleRoca() {
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs text-muted-foreground">Quantidade total (itens)</p>
+                    <p className="text-xs text-muted-foreground">Quantidade total de caixa</p>
                     <p className="mt-1 text-lg font-semibold">
                       {somaQuantidadeDashboard.toLocaleString('pt-BR')}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-3">
-                    <p className="text-xs text-muted-foreground">Valor médio por lançamento</p>
+                    <p className="text-xs text-muted-foreground">Valor médio por caixa</p>
                     <p className="mt-1 text-lg font-semibold">
                       {formatCurrency(valorMedioDashboard)}
                     </p>
@@ -1931,6 +2010,77 @@ export default function ControleRoca() {
                     <p className="text-xs text-muted-foreground">Meeiros cadastrados</p>
                     <p className="mt-1 text-lg font-semibold">{meeirosDashboard.length}</p>
                   </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-border/60 space-y-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="font-semibold text-foreground flex items-center gap-2">
+                        <Sprout className="h-5 w-5 text-primary shrink-0" />
+                        Plantio, colheita e produtividade
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Mudas plantadas, quantidade colhida e colheita por pé (mesmo filtro de roça do
+                        topo).
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => setTab('rocas')}>
+                      Editar roças
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-border/60">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-center whitespace-nowrap">Mudas plantadas</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">Qtd. colhida</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">Colheita por pé</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rocasPlantioDashboard.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={3}
+                              className="py-10 text-center text-sm text-muted-foreground"
+                            >
+                              {dashboardRocaId !== ''
+                                ? 'Nenhuma roça ativa corresponde ao filtro.'
+                                : 'Nenhuma roça ativa cadastrada.'}
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          rocasPlantioDashboard.map((rItem) => (
+                            <TableRow key={rItem.id}>
+                              <TableCell className="text-center tabular-nums">
+                                {rItem.quantidadeMudasPlantadas != null
+                                  ? String(rItem.quantidadeMudasPlantadas)
+                                  : '—'}
+                              </TableCell>
+                              <TableCell className="text-center tabular-nums">
+                                {formatQuantidadeColhida(rItem.quantidadeColhidaTotal)}
+                              </TableCell>
+                              <TableCell className="text-center tabular-nums">
+                                <span className="inline-flex flex-col items-center gap-0.5 mx-auto">
+                                  <span>{formatColhidaPorPe(rItem.quantidadeColhidaPorPe)}</span>
+                                  {rItem.origemDenominadorProdutividade === 'MUDAS_CADASTRO' &&
+                                    rItem.quantidadeColhidaPorPe != null && (
+                                      <span className="text-[10px] font-normal text-muted-foreground leading-tight">
+                                        ÷ mudas
+                                      </span>
+                                    )}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Colheita por pé: média (total colhido ÷ pés nos lançamentos, ou ÷ mudas se não houver
+                    pés informados).
+                  </p>
                 </div>
               </div>
 
@@ -2032,7 +2182,7 @@ export default function ControleRoca() {
                 </p>
               </div>
               <div className="rounded-xl border bg-card p-4">
-                <p className="text-sm text-muted-foreground">Ticket médio (mês)</p>
+                <p className="text-sm text-muted-foreground">Valor médio por caixa</p>
                 <p className="mt-2 text-2xl font-semibold">
                   {formatCurrency(metricasProducaoMensal.ticketMedio)}
                 </p>
@@ -2045,10 +2195,17 @@ export default function ControleRoca() {
               </div>
             </div>
 
-            <div className="rounded-xl border bg-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold text-foreground">Resumo das roças</h3>
-                <Button variant="ghost" size="sm" onClick={() => setTab('rocas')}>
+            <div className="rounded-xl border bg-card px-5 py-6 sm:px-6 sm:py-7">
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <h3 className="font-semibold text-foreground text-lg leading-snug pr-2">
+                  Resumo das roças
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setTab('rocas')}
+                >
                   Ver cadastro de roças
                 </Button>
               </div>
@@ -2404,13 +2561,19 @@ export default function ControleRoca() {
                       <TableHead>Nome</TableHead>
                       <TableHead>Localização</TableHead>
                       <TableHead>Produtor</TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden md:table-cell">
+                        Qtd. colhida
+                      </TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">
+                        Colhida / pé
+                      </TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredRocas.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           {searchRoca.trim()
                             ? 'Nenhum resultado para a busca.'
                             : 'Nenhuma roça cadastrada'}
@@ -2437,6 +2600,12 @@ export default function ControleRoca() {
                               {r.localizacao || '—'}
                             </TableCell>
                             <TableCell>{prod ? `${prod.codigo} – ${prod.nome_razao}` : r.produtorId}</TableCell>
+                            <TableCell className="text-right tabular-nums hidden md:table-cell">
+                              {formatQuantidadeColhida(r.quantidadeColhidaTotal)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums hidden lg:table-cell">
+                              {formatColhidaPorPe(r.quantidadeColhidaPorPe)}
+                            </TableCell>
                             <TableCell className="text-right">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -2463,6 +2632,9 @@ export default function ControleRoca() {
                                         localizacao: r.localizacao ?? '',
                                         produtorId: r.produtorId,
                                         ativo: r.ativo ?? true,
+                                        quantidadeMudasPlantadas: r.quantidadeMudasPlantadas ?? null,
+                                        dataPlantio: r.dataPlantio ?? null,
+                                        dataInicioColheita: r.dataInicioColheita ?? null,
                                       });
                                       setOpenEditRoca(true);
                                     }}
@@ -3742,6 +3914,9 @@ className={
                                     <TableHead>Produto</TableHead>
                                     <TableHead>Unidade</TableHead>
                                     <TableHead>Qtd</TableHead>
+                                    <TableHead className="text-right whitespace-nowrap">
+                                      Pés colh.
+                                    </TableHead>
                                     <TableHead className="text-right">Preço un.</TableHead>
                                     <TableHead className="text-right">Total</TableHead>
                                   </TableRow>
@@ -3753,6 +3928,11 @@ className={
                                         <TableCell className="font-medium">{item.produto}</TableCell>
                                         <TableCell>{item.unidade_medida || 'UN'}</TableCell>
                                         <TableCell>{item.quantidade}</TableCell>
+                                        <TableCell className="text-right tabular-nums">
+                                          {item.quantidadePesColhidos != null
+                                            ? item.quantidadePesColhidos
+                                            : '—'}
+                                        </TableCell>
                                         <TableCell className="text-right">
                                           {formatCurrency(item.preco_unitario ?? 0)}
                                         </TableCell>
@@ -3761,7 +3941,7 @@ className={
                                         </TableCell>
                                       </TableRow>
                                       <TableRow>
-                                        <TableCell colSpan={5} className="bg-muted/30 p-0">
+                                        <TableCell colSpan={6} className="bg-muted/30 p-0">
                                           <div className="px-4 py-3 border-t border-border/50">
                                             <div className="grid grid-cols-[auto_1fr_1fr] gap-x-6 gap-y-1 text-sm text-muted-foreground items-baseline">
                                               <span className="font-medium text-foreground/80">Meeiro</span>
@@ -4069,6 +4249,39 @@ className={
                                           Total: {formatCurrency(valorItem)}
                                         </span>
                                       </div>
+                                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                        <Label className="text-muted-foreground text-xs whitespace-nowrap">
+                                          Pés colhidos
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step={1}
+                                          placeholder="—"
+                                          className="w-24 h-9 text-right tabular-nums"
+                                          value={
+                                            item.quantidadePesColhidos != null
+                                              ? String(item.quantidadePesColhidos)
+                                              : ''
+                                          }
+                                          onChange={(e) => {
+                                            const raw = e.target.value;
+                                            setEditLancProdutos((prev) =>
+                                              prev.map((p, i) =>
+                                                i !== idx
+                                                  ? p
+                                                  : {
+                                                      ...p,
+                                                      quantidadePesColhidos:
+                                                        raw === ''
+                                                          ? null
+                                                          : Math.max(0, Math.floor(Number(raw)) || 0),
+                                                    },
+                                              ),
+                                            );
+                                          }}
+                                        />
+                                      </div>
                                     </div>
                                     <Button
                                       type="button"
@@ -4138,7 +4351,7 @@ className={
                           <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4">
                             <AddProdutoLanc
                               produtos={produtosDisponiveisEdit}
-                              onAdd={(produtoId, qtd, preco) => {
+                              onAdd={(produtoId, qtd, preco, quantidadePesColhidos) => {
                                 const p = produtosDisponiveisEdit.find(
                                   (x) => Number(x.id) === Number(produtoId)
                                 ) as { id: number; nome?: string } | undefined;
@@ -4147,12 +4360,17 @@ className={
                                   nome: m.nome,
                                   porcentagem: Number(m.porcentagem ?? 0),
                                 }));
+                                const pes =
+                                  quantidadePesColhidos != null
+                                    ? Math.max(0, Math.floor(Number(quantidadePesColhidos)))
+                                    : null;
                                 setEditLancProdutos((prev) => [
                                   ...prev,
                                   {
                                     produtoId: Number(produtoId),
                                     quantidade: qtd,
                                     preco_unitario: preco,
+                                    quantidadePesColhidos: pes,
                                     nome: p?.nome ?? '—',
                                     meeiros: meeirosDoProduto,
                                   },
@@ -4220,6 +4438,14 @@ className={
                                     produtoId: p.produtoId,
                                     quantidade: p.quantidade,
                                     preco_unitario: p.preco_unitario,
+                                    ...(p.quantidadePesColhidos != null
+                                      ? {
+                                          quantidadePesColhidos: Math.max(
+                                            0,
+                                            Math.floor(Number(p.quantidadePesColhidos)),
+                                          ),
+                                        }
+                                      : {}),
                                     meeiros: (p.meeiros ?? []).map((m) => ({
                                       meeiroId: m.meeiroId,
                                       porcentagem: Number(m.porcentagem ?? 0),
@@ -6962,7 +7188,16 @@ className={
         open={openRoca}
         onOpenChange={(open) => {
           setOpenRoca(open);
-          if (!open) setFormRoca({ produtorId: '', nome: '', codigo: '', localizacao: '' });
+          if (!open)
+            setFormRoca({
+              produtorId: 0,
+              nome: '',
+              codigo: '',
+              localizacao: '',
+              quantidadeMudasPlantadas: undefined,
+              dataPlantio: undefined,
+              dataInicioColheita: undefined,
+            });
         }}
       >
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -6989,7 +7224,7 @@ className={
                   <div>
                     <h3 className="text-sm font-semibold">Informações da roça</h3>
                     <p className="text-xs text-muted-foreground">
-                      Defina um código e um nome para identificar esta roça.
+                      Identificação, datas de plantio/colheita e mudas; a produtividade por pé vem dos lançamentos.
                     </p>
                   </div>
                 </div>
@@ -7060,6 +7295,70 @@ className={
                     rows={2}
                   />
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Sprout className="w-4 h-4 text-muted-foreground" />
+                      Quantidade de mudas plantadas
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Ex: 5000"
+                      value={
+                        formRoca.quantidadeMudasPlantadas != null
+                          ? String(formRoca.quantidadeMudasPlantadas)
+                          : ''
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setFormRoca((p) => ({
+                          ...p,
+                          quantidadeMudasPlantadas:
+                            v === '' ? undefined : Math.max(0, Math.floor(Number(v)) || 0),
+                        }));
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      Data do plantio
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      type="date"
+                      value={formRoca.dataPlantio ?? ''}
+                      onChange={(e) =>
+                        setFormRoca((p) => ({
+                          ...p,
+                          dataPlantio: e.target.value || undefined,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      Início da colheita
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      type="date"
+                      value={formRoca.dataInicioColheita ?? ''}
+                      onChange={(e) =>
+                        setFormRoca((p) => ({
+                          ...p,
+                          dataInicioColheita: e.target.value || undefined,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -7074,8 +7373,19 @@ className={
                     return;
                   }
                   createRoca.mutate({
-                    ...formRoca,
+                    nome: formRoca.nome.trim(),
+                    produtorId: formRoca.produtorId,
                     codigo: formRoca.codigo.trim() || undefined,
+                    localizacao: formRoca.localizacao?.trim() || undefined,
+                    ...(formRoca.quantidadeMudasPlantadas != null
+                      ? { quantidadeMudasPlantadas: formRoca.quantidadeMudasPlantadas }
+                      : {}),
+                    ...(formRoca.dataPlantio?.trim()
+                      ? { dataPlantio: formRoca.dataPlantio.trim() }
+                      : {}),
+                    ...(formRoca.dataInicioColheita?.trim()
+                      ? { dataInicioColheita: formRoca.dataInicioColheita.trim() }
+                      : {}),
                   });
                 }}
                 disabled={createRoca.isPending}
@@ -7144,6 +7454,85 @@ className={
 
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Sprout className="w-5 h-5 text-primary" />
+                        Produção e mudas
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border rounded-lg">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Mudas plantadas</Label>
+                          <p className="font-medium">
+                            {detailRoca.quantidadeMudasPlantadas != null
+                              ? String(detailRoca.quantidadeMudasPlantadas)
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Data do plantio</Label>
+                          <p className="font-medium">{formatDataIsoPt(detailRoca.dataPlantio ?? undefined)}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Início da colheita</Label>
+                          <p className="font-medium">
+                            {formatDataIsoPt(detailRoca.dataInicioColheita ?? undefined)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Total colhido (lançamentos)</Label>
+                          <p className="font-medium tabular-nums">
+                            {detailRoca.quantidadeColhidaTotal != null
+                              ? String(detailRoca.quantidadeColhidaTotal)
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Pés colhidos (soma nos lançamentos)</Label>
+                          <p className="font-medium tabular-nums">
+                            {detailRoca.quantidadePesColhidosTotal != null
+                              ? String(detailRoca.quantidadePesColhidosTotal)
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Quantidade colhida por pé</Label>
+                          <p className="font-medium tabular-nums">
+                            {formatColhidaPorPe(detailRoca.quantidadeColhidaPorPe)}
+                          </p>
+                          {detailRoca.quantidadeColhidaPorPe != null &&
+                          detailRoca.denominadorProdutividade != null &&
+                          detailRoca.origemDenominadorProdutividade != null ? (
+                            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                              {detailRoca.origemDenominadorProdutividade === 'LANCAMENTOS' ? (
+                                <>
+                                  <span className="font-medium text-foreground">Como foi calculado: </span>
+                                  total colhido ({formatQuantidadeColhida(detailRoca.quantidadeColhidaTotal)}) ÷{' '}
+                                  <span className="tabular-nums">{detailRoca.denominadorProdutividade}</span> pé(s)
+                                  somados nos itens dos lançamentos. Este número é uma{' '}
+                                  <span className="font-medium text-foreground">média por pé</span>, não a
+                                  quantidade de pés nem o total colhido.
+                                </>
+                              ) : (
+                                <>
+                                  <span className="font-medium text-foreground">Como foi calculado: </span>
+                                  total colhido ({formatQuantidadeColhida(detailRoca.quantidadeColhidaTotal)}) ÷{' '}
+                                  <span className="tabular-nums">{detailRoca.denominadorProdutividade}</span>{' '}
+                                  mudas cadastradas nesta roça — porque nos lançamentos não há “pés colhidos”
+                                  preenchidos. Se você informar pés em cada produto do lançamento, o sistema
+                                  passa a usar essa soma no lugar das mudas.
+                                </>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              É a média: total colhido ÷ pés nos lançamentos; se não houver pés informados,
+                              usa as mudas plantadas cadastradas nesta roça.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
                         <MapPin className="w-5 h-5 text-primary" />
                         Localização
                       </h3>
@@ -7193,6 +7582,9 @@ className={
                           localizacao: detailRoca.localizacao ?? '',
                           produtorId: detailRoca.produtorId,
                           ativo: detailRoca.ativo ?? true,
+                          quantidadeMudasPlantadas: detailRoca.quantidadeMudasPlantadas ?? null,
+                          dataPlantio: detailRoca.dataPlantio ?? null,
+                          dataInicioColheita: detailRoca.dataInicioColheita ?? null,
                         });
                         setOpenEditRoca(true);
                       }}
@@ -7314,6 +7706,58 @@ className={
                       }
                     />
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>Mudas plantadas (opcional)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="Ex: 5000"
+                        value={
+                          formEditRoca.quantidadeMudasPlantadas != null
+                            ? String(formEditRoca.quantidadeMudasPlantadas)
+                            : ''
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setFormEditRoca((p) => ({
+                            ...p,
+                            quantidadeMudasPlantadas:
+                              v === '' ? null : Math.max(0, Math.floor(Number(v)) || 0),
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>Data do plantio</Label>
+                      <Input
+                        type="date"
+                        value={formEditRoca.dataPlantio?.slice(0, 10) ?? ''}
+                        onChange={(e) =>
+                          setFormEditRoca((p) => ({
+                            ...p,
+                            dataPlantio: e.target.value ? e.target.value : null,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Início da colheita</Label>
+                      <Input
+                        type="date"
+                        value={formEditRoca.dataInicioColheita?.slice(0, 10) ?? ''}
+                        onChange={(e) =>
+                          setFormEditRoca((p) => ({
+                            ...p,
+                            dataInicioColheita: e.target.value ? e.target.value : null,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -7343,6 +7787,16 @@ className={
                           : localizacaoVal || undefined,
                       produtorId: formEditRoca.produtorId || undefined,
                       ativo: formEditRoca.ativo,
+                      quantidadeMudasPlantadas:
+                        formEditRoca.quantidadeMudasPlantadas == null
+                          ? null
+                          : Number(formEditRoca.quantidadeMudasPlantadas),
+                      dataPlantio: formEditRoca.dataPlantio?.trim()
+                        ? formEditRoca.dataPlantio
+                        : null,
+                      dataInicioColheita: formEditRoca.dataInicioColheita?.trim()
+                        ? formEditRoca.dataInicioColheita
+                        : null,
                     },
                   });
                 }}
@@ -8646,7 +9100,8 @@ className={
             <DialogHeader>
               <DialogTitle>Novo Lançamento de Produção</DialogTitle>
               <DialogDescription>
-                Registre a produção: selecione roça, data, meeiros e produtos com quantidade e preço.
+                Registre a produção: roça, data, meeiros e produtos (quantidade, preço e, se quiser,
+                pés colhidos por item para calcular produtividade).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-8 py-6 px-1 min-w-0">
@@ -8872,8 +9327,10 @@ className={
               </div>
 
               <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-5">
-                <Label className="text-sm font-medium">Produtos (quantidade, preço e % por meeiro)</Label>
-                <div className="rounded-md border border-border/40 bg-background p-4 space-y-4 max-h-[340px] overflow-y-auto min-h-[72px]">
+                <Label className="text-sm font-medium">
+                  Produtos (quantidade, preço, pés colhidos opcional e % por meeiro)
+                </Label>
+                <div className="rounded-md border border-border/40 bg-background p-4 space-y-4 max-h-[420px] overflow-y-auto min-h-[72px]">
                   {lancProdutos.map((item, idx) => {
                     const valorItem = item.quantidade * item.preco_unitario;
                     return (
@@ -8881,7 +9338,7 @@ className={
                         key={idx}
                         className="rounded-md border border-border/60 p-4 space-y-3 bg-background"
                       >
-                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 gap-x-6 items-center text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 gap-x-6 items-start text-sm">
                           <span className="font-medium truncate" title={String(item.nome ?? item.produtoId)}>
                             {item.nome ?? item.produtoId}
                           </span>
@@ -8900,6 +9357,39 @@ className={
                             >
                               Remover
                             </Button>
+                          </div>
+                          <div className="col-span-full flex flex-wrap items-center gap-2 text-sm pt-2 border-t border-border/40">
+                            <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                              Pés colhidos (opcional)
+                            </Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={1}
+                              placeholder="—"
+                              className="w-28 h-9 text-right tabular-nums"
+                              value={
+                                item.quantidadePesColhidos != null
+                                  ? String(item.quantidadePesColhidos)
+                                  : ''
+                              }
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                setLancProdutos((prev) =>
+                                  prev.map((p, i) =>
+                                    i !== idx
+                                      ? p
+                                      : {
+                                          ...p,
+                                          quantidadePesColhidos:
+                                            raw === ''
+                                              ? null
+                                              : Math.max(0, Math.floor(Number(raw)) || 0),
+                                        },
+                                  ),
+                                );
+                              }}
+                            />
                           </div>
                         </div>
                         {item.meeiros.length > 0 && (
@@ -9566,7 +10056,12 @@ function AddProdutoLanc({
   onProdutoPreselecionadoConsumido,
 }: {
   produtos: Array<{ id: number; nome?: string; unidade_medida?: string }>;
-  onAdd: (produtoId: number, quantidade: number, preco_unitario: number) => void;
+  onAdd: (
+    produtoId: number,
+    quantidade: number,
+    preco_unitario: number,
+    quantidadePesColhidos?: number | null,
+  ) => void;
   disabled: boolean;
   produtoPreselecionado?: { id: number; nome: string } | null;
   onProdutoPreselecionadoConsumido?: () => void;
@@ -9574,6 +10069,7 @@ function AddProdutoLanc({
   const [produtoId, setProdutoId] = useState<number | ''>('');
   const [qtd, setQtd] = useState('');
   const [preco, setPreco] = useState('');
+  const [pesColhidos, setPesColhidos] = useState('');
   const [produtoPopoverOpen, setProdutoPopoverOpen] = useState(false);
   const [produtoSearchTerm, setProdutoSearchTerm] = useState('');
 
@@ -9662,9 +10158,9 @@ function AddProdutoLanc({
           </PopoverContent>
         </Popover>
       </div>
-      {/* Qtd e Preço un.: mesmo grid que Data + Roça */}
-      <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-5 items-end">
-        <div className="space-y-2 min-w-0 w-full sm:w-[180px]">
+      {/* Qtd, preço, pés colhidos (opc.) e adicionar */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="space-y-2 min-w-0 w-full sm:w-[160px] shrink-0">
           <Label>Qtd</Label>
           <Input
             type="number"
@@ -9677,7 +10173,7 @@ function AddProdutoLanc({
             disabled={disabled}
           />
         </div>
-        <div className="space-y-2 min-w-0 flex-1">
+        <div className="space-y-2 min-w-0 flex-1 sm:min-w-[140px]">
           <Label>Preço un.</Label>
           <Input
             type="number"
@@ -9690,10 +10186,23 @@ function AddProdutoLanc({
             disabled={disabled}
           />
         </div>
+        <div className="space-y-2 w-full sm:w-[130px] shrink-0">
+          <Label className="text-muted-foreground">Pés colhidos</Label>
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            placeholder="Opcional"
+            value={pesColhidos}
+            onChange={(e) => setPesColhidos(e.target.value)}
+            className="w-full min-h-11 tabular-nums text-right"
+            disabled={disabled}
+          />
+        </div>
         <Button
           type="button"
           size="default"
-          className="min-h-11 px-6"
+          className="min-h-11 px-6 w-full sm:w-auto shrink-0"
           onClick={() => {
             if (!produtoId) {
               toast.error('Selecione um produto');
@@ -9717,10 +10226,21 @@ function AddProdutoLanc({
               toast.error('Preço não pode ser negativo');
               return;
             }
-            onAdd(produtoId, q, p);
+            let pes: number | null = null;
+            const pesRaw = pesColhidos?.trim() ?? '';
+            if (pesRaw !== '') {
+              const n = Math.floor(Number(pesRaw.replace(',', '.')));
+              if (Number.isNaN(n) || n < 0) {
+                toast.error('Pés colhidos deve ser um número inteiro ≥ 0');
+                return;
+              }
+              pes = n;
+            }
+            onAdd(produtoId, q, p, pes);
             setProdutoId('');
             setQtd('');
             setPreco('');
+            setPesColhidos('');
           }}
           disabled={disabled}
         >
