@@ -284,6 +284,8 @@ export interface LancamentoProducaoRoca {
   data: string;
   produtorId: number;
   rocaId: number;
+  /** Nome da roça conforme cadastro (preenchido pela API em listagem/detalhe) */
+  rocaNome?: string | null;
   total_geral: number;
   ativo?: boolean;
   /** Itens do lançamento (produto, quantidade) — preenchido pela API ao listar */

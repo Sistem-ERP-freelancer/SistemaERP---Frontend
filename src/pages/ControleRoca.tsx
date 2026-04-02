@@ -133,12 +133,27 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import { toast } from 'sonner';
+
+/** Cores estáveis por roça no gráfico de lançamentos por período (ordem das séries no legenda). */
+const CORES_GRAFICO_ROCA_DASHBOARD = [
+  '#2563eb',
+  '#ec4899',
+  '#16a34a',
+  '#f59e0b',
+  '#8b5cf6',
+  '#06b6d4',
+  '#ef4444',
+  '#64748b',
+  '#d946ef',
+  '#0d9488',
+];
 
 /** Pendência em aberto: ainda há empréstimo em aberto, ou valor líquido sem pagamento quitado. */
 function isMeeiroPagamentoEmAberto(m: ResumoPagamentoMeeiro): boolean {
@@ -929,7 +944,6 @@ export default function ControleRoca() {
       produtoId: number;
       quantidade: number;
       preco_unitario: number;
-      quantidadePesColhidos?: number | null;
       nome?: string;
       meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
     }[]
@@ -962,8 +976,6 @@ export default function ControleRoca() {
         produtoId: item.produtoId ?? 0,
         quantidade: item.quantidade,
         preco_unitario: item.preco_unitario ?? 0,
-        quantidadePesColhidos:
-          item.quantidadePesColhidos != null ? Number(item.quantidadePesColhidos) : null,
         nome: item.produto,
         meeiros: (item.meeiros ?? []).map((m) => ({
           meeiroId: m.meeiroId,
@@ -1030,7 +1042,6 @@ export default function ControleRoca() {
       produtoId: number;
       quantidade: number;
       preco_unitario: number;
-      quantidadePesColhidos?: number | null;
       nome?: string;
       meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
     }[]
@@ -1184,7 +1195,7 @@ export default function ControleRoca() {
     if (search) {
       list = list.filter((l) => {
         const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
-        const rocaNome = (roca?.nome ?? '').toLowerCase();
+        const rocaNome = (roca?.nome ?? l.rocaNome ?? '').toLowerCase();
         const itens = l.itens ?? [];
         const produtosStr = itens.map((i) => i.produto).join(' ').toLowerCase();
         const meeirosStr = itens
@@ -1349,12 +1360,7 @@ export default function ControleRoca() {
     );
   };
 
-  const handleAddProdutoLanc = (
-    produtoId: number,
-    qtd: number,
-    preco: number,
-    quantidadePesColhidos?: number | null,
-  ) => {
+  const handleAddProdutoLanc = (produtoId: number, qtd: number, preco: number) => {
     const p = produtosDisponiveisLancamento.find(
       (x) => Number(x.id) === Number(produtoId)
     ) as { id: number; nome?: string; unidade_medida?: string } | undefined;
@@ -1367,17 +1373,12 @@ export default function ControleRoca() {
       nome: m.nome,
       porcentagem: m.porcentagem_padrao,
     }));
-    const pes =
-      quantidadePesColhidos != null
-        ? Math.max(0, Math.floor(Number(quantidadePesColhidos)))
-        : null;
     setLancProdutos((prev) => [
       ...prev,
       {
         produtoId: Number(p.id),
         quantidade: qtd,
         preco_unitario: preco,
-        quantidadePesColhidos: pes,
         nome: p.nome ?? '—',
         meeiros: meeirosDoProduto,
       },
@@ -1411,14 +1412,6 @@ export default function ControleRoca() {
         produtoId: p.produtoId,
         quantidade: p.quantidade,
         preco_unitario: p.preco_unitario,
-        ...(p.quantidadePesColhidos != null
-          ? {
-              quantidadePesColhidos: Math.max(
-                0,
-                Math.floor(Number(p.quantidadePesColhidos)),
-              ),
-            }
-          : {}),
         meeiros: p.meeiros.map((m) => ({
           meeiroId: m.meeiroId,
           porcentagem: Number(m.porcentagem ?? 0),
@@ -1723,6 +1716,16 @@ export default function ControleRoca() {
         : lancamentosPorRocaDashboard.filter((l) => String(l.data ?? '').startsWith(dashboardMes)),
     [dashboardMes, lancamentosPorRocaDashboard]
   );
+  /** Nome da roça vindo da API (útil quando o cadastro não está nas listas do filtro). */
+  const rocaNomePorIdDosLancamentos = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const l of lancamentosDashboardFiltrados) {
+      const id = Number(l.rocaId);
+      const raw = l.rocaNome?.trim();
+      if (raw && !m.has(id)) m.set(id, raw);
+    }
+    return m;
+  }, [lancamentosDashboardFiltrados]);
   const somaQuantidadeDashboard = useMemo(
     () =>
       lancamentosDashboardFiltrados.reduce((acc, l) => {
@@ -1738,10 +1741,10 @@ export default function ControleRoca() {
   );
   const valorMedioDashboard = useMemo(
     () =>
-      lancamentosDashboardFiltrados.length > 0
-        ? valorTotalDashboardParcial / lancamentosDashboardFiltrados.length
+      somaQuantidadeDashboard > 0
+        ? valorTotalDashboardParcial / somaQuantidadeDashboard
         : 0,
-    [lancamentosDashboardFiltrados.length, valorTotalDashboardParcial]
+    [somaQuantidadeDashboard, valorTotalDashboardParcial]
   );
   const mesReferenciaMetricas = useMemo(() => {
     if (dashboardMes !== 'all') return dashboardMes;
@@ -1761,16 +1764,10 @@ export default function ControleRoca() {
       return acc + qtd;
     }, 0);
     const valor = lancamentosMesReferencia.reduce((acc, l) => acc + (Number(l.total_geral) || 0), 0);
-    const ticketMedio = lancamentosMesReferencia.length > 0 ? valor / lancamentosMesReferencia.length : 0;
+    /** Valor médio por unidade de produção (total R$ ÷ quantidade somada nos itens). */
+    const ticketMedio = quantidade > 0 ? valor / quantidade : 0;
     return { quantidade, valor, ticketMedio, totalLancamentos: lancamentosMesReferencia.length };
   }, [lancamentosMesReferencia]);
-  const ultimosLancamentosDashboard = useMemo(
-    () =>
-      [...lancamentosDashboardFiltrados]
-        .sort((a, b) => String(b.data ?? '').localeCompare(String(a.data ?? '')))
-        .slice(0, 5),
-    [lancamentosDashboardFiltrados]
-  );
   const resumoRocasDashboard = useMemo(() => {
     const mapa = new Map<
       number,
@@ -1803,56 +1800,117 @@ export default function ControleRoca() {
         return {
           ...item,
           codigo: roca?.codigo ?? `R${item.rocaId}`,
-          nome: roca?.nome ?? `Roça ${item.rocaId}`,
+          nome:
+            roca?.nome ??
+            rocaNomePorIdDosLancamentos.get(item.rocaId) ??
+            `Roça ${item.rocaId}`,
           produtor: produtor?.nome_razao ?? '—',
         };
       })
       .sort((a, b) => b.valor - a.valor)
       .slice(0, 8);
-  }, [lancamentosDashboardFiltrados, produtores, rocas, rocasParaFiltroLancamento, rocasParaLancamento]);
-  const producaoMensalDashboard = useMemo(() => {
-    if (dashboardMes !== 'all') {
-      const mapaDia = new Map<string, { periodo: string; quantidade: number; valor: number }>();
-      lancamentosDashboardFiltrados.forEach((l) => {
-        const data = String(l.data ?? '');
-        const chave = data.length >= 10 ? data.slice(0, 10) : 'sem-data';
-        const atual = mapaDia.get(chave) ?? { periodo: chave, quantidade: 0, valor: 0 };
-        const qtd = (l.itens ?? []).reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
-        atual.quantidade += qtd;
-        atual.valor += Number(l.total_geral) || 0;
-        mapaDia.set(chave, atual);
-      });
+  }, [
+    lancamentosDashboardFiltrados,
+    produtores,
+    rocas,
+    rocasParaFiltroLancamento,
+    rocasParaLancamento,
+    rocaNomePorIdDosLancamentos,
+  ]);
+  /** Gráfico: quantidade de lançamentos por roça em cada período (mês ou dia). */
+  const graficoLancamentosPorRocaDashboard = useMemo(() => {
+    const src = lancamentosDashboardFiltrados;
+    type Row = Record<string, string | number>;
+    type Serie = { dataKey: string; name: string; fill: string };
 
-      return Array.from(mapaDia.values())
-        .sort((a, b) => a.periodo.localeCompare(b.periodo))
-        .map((item) => ({
-          ...item,
-          label:
-            item.periodo === 'sem-data'
-              ? 'Sem data'
-              : `${item.periodo.slice(8, 10)}/${item.periodo.slice(5, 7)}`,
-        }));
+    if (src.length === 0) {
+      return { data: [] as Row[], series: [] as Serie[] };
     }
 
-    const mapa = new Map<string, { periodo: string; quantidade: number; valor: number }>();
-    lancamentosDashboardFiltrados.forEach((l) => {
-      const data = String(l.data ?? '');
-      const chave = data.length >= 7 ? data.slice(0, 7) : 'sem-data';
-      const atual = mapa.get(chave) ?? { periodo: chave, quantidade: 0, valor: 0 };
-      const qtd = (l.itens ?? []).reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
-      atual.quantidade += qtd;
-      atual.valor += Number(l.total_geral) || 0;
-      mapa.set(chave, atual);
+    const bucketToContagemPorRoca = new Map<string, Map<number, number>>();
+
+    const incrementar = (bucket: string, rocaId: number) => {
+      if (!Number.isFinite(rocaId)) return;
+      let porRoca = bucketToContagemPorRoca.get(bucket);
+      if (!porRoca) {
+        porRoca = new Map();
+        bucketToContagemPorRoca.set(bucket, porRoca);
+      }
+      porRoca.set(rocaId, (porRoca.get(rocaId) ?? 0) + 1);
+    };
+
+    src.forEach((l) => {
+      const dataStr = String(l.data ?? '');
+      const rocaId = Number(l.rocaId);
+      if (dashboardMes !== 'all') {
+        const chave = dataStr.length >= 10 ? dataStr.slice(0, 10) : 'sem-data';
+        incrementar(chave, rocaId);
+      } else {
+        const chave = dataStr.length >= 7 ? dataStr.slice(0, 7) : 'sem-data';
+        incrementar(chave, rocaId);
+      }
     });
 
-    return Array.from(mapa.values())
-      .sort((a, b) => a.periodo.localeCompare(b.periodo))
-      .slice(-6)
-      .map((item) => ({
-        ...item,
-        label: item.periodo === 'sem-data' ? 'Sem data' : item.periodo.slice(5, 7) + '/' + item.periodo.slice(0, 4),
-      }));
-  }, [dashboardMes, lancamentosDashboardFiltrados]);
+    let periodos = Array.from(bucketToContagemPorRoca.keys()).sort((a, b) => a.localeCompare(b));
+    if (dashboardMes === 'all') {
+      periodos = periodos.slice(-6);
+    }
+
+    const rocaIdsNoGrafico = new Set<number>();
+    periodos.forEach((p) => {
+      bucketToContagemPorRoca.get(p)?.forEach((_, id) => rocaIdsNoGrafico.add(id));
+    });
+
+    const resolverRoca = (id: number) =>
+      rocasParaFiltroLancamento.find((r) => r.id === id) ||
+      rocas.find((r) => r.id === id) ||
+      rocasParaLancamento.find((r) => r.id === id);
+
+    const rocaIdsOrdenados = Array.from(rocaIdsNoGrafico).sort((a, b) => {
+      const ra = resolverRoca(a);
+      const rb = resolverRoca(b);
+      const labelA = rocaNomePorIdDosLancamentos.get(a) ?? ra?.nome ?? ra?.codigo ?? String(a);
+      const labelB = rocaNomePorIdDosLancamentos.get(b) ?? rb?.nome ?? rb?.codigo ?? String(b);
+      return String(labelA).localeCompare(String(labelB), 'pt-BR', { sensitivity: 'base' });
+    });
+
+    const series: Serie[] = rocaIdsOrdenados.map((id, i) => {
+      const r = resolverRoca(id);
+      const nomeRoca =
+        rocaNomePorIdDosLancamentos.get(id) ?? r?.nome ?? `Roça ${id}`;
+      const nome = (r?.codigo ? `${r.codigo} – ` : '') + nomeRoca;
+      return {
+        dataKey: `r_${id}`,
+        name: nome,
+        fill: CORES_GRAFICO_ROCA_DASHBOARD[i % CORES_GRAFICO_ROCA_DASHBOARD.length],
+      };
+    });
+
+    const data: Row[] = periodos.map((periodo) => {
+      const porRoca = bucketToContagemPorRoca.get(periodo) ?? new Map();
+      const row: Row = {
+        label:
+          periodo === 'sem-data'
+            ? 'Sem data'
+            : dashboardMes !== 'all'
+              ? `${periodo.slice(8, 10)}/${periodo.slice(5, 7)}`
+              : `${periodo.slice(5, 7)}/${periodo.slice(0, 4)}`,
+      };
+      rocaIdsOrdenados.forEach((id) => {
+        row[`r_${id}`] = porRoca.get(id) ?? 0;
+      });
+      return row;
+    });
+
+    return { data, series };
+  }, [
+    dashboardMes,
+    lancamentosDashboardFiltrados,
+    rocas,
+    rocasParaFiltroLancamento,
+    rocasParaLancamento,
+    rocaNomePorIdDosLancamentos,
+  ]);
 
   /** Roças com plantio/produtividade para o dashboard (filtra pela roça do topo, se houver). */
   const rocasPlantioDashboard = useMemo(() => {
@@ -1977,8 +2035,8 @@ export default function ControleRoca() {
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-3">
-              <div className="rounded-xl border bg-card px-5 py-6 sm:px-6 sm:py-7 xl:col-span-2">
+            <div className="grid gap-4">
+              <div className="rounded-xl border bg-card px-5 py-6 sm:px-6 sm:py-7">
                 <div className="mb-5 flex items-center justify-between gap-3">
                   <div className="space-y-2 pr-2">
                     <h3 className="font-semibold text-foreground text-lg leading-snug">
@@ -2020,8 +2078,8 @@ export default function ControleRoca() {
                         Plantio, colheita e produtividade
                       </h3>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        Mudas plantadas, quantidade colhida e colheita por pé (mesmo filtro de roça do
-                        topo).
+                        Datas de plantio e início da colheita, mudas plantadas, quantidade colhida e
+                        colheita por pé (mesmo filtro de roça do topo).
                       </p>
                     </div>
                     <Button variant="outline" size="sm" className="shrink-0" onClick={() => setTab('rocas')}>
@@ -2032,6 +2090,13 @@ export default function ControleRoca() {
                     <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
+                          <TableHead className="whitespace-nowrap min-w-[140px]">Roça</TableHead>
+                          <TableHead className="text-center whitespace-nowrap min-w-[100px]">
+                            Data do plantio
+                          </TableHead>
+                          <TableHead className="text-center whitespace-nowrap min-w-[100px]">
+                            Início da colheita
+                          </TableHead>
                           <TableHead className="text-center whitespace-nowrap">Mudas plantadas</TableHead>
                           <TableHead className="text-center whitespace-nowrap">Qtd. colhida</TableHead>
                           <TableHead className="text-center whitespace-nowrap">Colheita por pé</TableHead>
@@ -2041,7 +2106,7 @@ export default function ControleRoca() {
                         {rocasPlantioDashboard.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={3}
+                              colSpan={6}
                               className="py-10 text-center text-sm text-muted-foreground"
                             >
                               {dashboardRocaId !== ''
@@ -2052,6 +2117,16 @@ export default function ControleRoca() {
                         ) : (
                           rocasPlantioDashboard.map((rItem) => (
                             <TableRow key={rItem.id}>
+                              <TableCell className="font-medium max-w-[280px]">
+                                {(rItem.codigo ? `${rItem.codigo} – ` : '') +
+                                  (rItem.nome ?? `Roça ${rItem.id}`)}
+                              </TableCell>
+                              <TableCell className="text-center whitespace-nowrap tabular-nums text-sm">
+                                {formatDataIsoPt(rItem.dataPlantio ?? undefined)}
+                              </TableCell>
+                              <TableCell className="text-center whitespace-nowrap tabular-nums text-sm">
+                                {formatDataIsoPt(rItem.dataInicioColheita ?? undefined)}
+                              </TableCell>
                               <TableCell className="text-center tabular-nums">
                                 {rItem.quantidadeMudasPlantadas != null
                                   ? String(rItem.quantidadeMudasPlantadas)
@@ -2083,31 +2158,6 @@ export default function ControleRoca() {
                   </p>
                 </div>
               </div>
-
-              <div className="rounded-xl border bg-card p-4">
-                <h3 className="font-semibold text-foreground">Ações rápidas</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Acesse rapidamente os principais cadastros.
-                </p>
-                <div className="mt-4 grid gap-2">
-                  <Button variant="gradient" className="justify-start" onClick={() => setTab('lancamentos')}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Novo Lançamento
-                  </Button>
-                  <Button variant="outline" className="justify-start" onClick={() => setTab('produtores')}>
-                    <User className="mr-2 h-4 w-4" />
-                    Ir para Produtores
-                  </Button>
-                  <Button variant="outline" className="justify-start" onClick={() => setTab('rocas')}>
-                    <MapPin className="mr-2 h-4 w-4" />
-                    Ir para Roças
-                  </Button>
-                  <Button variant="outline" className="justify-start" onClick={() => setTab('meeiros')}>
-                    <Users className="mr-2 h-4 w-4" />
-                    Ir para Meeiros
-                  </Button>
-                </div>
-              </div>
             </div>
 
             <div className="rounded-xl border bg-card p-4">
@@ -2116,9 +2166,9 @@ export default function ControleRoca() {
                   <h3 className="font-semibold text-foreground">Produção por período</h3>
                   <p className="text-sm text-muted-foreground">
                     {dashboardMes === 'all'
-                      ? 'Últimos 6 meses com quantidade total e valor consolidado.'
-                      : 'Evolução diária do mês selecionado.'}{' '}
-                    Roça, mês, resumo das roças e últimos lançamentos seguem estes filtros.
+                      ? 'Últimos 6 meses: quantidade de lançamentos por roça.'
+                      : 'Por dia no mês selecionado: quantidade de lançamentos por roça.'}{' '}
+                    Mesmos filtros de roça do topo e o resumo das roças abaixo.
                   </p>
                 </div>
                 <div className="w-full md:w-[220px] md:shrink-0">
@@ -2137,25 +2187,34 @@ export default function ControleRoca() {
                   </Select>
                 </div>
               </div>
-              {producaoMensalDashboard.length === 0 ? (
+              {graficoLancamentosPorRocaDashboard.data.length === 0 ||
+              graficoLancamentosPorRocaDashboard.series.length === 0 ? (
                 <div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
                   Sem dados para exibir no gráfico.
                 </div>
               ) : (
-                <div className="h-72 w-full">
+                <div className="h-80 w-full min-h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={producaoMensalDashboard}>
+                    <BarChart data={graficoLancamentosPorRocaDashboard.data}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" />
-                      <YAxis />
+                      <YAxis allowDecimals={false} tickFormatter={(v) => Number(v).toLocaleString('pt-BR')} />
                       <Tooltip
-                        formatter={(value: number, name: string) => {
-                          if (name === 'valor') return [formatCurrency(Number(value) || 0), 'Valor total'];
-                          return [Number(value).toLocaleString('pt-BR'), 'Quantidade'];
-                        }}
+                        formatter={(value: number | string, name: string) => [
+                          `${Number(value).toLocaleString('pt-BR')} lançamento(s)`,
+                          name,
+                        ]}
                       />
-                      <Bar dataKey="quantidade" name="quantidade" fill="#2563eb" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="valor" name="valor" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {graficoLancamentosPorRocaDashboard.series.map((s) => (
+                        <Bar
+                          key={s.dataKey}
+                          dataKey={s.dataKey}
+                          name={s.name}
+                          fill={s.fill}
+                          radius={[4, 4, 0, 0]}
+                        />
+                      ))}
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -2249,59 +2308,6 @@ export default function ControleRoca() {
                   </TableBody>
                 </Table>
               </div>
-            </div>
-
-            <div className="rounded-xl border bg-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold text-foreground">Ultimos lançamentos</h3>
-                <Button variant="ghost" size="sm" onClick={() => setTab('lancamentos')}>
-                  Ver todos
-                </Button>
-              </div>
-              {loadingLancamentos ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Roça</TableHead>
-                        <TableHead>Produtos</TableHead>
-                        <TableHead className="text-right">Valor total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ultimosLancamentosDashboard.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                            Nenhum lançamento encontrado.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        ultimosLancamentosDashboard.map((l) => {
-                          const roca = rocasParaLancamento.find((r) => r.id === l.rocaId);
-                          const produtos = (l.itens ?? []).map((item) => item.produto).filter(Boolean);
-                          return (
-                            <TableRow key={l.id}>
-                              <TableCell>{formatDate(l.data)}</TableCell>
-                              <TableCell>{roca?.nome ?? `ID ${l.rocaId}`}</TableCell>
-                              <TableCell className="max-w-[320px] truncate">
-                                {produtos.length ? produtos.join(', ') : '—'}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(Number(l.total_geral) || 0)}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
             </div>
           </TabsContent>
 
@@ -3666,8 +3672,13 @@ className={
                               />
                             </TableCell>
                             <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible" title={roca ? roca.nome : String(l.rocaId)}>
-                              <span className="block truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip">{roca ? roca.nome : l.rocaId}</span>
+                            <TableCell
+                              className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible"
+                              title={roca?.nome ?? l.rocaNome?.trim() ?? String(l.rocaId)}
+                            >
+                              <span className="block truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip">
+                                {roca?.nome ?? l.rocaNome?.trim() ?? l.rocaId}
+                              </span>
                             </TableCell>
                             <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
                               {item ? (
@@ -3874,6 +3885,7 @@ className={
                               <Label className="text-sm text-muted-foreground">Roça</Label>
                               <p className="font-medium text-base">
                                 {rocasParaLancamento.find((r) => r.id === detalheLancamento.rocaId)?.nome ??
+                                  detalheLancamento.rocaNome?.trim() ??
                                   detalheLancamento.rocaId}
                               </p>
                             </div>
@@ -3915,7 +3927,7 @@ className={
                                     <TableHead>Unidade</TableHead>
                                     <TableHead>Qtd</TableHead>
                                     <TableHead className="text-right whitespace-nowrap">
-                                      Pés colh.
+                                      Pés (1/lanç.)
                                     </TableHead>
                                     <TableHead className="text-right">Preço un.</TableHead>
                                     <TableHead className="text-right">Total</TableHead>
@@ -4249,39 +4261,6 @@ className={
                                           Total: {formatCurrency(valorItem)}
                                         </span>
                                       </div>
-                                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                        <Label className="text-muted-foreground text-xs whitespace-nowrap">
-                                          Pés colhidos
-                                        </Label>
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          step={1}
-                                          placeholder="—"
-                                          className="w-24 h-9 text-right tabular-nums"
-                                          value={
-                                            item.quantidadePesColhidos != null
-                                              ? String(item.quantidadePesColhidos)
-                                              : ''
-                                          }
-                                          onChange={(e) => {
-                                            const raw = e.target.value;
-                                            setEditLancProdutos((prev) =>
-                                              prev.map((p, i) =>
-                                                i !== idx
-                                                  ? p
-                                                  : {
-                                                      ...p,
-                                                      quantidadePesColhidos:
-                                                        raw === ''
-                                                          ? null
-                                                          : Math.max(0, Math.floor(Number(raw)) || 0),
-                                                    },
-                                              ),
-                                            );
-                                          }}
-                                        />
-                                      </div>
                                     </div>
                                     <Button
                                       type="button"
@@ -4351,7 +4330,7 @@ className={
                           <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4">
                             <AddProdutoLanc
                               produtos={produtosDisponiveisEdit}
-                              onAdd={(produtoId, qtd, preco, quantidadePesColhidos) => {
+                              onAdd={(produtoId, qtd, preco) => {
                                 const p = produtosDisponiveisEdit.find(
                                   (x) => Number(x.id) === Number(produtoId)
                                 ) as { id: number; nome?: string } | undefined;
@@ -4360,17 +4339,12 @@ className={
                                   nome: m.nome,
                                   porcentagem: Number(m.porcentagem ?? 0),
                                 }));
-                                const pes =
-                                  quantidadePesColhidos != null
-                                    ? Math.max(0, Math.floor(Number(quantidadePesColhidos)))
-                                    : null;
                                 setEditLancProdutos((prev) => [
                                   ...prev,
                                   {
                                     produtoId: Number(produtoId),
                                     quantidade: qtd,
                                     preco_unitario: preco,
-                                    quantidadePesColhidos: pes,
                                     nome: p?.nome ?? '—',
                                     meeiros: meeirosDoProduto,
                                   },
@@ -4438,14 +4412,6 @@ className={
                                     produtoId: p.produtoId,
                                     quantidade: p.quantidade,
                                     preco_unitario: p.preco_unitario,
-                                    ...(p.quantidadePesColhidos != null
-                                      ? {
-                                          quantidadePesColhidos: Math.max(
-                                            0,
-                                            Math.floor(Number(p.quantidadePesColhidos)),
-                                          ),
-                                        }
-                                      : {}),
                                     meeiros: (p.meeiros ?? []).map((m) => ({
                                       meeiroId: m.meeiroId,
                                       porcentagem: Number(m.porcentagem ?? 0),
@@ -9328,7 +9294,7 @@ className={
 
               <div className="space-y-3 rounded-lg border border-border/60 bg-muted/10 p-5">
                 <Label className="text-sm font-medium">
-                  Produtos (quantidade, preço, pés colhidos opcional e % por meeiro)
+                  Produtos (quantidade, preço e % por meeiro — cada produto gera um lançamento com 1 pé colhido)
                 </Label>
                 <div className="rounded-md border border-border/40 bg-background p-4 space-y-4 max-h-[420px] overflow-y-auto min-h-[72px]">
                   {lancProdutos.map((item, idx) => {
@@ -9357,39 +9323,6 @@ className={
                             >
                               Remover
                             </Button>
-                          </div>
-                          <div className="col-span-full flex flex-wrap items-center gap-2 text-sm pt-2 border-t border-border/40">
-                            <Label className="text-xs text-muted-foreground whitespace-nowrap">
-                              Pés colhidos (opcional)
-                            </Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={1}
-                              placeholder="—"
-                              className="w-28 h-9 text-right tabular-nums"
-                              value={
-                                item.quantidadePesColhidos != null
-                                  ? String(item.quantidadePesColhidos)
-                                  : ''
-                              }
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                setLancProdutos((prev) =>
-                                  prev.map((p, i) =>
-                                    i !== idx
-                                      ? p
-                                      : {
-                                          ...p,
-                                          quantidadePesColhidos:
-                                            raw === ''
-                                              ? null
-                                              : Math.max(0, Math.floor(Number(raw)) || 0),
-                                        },
-                                  ),
-                                );
-                              }}
-                            />
                           </div>
                         </div>
                         {item.meeiros.length > 0 && (
@@ -10056,12 +9989,7 @@ function AddProdutoLanc({
   onProdutoPreselecionadoConsumido,
 }: {
   produtos: Array<{ id: number; nome?: string; unidade_medida?: string }>;
-  onAdd: (
-    produtoId: number,
-    quantidade: number,
-    preco_unitario: number,
-    quantidadePesColhidos?: number | null,
-  ) => void;
+  onAdd: (produtoId: number, quantidade: number, preco_unitario: number) => void;
   disabled: boolean;
   produtoPreselecionado?: { id: number; nome: string } | null;
   onProdutoPreselecionadoConsumido?: () => void;
@@ -10069,7 +9997,6 @@ function AddProdutoLanc({
   const [produtoId, setProdutoId] = useState<number | ''>('');
   const [qtd, setQtd] = useState('');
   const [preco, setPreco] = useState('');
-  const [pesColhidos, setPesColhidos] = useState('');
   const [produtoPopoverOpen, setProdutoPopoverOpen] = useState(false);
   const [produtoSearchTerm, setProdutoSearchTerm] = useState('');
 
@@ -10158,7 +10085,7 @@ function AddProdutoLanc({
           </PopoverContent>
         </Popover>
       </div>
-      {/* Qtd, preço, pés colhidos (opc.) e adicionar */}
+      {/* Qtd, preço e adicionar (1 pé colhido por lançamento é aplicado no servidor) */}
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="space-y-2 min-w-0 w-full sm:w-[160px] shrink-0">
           <Label>Qtd</Label>
@@ -10183,19 +10110,6 @@ function AddProdutoLanc({
             value={preco}
             onChange={(e) => setPreco(e.target.value)}
             className="w-full min-h-11"
-            disabled={disabled}
-          />
-        </div>
-        <div className="space-y-2 w-full sm:w-[130px] shrink-0">
-          <Label className="text-muted-foreground">Pés colhidos</Label>
-          <Input
-            type="number"
-            min={0}
-            step={1}
-            placeholder="Opcional"
-            value={pesColhidos}
-            onChange={(e) => setPesColhidos(e.target.value)}
-            className="w-full min-h-11 tabular-nums text-right"
             disabled={disabled}
           />
         </div>
@@ -10226,21 +10140,10 @@ function AddProdutoLanc({
               toast.error('Preço não pode ser negativo');
               return;
             }
-            let pes: number | null = null;
-            const pesRaw = pesColhidos?.trim() ?? '';
-            if (pesRaw !== '') {
-              const n = Math.floor(Number(pesRaw.replace(',', '.')));
-              if (Number.isNaN(n) || n < 0) {
-                toast.error('Pés colhidos deve ser um número inteiro ≥ 0');
-                return;
-              }
-              pes = n;
-            }
-            onAdd(produtoId, q, p, pes);
+            onAdd(produtoId, q, p);
             setProdutoId('');
             setQtd('');
             setPreco('');
-            setPesColhidos('');
           }}
           disabled={disabled}
         >
