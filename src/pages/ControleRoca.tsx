@@ -1766,7 +1766,16 @@ export default function ControleRoca() {
     const valor = lancamentosMesReferencia.reduce((acc, l) => acc + (Number(l.total_geral) || 0), 0);
     /** Valor médio por unidade de produção (total R$ ÷ quantidade somada nos itens). */
     const ticketMedio = quantidade > 0 ? valor / quantidade : 0;
-    return { quantidade, valor, ticketMedio, totalLancamentos: lancamentosMesReferencia.length };
+    const totalLancamentos = lancamentosMesReferencia.length;
+    const mediaCaixasPorLancamento =
+      totalLancamentos > 0 ? quantidade / totalLancamentos : 0;
+    return {
+      quantidade,
+      valor,
+      ticketMedio,
+      totalLancamentos,
+      mediaCaixasPorLancamento,
+    };
   }, [lancamentosMesReferencia]);
   const resumoRocasDashboard = useMemo(() => {
     const mapa = new Map<
@@ -1817,7 +1826,7 @@ export default function ControleRoca() {
     rocasParaLancamento,
     rocaNomePorIdDosLancamentos,
   ]);
-  /** Gráfico: quantidade de lançamentos por roça em cada período (mês ou dia). */
+  /** Gráfico: soma das quantidades (caixas) por roça em cada período (mês ou dia). */
   const graficoLancamentosPorRocaDashboard = useMemo(() => {
     const src = lancamentosDashboardFiltrados;
     type Row = Record<string, string | number>;
@@ -1827,38 +1836,43 @@ export default function ControleRoca() {
       return { data: [] as Row[], series: [] as Serie[] };
     }
 
-    const bucketToContagemPorRoca = new Map<string, Map<number, number>>();
+    const bucketToCaixasPorRoca = new Map<string, Map<number, number>>();
 
-    const incrementar = (bucket: string, rocaId: number) => {
+    const somarCaixas = (bucket: string, rocaId: number, qtd: number) => {
       if (!Number.isFinite(rocaId)) return;
-      let porRoca = bucketToContagemPorRoca.get(bucket);
+      let porRoca = bucketToCaixasPorRoca.get(bucket);
       if (!porRoca) {
         porRoca = new Map();
-        bucketToContagemPorRoca.set(bucket, porRoca);
+        bucketToCaixasPorRoca.set(bucket, porRoca);
       }
-      porRoca.set(rocaId, (porRoca.get(rocaId) ?? 0) + 1);
+      const add = Number.isFinite(qtd) && qtd > 0 ? qtd : 0;
+      porRoca.set(rocaId, (porRoca.get(rocaId) ?? 0) + add);
     };
 
     src.forEach((l) => {
       const dataStr = String(l.data ?? '');
       const rocaId = Number(l.rocaId);
+      const qtdCaixas = (l.itens ?? []).reduce(
+        (s, item) => s + (Number(item.quantidade) || 0),
+        0,
+      );
       if (dashboardMes !== 'all') {
         const chave = dataStr.length >= 10 ? dataStr.slice(0, 10) : 'sem-data';
-        incrementar(chave, rocaId);
+        somarCaixas(chave, rocaId, qtdCaixas);
       } else {
         const chave = dataStr.length >= 7 ? dataStr.slice(0, 7) : 'sem-data';
-        incrementar(chave, rocaId);
+        somarCaixas(chave, rocaId, qtdCaixas);
       }
     });
 
-    let periodos = Array.from(bucketToContagemPorRoca.keys()).sort((a, b) => a.localeCompare(b));
+    let periodos = Array.from(bucketToCaixasPorRoca.keys()).sort((a, b) => a.localeCompare(b));
     if (dashboardMes === 'all') {
       periodos = periodos.slice(-6);
     }
 
     const rocaIdsNoGrafico = new Set<number>();
     periodos.forEach((p) => {
-      bucketToContagemPorRoca.get(p)?.forEach((_, id) => rocaIdsNoGrafico.add(id));
+      bucketToCaixasPorRoca.get(p)?.forEach((_, id) => rocaIdsNoGrafico.add(id));
     });
 
     const resolverRoca = (id: number) =>
@@ -1887,7 +1901,7 @@ export default function ControleRoca() {
     });
 
     const data: Row[] = periodos.map((periodo) => {
-      const porRoca = bucketToContagemPorRoca.get(periodo) ?? new Map();
+      const porRoca = bucketToCaixasPorRoca.get(periodo) ?? new Map();
       const row: Row = {
         label:
           periodo === 'sem-data'
@@ -2166,8 +2180,8 @@ export default function ControleRoca() {
                   <h3 className="font-semibold text-foreground">Produção por período</h3>
                   <p className="text-sm text-muted-foreground">
                     {dashboardMes === 'all'
-                      ? 'Últimos 6 meses: quantidade de lançamentos por roça.'
-                      : 'Por dia no mês selecionado: quantidade de lançamentos por roça.'}{' '}
+                      ? 'Últimos 6 meses: quantidade de caixas (soma das quantidades dos lançamentos) por roça.'
+                      : 'Por dia no mês selecionado: quantidade de caixas por roça.'}{' '}
                     Mesmos filtros de roça do topo e o resumo das roças abaixo.
                   </p>
                 </div>
@@ -2198,10 +2212,16 @@ export default function ControleRoca() {
                     <BarChart data={graficoLancamentosPorRocaDashboard.data}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" />
-                      <YAxis allowDecimals={false} tickFormatter={(v) => Number(v).toLocaleString('pt-BR')} />
+                      <YAxis
+                        allowDecimals
+                        tickFormatter={(v) => Number(v).toLocaleString('pt-BR')}
+                      />
                       <Tooltip
                         formatter={(value: number | string, name: string) => [
-                          `${Number(value).toLocaleString('pt-BR')} lançamento(s)`,
+                          `${Number(value).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 3,
+                          })} caixa(s)`,
                           name,
                         ]}
                       />
@@ -2247,9 +2267,15 @@ export default function ControleRoca() {
                 </p>
               </div>
               <div className="rounded-xl border bg-card p-4">
-                <p className="text-sm text-muted-foreground">Lançamentos no mês</p>
+                <p className="text-sm text-muted-foreground">Média de caixas por lançamento</p>
                 <p className="mt-2 text-2xl font-semibold">
-                  {metricasProducaoMensal.totalLancamentos.toLocaleString('pt-BR')}
+                  {metricasProducaoMensal.mediaCaixasPorLancamento.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {metricasProducaoMensal.totalLancamentos.toLocaleString('pt-BR')} lançamento(s) no mês
                 </p>
               </div>
             </div>
