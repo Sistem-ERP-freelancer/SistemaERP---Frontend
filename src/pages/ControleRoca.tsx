@@ -73,7 +73,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
-import { cleanDocument, formatCPF, formatTelefone } from '@/lib/validators';
+import {
+  cleanDocument,
+  formatCPF,
+  formatTelefone,
+  normalizarTelefoneWhatsappEnvio,
+  telefoneArmazenadoParaCampo,
+} from '@/lib/validators';
 import { ConsultaCnpjResponse } from '@/services/cnpj.service';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { produtosService } from '@/services/produtos.service';
@@ -2416,8 +2422,10 @@ export default function ControleRoca() {
                                       codigo: p.codigo,
                                       nome_razao: p.nome_razao,
                                       cpf_cnpj: p.cpf_cnpj ?? '',
-                                      telefone: p.telefone ?? '',
-                                      whatsapp: p.whatsapp ?? '',
+                                      telefone: telefoneArmazenadoParaCampo(
+                                        p.telefone ?? p.whatsapp,
+                                      ),
+                                      whatsapp: '',
                                       endereco: p.endereco ?? '',
                                     });
                                     setTipoPessoaEdit(
@@ -6695,8 +6703,9 @@ className={
                         }));
                       }
                       if (dados.telefones && dados.telefones.length > 0) {
-                        const tel = formatTelefone(dados.telefones[0]);
-                        setFormProdutor((p) => ({ ...p, telefone: tel, whatsapp: tel }));
+                        const digits = dados.telefones[0].replace(/\D/g, '').slice(0, 11);
+                        const tel = digits ? formatTelefone(digits) : '';
+                        setFormProdutor((p) => ({ ...p, telefone: tel }));
                       }
                     }}
                   />
@@ -6742,10 +6751,14 @@ className={
                   <span className="text-xs text-muted-foreground">(opcional)</span>
                 </Label>
                 <Input
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={formProdutor.telefone || ''}
-                  onChange={(e) =>
-                    setFormProdutor((p) => ({ ...p, telefone: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    const formatted = digits ? formatTelefone(digits) : '';
+                    setFormProdutor((p) => ({ ...p, telefone: formatted }));
+                  }}
                   placeholder="(00) 00000-0000"
                 />
               </div>
@@ -6778,9 +6791,14 @@ className={
                     toast.error('Nome é obrigatório');
                     return;
                   }
+                  const telWa = normalizarTelefoneWhatsappEnvio(
+                    formProdutor.telefone || '',
+                  );
                   createProdutor.mutate({
                     ...formProdutor,
                     codigo: formProdutor.codigo?.trim() || undefined,
+                    telefone: telWa.telefone,
+                    whatsapp: telWa.whatsapp,
                   });
                 }}
                 disabled={createProdutor.isPending}
@@ -6948,8 +6966,10 @@ className={
                       codigo: detailProdutor.codigo,
                       nome_razao: detailProdutor.nome_razao,
                       cpf_cnpj: detailProdutor.cpf_cnpj ?? '',
-                      telefone: detailProdutor.telefone ?? '',
-                      whatsapp: detailProdutor.whatsapp ?? '',
+                      telefone: telefoneArmazenadoParaCampo(
+                        detailProdutor.telefone ?? detailProdutor.whatsapp,
+                      ),
+                      whatsapp: '',
                       endereco: detailProdutor.endereco ?? '',
                     });
                     setTipoPessoaEdit(
@@ -7093,8 +7113,9 @@ className={
                           setFormEditProdutor((p) => ({ ...p, endereco: partes.join(', ') }));
                         }
                         if (dados.telefones?.length) {
-                          const tel = formatTelefone(dados.telefones[0]);
-                          setFormEditProdutor((p) => ({ ...p, telefone: tel, whatsapp: tel }));
+                          const digits = dados.telefones[0].replace(/\D/g, '').slice(0, 11);
+                          const tel = digits ? formatTelefone(digits) : '';
+                          setFormEditProdutor((p) => ({ ...p, telefone: tel }));
                         }
                       }}
                     />
@@ -7118,10 +7139,14 @@ className={
                     Telefone / WhatsApp <span className="text-xs text-muted-foreground">(opcional)</span>
                   </Label>
                   <Input
+                    inputMode="tel"
+                    autoComplete="tel"
                     value={formEditProdutor.telefone ?? ''}
-                    onChange={(e) =>
-                      setFormEditProdutor((p) => ({ ...p, telefone: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      const formatted = digits ? formatTelefone(digits) : '';
+                      setFormEditProdutor((p) => ({ ...p, telefone: formatted }));
+                    }}
                     placeholder="(00) 00000-0000"
                   />
                 </div>
@@ -7153,14 +7178,17 @@ className={
                     return;
                   }
                   if (!editProdutor) return;
+                  const telWaEdit = normalizarTelefoneWhatsappEnvio(
+                    formEditProdutor.telefone ?? '',
+                  );
                   updateProdutor.mutate({
                     id: editProdutor.id,
                     data: {
                       codigo: formEditProdutor.codigo?.trim() || undefined,
                       nome_razao: formEditProdutor.nome_razao,
                       cpf_cnpj: formEditProdutor.cpf_cnpj || undefined,
-                      telefone: formEditProdutor.telefone || undefined,
-                      whatsapp: formEditProdutor.whatsapp || undefined,
+                      telefone: telWaEdit.telefone,
+                      whatsapp: telWaEdit.whatsapp,
                       // Permite enviar endereço vazio para limpar o campo
                       endereco: formEditProdutor.endereco?.trim() ?? '',
                     },

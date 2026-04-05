@@ -214,3 +214,52 @@ export function formatTelefone(telefone: string): string {
   }
 }
 
+/**
+ * Exibe no input um número já salvo (formatado, só dígitos ou com 55).
+ */
+export function telefoneArmazenadoParaCampo(
+  armazenado: string | null | undefined,
+): string {
+  if (!armazenado?.trim()) return '';
+  const d = cleanTelefone(armazenado);
+  if (!d) return armazenado.trim();
+  if (d.startsWith('55') && d.length >= 12) {
+    return formatTelefone(d.slice(2, 13));
+  }
+  return formatTelefone(d.slice(0, 11));
+}
+
+/**
+ * Para API / WhatsApp: telefone formatado (BR) e whatsapp só dígitos com código 55.
+ */
+export function normalizarTelefoneWhatsappEnvio(telefoneUi: string): {
+  telefone?: string;
+  whatsapp?: string;
+} {
+  const bruto = cleanTelefone(telefoneUi || '');
+  if (!bruto) return {};
+
+  let local = bruto;
+  if (bruto.startsWith('55') && bruto.length >= 12) {
+    local = bruto.slice(2, 13);
+  } else {
+    local = bruto.slice(0, 11);
+  }
+
+  const formatted = formatTelefone(local);
+  const digitsLocal = cleanTelefone(formatted);
+  if (digitsLocal.length < 10) {
+    return { telefone: formatted || undefined };
+  }
+
+  const whatsapp =
+    bruto.startsWith('55') && bruto.length >= 12
+      ? bruto.slice(0, 13)
+      : `55${digitsLocal}`;
+
+  return {
+    telefone: formatted || undefined,
+    whatsapp,
+  };
+}
+
