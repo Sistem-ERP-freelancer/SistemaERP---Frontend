@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AdminPanel from "./pages/AdminPanel";
 import Clientes from "./pages/Clientes";
+import ContasAPagarContaFinanceiraPagamentos from "./pages/contas-a-pagar/ContasAPagarContaFinanceiraPagamentos";
 import ContasAPagarPedidoDetalhes from "./pages/contas-a-pagar/ContasAPagarPedidoDetalhes";
 import ContasAPagarPedidoPagamentos from "./pages/contas-a-pagar/ContasAPagarPedidoPagamentos";
 import ContasAReceberClienteDetalhes from "./pages/contas-a-receber/ContasAReceberClienteDetalhes";
@@ -156,6 +157,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ContasAReceberPedidoPagamentos />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financeiro/contas-pagar/conta/:contaId/pagamentos"
+              element={
+                <ProtectedRoute>
+                  <ContasAPagarContaFinanceiraPagamentos />
                 </ProtectedRoute>
               }
             />

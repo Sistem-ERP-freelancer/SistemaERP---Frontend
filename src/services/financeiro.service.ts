@@ -274,7 +274,15 @@ class FinanceiroService {
     return apiClient.post<ContaFinanceira>('/contas-financeiras', data);
   }
 
-  async atualizar(id: number | string, data: Partial<CreateContaFinanceiraDto & { status?: ContaFinanceira['status'] }>): Promise<ContaFinanceira> {
+  async atualizar(
+    id: number | string,
+    data: Partial<
+      CreateContaFinanceiraDto & {
+        status?: ContaFinanceira['status'];
+        valor_pago?: number;
+      }
+    >,
+  ): Promise<ContaFinanceira> {
     // Garantir que o ID seja um número
     const contaId = typeof id === 'string' ? parseInt(id, 10) : id;
     
@@ -296,6 +304,9 @@ class FinanceiroService {
     if (shouldInclude(data.tipo)) payload.tipo = data.tipo;
     if (shouldInclude(data.descricao)) payload.descricao = typeof data.descricao === 'string' ? data.descricao.trim() : data.descricao;
     if (shouldInclude(data.valor_original)) payload.valor_original = Number(data.valor_original);
+    if (data.valor_pago !== undefined && data.valor_pago !== null && !Number.isNaN(Number(data.valor_pago))) {
+      payload.valor_pago = Number(Number(data.valor_pago).toFixed(2));
+    }
     if (shouldInclude(data.data_emissao)) payload.data_emissao = data.data_emissao;
     if (shouldInclude(data.data_vencimento)) payload.data_vencimento = data.data_vencimento;
     if (shouldInclude(data.data_pagamento)) payload.data_pagamento = data.data_pagamento;

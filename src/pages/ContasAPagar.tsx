@@ -75,6 +75,23 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+/** Saldo em aberto: confia em valor_em_aberto quando > 0; senão deriva de total − pago (evita menu “Pagar” oculto). */
+function valorEmAbertoContaPagar(p: ContaPagar): number {
+  const total = Number(p.valor_total) || 0;
+  const pago = Number(p.valor_pago ?? 0);
+  const declarado = Number(p.valor_em_aberto);
+  if (Number.isFinite(declarado) && declarado > 0.009) {
+    return Math.max(0, declarado);
+  }
+  return Math.max(0, Number((total - pago).toFixed(2)));
+}
+
+function podeExibirPagarPedido(p: ContaPagar): boolean {
+  const st = String(p.status ?? "").toUpperCase().trim();
+  if (st === "QUITADO" || st === "CANCELADO") return false;
+  return valorEmAbertoContaPagar(p) > 0.009;
+}
+
 function ContasAPagar() {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
@@ -473,10 +490,10 @@ function ContasAPagar() {
     if (!conta || conta.tipo !== "PAGAR") return false;
     
     // Se já está paga ou cancelada, não está vencida
-    if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") return false;
-    
-    // Se tem status VENCIDO, está vencida
-    if (conta.status === "VENCIDO") return true;
+    const st = String(conta.status ?? "").toUpperCase();
+    if (st === "PAGO_TOTAL" || st === "QUITADO" || st === "CANCELADO") return false;
+
+    if (st === "VENCIDO") return true;
     
     // Verificar pela data de vencimento
     if (!conta.data_vencimento) return false;
@@ -501,7 +518,8 @@ function ContasAPagar() {
   // Função auxiliar para verificar se uma conta vence hoje
   const isContaVencendoHoje = (conta: any): boolean => {
     if (!conta || conta.tipo !== "PAGAR") return false;
-    if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") return false;
+    const stVh = String(conta.status ?? "").toUpperCase();
+    if (stVh === "PAGO_TOTAL" || stVh === "QUITADO" || stVh === "CANCELADO") return false;
     if (!conta.data_vencimento) return false;
     
     try {
@@ -524,7 +542,8 @@ function ContasAPagar() {
   // Função auxiliar para verificar se uma conta vence este mês
   const isContaVencendoEsteMes = (conta: any): boolean => {
     if (!conta || conta.tipo !== "PAGAR") return false;
-    if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") return false;
+    const stM = String(conta.status ?? "").toUpperCase();
+    if (stM === "PAGO_TOTAL" || stM === "QUITADO" || stM === "CANCELADO") return false;
     if (!conta.data_vencimento) return false;
     
     try {
@@ -883,7 +902,8 @@ function ContasAPagar() {
 
   // Função para obter status de vencimento
   const getVencimentoStatus = (dias: number | null, status: string): { texto: string; cor: string; bgColor: string } => {
-    if (status === "PAGO_TOTAL" || status === "CANCELADO") {
+    const su = String(status ?? "").toUpperCase();
+    if (su === "PAGO_TOTAL" || su === "QUITADO" || su === "CANCELADO") {
       return { texto: "", cor: "", bgColor: "" };
     }
     
@@ -923,7 +943,7 @@ function ContasAPagar() {
         const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || pedido.fornecedor_nome || "N/A";
 
         const valorTotal = Number(pedido.valor_total) || 0;
-        const valorEmAbertoPedido = Number(pedido.valor_em_aberto) || 0;
+        const valorEmAbertoPedido = valorEmAbertoContaPagar(pedido);
         const valorPagoPedido = (pedido as any).valor_pago ?? (valorTotal - valorEmAbertoPedido);
         const valorFormatado = formatCurrency(valorTotal);
         const valorPagoFormatado = formatCurrency(valorPagoPedido);
@@ -955,7 +975,8 @@ function ContasAPagar() {
           diasAteVencimento,
           vencimentoStatus,
           pedidoId: pedido.pedido_id,
-          valorEmAberto: pedido.valor_em_aberto ?? 0,
+          valorEmAberto: valorEmAbertoPedido,
+          podePagar: podeExibirPagarPedido(pedido),
         };
       });
     }
@@ -988,11 +1009,14 @@ function ContasAPagar() {
         : "N/A";
 
       const statusMap: Record<string, string> = {
-        "PENDENTE": "Pendente",
-        "PAGO_PARCIAL": "Pago Parcial",
-        "PAGO_TOTAL": "Pago Total",
-        "VENCIDO": "Vencido",
-        "CANCELADO": "Cancelado",
+        PENDENTE: "Pendente",
+        ABERTO: "Pendente",
+        PAGO_PARCIAL: "Pago Parcial",
+        PARCIAL: "Pago Parcial",
+        PAGO_TOTAL: "Pago Total",
+        QUITADO: "Quitado",
+        VENCIDO: "Vencido",
+        CANCELADO: "Cancelado",
       };
       const statusFormatado = statusMap[conta.status] || conta.status;
 
@@ -1035,6 +1059,21 @@ function ContasAPagar() {
         vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
       }
 
+      const vrRaw = (conta as any).valor_restante;
+      const veRaw = (conta as any).valor_em_aberto;
+      const abertoFallback =
+        vrRaw != null && vrRaw !== ""
+          ? Math.max(0, Number(vrRaw))
+          : veRaw != null && veRaw !== ""
+            ? Math.max(0, Number(veRaw))
+            : Math.max(0, valorTotalConta - valorPagoConta);
+      const stO = String(conta.status ?? "").toUpperCase();
+      const podePagarConta =
+        abertoFallback > 0.009 &&
+        stO !== "QUITADO" &&
+        stO !== "PAGO_TOTAL" &&
+        stO !== "CANCELADO";
+
       return {
         id: conta.numero_conta || `CONTA-${conta.id}`,
         descricao: conta.descricao,
@@ -1048,7 +1087,8 @@ function ContasAPagar() {
         fornecedor: nomeFornecedor,
         diasAteVencimento,
         vencimentoStatus,
-        valorEmAberto: 0,
+        valorEmAberto: abertoFallback,
+        podePagar: podePagarConta,
       };
     });
   }, [pedidosContasPagarList, contasFallback, fornecedores]);
@@ -1093,13 +1133,13 @@ function ContasAPagar() {
     // Filtrar por tab ativa (especialmente para Vencidas e Vencendo Hoje)
     if (activeTab === "VENCIDO") {
       filtered = filtered.filter(t => {
-        const conta = contas.find(c => c.id === t.contaId);
+        const conta = contasFallback.find((c) => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencida(conta);
       });
     } else if (activeTab === "VENCE_HOJE") {
       filtered = filtered.filter(t => {
-        const conta = contas.find(c => c.id === t.contaId);
+        const conta = contasFallback.find((c) => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencendoHoje(conta);
       });
@@ -1107,7 +1147,7 @@ function ContasAPagar() {
 
     // Busca numérica por ID
     if (isNumericSearch && contaPorId && contaPorId.tipo === "PAGAR") {
-      const contaEncontrada = contas.find(c => c.id === contaPorId.id);
+      const contaEncontrada = contasFallback.find((c) => c.id === contaPorId.id);
       if (contaEncontrada) {
         const conta = contaEncontrada;
         let nomeFornecedor = "N/A";
@@ -1130,11 +1170,14 @@ function ContasAPagar() {
           : "N/A";
 
         const statusMap: Record<string, string> = {
-          "PENDENTE": "Pendente",
-          "PAGO_PARCIAL": "Pago Parcial",
-          "PAGO_TOTAL": "Pago Total",
-          "VENCIDO": "Vencido",
-          "CANCELADO": "Cancelado",
+          PENDENTE: "Pendente",
+          ABERTO: "Pendente",
+          PAGO_PARCIAL: "Pago Parcial",
+          PARCIAL: "Pago Parcial",
+          PAGO_TOTAL: "Pago Total",
+          QUITADO: "Quitado",
+          VENCIDO: "Vencido",
+          CANCELADO: "Cancelado",
         };
         const statusFormatado = statusMap[conta.status] || conta.status;
 
@@ -1173,7 +1216,7 @@ function ContasAPagar() {
     }
 
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, pedidosContasPagarList, contasFallback, fornecedores, activeTab, activeCardFilter]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contasFallback, fornecedores, activeTab, activeCardFilter]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -1745,12 +1788,30 @@ function ContasAPagar() {
                             <Eye className="w-4 h-4 mr-2" />
                             Ver detalhes
                           </DropdownMenuItem>
-                          {(transacao as any).pedidoId && ((transacao as any).valorEmAberto ?? 0) > 0 && (
-                            <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-pagar/${(transacao as any).pedidoId}/pagamentos`)}>
-                              <DollarSign className="w-4 h-4 mr-2" />
-                              Pagamentos
-                            </DropdownMenuItem>
-                          )}
+                          {(transacao as any).podePagar &&
+                            ((transacao as any).pedidoId ? (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/financeiro/contas-pagar/${(transacao as any).pedidoId}/pagamentos`,
+                                  )
+                                }
+                              >
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                Pagamentos
+                              </DropdownMenuItem>
+                            ) : transacao.contaId ? (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/financeiro/contas-pagar/conta/${transacao.contaId}/pagamentos`,
+                                  )
+                                }
+                              >
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                Pagamentos
+                              </DropdownMenuItem>
+                            ) : null)}
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
