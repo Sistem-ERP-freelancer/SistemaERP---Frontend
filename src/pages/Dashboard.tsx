@@ -94,9 +94,11 @@ function mesAnoAtualLocal(): string {
 }
 
 const Dashboard = () => {
-  const [mesAnoFiltro, setMesAnoFiltro] = useState<string>(mesAnoAtualLocal);
+  /** Vazio = totais da 3ª faixa são histórico geral; linhas 1–2 usam o mês atual como referência. */
+  const [mesAnoFiltro, setMesAnoFiltro] = useState<string>("");
   const parametrosDashboardFinanceiro = useMemo(() => {
-    const chave = mesAnoFiltro?.trim() || mesAnoAtualLocal();
+    const mesEscolhido = mesAnoFiltro?.trim();
+    const chave = mesEscolhido || mesAnoAtualLocal();
     const parts = chave.split("-").map(Number);
     const ref = parts[0] && parts[1] ? parts : mesAnoAtualLocal().split("-").map(Number);
     const [ano, mes] = ref;
@@ -105,6 +107,7 @@ const Dashboard = () => {
     return {
       data_inicial: formatISODateLocal(primeiro),
       data_final: formatISODateLocal(ultimo),
+      painel_totais_gerais: !mesEscolhido,
     };
   }, [mesAnoFiltro]);
 
@@ -287,11 +290,12 @@ const Dashboard = () => {
                   id="dashboard-mes-ano"
                   type="month"
                   value={mesAnoFiltro}
-                  onChange={(e) =>
-                    setMesAnoFiltro(e.target.value || mesAnoAtualLocal())
-                  }
+                  onChange={(e) => setMesAnoFiltro(e.target.value)}
                   className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  Sem mês: linhas 1 e 2 usam o mês atual; &quot;Totais&quot; soma todo o histórico (competência).
+                </p>
               </div>
             </div>
           </div>
@@ -363,9 +367,12 @@ const Dashboard = () => {
                     {
                       etapa: 3 as const,
                       pill: "Totais",
-                      titulo: "Totais no período",
-                      subtitulo:
-                        "Fechamento de referência no período selecionado (competência).",
+                      titulo: mesAnoFiltro.trim()
+                        ? "Totais no período"
+                        : "Totais gerais",
+                      subtitulo: mesAnoFiltro.trim()
+                        ? "Fechamento de referência no período selecionado (competência)."
+                        : "Acumulado de todas as competências no sistema (independente do mês das linhas acima).",
                       celulas: [
                         {
                           legenda: "Total compras paga",

@@ -476,6 +476,8 @@ class FinanceiroService {
     tipo?: string;
     cliente_id?: number;
     fornecedor_id?: number;
+    /** Quando true, o backend retorna `linha_totais_periodo` acumulado (histórico), não só o intervalo. */
+    painel_totais_gerais?: boolean;
   }): Promise<DashboardUnificado> {
     const q = new URLSearchParams();
     if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
@@ -483,6 +485,7 @@ class FinanceiroService {
     if (params?.tipo) q.append('tipo', params.tipo);
     if (params?.cliente_id != null) q.append('cliente_id', params.cliente_id.toString());
     if (params?.fornecedor_id != null) q.append('fornecedor_id', params.fornecedor_id.toString());
+    if (params?.painel_totais_gerais) q.append('painel_totais_gerais', '1');
     const query = q.toString();
     return apiClient.get<DashboardUnificado>(`/financeiro/dashboard${query ? `?${query}` : ''}`);
   }

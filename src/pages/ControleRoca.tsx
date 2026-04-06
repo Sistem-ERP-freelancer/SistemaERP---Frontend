@@ -1822,7 +1822,16 @@ export default function ControleRoca() {
           produtor: produtor?.nome_razao ?? '—',
         };
       })
-      .sort((a, b) => b.valor - a.valor)
+      .sort((a, b) => {
+        const da = a.ultimaData?.trim() || '';
+        const db = b.ultimaData?.trim() || '';
+        if (!da && !db) return b.valor - a.valor;
+        if (!da) return 1;
+        if (!db) return -1;
+        const porData = db.localeCompare(da);
+        if (porData !== 0) return porData;
+        return b.valor - a.valor;
+      })
       .slice(0, 8);
   }, [
     lancamentosDashboardFiltrados,
