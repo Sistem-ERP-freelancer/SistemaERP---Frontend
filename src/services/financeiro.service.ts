@@ -118,6 +118,28 @@ export interface DashboardFinanceiro {
   valor_total_pago_contabilizado?: number;
 }
 
+/** Linhas do painel “acompanhamento financeiro” (planilha de referência). */
+export type PainelAcompanhamentoFinanceiro = {
+  linha_registrado: {
+    compras: number;
+    despesas: number;
+    vendas: number;
+    saldo: number;
+  };
+  linha_caixa: {
+    compras: number;
+    despesas: number;
+    vendas: number;
+    saldo: number;
+  };
+  linha_totais_periodo: {
+    compras: number;
+    despesas: number;
+    vendas: number;
+    saldo: number;
+  };
+};
+
 export interface ResumoFinanceiro {
   contas_receber: {
     total: number;
@@ -141,6 +163,7 @@ export interface ResumoFinanceiro {
     despesa_mes: number;            // ⭐ NOVO: Despesa do mês atual (valor total a pagar do mês)
     valor_pago_mes: number;        // ⭐ NOVO: Valor pago no mês atual
   };
+  painel_acompanhamento?: PainelAcompanhamentoFinanceiro;
 }
 
 /** Resposta GET /financeiro/dashboard — contrato unificado (GUIA_IMPLEMENTACAO_FRONTEND_FINANCEIRO) */
@@ -168,6 +191,8 @@ export interface DashboardUnificado {
     valor_pago_mes?: number;
   };
   saldo_atual: number;
+  /** Painel estilo planilha (GET /financeiro/dashboard). */
+  painel_acompanhamento?: PainelAcompanhamentoFinanceiro;
 }
 
 class FinanceiroService {

@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { Card, CardContent } from "@/components/ui/card";
 import {
     Table,
     TableBody,
@@ -7,7 +8,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatISODateLocal } from "@/lib/utils";
 import { estoqueService } from "@/services/estoque.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
@@ -15,99 +16,149 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     AlertTriangle,
+    BarChart3,
     Calendar,
-    DollarSign,
+    Info,
     Loader2,
+    Receipt,
+    Scale,
     ShoppingCart,
-    TrendingDown
+    TrendingUp,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Label } from "@/components/ui/label";
+
+type PainelMetricKind = "compras" | "despesas" | "vendas" | "saldo";
+
+function painelMetricKindFromLegenda(legenda: string): PainelMetricKind {
+  const l = legenda.toLowerCase();
+  if (l.includes("saldo")) return "saldo";
+  if (l.includes("venda")) return "vendas";
+  if (l.includes("compra")) return "compras";
+  if (l.includes("despesa")) return "despesas";
+  return "compras";
+}
+
+const painelMetricVisual: Record<
+  PainelMetricKind,
+  { border: string; iconWrap: string; Icon: LucideIcon }
+> = {
+  compras: {
+    border: "border-l-4 border-l-amber-500",
+    iconWrap:
+      "bg-amber-500/[0.12] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+    Icon: ShoppingCart,
+  },
+  despesas: {
+    border: "border-l-4 border-l-rose-500",
+    iconWrap:
+      "bg-rose-500/[0.12] text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
+    Icon: Receipt,
+  },
+  vendas: {
+    border: "border-l-4 border-l-emerald-500",
+    iconWrap:
+      "bg-emerald-500/[0.12] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+    Icon: TrendingUp,
+  },
+  saldo: {
+    border: "border-l-4 border-l-sky-600 dark:border-l-sky-400",
+    iconWrap:
+      "bg-sky-500/[0.12] text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
+    Icon: Scale,
+  },
+};
+
+function painelValorClass(kind: PainelMetricKind, valor: number): string {
+  if (kind === "saldo") {
+    if (valor < 0) return "text-destructive";
+    if (valor > 0) return "text-emerald-600 dark:text-emerald-400";
+  }
+  if (kind === "vendas" && valor > 0) {
+    return "text-emerald-700 dark:text-emerald-400";
+  }
+  return "text-slate-900 dark:text-foreground";
+}
+
+/** API pode devolver número ou string decimal; JSON às vezes vem em camelCase. */
+function numPainel(v: unknown): number {
+  if (v == null || v === "") return 0;
+  const n = typeof v === "string" ? parseFloat(v.replace(",", ".")) : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function mesAnoAtualLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const hoje = useMemo(() => new Date(), []);
-  const [mesAno, setMesAno] = useState<string>(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`);
-  const periodoDashboard = useMemo(() => {
-    const [ano, mes] = mesAno.split('-').map(Number);
-    return { mes, ano, mes_ano: mesAno };
-  }, [mesAno]);
+  const [mesAnoFiltro, setMesAnoFiltro] = useState<string>(mesAnoAtualLocal);
+  const parametrosDashboardFinanceiro = useMemo(() => {
+    const chave = mesAnoFiltro?.trim() || mesAnoAtualLocal();
+    const parts = chave.split("-").map(Number);
+    const ref = parts[0] && parts[1] ? parts : mesAnoAtualLocal().split("-").map(Number);
+    const [ano, mes] = ref;
+    const primeiro = new Date(ano, mes - 1, 1);
+    const ultimo = new Date(ano, mes, 0);
+    return {
+      data_inicial: formatISODateLocal(primeiro),
+      data_final: formatISODateLocal(ultimo),
+    };
+  }, [mesAnoFiltro]);
 
-  const periodoTotalRecebido = useMemo(() => {
-    const [ano, mes] = mesAno.split('-').map(Number);
-    const primeiro = new Date(ano, mes - 1, 1).toISOString().slice(0, 10);
-    const ultimo = new Date(ano, mes, 0).toISOString().slice(0, 10);
-    return { data_inicial: primeiro, data_final: ultimo };
-  }, [mesAno]);
-
-  // GET /financeiro/dashboard — enviar período selecionado para dados corretos do mês
   const { data: dashboardUnificado, isLoading: loadingUnificado } = useQuery({
-    queryKey: ['dashboard', 'unificado', periodoTotalRecebido],
-    queryFn: () => financeiroService.getDashboardUnificado(periodoTotalRecebido),
+    queryKey: ['dashboard', 'unificado', parametrosDashboardFinanceiro],
+    queryFn: () => financeiroService.getDashboardUnificado(parametrosDashboardFinanceiro),
     refetchInterval: 30000,
     retry: false,
   });
 
-  // Fallback: dados financeiros por endpoint antigo (quando /financeiro/dashboard não existir)
-  const { data: dashboardReceber, isLoading: loadingReceber } = useQuery({
-    queryKey: ['dashboard', 'receber', periodoDashboard],
-    queryFn: () => financeiroService.getDashboardReceber(periodoDashboard),
-    refetchInterval: 30000,
-    enabled: !dashboardUnificado,
-  });
-
-  const { data: dashboardPagar, isLoading: loadingPagar } = useQuery({
-    queryKey: ['dashboard', 'pagar', periodoDashboard],
-    queryFn: () => financeiroService.getDashboardPagar(periodoDashboard),
-    refetchInterval: 30000,
-    enabled: !dashboardUnificado,
-  });
-
-  // ✅ Buscar dashboard de pedidos para obter valor_em_aberto_venda (Total a Receber correto) — fallback
-  // Conforme CORRECAO_DASHBOARD_PRINCIPAL_TOTAL_RECEBER.md:
-  // - Usar valor_em_aberto_venda.valor do endpoint /pedidos/dashboard/resumo
-  // - Este campo considera todos os pedidos pendentes e calcula valor_total - valor_pago corretamente
-  const { data: dashboardPedidos, isLoading: loadingDashboardPedidos } = useQuery({
-    queryKey: ['dashboard', 'pedidos'],
-    queryFn: () => pedidosService.obterDashboard(),
-    refetchInterval: 30000,
-    enabled: !dashboardUnificado,
-  });
-
-  // ✅ Buscar total recebido (valores efetivamente pagos/baixados)
-  // Conforme GUIA_FRONTEND_TOTAL_RECEBIDO.md:
-  // - Endpoint: /contas-financeiras/dashboard/total-recebido
-  // - Retorna apenas valores realmente pagos (pagamentos registrados)
-  // - Parcelas quitadas e pagamentos parciais (à vista)
-  // - Estornos são subtraídos automaticamente
-  const { data: totalRecebidoData, isLoading: loadingTotalRecebido, isError: isErrorTotalRecebido, refetch: refetchTotalRecebido } = useQuery({
-    queryKey: ['dashboard', 'total-recebido', periodoTotalRecebido],
-    queryFn: () => financeiroService.getTotalRecebido(periodoTotalRecebido),
-    refetchInterval: 30000,
-    retry: (failureCount, error: any) => {
-      if (error?.response?.status === 500) return false;
-      return failureCount < 2;
-    },
-  });
-
-  // Removido: não precisamos mais buscar todos os pedidos para calcular estatísticas
-  // O backend já retorna os valores corretos considerando pagamentos parciais
+  const painelFinanceiro = useMemo(() => {
+    if (!dashboardUnificado) return undefined;
+    const u = dashboardUnificado as Record<string, unknown>;
+    const raw =
+      u.painel_acompanhamento ??
+      u.painelAcompanhamento;
+    if (!raw || typeof raw !== "object") return undefined;
+    const p = raw as Record<string, unknown>;
+    const linhaReg =
+      (p.linha_registrado as Record<string, unknown>) ??
+      (p.linhaRegistrado as Record<string, unknown>);
+    const linhaCaixa =
+      (p.linha_caixa as Record<string, unknown>) ??
+      (p.linhaCaixa as Record<string, unknown>);
+    const linhaTot =
+      (p.linha_totais_periodo as Record<string, unknown>) ??
+      (p.linhaTotaisPeriodo as Record<string, unknown>);
+    if (!linhaReg || !linhaCaixa || !linhaTot) return undefined;
+    return {
+      linha_registrado: {
+        compras: numPainel(linhaReg.compras),
+        despesas: numPainel(linhaReg.despesas),
+        vendas: numPainel(linhaReg.vendas),
+        saldo: numPainel(linhaReg.saldo),
+      },
+      linha_caixa: {
+        compras: numPainel(linhaCaixa.compras),
+        despesas: numPainel(linhaCaixa.despesas),
+        vendas: numPainel(linhaCaixa.vendas),
+        saldo: numPainel(linhaCaixa.saldo),
+      },
+      linha_totais_periodo: {
+        compras: numPainel(linhaTot.compras),
+        despesas: numPainel(linhaTot.despesas),
+        vendas: numPainel(linhaTot.vendas),
+        saldo: numPainel(linhaTot.saldo),
+      },
+    };
+  }, [dashboardUnificado]);
 
   // Buscar pedidos recentes (vendas)
   const { data: pedidosData, isLoading: loadingPedidos } = useQuery({
     queryKey: ['pedidos', 'recentes'],
     queryFn: () => pedidosService.listar({ page: 1, limit: 5, tipo: 'VENDA' }),
-    refetchInterval: 30000,
-  });
-
-  // Buscar pedidos pendentes (todos os tipos, exceto concluídos e cancelados)
-  const { data: pedidosPendentesData } = useQuery({
-    queryKey: ['pedidos', 'pendentes'],
-    queryFn: () => pedidosService.listar({ 
-      page: 1, 
-      limit: 100,
-      status: 'ABERTO' // Busca apenas pendentes (acabou de criar)
-    }),
     refetchInterval: 30000,
   });
 
@@ -149,14 +200,6 @@ const Dashboard = () => {
     refetchInterval: 30000,
   });
 
-  const isLoading =
-    loadingUnificado ||
-    loadingReceber ||
-    loadingPagar ||
-    loadingPedidos ||
-    loadingProdutos ||
-    loadingContasVencidas;
-
   // Função auxiliar para converter valor para número seguro
   const parseValor = (valor: any): number => {
     if (valor === null || valor === undefined || valor === '') return 0;
@@ -170,99 +213,6 @@ const Dashboard = () => {
 
   // Contas vencidas
   const contasVencidas = contasVencidasData || [];
-  // Preferir GET /financeiro/dashboard quando disponível (não calcular no front)
-  const totalVencidas = dashboardUnificado
-    ? (dashboardUnificado.contas_receber?.vencidas ?? 0) + (dashboardUnificado.contas_pagar?.vencidas ?? 0)
-    : (parseValor(dashboardReceber?.vencidas) || 0) + (parseValor(dashboardPagar?.vencidas) || 0);
-  const valorTotalVencidas = (parseValor(dashboardReceber?.valor_total_vencidas) || 0) + (parseValor(dashboardPagar?.valor_total_vencidas) || 0);
-
-  const totalReceber = dashboardUnificado
-    ? parseValor(dashboardUnificado.contas_receber?.valor_total_pendente) || 0
-    : (parseValor(dashboardPedidos?.valor_em_aberto_venda?.valor) || 0);
-
-  const totalPagar = dashboardUnificado
-    ? parseValor(dashboardUnificado.contas_pagar?.valor_total_pendente) || 0
-    : (parseValor(dashboardPagar?.valor_total_pendente) || parseValor(dashboardPagar?.total) || 0);
-
-  // Total Pago: no período selecionado usar valor_pago_mes; senão valor_total_recebido (fallback)
-  const totalRecebido = dashboardUnificado
-    ? (parseValor(dashboardUnificado.contas_receber?.valor_pago_mes) ?? parseValor(dashboardUnificado.contas_receber?.valor_total_recebido) ?? 0)
-    : (isErrorTotalRecebido ? 0 : (parseValor(totalRecebidoData?.totalRecebido) ?? 0));
-
-  // Preparar estatísticas (cards clicáveis conforme guia)
-  const stats = [
-    { 
-      label: "Total a Receber", 
-      value: formatCurrency(totalReceber), 
-      icon: DollarSign,
-      trend: null,
-      trendUp: true,
-      color: "text-royal",
-      bgColor: "bg-royal/10",
-      isLoading: dashboardUnificado ? loadingUnificado : loadingDashboardPedidos,
-      onClick: () => navigate('/contas-a-receber'),
-      hint: "Ver contas a receber"
-    },
-    { 
-      label: "Contas Vencidas", 
-      value: totalVencidas.toString(), 
-      icon: Calendar,
-      trend: valorTotalVencidas > 0 ? formatCurrency(valorTotalVencidas) : null,
-      trendUp: false,
-      color: "text-red-600",
-      bgColor: "bg-red-100",
-      isLoading: loadingContasVencidas,
-      onClick: () => navigate('/contas-a-receber?tab=VENCIDO'),
-      hint: "Ver contas vencidas"
-    },
-    { 
-      label: "Produtos com Estoque Baixo", 
-      value: countEstoqueBaixo.toString(), 
-      icon: AlertTriangle,
-      trend: null,
-      color: "text-destructive",
-      bgColor: "bg-destructive/10",
-      isLoading: loadingProdutos,
-      onClick: () => navigate('/estoque'),
-      hint: "Ver estoque"
-    },
-      {
-        label: "Total Pago",
-        value: formatCurrency(totalRecebido),
-        icon: DollarSign,
-        trend: isErrorTotalRecebido ? "Não foi possível carregar. Tente novamente." : null,
-        trendUp: !isErrorTotalRecebido,
-        color: "text-green-600",
-        bgColor: "bg-green-100",
-        isLoading: loadingTotalRecebido,
-        onClick: () => navigate('/financeiro'),
-        hint: "Ver financeiro"
-      },
-    { 
-      label: "Total a Pagar", 
-      value: formatCurrency(totalPagar), 
-      icon: TrendingDown,
-      trend: null,
-      trendUp: false,
-      color: "text-azure",
-      bgColor: "bg-azure/10",
-      isLoading: dashboardUnificado ? loadingUnificado : loadingPagar,
-      onClick: () => navigate('/contas-a-pagar'),
-      hint: "Ver contas a pagar"
-    },
-    { 
-      label: "Pedidos Pendentes", 
-      value: (pedidosPendentesData?.total || 0).toString(), 
-      icon: ShoppingCart,
-      trend: null,
-      trendUp: true,
-      color: "text-royal",
-      bgColor: "bg-royal/10",
-      isLoading: loadingPedidos,
-      onClick: () => navigate('/pedidos'),
-      hint: "Ver pedidos"
-    },
-  ];
 
   // Tratar diferentes formatos de resposta de pedidos
   let pedidosRecentes: any[] = [];
@@ -291,24 +241,6 @@ const Dashboard = () => {
     minimo: produto.estoque_minimo,
   }));
 
-  // Debug: verificar dados carregados
-  useEffect(() => {
-    console.log('📊 [Dashboard] Dados carregados:', {
-      contasVencidas: contasVencidas.length,
-      pedidosRecentes: pedidosRecentes.length,
-      produtosEstoqueBaixo: produtosEstoqueBaixo.length,
-      recentSales: recentSales.length,
-      lowStockProducts: lowStockProducts.length,
-      totalReceber,
-      totalPagar,
-      dashboardReceber,
-      dashboardPagar,
-      pedidosData,
-      estoqueBaixoData,
-      contasVencidasData,
-    });
-  }, [contasVencidas, pedidosRecentes, produtosEstoqueBaixo, recentSales, lowStockProducts, totalReceber, totalRecebido, totalPagar, dashboardReceber, dashboardPagar, dashboardPedidos, totalRecebidoData, pedidosData, estoqueBaixoData, contasVencidasData]);
-
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -318,40 +250,227 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Visão geral do seu negócio</p>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {stats.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className={`bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow ${stat.onClick ? 'cursor-pointer hover:border-primary/50' : ''}`}
-              onClick={stat.onClick}
-              role={stat.onClick ? 'button' : undefined}
-              title={stat.hint}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  {stat.isLoading ? (
-                    <Loader2 className={`w-5 h-5 ${stat.color} animate-spin`} />
-                  ) : (
-                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                  )}
+        {/* Acompanhamento financeiro — layout refinado (ícones, cores por tipo, seções numeradas) */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="mb-6 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]"
+        >
+          <div className="relative border-b border-border/80 bg-gradient-to-br from-slate-50/90 via-card to-sky-50/40 px-4 py-5 sm:px-6 dark:from-muted/30 dark:via-card dark:to-sky-950/20">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex gap-3 min-w-0">
+                <div className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <BarChart3 className="h-5 w-5" />
                 </div>
-                {stat.trend && (
-                  <span className={`text-sm font-medium ${stat.trendUp ? "text-cyan" : "text-destructive"}`}>
-                    {stat.trend}
-                  </span>
-                )}
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Financeiro
+                  </p>
+                  <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
+                    Dashboard de acompanhamento financeiro
+                  </h2>
+                  <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                    Lançamentos no mês (competência), movimentação de caixa no período e totais — alinhado ao endpoint da página Financeiro.
+                  </p>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-foreground mb-1">
-                {stat.isLoading ? '...' : stat.value}
+              <div className="flex flex-col gap-1.5 shrink-0 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm backdrop-blur-sm dark:bg-background/50 max-w-full sm:max-w-[16rem]">
+                <Label
+                  htmlFor="dashboard-mes-ano"
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                >
+                  <Calendar className="h-3.5 w-3.5 opacity-70" />
+                  Mês de referência
+                </Label>
+                <input
+                  id="dashboard-mes-ano"
+                  type="month"
+                  value={mesAnoFiltro}
+                  onChange={(e) =>
+                    setMesAnoFiltro(e.target.value || mesAnoAtualLocal())
+                  }
+                  className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="p-4 sm:p-6 overflow-x-auto bg-muted/20 dark:bg-muted/10">
+            {loadingUnificado && !dashboardUnificado ? (
+              <div className="flex justify-center py-10 text-muted-foreground gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Carregando acompanhamento financeiro...
+              </div>
+            ) : !dashboardUnificado ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Não foi possível carregar o resumo unificado. Verifique o endpoint{' '}
+                <code className="text-xs bg-muted px-1 rounded">GET /financeiro/dashboard</code>.
               </p>
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-            </motion.div>
-          ))}
-        </div>
+            ) : painelFinanceiro ? (
+              <div className="space-y-6 sm:space-y-8">
+                {(
+                  [
+                    {
+                      etapa: 1 as const,
+                      pill: "Competência",
+                      titulo: "Lançamentos no mês",
+                      subtitulo:
+                        "Recorte por data de emissão da conta no período (competência contábil).",
+                      celulas: [
+                        {
+                          legenda: "compras do mês",
+                          valor: painelFinanceiro.linha_registrado.compras,
+                        },
+                        {
+                          legenda: "despesa do mês",
+                          valor: painelFinanceiro.linha_registrado.despesas,
+                        },
+                        {
+                          legenda: "venda do mês",
+                          valor: painelFinanceiro.linha_registrado.vendas,
+                        },
+                        {
+                          legenda: "saldo do mês",
+                          valor: painelFinanceiro.linha_registrado.saldo,
+                        },
+                      ],
+                    },
+                    {
+                      etapa: 2 as const,
+                      pill: "Caixa",
+                      titulo: "Pago / recebido no período",
+                      subtitulo:
+                        "Efetivação financeira conforme datas de pagamento e recebimentos.",
+                      celulas: [
+                        {
+                          legenda: "compras paga",
+                          valor: painelFinanceiro.linha_caixa.compras,
+                        },
+                        {
+                          legenda: "despesa paga",
+                          valor: painelFinanceiro.linha_caixa.despesas,
+                        },
+                        {
+                          legenda: "vendas recebida",
+                          valor: painelFinanceiro.linha_caixa.vendas,
+                        },
+                        {
+                          legenda: "saldo",
+                          valor: painelFinanceiro.linha_caixa.saldo,
+                        },
+                      ],
+                    },
+                    {
+                      etapa: 3 as const,
+                      pill: "Totais",
+                      titulo: "Totais no período",
+                      subtitulo:
+                        "Fechamento de referência no período selecionado (competência).",
+                      celulas: [
+                        {
+                          legenda: "Total compras paga",
+                          valor: painelFinanceiro.linha_totais_periodo.compras,
+                        },
+                        {
+                          legenda: "despesa paga no período",
+                          valor: painelFinanceiro.linha_totais_periodo.despesas,
+                        },
+                        {
+                          legenda: "vendas recebida no período",
+                          valor: painelFinanceiro.linha_totais_periodo.vendas,
+                        },
+                        {
+                          legenda: "saldo do período",
+                          valor: painelFinanceiro.linha_totais_periodo.saldo,
+                        },
+                      ],
+                    },
+                  ] as const
+                ).map((bloco, blocoIdx) => (
+                  <motion.section
+                    key={bloco.titulo}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08 + blocoIdx * 0.06 }}
+                    className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60"
+                  >
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                          {bloco.etapa}
+                        </span>
+                        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {bloco.pill}
+                        </span>
+                        <h3 className="text-base font-semibold text-slate-900 dark:text-foreground sm:text-lg">
+                          {bloco.titulo}
+                        </h3>
+                      </div>
+                    </div>
+                    <p className="mb-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                      {bloco.subtitulo}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                      {bloco.celulas.map((c, idx) => {
+                        const valorN = numPainel(c.valor);
+                        const kind = painelMetricKindFromLegenda(c.legenda);
+                        const visual = painelMetricVisual[kind];
+                        const Icon = visual.Icon;
+                        return (
+                          <motion.div
+                            key={`${bloco.titulo}-${c.legenda}`}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.12 + blocoIdx * 0.05 + idx * 0.04 }}
+                          >
+                            <Card
+                              className={`h-full overflow-hidden border border-border/60 shadow-none transition-shadow hover:shadow-md ${visual.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
+                            >
+                              <CardContent className="p-4 sm:p-4">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
+                                    {c.legenda}
+                                  </p>
+                                  <div
+                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${visual.iconWrap}`}
+                                  >
+                                    <Icon className="h-4 w-4" aria-hidden />
+                                  </div>
+                                </div>
+                                <p
+                                  className={`mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${painelValorClass(kind, valorN)}`}
+                                >
+                                  {formatCurrency(valorN)}
+                                </p>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.section>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                O backend ainda não envia{' '}
+                <code className="text-xs bg-muted px-1 rounded">painel_acompanhamento</code>. Atualize a API e recarregue.
+              </p>
+            )}
+            {painelFinanceiro ? (
+              <div className="mt-6 flex gap-3 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 dark:border-sky-500/25 dark:bg-sky-950/30">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+                <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                  <span className="font-semibold text-foreground">Competência</span> usa a{' '}
+                  <span className="font-semibold text-foreground">data de emissão</span> da conta no mês selecionado.{' '}
+                  <span className="font-semibold text-foreground">Compras</span> somam contas a pagar de pedidos de compra;{' '}
+                  <span className="font-semibold text-foreground">Despesas</span>, as demais contas a pagar.{' '}
+                  <span className="font-semibold text-foreground">Caixa</span> segue pagamentos/recebimentos na data informada.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </motion.div>
 
         {/* Contas Vencidas - Full Width */}
         <motion.div

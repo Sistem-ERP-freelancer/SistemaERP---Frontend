@@ -12,6 +12,14 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+/** Data local em YYYY-MM-DD (evita deslocar o dia com `toISOString()` em fusos UTC−). */
+export function formatISODateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Extrai numero_parcela a partir da string p.numero (ex: "1/10", "10/10", "2026/10").
  * O backend espera numero_parcela 1..N. O formato "2026/10" (ano/parcela) deve retornar 10.
