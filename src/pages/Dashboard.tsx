@@ -261,7 +261,7 @@ const Dashboard = () => {
           className="mb-6 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]"
         >
           <div className="relative border-b border-border/80 bg-gradient-to-br from-slate-50/90 via-card to-sky-50/40 px-4 py-5 sm:px-6 dark:from-muted/30 dark:via-card dark:to-sky-950/20">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-4">
               <div className="flex gap-3 min-w-0">
                 <div className="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <BarChart3 className="h-5 w-5" />
@@ -277,25 +277,6 @@ const Dashboard = () => {
                     Lançamentos no mês (competência), movimentação de caixa no período e totais — alinhado ao endpoint da página Financeiro.
                   </p>
                 </div>
-              </div>
-              <div className="flex flex-col gap-1.5 shrink-0 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm backdrop-blur-sm dark:bg-background/50 max-w-full sm:max-w-[16rem]">
-                <Label
-                  htmlFor="dashboard-mes-ano"
-                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                >
-                  <Calendar className="h-3.5 w-3.5 opacity-70" />
-                  Mês de referência
-                </Label>
-                <input
-                  id="dashboard-mes-ano"
-                  type="month"
-                  value={mesAnoFiltro}
-                  onChange={(e) => setMesAnoFiltro(e.target.value)}
-                  className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <p className="text-[11px] leading-snug text-muted-foreground">
-                  Sem mês: linhas 1 e 2 usam o mês atual; &quot;Totais&quot; soma todo o histórico (competência).
-                </p>
               </div>
             </div>
           </div>
@@ -413,6 +394,24 @@ const Dashboard = () => {
                           {bloco.titulo}
                         </h3>
                       </div>
+                      {bloco.etapa === 1 ? (
+                        <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
+                          <Label
+                            htmlFor="dashboard-mes-ano"
+                            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                          >
+                            <Calendar className="h-3.5 w-3.5 opacity-70" />
+                            Mês de referência
+                          </Label>
+                          <input
+                            id="dashboard-mes-ano"
+                            type="month"
+                            value={mesAnoFiltro}
+                            onChange={(e) => setMesAnoFiltro(e.target.value)}
+                            className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                        </div>
+                      ) : null}
                     </div>
                     <p className="mb-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                       {bloco.subtitulo}
