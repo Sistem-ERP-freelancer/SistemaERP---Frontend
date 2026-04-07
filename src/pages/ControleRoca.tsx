@@ -1435,7 +1435,7 @@ export default function ControleRoca() {
   const [relPagMeeiroPopoverOpen, setRelPagMeeiroPopoverOpen] = useState(false);
   const [relDataInicial, setRelDataInicial] = useState('');
   const [relDataFinal, setRelDataFinal] = useState('');
-  /** Vazio por padrão: o backend gera o PDF em lista (“comissão”). Datas preenchidas → recibo detalhado com lançamentos. */
+  /** Vazio por padrão: o backend gera o PDF em lista (“comissão”). Datas preenchidas → recibo de repasse ao parceiro com lançamentos. */
   const [relMeeirosPdfDataInicial, setRelMeeirosPdfDataInicial] = useState('');
   const [relMeeirosPdfDataFinal, setRelMeeirosPdfDataFinal] = useState('');
   const [relMeeirosPdfRocaIds, setRelMeeirosPdfRocaIds] = useState<number[]>([]);
@@ -4926,10 +4926,10 @@ className={
                       <Separator />
                       <div className="rounded-lg border border-dashed border-border bg-muted/25 p-3 space-y-3">
                         <div>
-                          <p className="text-sm font-medium">Todos os recibos em um PDF</p>
+                          <p className="text-sm font-medium">Todos os recibos de repasse em um PDF</p>
                           <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                            Um arquivo com recibo detalhado por meeiro (cada um em páginas separadas). Usa o período,
-                            a roça e o status selecionados acima. Com status &quot;Todos&quot;, a API trata como
+                            Um arquivo com recibo de repasse ao parceiro por meeiro (cada um em páginas separadas). Usa o
+                            período, a roça e o status selecionados acima. Com status &quot;Todos&quot;, a API trata como
                             pendentes neste modo.
                           </p>
                         </div>
@@ -4963,7 +4963,7 @@ className={
                             ) : (
                               <Printer className="w-4 h-4 shrink-0" />
                             )}
-                            Imprimir todos os recibos
+                            Imprimir todos os recibos de repasse
                           </Button>
                           <Button
                             type="button"
@@ -4995,7 +4995,7 @@ className={
                             ) : (
                               <Download className="w-4 h-4 shrink-0" />
                             )}
-                            Baixar todos os recibos (1 PDF)
+                            Baixar recibos de repasse (1 PDF)
                           </Button>
                         </div>
                       </div>
@@ -6034,11 +6034,12 @@ className={
                   <FileText className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold leading-tight">Relatório de pagamento de meeiro</h3>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de repasse ao parceiro</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Sem meeiro e sem datas: PDF em lista consolidada. Com um meeiro e período: recibo detalhado. Com
-                    &quot;Todos os meeiros&quot;, use os botões <span className="font-medium">Recibos (1 PDF)</span> para
-                    um único arquivo com recibo por meeiro (páginas separadas). Roças e status são opcionais.
+                    Sem meeiro e sem datas: PDF em lista consolidada. Com um meeiro e período: recibo de repasse ao parceiro
+                    detalhado. Com &quot;Todos os meeiros&quot;, use os botões{' '}
+                    <span className="font-medium">Recibos de repasse (1 PDF)</span> para um único arquivo com um recibo por
+                    parceiro (páginas separadas). Roças e status são opcionais.
                   </p>
                 </div>
               </div>
@@ -6301,7 +6302,7 @@ className={
                         ) : (
                           <Download className="w-4 h-4" />
                         )}
-                        Recibos (1 PDF)
+                        Recibos de repasse (1 PDF)
                       </Button>
                       <Button
                         variant="secondary"
@@ -6329,7 +6330,7 @@ className={
                         ) : (
                           <Printer className="w-4 h-4" />
                         )}
-                        Imprimir recibos
+                        Imprimir recibos de repasse
                       </Button>
                     </>
                   )}
