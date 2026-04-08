@@ -46,7 +46,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatarStatus } from "@/lib/utils";
+import { formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { ContaFinanceira, CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
@@ -379,7 +379,8 @@ const ContasAReceber = () => {
       // Calcular manualmente se não tiver o campo do backend
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(conta.data_vencimento);
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (!vencimento) return false;
       vencimento.setHours(0, 0, 0, 0);
       return vencimento < hoje;
     } catch {
@@ -402,7 +403,8 @@ const ContasAReceber = () => {
       // Calcular manualmente
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(conta.data_vencimento);
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (!vencimento) return false;
       vencimento.setHours(0, 0, 0, 0);
       return vencimento.getTime() === hoje.getTime();
     } catch {
@@ -421,7 +423,8 @@ const ContasAReceber = () => {
       const mesAtual = hoje.getMonth();
       const anoAtual = hoje.getFullYear();
       
-      const vencimento = new Date(conta.data_vencimento);
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (!vencimento) return false;
       const mesVencimento = vencimento.getMonth();
       const anoVencimento = vencimento.getFullYear();
       
@@ -530,16 +533,6 @@ const ContasAReceber = () => {
     return metodos[metodo] || metodo;
   };
 
-  // Função para formatar data
-  const formatarData = (data?: string): string => {
-    if (!data) return 'N/A';
-    try {
-      return new Date(data).toLocaleDateString('pt-BR');
-    } catch {
-      return data;
-    }
-  };
-
   // Mutation para criar conta financeira
   const createContaMutation = useMutation({
     mutationFn: async (data: CreateContaFinanceiraDto) => {
@@ -644,15 +637,13 @@ const ContasAReceber = () => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
   };
 
-  const formatarDataBR = (data: string) =>
-    data ? new Date(data).toLocaleDateString("pt-BR") : "N/A";
-
   const calcularDiasAteVencimento = (dataVencimento: string | undefined | null): number | null => {
     if (!dataVencimento) return null;
     try {
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(dataVencimento);
+      const vencimento = parseDateOnlyLocal(dataVencimento);
+      if (!vencimento) return null;
       vencimento.setHours(0, 0, 0, 0);
       const diffTime = vencimento.getTime() - hoje.getTime();
       return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -859,7 +850,7 @@ const ContasAReceber = () => {
       }).format(conta.valor_original || 0);
 
       const dataFormatada = conta.data_vencimento
-        ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
+        ? formatDate(conta.data_vencimento)
         : "N/A";
 
       const statusMap: Record<string, string> = {
@@ -1012,7 +1003,11 @@ const ContasAReceber = () => {
       const descricaoBase = primeira?.descricao?.replace(/\s*-\s*\d+\/\d+\s*$/, "").trim() || primeira?.numero_conta || `Conta ${primeira?.id}`;
       const pendentes = parcelas.filter((p) => p.status !== "CANCELADO" && !isPaga(p));
       const primeiraVenc = pendentes
-        .sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime())[0]
+        .sort((a, b) => {
+          const ka = String(a.data_vencimento ?? "").split(/[T ]/)[0];
+          const kb = String(b.data_vencimento ?? "").split(/[T ]/)[0];
+          return ka.localeCompare(kb);
+        })[0]
         ?.data_vencimento;
 
       let statusConsolidado = "Pendente";
@@ -1053,7 +1048,8 @@ const ContasAReceber = () => {
     fimDoMes.setHours(23, 59, 59, 999);
 
     return linhasPedidos.filter((p: ContaReceber) => {
-      const dataVenc = p.data_vencimento ? new Date(p.data_vencimento) : new Date(p.data_pedido);
+      const raw = p.data_vencimento ?? p.data_pedido;
+      const dataVenc = parseDateOnlyLocal(raw) ?? new Date(raw);
       dataVenc.setHours(0, 0, 0, 0);
 
       if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
@@ -1084,7 +1080,8 @@ const ContasAReceber = () => {
       if (!g.primeira_vencimento && activeCardFilter === "todos") return true;
       if (!g.primeira_vencimento) return false;
 
-      const dataVenc = new Date(g.primeira_vencimento);
+      const dataVenc = parseDateOnlyLocal(g.primeira_vencimento);
+      if (!dataVenc) return false;
       dataVenc.setHours(0, 0, 0, 0);
 
       if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
@@ -1112,7 +1109,9 @@ const ContasAReceber = () => {
           categoria: "Vendas",
           valor: formatarMoeda(p.valor_total),
           valorPago: formatarMoeda(p.valor_pago ?? 0),
-          data: p.data_vencimento ? formatarDataBR(p.data_vencimento) : formatarDataBR(p.data_pedido),
+          data: p.data_vencimento
+            ? formatDate(p.data_vencimento)
+            : formatDate(p.data_pedido),
           vencimentoStatus,
           status: statusFormatado,
           pedidoId: p.pedido_id,
@@ -1135,7 +1134,7 @@ const ContasAReceber = () => {
         categoria: g.categoria,
         valor: formatarMoeda(totalGrupo),
         valorPago: formatarMoeda(valorPagoGrupo),
-        data: g.primeira_vencimento ? formatarDataBR(g.primeira_vencimento) : "—",
+        data: g.primeira_vencimento ? formatDate(g.primeira_vencimento) : "—",
         vencimentoStatus,
         status: g.statusConsolidado,
         pedidoId: g.pedido_id,
@@ -1185,7 +1184,7 @@ const ContasAReceber = () => {
         }).format(conta.valor_original || 0);
 
         const dataFormatada = conta.data_vencimento
-          ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
+          ? formatDate(conta.data_vencimento)
           : "N/A";
 
         const statusMap: Record<string, string> = {
@@ -2151,7 +2150,11 @@ const ContasAReceber = () => {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Data de Pagamento</Label>
-                    <p className="text-sm font-medium">{formatarData(contaSelecionada.data_pagamento)}</p>
+                    <p className="text-sm font-medium">
+                      {contaSelecionada.data_pagamento
+                        ? formatDate(contaSelecionada.data_pagamento)
+                        : "N/A"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Método de Pagamento</Label>

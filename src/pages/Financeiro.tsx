@@ -1,5 +1,6 @@
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
     Dialog,
     DialogContent,
@@ -11,6 +12,8 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -40,14 +43,18 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { cn, formatDate } from "@/lib/utils";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { CreateContaFinanceiraDto, financeiroService, ResumoFinanceiro } from "@/services/financeiro.service";
+import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
+    BarChart3,
     Calendar,
+    Download,
     Circle,
     CreditCard,
     DollarSign,
@@ -59,6 +66,7 @@ import {
     Loader2,
     MoreVertical,
     Plus,
+    Printer,
     RotateCcw,
     Search,
     ShoppingCart,
@@ -94,6 +102,12 @@ const Financeiro = () => {
   const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
   const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
+  const [relatorioClientePdfOpen, setRelatorioClientePdfOpen] = useState(false);
+  const [relatorioClienteIdSelect, setRelatorioClienteIdSelect] = useState<string>("");
+  const [relatorioClientePdfLoading, setRelatorioClientePdfLoading] = useState(false);
+  const [relatorioDataInicial, setRelatorioDataInicial] = useState("");
+  const [relatorioDataFinal, setRelatorioDataFinal] = useState("");
+  const [relatorioStatusFiltro, setRelatorioStatusFiltro] = useState<string>("Todos");
   /** Filtro por card clicável: Receita do Mês / Despesas do Mês (como em Contas a Receber) */
   const [cardTipoFilter, setCardTipoFilter] = useState<"todos" | "RECEBER" | "PAGAR">("todos");
 
@@ -153,6 +167,68 @@ const Financeiro = () => {
     if (fornecedorFilterId != null) f.fornecedor_id = fornecedorFilterId;
     return Object.keys(f).length ? f : undefined;
   }, [dataInicialFilter, dataFinalFilter, cardTipoFilter, clienteFilterId, fornecedorFilterId]);
+
+  const relatorioClienteIdParsed = useMemo(() => {
+    if (!relatorioClienteIdSelect) return null;
+    const n = parseInt(relatorioClienteIdSelect, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [relatorioClienteIdSelect]);
+
+  const relatorioPreviewParams = useMemo(
+    () => ({
+      page: 1,
+      limit: 1,
+      cliente_id: relatorioClienteIdParsed ?? undefined,
+      data_inicial: relatorioDataInicial || undefined,
+      data_final: relatorioDataFinal || undefined,
+      status:
+        relatorioStatusFiltro !== "Todos"
+          ? relatorioStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioClienteIdParsed,
+      relatorioDataInicial,
+      relatorioDataFinal,
+      relatorioStatusFiltro,
+    ],
+  );
+
+  const {
+    data: relatorioPreviewData,
+    isFetching: relatorioPreviewFetching,
+    isError: relatorioPreviewError,
+  } = useQuery({
+    queryKey: ["relatorio-financeiro-preview", relatorioPreviewParams],
+    queryFn: () => financeiroService.listarAgrupado(relatorioPreviewParams),
+    enabled:
+      relatorioClientePdfOpen && relatorioClienteIdParsed != null,
+  });
+
+  const relatorioTemDados =
+    !relatorioPreviewError &&
+    relatorioPreviewData != null &&
+    relatorioPreviewData.total > 0;
+
+  /** Mensagem quando o preview não encontra contas (PDF/impressão desabilitados). */
+  const relatorioMensagemSemDados = useMemo(() => {
+    if (relatorioStatusFiltro !== "Todos") {
+      return "O cliente não possui dívida naquele status selecionado.";
+    }
+    return "O cliente não possui dívida naquele período.";
+  }, [relatorioStatusFiltro]);
+
+  const relatorioFiltrosForPdf = useMemo(
+    () => ({
+      dataInicial: relatorioDataInicial || undefined,
+      dataFinal: relatorioDataFinal || undefined,
+      status:
+        relatorioStatusFiltro !== "Todos"
+          ? relatorioStatusFiltro
+          : undefined,
+    }),
+    [relatorioDataInicial, relatorioDataFinal, relatorioStatusFiltro],
+  );
 
   // GET /financeiro/dashboard (unificado) com fallback para GET /contas-financeiras/dashboard/resumo
   const { data: dashboardUnificado } = useQuery({
@@ -293,47 +369,47 @@ const Financeiro = () => {
     const valorTotalPago = parseValor(contasPagarStats?.valor_total_pago) ?? 0;
     const saldoAtual = dashboardUnificado?.saldo_atual ?? (valorTotalRecebido - valorTotalPago);
 
+    /** Mesmo padrão visual dos cards em Centro de custos (borda lateral + ícone + valor). */
     return [
-      { 
-        label: "Receita do Mês", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(receitaMes), 
-        icon: TrendingUp, 
-        trend: null, 
-        trendUp: true, 
-        color: "text-cyan", 
-        bgColor: "bg-cyan/10",
-        description: "Valor total a receber do mês atual",
+      {
+        label: "Receita do Mês",
+        value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(receitaMes),
+        Icon: TrendingUp,
+        border: "border-l-4 border-l-sky-600 dark:border-l-sky-400",
+        iconWrap:
+          "bg-sky-500/[0.12] text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
         cardFilter: "RECEBER" as const,
       },
-      { 
-        label: "Valor Pago do Mês", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorPagoMes), 
-        icon: DollarSign, 
-        trend: null, 
-        trendUp: true, 
-        color: "text-green-600", 
-        bgColor: "bg-green-100",
-        description: "Valor pago no mês atual",
+      {
+        label: "Valor Pago do Mês",
+        value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valorPagoMes),
+        Icon: DollarSign,
+        border: "border-l-4 border-l-emerald-500",
+        iconWrap:
+          "bg-emerald-500/[0.12] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
         cardFilter: "todos" as const,
       },
-      { 
-        label: "Despesas do Mês", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(despesaMes), 
-        icon: TrendingDown, 
-        trend: null, 
-        trendUp: false, 
-        color: "text-destructive", 
-        bgColor: "bg-destructive/10",
-        description: "Valor total a pagar do mês atual",
+      {
+        label: "Despesas do Mês",
+        value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(despesaMes),
+        Icon: TrendingDown,
+        border: "border-l-4 border-l-rose-500",
+        iconWrap:
+          "bg-rose-500/[0.12] text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
         cardFilter: "PAGAR" as const,
       },
-      { 
-        label: "Saldo Atual", 
-        value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoAtual), 
-        icon: Wallet, 
-        trend: null, 
-        color: "text-azure", 
-        bgColor: "bg-azure/10",
+      {
+        label: "Saldo Atual",
+        value: new Intl.NumberFormat("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(saldoAtual),
+        Icon: Wallet,
+        border: "border-l-4 border-l-blue-600 dark:border-l-blue-400",
+        iconWrap:
+          "bg-blue-500/[0.12] text-blue-800 dark:bg-blue-500/15 dark:text-blue-300",
         cardFilter: "todos" as const,
       },
     ];
@@ -813,54 +889,71 @@ const Financeiro = () => {
           </Dialog>
         </div>
 
-        {/* Stats Grid — cards clicáveis para filtrar por tipo (Receita/Despesa), como Contas a Receber */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Stats — mesmo designer dos cards da página Centro de custos (clicável para filtrar) */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4 mb-6">
           {stats.map((stat, index) => {
-            const cardFilter = (stat as { cardFilter?: "todos" | "RECEBER" | "PAGAR" }).cardFilter ?? "todos";
+            const Icon = stat.Icon;
+            const cardFilter = stat.cardFilter ?? "todos";
+            const filtroTipoAtivo =
+              cardFilter !== "todos" && cardTipoFilter === cardFilter;
             return (
               <motion.div
                 key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  setCardTipoFilter(cardFilter);
-                  setPage(1);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
+                transition={{ delay: index * 0.05 }}
+              >
+                <Card
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
                     setCardTipoFilter(cardFilter);
                     setPage(1);
-                  }
-                }}
-                className="bg-transparent rounded-xl p-5 border border-border transition-all cursor-pointer hover:shadow-md"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                  </div>
-                  {stat.trend && (
-                    <span className={`text-sm font-medium ${stat.trend.includes("pendentes") ? "text-destructive" : stat.trendUp ? "text-cyan" : "text-destructive"}`}>
-                      {stat.trend}
-                    </span>
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setCardTipoFilter(cardFilter);
+                      setPage(1);
+                    }
+                  }}
+                  className={cn(
+                    "h-full overflow-hidden border border-border/60 shadow-sm cursor-pointer transition-all hover:shadow-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    stat.border,
+                    "bg-gradient-to-b from-background to-muted/30 dark:to-muted/20",
+                    filtroTipoAtivo ? "ring-2 ring-primary/45" : "",
                   )}
-                </div>
-                <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
+                        {stat.label}
+                      </p>
+                      <div
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                          stat.iconWrap,
+                        )}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden />
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
+                      {stat.value}
+                    </p>
+                  </CardContent>
+                </Card>
               </motion.div>
             );
           })}
         </div>
 
-        {/* Filtros e busca — mesmo design de Contas a Receber */}
-        <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex gap-4">
+        {/* Filtros e busca — barra tipo Centro de Custos */}
+        <div className="mb-6 rounded-2xl border border-border/60 bg-muted/40 p-3 sm:p-4 dark:bg-muted/25">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button
-              variant="outline"
-              className="gap-2"
+              variant="secondary"
+              className="h-10 w-full shrink-0 gap-2 rounded-xl shadow-sm sm:w-auto"
               onClick={() => setFiltrosDialogOpen(true)}
               style={
                 temFiltrosAtivos
@@ -868,10 +961,10 @@ const Financeiro = () => {
                   : {}
               }
             >
-              <Filter className="w-4 h-4" />
+              <Filter className="h-4 w-4 text-muted-foreground" />
               Filtros
               {temFiltrosAtivos && (
-                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
                   {(cardTipoFilter !== "todos" ? 1 : 0) +
                     (clienteFilterId != null ? 1 : 0) +
                     (fornecedorFilterId != null ? 1 : 0) +
@@ -881,7 +974,42 @@ const Financeiro = () => {
                 </span>
               )}
             </Button>
-            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por cliente ou descrição..."
+                  className="h-10 rounded-xl border-border/80 bg-background pl-10 shadow-sm placeholder:text-muted-foreground/70"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-10 w-full shrink-0 gap-2 rounded-xl shadow-sm sm:w-auto"
+                  >
+                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                    Relatórios
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setRelatorioClientePdfOpen(true)}
+                  >
+                    Relatório financeiro por cliente
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </div>
+
+        <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
               <SheetContent
                 side="right"
                 className="w-[400px] sm:w-[540px] overflow-y-auto"
@@ -1055,18 +1183,6 @@ const Financeiro = () => {
                 </div>
               </SheetContent>
             </Sheet>
-
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente ou descrição..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
 
         {/* Table */}
         <motion.div
@@ -1340,19 +1456,19 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Data de criação</Label>
                       <div className="text-sm font-medium">
-                        {contaDetalhe.datas?.data_criacao ? new Date(contaDetalhe.datas.data_criacao).toLocaleDateString('pt-BR') : 'N/A'}
+                        {contaDetalhe.datas?.data_criacao ? formatDate(contaDetalhe.datas.data_criacao) : 'N/A'}
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Data de vencimento</Label>
                       <div className="text-sm font-medium">
-                        {contaDetalhe.datas?.data_vencimento ? new Date(contaDetalhe.datas.data_vencimento).toLocaleDateString('pt-BR') : 'N/A'}
+                        {contaDetalhe.datas?.data_vencimento ? formatDate(contaDetalhe.datas.data_vencimento) : 'N/A'}
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Data de pagamento</Label>
                       <div className="text-sm font-medium">
-                        {contaDetalhe.datas?.data_pagamento ? new Date(contaDetalhe.datas.data_pagamento).toLocaleDateString('pt-BR') : 'N/A'}
+                        {contaDetalhe.datas?.data_pagamento ? formatDate(contaDetalhe.datas.data_pagamento) : 'N/A'}
                       </div>
                     </div>
                   </div>
@@ -1733,6 +1849,233 @@ const Financeiro = () => {
                 Carregando dados da conta...
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={relatorioClientePdfOpen}
+          onOpenChange={(open) => {
+            setRelatorioClientePdfOpen(open);
+            if (open) {
+              setRelatorioDataInicial("");
+              setRelatorioDataFinal("");
+              setRelatorioStatusFiltro("Todos");
+              setRelatorioClienteIdSelect(
+                clienteFilterId != null ? String(clienteFilterId) : "",
+              );
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório financeiro por cliente</DialogTitle>
+              <DialogDescription>
+                Inclui dados da empresa, cadastro do cliente e lançamentos das contas financeiras
+                vinculadas a ele (campos já existentes no sistema).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="relatorio-cliente-select">Cliente</Label>
+                <Select
+                  value={relatorioClienteIdSelect || undefined}
+                  onValueChange={setRelatorioClienteIdSelect}
+                >
+                  <SelectTrigger id="relatorio-cliente-select">
+                    <SelectValue placeholder="Selecione o cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
+                          value={relatorioDataInicial}
+                          onChange={(e) => setRelatorioDataInicial(e.target.value || "")}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
+                          value={relatorioDataFinal}
+                          onChange={(e) => setRelatorioDataFinal(e.target.value || "")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Status</Label>
+                  <RadioGroup
+                    value={relatorioStatusFiltro}
+                    onValueChange={setRelatorioStatusFiltro}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="Todos" id="relatorio-status-todos" />
+                      <Label htmlFor="relatorio-status-todos" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-primary" />
+                        <span className="text-[#1A3B70]">Todos</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PENDENTE" id="relatorio-status-pendente" />
+                      <Label htmlFor="relatorio-status-pendente" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-amber-500" />
+                        <span className="text-[#1A3B70]">Pendente</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PAGO_PARCIAL" id="relatorio-status-parcial" />
+                      <Label htmlFor="relatorio-status-parcial" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-blue-500" />
+                        <span className="text-[#1A3B70]">Pago Parcial</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PAGO_TOTAL" id="relatorio-status-quitado" />
+                      <Label htmlFor="relatorio-status-quitado" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-green-500" />
+                        <span className="text-[#1A3B70]">Quitada</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="VENCIDO" id="relatorio-status-vencido" />
+                      <Label htmlFor="relatorio-status-vencido" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-red-500" />
+                        <span className="text-[#1A3B70]">Vencido</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="CANCELADO" id="relatorio-status-cancelado" />
+                      <Label htmlFor="relatorio-status-cancelado" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-slate-500" />
+                        <span className="text-[#1A3B70]">Cancelado</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              </div>
+
+              {relatorioPreviewFetching && relatorioClienteIdParsed != null && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando filtros…
+                </p>
+              )}
+
+              {relatorioPreviewError && relatorioClienteIdParsed != null && (
+                <p className="text-sm text-destructive">
+                  Não foi possível verificar os filtros. Tente novamente.
+                </p>
+              )}
+
+              {!relatorioPreviewFetching &&
+                !relatorioPreviewError &&
+                relatorioClienteIdParsed != null &&
+                relatorioPreviewData?.total === 0 && (
+                  <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">
+                    {relatorioMensagemSemDados}
+                  </p>
+                )}
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  className="gap-2"
+                  disabled={
+                    relatorioClienteIdParsed == null ||
+                    relatorioPreviewFetching ||
+                    !relatorioTemDados ||
+                    relatorioClientePdfLoading
+                  }
+                  onClick={async () => {
+                    const id = relatorioClienteIdParsed;
+                    if (id == null) {
+                      toast.error("Selecione um cliente.");
+                      return;
+                    }
+                    setRelatorioClientePdfLoading(true);
+                    try {
+                      await relatoriosClienteService.downloadRelatorioFinanceiro(
+                        id,
+                        relatorioFiltrosForPdf,
+                      );
+                      toast.success("PDF baixado.");
+                    } catch (e: unknown) {
+                      const msg =
+                        e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                      toast.error(msg);
+                    } finally {
+                      setRelatorioClientePdfLoading(false);
+                    }
+                  }}
+                >
+                  {relatorioClientePdfLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Baixar PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={
+                    relatorioClienteIdParsed == null ||
+                    relatorioPreviewFetching ||
+                    !relatorioTemDados ||
+                    relatorioClientePdfLoading
+                  }
+                  onClick={async () => {
+                    const id = relatorioClienteIdParsed;
+                    if (id == null) {
+                      toast.error("Selecione um cliente.");
+                      return;
+                    }
+                    setRelatorioClientePdfLoading(true);
+                    try {
+                      await relatoriosClienteService.imprimirRelatorioFinanceiro(
+                        id,
+                        relatorioFiltrosForPdf,
+                      );
+                    } catch (e: unknown) {
+                      const msg =
+                        e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                      toast.error(msg);
+                    } finally {
+                      setRelatorioClientePdfLoading(false);
+                    }
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  Abrir para imprimir
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

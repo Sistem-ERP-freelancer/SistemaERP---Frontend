@@ -40,6 +40,14 @@ export interface EnviarEmailResponse {
   email: string;
 }
 
+/** Mesmos filtros opcionais do GET /contas-financeiras/agrupado e do PDF financeiro. */
+export interface RelatorioFinanceiroClienteQuery {
+  dataInicial?: string;
+  dataFinal?: string;
+  /** PENDENTE, PAGO_PARCIAL, PAGO_TOTAL, VENCIDO, CANCELADO — omitir ou “Todos” = sem filtro */
+  status?: string;
+}
+
 class RelatoriosClienteService {
   private getAuthToken(): string | null {
     return localStorage.getItem('access_token');
@@ -108,12 +116,27 @@ class RelatoriosClienteService {
     window.URL.revokeObjectURL(urlBlob);
   }
 
+  private buildRelatorioFinanceiroQuery(filtros?: RelatorioFinanceiroClienteQuery): string {
+    const params = new URLSearchParams();
+    if (filtros?.dataInicial) params.append('data_inicial', filtros.dataInicial);
+    if (filtros?.dataFinal) params.append('data_final', filtros.dataFinal);
+    if (filtros?.status && filtros.status !== 'Todos') {
+      params.append('status', filtros.status);
+    }
+    const q = params.toString();
+    return q ? `?${q}` : '';
+  }
+
   /**
    * Baixa o relatório financeiro de um cliente
    */
-  async downloadRelatorioFinanceiro(clienteId: number): Promise<void> {
+  async downloadRelatorioFinanceiro(
+    clienteId: number,
+    filtros?: RelatorioFinanceiroClienteQuery,
+  ): Promise<void> {
+    const query = this.buildRelatorioFinanceiroQuery(filtros);
     await this.downloadPDF(
-      `/relatorios/cliente/${clienteId}/financeiro/pdf`,
+      `/relatorios/cliente/${clienteId}/financeiro/pdf${query}`,
       `relatorio-financeiro-cliente-${clienteId}.pdf`
     );
   }
@@ -121,13 +144,17 @@ class RelatoriosClienteService {
   /**
    * Abre o relatório financeiro para impressão
    */
-  async imprimirRelatorioFinanceiro(clienteId: number): Promise<void> {
+  async imprimirRelatorioFinanceiro(
+    clienteId: number,
+    filtros?: RelatorioFinanceiroClienteQuery,
+  ): Promise<void> {
     const token = this.getAuthToken();
     if (!token) {
       throw new Error('Token de autenticação não encontrado');
     }
 
-    const url = `${API_BASE_URL}/relatorios/cliente/${clienteId}/financeiro/imprimir`;
+    const query = this.buildRelatorioFinanceiroQuery(filtros);
+    const url = `${API_BASE_URL}/relatorios/cliente/${clienteId}/financeiro/imprimir${query}`;
 
     const response = await fetch(url, {
       method: 'GET',

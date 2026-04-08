@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Parcela } from '@/hooks/useParcelasPedido';
-import { formatCurrency, normalizarStatusParcela } from '@/lib/utils';
+import { formatCurrency, normalizarStatusParcela, parseDateOnlyLocal } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AlertCircle, Calendar, CheckCircle2, DollarSign } from 'lucide-react';
@@ -151,7 +151,15 @@ export function ParcelasChecklist({
     // Verificar se está vencida
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-    const vencimento = new Date(parcela.data_vencimento);
+    const vencimento = parseDateOnlyLocal(parcela.data_vencimento);
+    if (!vencimento) {
+      return (
+        <Badge variant="secondary">
+          <Calendar className="w-3 h-3 mr-1" />
+          Aberta
+        </Badge>
+      );
+    }
     vencimento.setHours(0, 0, 0, 0);
 
     if (vencimento < hoje) {

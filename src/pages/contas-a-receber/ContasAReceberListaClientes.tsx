@@ -22,7 +22,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, parseDateOnlyLocal } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
 import type { ClienteComPedidos } from '@/services/contas-receber.service';
 import { financeiroService } from '@/services/financeiro.service';
@@ -176,13 +176,17 @@ const ContasAReceberListaClientes = ({
       const valorAberto = conta.valor_restante ?? (conta as any).valor_em_aberto ?? 0;
       let maiorAtraso = 0;
       try {
-        const venc = new Date(conta.data_vencimento);
-        venc.setHours(0, 0, 0, 0);
-        const dias = Math.floor(
-          (hoje.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (dias > 0 && dias > maiorAtraso) maiorAtraso = dias;
-      } catch {}
+        const venc = parseDateOnlyLocal(conta.data_vencimento);
+        if (venc) {
+          venc.setHours(0, 0, 0, 0);
+          const dias = Math.floor(
+            (hoje.getTime() - venc.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (dias > 0 && dias > maiorAtraso) maiorAtraso = dias;
+        }
+      } catch {
+        /* ignora data inválida */
+      }
       const existing = map.get(cidNum);
       if (existing) {
         existing.total_aberto += valorAberto;

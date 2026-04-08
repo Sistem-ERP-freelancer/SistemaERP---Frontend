@@ -48,7 +48,13 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency, formatarFormaPagamento, formatarStatus } from "@/lib/utils";
+import {
+    formatCurrency,
+    formatDate,
+    formatarFormaPagamento,
+    formatarStatus,
+    parseDateOnlyLocal,
+} from "@/lib/utils";
 import { CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
@@ -507,7 +513,8 @@ function ContasAPagar() {
       // Calcular manualmente se não tiver o campo do backend
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(conta.data_vencimento);
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (!vencimento) return false;
       vencimento.setHours(0, 0, 0, 0);
       return vencimento < hoje;
     } catch {
@@ -531,7 +538,8 @@ function ContasAPagar() {
       // Calcular manualmente
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(conta.data_vencimento);
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (!vencimento) return false;
       vencimento.setHours(0, 0, 0, 0);
       return vencimento.getTime() === hoje.getTime();
     } catch {
@@ -551,7 +559,8 @@ function ContasAPagar() {
       const mesAtual = hoje.getMonth();
       const anoAtual = hoje.getFullYear();
       
-      const vencimento = new Date(conta.data_vencimento);
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (!vencimento) return false;
       const mesVencimento = vencimento.getMonth();
       const anoVencimento = vencimento.getFullYear();
       
@@ -890,7 +899,8 @@ function ContasAPagar() {
     try {
       const hoje = new Date();
       hoje.setHours(0, 0, 0, 0);
-      const vencimento = new Date(dataVencimento);
+      const vencimento = parseDateOnlyLocal(dataVencimento);
+      if (!vencimento) return null;
       vencimento.setHours(0, 0, 0, 0);
       const diffTime = vencimento.getTime() - hoje.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -949,7 +959,7 @@ function ContasAPagar() {
         const valorPagoFormatado = formatCurrency(valorPagoPedido);
 
         const dataFormatada = pedido.data_pedido
-          ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR')
+          ? formatDate(pedido.data_pedido)
           : "N/A";
 
         const statusFormatado = formatarStatus(pedido.status);
@@ -1005,7 +1015,7 @@ function ContasAPagar() {
       }).format(valorPagoConta);
 
       const dataFormatada = conta.data_vencimento
-        ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
+        ? formatDate(conta.data_vencimento)
         : "N/A";
 
       const statusMap: Record<string, string> = {
@@ -1166,7 +1176,7 @@ function ContasAPagar() {
         const valorPagoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorPagoConta);
 
         const dataFormatada = conta.data_vencimento
-          ? new Date(conta.data_vencimento).toLocaleDateString('pt-BR')
+          ? formatDate(conta.data_vencimento)
           : "N/A";
 
         const statusMap: Record<string, string> = {

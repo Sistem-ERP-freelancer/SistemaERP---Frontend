@@ -45,6 +45,23 @@ export function parseNumeroParcela(
   return simple ? parseInt(simple[1], 10) : fallbackIdx;
 }
 
+/**
+ * Converte a parte calendário (YYYY-MM-DD) em `Date` no fuso local,
+ * evitando o deslocamento de um dia causado por `new Date('YYYY-MM-DD')` (interpretado como UTC).
+ */
+export function parseDateOnlyLocal(
+  date: string | null | undefined,
+): Date | null {
+  if (date == null || date === "") return null;
+  const m = String(date).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function formatDate(date: string | Date): string {
   if (date === null || date === undefined) return '';
   let d: Date;
