@@ -103,6 +103,27 @@ export interface MeeiroRoca {
   atualizadoEm?: string;
 }
 
+/** Campos opcionais considerados no relatório de cadastro incompleto. */
+export type CampoCadastroMeeiroPendente = 'cpf' | 'telefone' | 'chavePix' | 'endereco';
+
+export interface MeeiroCadastroIncompletoItem {
+  meeiroId: number;
+  codigo: string;
+  nome: string;
+  cpf: string | null;
+  telefone: string | null;
+  chavePix: string | null;
+  endereco: string | null;
+  produtorId: number;
+  produtorNome: string | null;
+  camposPendentes: CampoCadastroMeeiroPendente[];
+}
+
+export interface RelatorioMeeirosCadastroIncompletoResponse {
+  total: number;
+  itens: MeeiroCadastroIncompletoItem[];
+}
+
 export interface CreateMeeiroRocaDto {
   /** Se não informado, o backend gera automaticamente (ex: M001, M002). */
   codigo?: string;

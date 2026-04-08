@@ -84,6 +84,7 @@ import { ConsultaCnpjResponse } from '@/services/cnpj.service';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { produtosService } from '@/services/produtos.service';
 import type {
+    CampoCadastroMeeiroPendente,
     CreateLancamentoProducaoRocaDto,
     CreateMeeiroRocaDto,
     CreateProdutorRocaDto,
@@ -107,6 +108,7 @@ import {
     Building2,
     Calendar,
     Check,
+    ChevronDown,
     ChevronsUpDown,
     ClipboardList,
     Copy,
@@ -258,6 +260,16 @@ function createDefaultPagamentoMeeirosFiltros(): PagamentoMeeirosFiltros {
 }
 
 const UNIDADES = ['KG', 'SC', 'ARROBA', 'UN', 'LT', 'CX'] as const;
+
+function labelCampoMeeiroPendente(c: CampoCadastroMeeiroPendente): string {
+  const m: Record<CampoCadastroMeeiroPendente, string> = {
+    cpf: 'CPF',
+    telefone: 'Telefone',
+    chavePix: 'Chave PIX',
+    endereco: 'Endereço',
+  };
+  return m[c];
+}
 
 export default function ControleRoca() {
   const queryClient = useQueryClient();
@@ -496,6 +508,7 @@ export default function ControleRoca() {
   const [filtroMeeiroProdutorOpen, setFiltroMeeiroProdutorOpen] = useState(false);
   const [filtroMeeiroRocaSearch, setFiltroMeeiroRocaSearch] = useState('');
   const [filtroMeeiroRocaOpen, setFiltroMeeiroRocaOpen] = useState(false);
+  const [meeiroIncompletoDialogOpen, setMeeiroIncompletoDialogOpen] = useState(false);
   const { data: meeiroFiltroRocas = [] } = useQuery({
     queryKey: ['controle-roca', 'rocas', 'meeiros-tab-filtro', produtorIdMeeiros],
     queryFn: () =>
@@ -530,6 +543,11 @@ export default function ControleRoca() {
           rocaId: rocaIdMeeiros === '' ? undefined : Number(rocaIdMeeiros),
         },
       ),
+  });
+  const { data: meeirosCadastroIncompleto, isLoading: loadingMeeirosIncompleto } = useQuery({
+    queryKey: ['controle-roca', 'meeiros-cadastro-incompleto'],
+    queryFn: () => controleRocaService.relatorioMeeirosCadastroIncompleto(),
+    enabled: tab === 'meeiros' && meeiroIncompletoDialogOpen,
   });
   /** Lista de meeiros para métricas do dashboard (independe dos filtros da aba Meeiros). */
   const { data: meeirosDashboard = [] } = useQuery({
@@ -2731,7 +2749,7 @@ export default function ControleRoca() {
           {/* Tab Meeiros */}
           <TabsContent value="meeiros" className="space-y-4">
             <div className="bg-card rounded-xl border border-border p-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center">
                 <Button
                   variant="outline"
                   className="gap-2"
@@ -2904,12 +2922,144 @@ export default function ControleRoca() {
                     </div>
                   </SheetContent>
                 </Sheet>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" className="gap-2 shrink-0">
+                      <ClipboardList className="w-4 h-4" />
+                      Cadastro incompleto
+                      <ChevronDown className="w-4 h-4 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setMeeiroIncompletoDialogOpen(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Ver na tela
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        try {
+                          await controleRocaService.printRelatorioMeeirosCadastroIncompletoPdf();
+                        } catch (e: unknown) {
+                          const err = e as { message?: string; response?: { data?: { message?: string } } };
+                          toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
+                        }
+                      }}
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Imprimir PDF
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        try {
+                          await controleRocaService.downloadRelatorioMeeirosCadastroIncompletoPdf();
+                          toast.success('PDF baixado');
+                        } catch (e: unknown) {
+                          const err = e as { message?: string; response?: { data?: { message?: string } } };
+                          toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                        }
+                      }}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Baixar PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button variant="gradient" onClick={() => setOpenMeeiro(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Novo Meeiro
                 </Button>
               </div>
             </div>
+            <Dialog open={meeiroIncompletoDialogOpen} onOpenChange={setMeeiroIncompletoDialogOpen}>
+              <DialogContent className="max-w-lg sm:max-w-xl w-[calc(100vw-2rem)] max-h-[min(90vh,720px)] flex flex-col gap-0 p-0 overflow-hidden">
+                <DialogHeader className="px-4 pt-5 pb-3 sm:px-6 shrink-0 border-b border-border/60 text-left">
+                  <DialogTitle className="text-lg sm:text-xl pr-8">Meeiros com cadastro incompleto</DialogTitle>
+                  <DialogDescription className="text-xs sm:text-sm leading-relaxed">
+                    Falta ao menos um destes dados: CPF, telefone, chave PIX ou endereço. Imprimir ou baixar o PDF abre
+                    a planilha completa — no leitor, use o menu Imprimir ou Ctrl+P.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 sm:px-6">
+                  {loadingMeeirosIncompleto ? (
+                    <div className="flex justify-center py-16">
+                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (meeirosCadastroIncompleto?.itens ?? []).length === 0 ? (
+                    <p className="text-center text-muted-foreground text-sm py-10">
+                      Todos os meeiros estão com esses campos preenchidos.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2.5 min-w-0">
+                      {(meeirosCadastroIncompleto?.itens ?? []).map((row) => {
+                        const pend = (row.camposPendentes ?? []).map(labelCampoMeeiroPendente).join(', ');
+                        return (
+                          <li
+                            key={row.meeiroId}
+                            className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2.5 text-sm min-w-0"
+                          >
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+                              <span className="font-mono text-xs font-semibold tabular-nums shrink-0 bg-background/80 px-1.5 py-0.5 rounded border border-border/60">
+                                {row.codigo}
+                              </span>
+                              <span className="font-medium text-foreground break-words min-w-0 flex-1 basis-[12rem]">
+                                {row.nome}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1.5 break-words">
+                              <span className="font-medium text-foreground/80">Produtor:</span>{' '}
+                              {row.produtorNome?.trim() ? row.produtorNome : '—'}
+                            </p>
+                            <p className="text-xs text-amber-800 dark:text-amber-400 mt-1.5 break-words leading-snug">
+                              <span className="font-semibold">Falta preencher:</span> {pend}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                <DialogFooter className="px-4 py-3 sm:px-6 border-t border-border/60 shrink-0 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end sm:flex-wrap">
+                  <Button type="button" variant="secondary" onClick={() => setMeeiroIncompletoDialogOpen(false)}>
+                    Fechar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await controleRocaService.downloadRelatorioMeeirosCadastroIncompletoPdf();
+                        toast.success('PDF baixado');
+                      } catch (e: unknown) {
+                        const err = e as { message?: string; response?: { data?: { message?: string } } };
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await controleRocaService.printRelatorioMeeirosCadastroIncompletoPdf();
+                      } catch (e: unknown) {
+                        const err = e as { message?: string; response?: { data?: { message?: string } } };
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
+                      }
+                    }}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimir
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <div className="bg-card border rounded-xl overflow-hidden min-w-0">
               {loadingMeeiros ? (
                 <div className="flex justify-center py-12">

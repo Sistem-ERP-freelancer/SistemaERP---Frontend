@@ -15,6 +15,7 @@ import type {
     RegistrarPagamentoMeeiroDto,
     RegistrarPagamentoMeeiroResponse,
     RelatorioMeeiroResponse,
+    RelatorioMeeirosCadastroIncompletoResponse,
     ResumoPagamentoMeeirosResponse,
     Roca,
     RocaDetalhes,
@@ -116,6 +117,38 @@ class ControleRocaService {
 
   async excluirMeeiro(id: number): Promise<{ sucesso: boolean }> {
     return apiClient.delete<{ sucesso: boolean }>(`${BASE}/meeiros/${id}`);
+  }
+
+  /** Meeiros sem CPF, telefone, PIX ou endereço preenchidos. */
+  async relatorioMeeirosCadastroIncompleto(): Promise<RelatorioMeeirosCadastroIncompletoResponse> {
+    return apiClient.get<RelatorioMeeirosCadastroIncompletoResponse>(
+      `${BASE}/relatorios/meeiros/cadastro-incompleto`,
+    );
+  }
+
+  async downloadRelatorioMeeirosCadastroIncompletoPdf(): Promise<void> {
+    const blob = await apiClient.getBlob(`${BASE}/relatorios/meeiros/cadastro-incompleto/pdf`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `meeiros-cadastro-incompleto-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /** Abre o PDF em nova aba para visualizar e imprimir (mesmo arquivo do download). */
+  async printRelatorioMeeirosCadastroIncompletoPdf(): Promise<void> {
+    const blob = await apiClient.getBlob(`${BASE}/relatorios/meeiros/cadastro-incompleto/pdf`);
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      URL.revokeObjectURL(url);
+      throw new Error(
+        'Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.',
+      );
+    }
   }
 
   // Empréstimos
