@@ -20,7 +20,6 @@ import {
     Calendar,
     Info,
     Loader2,
-    Receipt,
     Scale,
     ShoppingCart,
     TrendingUp,
@@ -29,14 +28,13 @@ import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 
-type PainelMetricKind = "compras" | "despesas" | "vendas" | "saldo";
+type PainelMetricKind = "compras" | "vendas" | "saldo";
 
 function painelMetricKindFromLegenda(legenda: string): PainelMetricKind {
   const l = legenda.toLowerCase();
   if (l.includes("saldo")) return "saldo";
   if (l.includes("venda")) return "vendas";
   if (l.includes("compra")) return "compras";
-  if (l.includes("despesa")) return "despesas";
   return "compras";
 }
 
@@ -45,16 +43,10 @@ const painelMetricVisual: Record<
   { border: string; iconWrap: string; Icon: LucideIcon }
 > = {
   compras: {
-    border: "border-l-4 border-l-amber-500",
+    border: "border-l-4 border-l-red-600",
     iconWrap:
-      "bg-amber-500/[0.12] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+      "bg-red-500/[0.12] text-red-700 dark:bg-red-500/15 dark:text-red-400",
     Icon: ShoppingCart,
-  },
-  despesas: {
-    border: "border-l-4 border-l-rose-500",
-    iconWrap:
-      "bg-rose-500/[0.12] text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
-    Icon: Receipt,
   },
   vendas: {
     border: "border-l-4 border-l-emerald-500",
@@ -74,6 +66,9 @@ function painelValorClass(kind: PainelMetricKind, valor: number): string {
   if (kind === "saldo") {
     if (valor < 0) return "text-destructive";
     if (valor > 0) return "text-emerald-600 dark:text-emerald-400";
+  }
+  if (kind === "compras") {
+    return "text-red-700 dark:text-red-400";
   }
   if (kind === "vendas" && valor > 0) {
     return "text-emerald-700 dark:text-emerald-400";
@@ -96,6 +91,10 @@ function mesAnoAtualLocal(): string {
 const Dashboard = () => {
   /** Vazio = totais da 3ª faixa são histórico geral; linhas 1–2 usam o mês atual como referência. */
   const [mesAnoFiltro, setMesAnoFiltro] = useState<string>("");
+  const refMesYyyyMm = useMemo(() => {
+    const mesEscolhido = mesAnoFiltro?.trim();
+    return mesEscolhido || mesAnoAtualLocal();
+  }, [mesAnoFiltro]);
   const parametrosDashboardFinanceiro = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
     const chave = mesEscolhido || mesAnoAtualLocal();
@@ -307,10 +306,6 @@ const Dashboard = () => {
                           valor: painelFinanceiro.linha_registrado.compras,
                         },
                         {
-                          legenda: "despesa do mês",
-                          valor: painelFinanceiro.linha_registrado.despesas,
-                        },
-                        {
                           legenda: "venda do mês",
                           valor: painelFinanceiro.linha_registrado.vendas,
                         },
@@ -330,10 +325,6 @@ const Dashboard = () => {
                         {
                           legenda: "compras paga",
                           valor: painelFinanceiro.linha_caixa.compras,
-                        },
-                        {
-                          legenda: "despesa paga",
-                          valor: painelFinanceiro.linha_caixa.despesas,
                         },
                         {
                           legenda: "vendas recebida",
@@ -358,10 +349,6 @@ const Dashboard = () => {
                         {
                           legenda: "Total compras paga",
                           valor: painelFinanceiro.linha_totais_periodo.compras,
-                        },
-                        {
-                          legenda: "despesa paga no período",
-                          valor: painelFinanceiro.linha_totais_periodo.despesas,
                         },
                         {
                           legenda: "vendas recebida no período",
@@ -403,20 +390,27 @@ const Dashboard = () => {
                             <Calendar className="h-3.5 w-3.5 opacity-70" />
                             Mês de referência
                           </Label>
-                          <input
-                            id="dashboard-mes-ano"
-                            type="month"
-                            value={mesAnoFiltro}
-                            onChange={(e) => setMesAnoFiltro(e.target.value)}
-                            className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
+                          <div className="relative">
+                            <input
+                              id="dashboard-mes-ano"
+                              type="month"
+                              value={mesAnoFiltro}
+                              onChange={(e) => setMesAnoFiltro(e.target.value)}
+                              className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            />
+                            {!mesAnoFiltro ? (
+                              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-muted-foreground">
+                                Todos os meses
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </div>
                     <p className="mb-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                       {bloco.subtitulo}
                     </p>
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                       {bloco.celulas.map((c, idx) => {
                         const valorN = numPainel(c.valor);
                         const kind = painelMetricKindFromLegenda(c.legenda);
@@ -469,8 +463,7 @@ const Dashboard = () => {
                 <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
                   <span className="font-semibold text-foreground">Competência</span> usa a{' '}
                   <span className="font-semibold text-foreground">data de emissão</span> da conta no mês selecionado.{' '}
-                  <span className="font-semibold text-foreground">Compras</span> somam contas a pagar de pedidos de compra;{' '}
-                  <span className="font-semibold text-foreground">Despesas</span>, as demais contas a pagar.{' '}
+                  <span className="font-semibold text-foreground">Compras</span> somam contas a pagar de pedidos de compra.{' '}
                   <span className="font-semibold text-foreground">Caixa</span> segue pagamentos/recebimentos na data informada.
                 </p>
               </div>

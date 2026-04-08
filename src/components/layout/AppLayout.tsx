@@ -14,6 +14,7 @@ import {
     ChevronDown,
     DollarSign,
     FileText,
+    Landmark,
     LayoutDashboard,
     LogOut,
     Menu,
@@ -44,6 +45,7 @@ const getMenuItems = (isSuperAdmin: boolean) => {
     { icon: Package, label: "Produtos", href: "/produtos" },
     { icon: Boxes, label: "Movimentações", href: "/estoque" },
     { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
+    { icon: Landmark, label: "Centro de custos", href: "/centro-custos" },
     { icon: Sprout, label: "Controle de Roça", href: "/controle-roca" },
     { icon: Settings, label: "Configurações", href: "/settings" },
   ];

@@ -5,9 +5,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CentroCustosProvider } from "@/contexts/CentroCustosContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AdminPanel from "./pages/AdminPanel";
+import CentroCustos from "./pages/CentroCustos";
 import Clientes from "./pages/Clientes";
 import ContasAPagarContaFinanceiraPagamentos from "./pages/contas-a-pagar/ContasAPagarContaFinanceiraPagamentos";
 import ContasAPagarPedidoDetalhes from "./pages/contas-a-pagar/ContasAPagarPedidoDetalhes";
@@ -76,6 +78,7 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <CentroCustosProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -225,6 +228,14 @@ const App = () => (
               } 
             />
             <Route 
+              path="/centro-custos" 
+              element={
+                <ProtectedRoute>
+                  <CentroCustos />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/controle-roca" 
               element={
                 <ProtectedRoute>
@@ -245,6 +256,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </CentroCustosProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
