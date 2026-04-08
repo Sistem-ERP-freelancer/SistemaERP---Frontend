@@ -4720,16 +4720,20 @@ className={
             <Sheet open={relPagamentoMeeiroSheetOpen} onOpenChange={setRelPagamentoMeeiroSheetOpen}>
               <SheetContent
                 side="right"
-                className="w-[400px] sm:w-[540px] overflow-y-auto flex flex-col gap-0"
+                className="w-[400px] sm:w-[540px] sm:max-w-[540px] flex min-h-0 flex-col gap-0"
               >
-                <SheetHeader className="space-y-1 text-left pb-4 border-b border-border/60">
+                <SheetHeader className="shrink-0 space-y-2 text-left pb-4 border-b border-border/60">
                   <SheetTitle className="text-xl">Pagamento de meeiro</SheetTitle>
-                  <SheetDescription>
-                    Filtros opcionais. Sem meeiro ou roça, o PDF inclui todos os meeiros e todas as roças do seu
-                    ambiente. Período em branco considera todas as datas com base nas regras do relatório.
+                  <SheetDescription className="text-xs sm:text-sm leading-relaxed">
+                    Ajuste os filtros abaixo e escolha o tipo de PDF. Campos vazios incluem todos os meeiros e roças;
+                    datas em branco seguem a regra do relatório no sistema.
                   </SheetDescription>
                 </SheetHeader>
-                <div className="flex-1 space-y-5 py-5">
+                <div className="flex-1 min-h-0 overflow-y-auto py-4 space-y-6">
+                  <section className="rounded-xl border border-border/60 bg-muted/15 px-4 py-4 space-y-4">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Filtros
+                    </h3>
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Meeiro (opcional)</Label>
                     <Popover
@@ -4920,30 +4924,203 @@ className={
                       </SelectContent>
                     </Select>
                   </div>
+                  </section>
 
-                  {relPagMeeiroFiltroId === '' && (
-                    <>
-                      <Separator />
-                      <div className="rounded-lg border border-dashed border-border bg-muted/25 p-3 space-y-3">
-                        <div>
-                          <p className="text-sm font-medium">Todos os repasses ao parceiro em um PDF</p>
-                          <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                            Um arquivo com repasse ao parceiro por meeiro (cada um em páginas separadas). Usa o
-                            período, a roça e o status selecionados acima. Com status &quot;Todos&quot;, a API trata como
-                            pendentes neste modo.
-                          </p>
+                  <section className="space-y-3">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5">
+                      Gerar documento
+                    </h3>
+
+                    {relPagMeeiroFiltroId === '' ? (
+                      <div className="space-y-3">
+                        <div className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm space-y-3 dark:bg-card/40">
+                          <div className="flex gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                              <ClipboardList className="h-4 w-4 text-primary" aria-hidden />
+                            </div>
+                            <div className="min-w-0 space-y-1">
+                              <p className="text-sm font-semibold text-foreground leading-tight">
+                                Lista consolidada
+                              </p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                Uma tabela com todos os meeiros, totais e valores finais — ideal para conferência
+                                rápida ou pagamento em lote.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="gap-2 w-full"
+                              disabled={relPagPdfLoading !== null}
+                              onClick={async () => {
+                                try {
+                                  setRelPagPdfLoading('print');
+                                  await controleRocaService.printRelatorioMeeirosPdf({
+                                    dataInicial: relPagDataInicial.trim() || undefined,
+                                    dataFinal: relPagDataFinal.trim() || undefined,
+                                    rocas:
+                                      relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                                    filtroPagamento: relPagFiltroPagamento,
+                                  });
+                                  setRelPagamentoMeeiroSheetOpen(false);
+                                } catch (e: any) {
+                                  toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                                } finally {
+                                  setRelPagPdfLoading(null);
+                                }
+                              }}
+                            >
+                              {relPagPdfLoading === 'print' ? (
+                                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                              ) : (
+                                <Printer className="w-4 h-4 shrink-0" />
+                              )}
+                              Imprimir lista
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="gradient"
+                              className="gap-2 w-full"
+                              disabled={relPagPdfLoading !== null}
+                              onClick={async () => {
+                                try {
+                                  setRelPagPdfLoading('download');
+                                  await controleRocaService.downloadRelatorioMeeirosPdf({
+                                    dataInicial: relPagDataInicial.trim() || undefined,
+                                    dataFinal: relPagDataFinal.trim() || undefined,
+                                    rocas:
+                                      relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                                    filtroPagamento: relPagFiltroPagamento,
+                                  });
+                                  toast.success('PDF baixado');
+                                  setRelPagamentoMeeiroSheetOpen(false);
+                                } catch (e: any) {
+                                  toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                                } finally {
+                                  setRelPagPdfLoading(null);
+                                }
+                              }}
+                            >
+                              {relPagPdfLoading === 'download' ? (
+                                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                              ) : (
+                                <Download className="w-4 h-4 shrink-0" />
+                              )}
+                              Baixar lista
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-2">
+
+                        <div className="rounded-xl border border-dashed border-primary/35 bg-primary/[0.06] p-4 shadow-sm space-y-3 dark:bg-primary/10">
+                          <div className="flex gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                              <Files className="h-4 w-4 text-primary" aria-hidden />
+                            </div>
+                            <div className="min-w-0 space-y-1">
+                              <p className="text-sm font-semibold text-foreground leading-tight">
+                                Repasses ao parceiro (1 PDF)
+                              </p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                Um único arquivo com repasse detalhado por meeiro (páginas separadas). Com status
+                                &quot;Todos&quot;, a API interpreta como pendentes neste modo.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="gap-2 w-full"
+                              disabled={relPagPdfLoading !== null}
+                              onClick={async () => {
+                                try {
+                                  setRelPagPdfLoading('print-recibos');
+                                  await controleRocaService.printRelatorioMeeirosPdf({
+                                    layout: 'recibos',
+                                    dataInicial: relPagDataInicial.trim() || undefined,
+                                    dataFinal: relPagDataFinal.trim() || undefined,
+                                    rocas:
+                                      relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                                    filtroPagamento: relPagFiltroPagamento,
+                                  });
+                                  setRelPagamentoMeeiroSheetOpen(false);
+                                } catch (e: any) {
+                                  toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                                } finally {
+                                  setRelPagPdfLoading(null);
+                                }
+                              }}
+                            >
+                              {relPagPdfLoading === 'print-recibos' ? (
+                                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                              ) : (
+                                <Printer className="w-4 h-4 shrink-0" />
+                              )}
+                              Imprimir recibos
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="gap-2 w-full border-primary/25 bg-background/80"
+                              disabled={relPagPdfLoading !== null}
+                              onClick={async () => {
+                                try {
+                                  setRelPagPdfLoading('download-recibos');
+                                  await controleRocaService.downloadRelatorioMeeirosPdf({
+                                    layout: 'recibos',
+                                    dataInicial: relPagDataInicial.trim() || undefined,
+                                    dataFinal: relPagDataFinal.trim() || undefined,
+                                    rocas:
+                                      relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
+                                    filtroPagamento: relPagFiltroPagamento,
+                                  });
+                                  toast.success('PDF baixado');
+                                  setRelPagamentoMeeiroSheetOpen(false);
+                                } catch (e: any) {
+                                  toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                                } finally {
+                                  setRelPagPdfLoading(null);
+                                }
+                              }}
+                            >
+                              {relPagPdfLoading === 'download-recibos' ? (
+                                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                              ) : (
+                                <Download className="w-4 h-4 shrink-0" />
+                              )}
+                              Baixar 1 PDF
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm space-y-3 dark:bg-card/40">
+                        <div className="flex gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                            <FileText className="h-4 w-4 text-primary" aria-hidden />
+                          </div>
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-sm font-semibold text-foreground leading-tight">
+                              Relatório do meeiro selecionado
+                            </p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              PDF com lançamentos e resumo apenas para o meeiro escolhido nos filtros.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             className="gap-2 w-full"
                             disabled={relPagPdfLoading !== null}
                             onClick={async () => {
                               try {
-                                setRelPagPdfLoading('print-recibos');
+                                setRelPagPdfLoading('print');
                                 await controleRocaService.printRelatorioMeeirosPdf({
-                                  layout: 'recibos',
+                                  meeiroId: Number(relPagMeeiroFiltroId),
                                   dataInicial: relPagDataInicial.trim() || undefined,
                                   dataFinal: relPagDataFinal.trim() || undefined,
                                   rocas:
@@ -4958,23 +5135,23 @@ className={
                               }
                             }}
                           >
-                            {relPagPdfLoading === 'print-recibos' ? (
+                            {relPagPdfLoading === 'print' ? (
                               <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
                             ) : (
                               <Printer className="w-4 h-4 shrink-0" />
                             )}
-                            Imprimir todos os repasses ao parceiro
+                            Imprimir PDF
                           </Button>
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="gradient"
                             className="gap-2 w-full"
                             disabled={relPagPdfLoading !== null}
                             onClick={async () => {
                               try {
-                                setRelPagPdfLoading('download-recibos');
+                                setRelPagPdfLoading('download');
                                 await controleRocaService.downloadRelatorioMeeirosPdf({
-                                  layout: 'recibos',
+                                  meeiroId: Number(relPagMeeiroFiltroId),
                                   dataInicial: relPagDataInicial.trim() || undefined,
                                   dataFinal: relPagDataFinal.trim() || undefined,
                                   rocas:
@@ -4990,84 +5167,17 @@ className={
                               }
                             }}
                           >
-                            {relPagPdfLoading === 'download-recibos' ? (
+                            {relPagPdfLoading === 'download' ? (
                               <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
                             ) : (
                               <Download className="w-4 h-4 shrink-0" />
                             )}
-                            Baixar repasses ao parceiro (1 PDF)
+                            Baixar PDF
                           </Button>
                         </div>
                       </div>
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-col gap-2 pt-4 mt-auto border-t border-border/60">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-2 w-full"
-                    disabled={relPagPdfLoading !== null}
-                    onClick={async () => {
-                      try {
-                        setRelPagPdfLoading('print');
-                        await controleRocaService.printRelatorioMeeirosPdf({
-                          meeiroId:
-                            relPagMeeiroFiltroId === '' ? undefined : Number(relPagMeeiroFiltroId),
-                          dataInicial: relPagDataInicial.trim() || undefined,
-                          dataFinal: relPagDataFinal.trim() || undefined,
-                          rocas:
-                            relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
-                          filtroPagamento: relPagFiltroPagamento,
-                        });
-                        setRelPagamentoMeeiroSheetOpen(false);
-                      } catch (e: any) {
-                        toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
-                      } finally {
-                        setRelPagPdfLoading(null);
-                      }
-                    }}
-                  >
-                    {relPagPdfLoading === 'print' ? (
-                      <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                    ) : (
-                      <Printer className="w-4 h-4 shrink-0" />
                     )}
-                    Imprimir PDF
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="gradient"
-                    className="gap-2 w-full"
-                    disabled={relPagPdfLoading !== null}
-                    onClick={async () => {
-                      try {
-                        setRelPagPdfLoading('download');
-                        await controleRocaService.downloadRelatorioMeeirosPdf({
-                          meeiroId:
-                            relPagMeeiroFiltroId === '' ? undefined : Number(relPagMeeiroFiltroId),
-                          dataInicial: relPagDataInicial.trim() || undefined,
-                          dataFinal: relPagDataFinal.trim() || undefined,
-                          rocas:
-                            relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
-                          filtroPagamento: relPagFiltroPagamento,
-                        });
-                        toast.success('PDF baixado');
-                        setRelPagamentoMeeiroSheetOpen(false);
-                      } catch (e: any) {
-                        toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
-                      } finally {
-                        setRelPagPdfLoading(null);
-                      }
-                    }}
-                  >
-                    {relPagPdfLoading === 'download' ? (
-                      <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4 shrink-0" />
-                    )}
-                    Baixar PDF
-                  </Button>
+                  </section>
                 </div>
               </SheetContent>
             </Sheet>

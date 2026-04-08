@@ -396,7 +396,11 @@ const Dashboard = () => {
                               type="month"
                               value={mesAnoFiltro}
                               onChange={(e) => setMesAnoFiltro(e.target.value)}
-                              className="h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              className={`h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                mesAnoFiltro
+                                  ? "text-foreground"
+                                  : "text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent"
+                              }`}
                             />
                             {!mesAnoFiltro ? (
                               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-muted-foreground">
