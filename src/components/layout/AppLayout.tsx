@@ -37,7 +37,7 @@ const getMenuItems = (isSuperAdmin: boolean) => {
   const baseItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: DollarSign, label: "Financeiro", href: "/financeiro" },
-    { icon: Landmark, label: "Centro de custos", href: "/centro-custos" },
+    { icon: Landmark, label: "Centro de Despesa", href: "/centro-custos" },
     { icon: FileText, label: "Contas a Pagar", href: "/contas-a-pagar" },
     { icon: Wallet, label: "Contas a Receber", href: "/contas-a-receber" },
     { icon: ShoppingCart, label: "Pedidos", href: "/pedidos" },

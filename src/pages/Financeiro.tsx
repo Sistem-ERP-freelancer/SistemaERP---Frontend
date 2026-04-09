@@ -108,6 +108,13 @@ const Financeiro = () => {
   const [relatorioDataInicial, setRelatorioDataInicial] = useState("");
   const [relatorioDataFinal, setRelatorioDataFinal] = useState("");
   const [relatorioStatusFiltro, setRelatorioStatusFiltro] = useState<string>("Todos");
+  const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
+  const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState("");
+  const [relatorioFornecedorPdfLoading, setRelatorioFornecedorPdfLoading] = useState(false);
+  const [relatorioFornecedorDataInicial, setRelatorioFornecedorDataInicial] = useState("");
+  const [relatorioFornecedorDataFinal, setRelatorioFornecedorDataFinal] = useState("");
+  const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
+    useState<string>("Todos");
   /** Filtro por card clicável: Receita do Mês / Despesas do Mês (como em Contas a Receber) */
   const [cardTipoFilter, setCardTipoFilter] = useState<"todos" | "RECEBER" | "PAGAR">("todos");
 
@@ -228,6 +235,70 @@ const Financeiro = () => {
           : undefined,
     }),
     [relatorioDataInicial, relatorioDataFinal, relatorioStatusFiltro],
+  );
+
+  const relatorioFornecedorIdParsed = useMemo(() => {
+    if (!relatorioFornecedorIdSelect) return null;
+    const n = parseInt(relatorioFornecedorIdSelect, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [relatorioFornecedorIdSelect]);
+
+  const relatorioFornecedorPreviewParams = useMemo(
+    () => ({
+      page: 1,
+      limit: 1,
+      fornecedor_id: relatorioFornecedorIdParsed ?? undefined,
+      data_inicial: relatorioFornecedorDataInicial || undefined,
+      data_final: relatorioFornecedorDataFinal || undefined,
+      status:
+        relatorioFornecedorStatusFiltro !== "Todos"
+          ? relatorioFornecedorStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioFornecedorIdParsed,
+      relatorioFornecedorDataInicial,
+      relatorioFornecedorDataFinal,
+      relatorioFornecedorStatusFiltro,
+    ],
+  );
+
+  const {
+    data: relatorioFornecedorPreviewData,
+    isFetching: relatorioFornecedorPreviewFetching,
+    isError: relatorioFornecedorPreviewError,
+  } = useQuery({
+    queryKey: ["financeiro-relatorio-fornecedor-preview", relatorioFornecedorPreviewParams],
+    queryFn: () => financeiroService.listarAgrupado(relatorioFornecedorPreviewParams),
+    enabled: relatorioFornecedorPdfOpen && relatorioFornecedorIdParsed != null,
+  });
+
+  const relatorioFornecedorTemDados =
+    !relatorioFornecedorPreviewError &&
+    relatorioFornecedorPreviewData != null &&
+    relatorioFornecedorPreviewData.total > 0;
+
+  const relatorioFornecedorMensagemSemDados = useMemo(() => {
+    if (relatorioFornecedorStatusFiltro !== "Todos") {
+      return "O fornecedor não possui dívida naquele status selecionado.";
+    }
+    return "O fornecedor não possui dívida naquele período.";
+  }, [relatorioFornecedorStatusFiltro]);
+
+  const relatorioFornecedorFiltrosForPdf = useMemo(
+    () => ({
+      dataInicial: relatorioFornecedorDataInicial || undefined,
+      dataFinal: relatorioFornecedorDataFinal || undefined,
+      status:
+        relatorioFornecedorStatusFiltro !== "Todos"
+          ? relatorioFornecedorStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioFornecedorDataInicial,
+      relatorioFornecedorDataFinal,
+      relatorioFornecedorStatusFiltro,
+    ],
   );
 
   // GET /financeiro/dashboard (unificado) com fallback para GET /contas-financeiras/dashboard/resumo
@@ -1002,6 +1073,11 @@ const Financeiro = () => {
                     onClick={() => setRelatorioClientePdfOpen(true)}
                   >
                     Relatório financeiro por cliente
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setRelatorioFornecedorPdfOpen(true)}
+                  >
+                    Relatório financeiro por fornecedor
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -2068,6 +2144,233 @@ const Financeiro = () => {
                       toast.error(msg);
                     } finally {
                       setRelatorioClientePdfLoading(false);
+                    }
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  Abrir para imprimir
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={relatorioFornecedorPdfOpen}
+          onOpenChange={(open) => {
+            setRelatorioFornecedorPdfOpen(open);
+            if (open) {
+              setRelatorioFornecedorDataInicial("");
+              setRelatorioFornecedorDataFinal("");
+              setRelatorioFornecedorStatusFiltro("Todos");
+              setRelatorioFornecedorIdSelect(
+                fornecedorFilterId != null ? String(fornecedorFilterId) : "",
+              );
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório financeiro por fornecedor</DialogTitle>
+              <DialogDescription>
+                Inclui dados da empresa, cadastro do fornecedor e lançamentos das contas financeiras
+                vinculadas a ele (campos já existentes no sistema).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="financeiro-relatorio-fornecedor-select">Fornecedor</Label>
+                <Select
+                  value={relatorioFornecedorIdSelect || undefined}
+                  onValueChange={setRelatorioFornecedorIdSelect}
+                >
+                  <SelectTrigger id="financeiro-relatorio-fornecedor-select">
+                    <SelectValue placeholder="Selecione o fornecedor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fornecedores.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        {f.nome_fantasia || f.nome_razao}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
+                          value={relatorioFornecedorDataInicial}
+                          onChange={(e) => setRelatorioFornecedorDataInicial(e.target.value || "")}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
+                          value={relatorioFornecedorDataFinal}
+                          onChange={(e) => setRelatorioFornecedorDataFinal(e.target.value || "")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Status</Label>
+                  <RadioGroup
+                    value={relatorioFornecedorStatusFiltro}
+                    onValueChange={setRelatorioFornecedorStatusFiltro}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="Todos" id="financeiro-relatorio-fornecedor-status-todos" />
+                      <Label htmlFor="financeiro-relatorio-fornecedor-status-todos" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-primary" />
+                        <span className="text-[#1A3B70]">Todos</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PENDENTE" id="financeiro-relatorio-fornecedor-status-pendente" />
+                      <Label htmlFor="financeiro-relatorio-fornecedor-status-pendente" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-amber-500" />
+                        <span className="text-[#1A3B70]">Pendente</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PAGO_PARCIAL" id="financeiro-relatorio-fornecedor-status-parcial" />
+                      <Label htmlFor="financeiro-relatorio-fornecedor-status-parcial" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-blue-500" />
+                        <span className="text-[#1A3B70]">Pago Parcial</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PAGO_TOTAL" id="financeiro-relatorio-fornecedor-status-quitado" />
+                      <Label htmlFor="financeiro-relatorio-fornecedor-status-quitado" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-green-500" />
+                        <span className="text-[#1A3B70]">Quitada</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="VENCIDO" id="financeiro-relatorio-fornecedor-status-vencido" />
+                      <Label htmlFor="financeiro-relatorio-fornecedor-status-vencido" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-red-500" />
+                        <span className="text-[#1A3B70]">Vencido</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="CANCELADO" id="financeiro-relatorio-fornecedor-status-cancelado" />
+                      <Label htmlFor="financeiro-relatorio-fornecedor-status-cancelado" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Circle className="w-3 h-3 text-slate-500" />
+                        <span className="text-[#1A3B70]">Cancelado</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              </div>
+
+              {relatorioFornecedorPreviewFetching && relatorioFornecedorIdParsed != null && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando filtros…
+                </p>
+              )}
+
+              {relatorioFornecedorPreviewError && relatorioFornecedorIdParsed != null && (
+                <p className="text-sm text-destructive">
+                  Não foi possível verificar os filtros. Tente novamente.
+                </p>
+              )}
+
+              {!relatorioFornecedorPreviewFetching &&
+                !relatorioFornecedorPreviewError &&
+                relatorioFornecedorIdParsed != null &&
+                relatorioFornecedorPreviewData?.total === 0 && (
+                  <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">
+                    {relatorioFornecedorMensagemSemDados}
+                  </p>
+                )}
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  className="gap-2"
+                  disabled={
+                    relatorioFornecedorIdParsed == null ||
+                    relatorioFornecedorPreviewFetching ||
+                    !relatorioFornecedorTemDados ||
+                    relatorioFornecedorPdfLoading
+                  }
+                  onClick={async () => {
+                    const id = relatorioFornecedorIdParsed;
+                    if (id == null) {
+                      toast.error("Selecione um fornecedor.");
+                      return;
+                    }
+                    setRelatorioFornecedorPdfLoading(true);
+                    try {
+                      await relatoriosClienteService.downloadRelatorioFinanceiroFornecedor(
+                        id,
+                        relatorioFornecedorFiltrosForPdf,
+                      );
+                      toast.success("PDF baixado.");
+                    } catch (e: unknown) {
+                      const msg =
+                        e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                      toast.error(msg);
+                    } finally {
+                      setRelatorioFornecedorPdfLoading(false);
+                    }
+                  }}
+                >
+                  {relatorioFornecedorPdfLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Baixar PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={
+                    relatorioFornecedorIdParsed == null ||
+                    relatorioFornecedorPreviewFetching ||
+                    !relatorioFornecedorTemDados ||
+                    relatorioFornecedorPdfLoading
+                  }
+                  onClick={async () => {
+                    const id = relatorioFornecedorIdParsed;
+                    if (id == null) {
+                      toast.error("Selecione um fornecedor.");
+                      return;
+                    }
+                    setRelatorioFornecedorPdfLoading(true);
+                    try {
+                      await relatoriosClienteService.imprimirRelatorioFinanceiroFornecedor(
+                        id,
+                        relatorioFornecedorFiltrosForPdf,
+                      );
+                    } catch (e: unknown) {
+                      const msg =
+                        e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                      toast.error(msg);
+                    } finally {
+                      setRelatorioFornecedorPdfLoading(false);
                     }
                   }}
                 >

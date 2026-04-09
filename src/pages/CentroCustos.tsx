@@ -425,7 +425,7 @@ export default function CentroCustos() {
               <Landmark className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Centro de custos</h1>
+              <h1 className="text-2xl font-bold text-foreground">Centro de Despesa</h1>
               <p className="text-muted-foreground text-sm sm:text-base mt-1">
                 Cadastro de tipos de custo e despesas por roça — demonstração apenas no navegador (sem API).
               </p>
@@ -434,81 +434,90 @@ export default function CentroCustos() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 max-w-lg h-auto p-1">
-            <TabsTrigger value="visao">Visão geral</TabsTrigger>
-            <TabsTrigger value="tipos">Tipos de custo</TabsTrigger>
-            <TabsTrigger value="despesas">Despesas</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="visao" className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Acompanhamento das despesas cadastradas neste módulo (dados salvos no seu navegador).
-            </p>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-              {CARD_STATS.map((c, idx) => {
-                const Icon = c.Icon;
-                const valNum =
-                  c.key === 'abertas'
-                    ? resumo.qAbertas
-                    : c.key === 'quitadas'
-                      ? resumo.qQuitadas
-                      : c.key === 'valorAberto'
-                        ? resumo.valorAbertoTotal
-                        : resumo.valorPagoTotal;
-                const display =
-                  c.kind === 'count' ? String(valNum) : formatCurrency(valNum);
-                return (
-                  <motion.div
-                    key={c.key}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                  >
-                    <Card
-                      className={`h-full overflow-hidden border border-border/60 shadow-sm ${c.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
+          {tab === 'visao' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                {CARD_STATS.map((c, idx) => {
+                  const Icon = c.Icon;
+                  const valNum =
+                    c.key === 'abertas'
+                      ? resumo.qAbertas
+                      : c.key === 'quitadas'
+                        ? resumo.qQuitadas
+                        : c.key === 'valorAberto'
+                          ? resumo.valorAbertoTotal
+                          : resumo.valorPagoTotal;
+                  const display =
+                    c.kind === 'count' ? String(valNum) : formatCurrency(valNum);
+                  return (
+                    <motion.div
+                      key={c.key}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
                     >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
-                            {c.label}
-                          </p>
-                          <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.iconWrap}`}
-                          >
-                            <Icon className="h-4 w-4" aria-hidden />
+                      <Card
+                        className={`h-full overflow-hidden border border-border/60 shadow-sm ${c.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
+                              {c.label}
+                            </p>
+                            <div
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.iconWrap}`}
+                            >
+                              <Icon className="h-4 w-4" aria-hidden />
+                            </div>
                           </div>
-                        </div>
-                        <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
-                          {display}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-semibold text-foreground">Despesas</h2>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Lançamentos recentes — use a aba Despesas para incluir novos ou gerenciar com o formulário completo.
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setTab('despesas')}>
-                  Ir para nova despesa
-                </Button>
+                          <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
+                            {display}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
               </div>
-              <DespesasTable
-                despesas={despesas}
-                nomeTipo={despesaNomeTipo}
-                onDetalhe={abrirDetalhe}
-                onPagar={abrirPagarRapido}
-                onEditar={abrirEditar}
-                onExcluir={setDeleteDesp}
-              />
             </div>
+          )}
+
+          <div
+            className={cn(
+              'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+              tab === 'visao' ? 'pt-2' : '',
+            )}
+          >
+            <TabsList className="grid h-auto w-full max-w-lg shrink-0 grid-cols-3 p-1 sm:w-auto">
+              <TabsTrigger value="visao">Visão geral</TabsTrigger>
+              <TabsTrigger value="tipos">Tipos de custo</TabsTrigger>
+              <TabsTrigger value="despesas">Despesas</TabsTrigger>
+            </TabsList>
+            {tab === 'visao' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 self-end sm:self-auto"
+                onClick={() => setTab('despesas')}
+              >
+                Ir para nova despesa
+              </Button>
+            )}
+          </div>
+
+          {tab === 'visao' && (
+            <DespesasTable
+              despesas={despesas}
+              nomeTipo={despesaNomeTipo}
+              onDetalhe={abrirDetalhe}
+              onPagar={abrirPagarRapido}
+              onEditar={abrirEditar}
+              onExcluir={setDeleteDesp}
+            />
+          )}
+
+          <TabsContent value="visao" className="mt-0">
+            <span className="sr-only">Resumo e tabela de despesas estão acima das abas.</span>
           </TabsContent>
 
           <TabsContent value="tipos" className="space-y-4">

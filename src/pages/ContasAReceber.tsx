@@ -11,6 +11,8 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -51,10 +53,12 @@ import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceber
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { ContaFinanceira, CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
+import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import type { ContaReceber } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
+    BarChart3,
     Calendar,
     Circle,
     CreditCard,
@@ -92,6 +96,12 @@ const ContasAReceber = () => {
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   // Dialog do relatório em aberto (PDF / imprimir)
   const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
+  const [relatorioClientePdfOpen, setRelatorioClientePdfOpen] = useState(false);
+  const [relatorioClienteIdSelect, setRelatorioClienteIdSelect] = useState<string>("");
+  const [relatorioClientePdfLoading, setRelatorioClientePdfLoading] = useState(false);
+  const [relatorioClienteDataInicial, setRelatorioClienteDataInicial] = useState("");
+  const [relatorioClienteDataFinal, setRelatorioClienteDataFinal] = useState("");
+  const [relatorioClienteStatusFiltro, setRelatorioClienteStatusFiltro] = useState<string>("Todos");
   const [relatorioDataInicial, setRelatorioDataInicial] = useState<string>("");
   const [relatorioDataFinal, setRelatorioDataFinal] = useState<string>("");
   const [relatorioPeriodoRapido, setRelatorioPeriodoRapido] = useState<
@@ -210,6 +220,70 @@ const ContasAReceber = () => {
   const clientes: Cliente[] = Array.isArray(clientesData) 
     ? clientesData 
     : clientesData?.data || [];
+
+  const relatorioClienteIdParsed = useMemo(() => {
+    if (!relatorioClienteIdSelect) return null;
+    const n = parseInt(relatorioClienteIdSelect, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [relatorioClienteIdSelect]);
+
+  const relatorioClientePreviewParams = useMemo(
+    () => ({
+      page: 1,
+      limit: 1,
+      cliente_id: relatorioClienteIdParsed ?? undefined,
+      data_inicial: relatorioClienteDataInicial || undefined,
+      data_final: relatorioClienteDataFinal || undefined,
+      status:
+        relatorioClienteStatusFiltro !== "Todos"
+          ? relatorioClienteStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioClienteIdParsed,
+      relatorioClienteDataInicial,
+      relatorioClienteDataFinal,
+      relatorioClienteStatusFiltro,
+    ],
+  );
+
+  const {
+    data: relatorioClientePreviewData,
+    isFetching: relatorioClientePreviewFetching,
+    isError: relatorioClientePreviewError,
+  } = useQuery({
+    queryKey: ["contas-receber-relatorio-financeiro-preview", relatorioClientePreviewParams],
+    queryFn: () => financeiroService.listarAgrupado(relatorioClientePreviewParams),
+    enabled: relatorioClientePdfOpen && relatorioClienteIdParsed != null,
+  });
+
+  const relatorioClienteTemDados =
+    !relatorioClientePreviewError &&
+    relatorioClientePreviewData != null &&
+    relatorioClientePreviewData.total > 0;
+
+  const relatorioClienteMensagemSemDados = useMemo(() => {
+    if (relatorioClienteStatusFiltro !== "Todos") {
+      return "O cliente não possui dívida naquele status selecionado.";
+    }
+    return "O cliente não possui dívida naquele período.";
+  }, [relatorioClienteStatusFiltro]);
+
+  const relatorioClienteFiltrosForPdf = useMemo(
+    () => ({
+      dataInicial: relatorioClienteDataInicial || undefined,
+      dataFinal: relatorioClienteDataFinal || undefined,
+      status:
+        relatorioClienteStatusFiltro !== "Todos"
+          ? relatorioClienteStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioClienteDataInicial,
+      relatorioClienteDataFinal,
+      relatorioClienteStatusFiltro,
+    ],
+  );
 
   // Removido: pedidos agora vem de pedidosContasReceber (linha 209)
 
@@ -1566,20 +1640,6 @@ const ContasAReceber = () => {
                 </span>
               )}
             </Button>
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                // Ao abrir o diálogo, inicializar datas com os filtros atuais (se existirem)
-                setRelatorioDataInicial(dataInicialFilter || "");
-                setRelatorioDataFinal(dataFinalFilter || "");
-                setRelatorioPeriodoRapido("custom");
-                setRelatorioDialogOpen(true);
-              }}
-            >
-              <FileText className="w-4 h-4" />
-              Relatório em aberto
-            </Button>
             <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
               <SheetContent
                 side="right"
@@ -1721,6 +1781,34 @@ const ContasAReceber = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="gap-2 shrink-0"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Relatórios
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRelatorioDataInicial(dataInicialFilter || "");
+                    setRelatorioDataFinal(dataFinalFilter || "");
+                    setRelatorioPeriodoRapido("custom");
+                    setRelatorioDialogOpen(true);
+                  }}
+                >
+                  Relatório em aberto
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRelatorioClientePdfOpen(true)}>
+                  Relatório financeiro por cliente
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <Dialog open={relatorioDialogOpen} onOpenChange={setRelatorioDialogOpen}>
@@ -1870,6 +1958,137 @@ const ContasAReceber = () => {
                     </span>
                   </Button>
                 </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={relatorioClientePdfOpen}
+          onOpenChange={(open) => {
+            setRelatorioClientePdfOpen(open);
+            if (open) {
+              setRelatorioClienteDataInicial("");
+              setRelatorioClienteDataFinal("");
+              setRelatorioClienteStatusFiltro("Todos");
+              setRelatorioClienteIdSelect(
+                clienteFilterId != null ? String(clienteFilterId) : "",
+              );
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório financeiro por cliente</DialogTitle>
+              <DialogDescription>
+                Inclui dados da empresa, cadastro do cliente e lançamentos das contas financeiras
+                vinculadas a ele (campos já existentes no sistema).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="relatorio-cliente-select-receber">Cliente</Label>
+                <Select
+                  value={relatorioClienteIdSelect || undefined}
+                  onValueChange={setRelatorioClienteIdSelect}
+                >
+                  <SelectTrigger id="relatorio-cliente-select-receber">
+                    <SelectValue placeholder="Selecione o cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <Input type="date" className="rounded-lg border-border/80 bg-muted/50" value={relatorioClienteDataInicial} onChange={(e) => setRelatorioClienteDataInicial(e.target.value || "")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <Input type="date" className="rounded-lg border-border/80 bg-muted/50" value={relatorioClienteDataFinal} onChange={(e) => setRelatorioClienteDataFinal(e.target.value || "")} />
+                    </div>
+                  </div>
+                </div>
+                <Separator />
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Status</Label>
+                  <RadioGroup value={relatorioClienteStatusFiltro} onValueChange={setRelatorioClienteStatusFiltro} className="space-y-2">
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="Todos" id="relatorio-status-todos-receber" /><Label htmlFor="relatorio-status-todos-receber" className="cursor-pointer">Todos</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PENDENTE" id="relatorio-status-pendente-receber" /><Label htmlFor="relatorio-status-pendente-receber" className="cursor-pointer">Pendente</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PAGO_PARCIAL" id="relatorio-status-parcial-receber" /><Label htmlFor="relatorio-status-parcial-receber" className="cursor-pointer">Pago Parcial</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PAGO_TOTAL" id="relatorio-status-quitado-receber" /><Label htmlFor="relatorio-status-quitado-receber" className="cursor-pointer">Quitada</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="VENCIDO" id="relatorio-status-vencido-receber" /><Label htmlFor="relatorio-status-vencido-receber" className="cursor-pointer">Vencido</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="CANCELADO" id="relatorio-status-cancelado-receber" /><Label htmlFor="relatorio-status-cancelado-receber" className="cursor-pointer">Cancelado</Label></div>
+                  </RadioGroup>
+                </div>
+              </div>
+              {relatorioClientePreviewFetching && relatorioClienteIdParsed != null && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Verificando filtros...</p>
+              )}
+              {relatorioClientePreviewError && relatorioClienteIdParsed != null && (
+                <p className="text-sm text-destructive">Não foi possível verificar os filtros. Tente novamente.</p>
+              )}
+              {!relatorioClientePreviewFetching && !relatorioClientePreviewError && relatorioClienteIdParsed != null && relatorioClientePreviewData?.total === 0 && (
+                <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">{relatorioClienteMensagemSemDados}</p>
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  className="gap-2"
+                  disabled={relatorioClienteIdParsed == null || relatorioClientePreviewFetching || !relatorioClienteTemDados || relatorioClientePdfLoading}
+                  onClick={async () => {
+                    const id = relatorioClienteIdParsed;
+                    if (id == null) {
+                      toast.error("Selecione um cliente.");
+                      return;
+                    }
+                    setRelatorioClientePdfLoading(true);
+                    try {
+                      await relatoriosClienteService.downloadRelatorioFinanceiro(id, relatorioClienteFiltrosForPdf);
+                      toast.success("PDF baixado.");
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                      toast.error(msg);
+                    } finally {
+                      setRelatorioClientePdfLoading(false);
+                    }
+                  }}
+                >
+                  {relatorioClientePdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Baixar PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={relatorioClienteIdParsed == null || relatorioClientePreviewFetching || !relatorioClienteTemDados || relatorioClientePdfLoading}
+                  onClick={async () => {
+                    const id = relatorioClienteIdParsed;
+                    if (id == null) {
+                      toast.error("Selecione um cliente.");
+                      return;
+                    }
+                    setRelatorioClientePdfLoading(true);
+                    try {
+                      await relatoriosClienteService.imprimirRelatorioFinanceiro(id, relatorioClienteFiltrosForPdf);
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                      toast.error(msg);
+                    } finally {
+                      setRelatorioClientePdfLoading(false);
+                    }
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  Abrir para imprimir
+                </Button>
               </div>
             </div>
           </DialogContent>
