@@ -28,10 +28,19 @@ import { apiClient } from './api';
 
 const BASE = '/controle-roca';
 
+/** Padrão para listas usadas em combos/dropdowns até haver paginação na UI (máx. permitido no backend). */
+const LIST_ALL_LIMIT = 500;
+
 class ControleRocaService {
   // Produtores
-  async listarProdutores(): Promise<ProdutorRoca[]> {
-    return apiClient.get<ProdutorRoca[]>(`${BASE}/produtores`);
+  async listarProdutores(opts?: { page?: number; limit?: number }): Promise<ProdutorRoca[]> {
+    const page = opts?.page ?? 1;
+    const limit = opts?.limit ?? LIST_ALL_LIMIT;
+    const res = await apiClient.get<
+      ProdutorRoca[] | { produtores: ProdutorRoca[]; total?: number }
+    >(`${BASE}/produtores?page=${page}&limit=${limit}`);
+    if (Array.isArray(res)) return res;
+    return (res as { produtores?: ProdutorRoca[] }).produtores ?? [];
   }
 
   async criarProdutor(data: CreateProdutorRocaDto): Promise<ProdutorRoca> {
@@ -53,12 +62,19 @@ class ControleRocaService {
   async listarRocas(
     produtorId?: number,
     incluirInativos?: boolean,
+    opts?: { page?: number; limit?: number },
   ): Promise<Roca[]> {
     const params = new URLSearchParams();
     if (produtorId != null) params.set('produtorId', String(produtorId));
     if (incluirInativos) params.set('incluirInativos', 'true');
-    const q = params.toString() ? `?${params.toString()}` : '';
-    return apiClient.get<Roca[]>(`${BASE}/rocas${q}`);
+    params.set('page', String(opts?.page ?? 1));
+    params.set('limit', String(opts?.limit ?? LIST_ALL_LIMIT));
+    const q = `?${params.toString()}`;
+    const res = await apiClient.get<Roca[] | { rocas: Roca[]; total?: number }>(
+      `${BASE}/rocas${q}`,
+    );
+    if (Array.isArray(res)) return res;
+    return (res as { rocas?: Roca[] }).rocas ?? [];
   }
 
   async criarRoca(data: CreateRocaDto): Promise<Roca> {
@@ -86,10 +102,12 @@ class ControleRocaService {
     if (produtorId != null) params.set('produtorId', String(produtorId));
     if (opts?.rocaId != null) params.set('rocaId', String(opts.rocaId));
     if (opts?.comEmprestimos === true) params.set('comEmprestimos', 'true');
-    if (opts?.page != null) params.set('page', String(opts.page));
-    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    params.set('page', String(opts?.page ?? 1));
+    params.set('limit', String(opts?.limit ?? LIST_ALL_LIMIT));
     const q = params.toString() ? `?${params.toString()}` : '';
-    const res = await apiClient.get<MeeiroRoca[] | { items: MeeiroRoca[] }>(`${BASE}/meeiros${q}`);
+    const res = await apiClient.get<
+      MeeiroRoca[] | { items: MeeiroRoca[]; total?: number }
+    >(`${BASE}/meeiros${q}`);
     return Array.isArray(res) ? res : (res?.items ?? []);
   }
 
@@ -120,9 +138,15 @@ class ControleRocaService {
   }
 
   /** Meeiros sem CPF, telefone, PIX ou endereço preenchidos. */
-  async relatorioMeeirosCadastroIncompleto(): Promise<RelatorioMeeirosCadastroIncompletoResponse> {
+  async relatorioMeeirosCadastroIncompleto(opts?: {
+    page?: number;
+    limit?: number;
+  }): Promise<RelatorioMeeirosCadastroIncompletoResponse> {
+    const p = new URLSearchParams();
+    p.set('page', String(opts?.page ?? 1));
+    p.set('limit', String(opts?.limit ?? LIST_ALL_LIMIT));
     return apiClient.get<RelatorioMeeirosCadastroIncompletoResponse>(
-      `${BASE}/relatorios/meeiros/cadastro-incompleto`,
+      `${BASE}/relatorios/meeiros/cadastro-incompleto?${p.toString()}`,
     );
   }
 
@@ -166,8 +190,8 @@ class ControleRocaService {
     opts?: { page?: number; limit?: number; status?: string }
   ): Promise<ListaEmprestimosResponse> {
     const params = new URLSearchParams();
-    if (opts?.page != null) params.set('page', String(opts.page));
-    if (opts?.limit != null) params.set('limit', String(opts.limit));
+    params.set('page', String(opts?.page ?? 1));
+    params.set('limit', String(opts?.limit ?? LIST_ALL_LIMIT));
     if (opts?.status) params.set('status', opts.status);
     const q = params.toString() ? `?${params.toString()}` : '';
     return apiClient.get<ListaEmprestimosResponse>(
@@ -194,6 +218,8 @@ class ControleRocaService {
     rocas?: number[];
     page?: number;
     limit?: number;
+    subTab?: 'em-aberto' | 'quitados';
+    buscaNome?: string;
     apenasComValorEmAberto?: boolean;
     apenasPagos?: boolean;
   }): Promise<ResumoPagamentoMeeirosResponse> {
@@ -203,8 +229,10 @@ class ControleRocaService {
     if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
     if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
     if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
-    if (params?.page != null) search.set('page', String(params.page));
-    if (params?.limit != null) search.set('limit', String(params.limit));
+    search.set('page', String(params?.page ?? 1));
+    search.set('limit', String(params?.limit ?? 15));
+    if (params?.subTab) search.set('subTab', params.subTab);
+    if (params?.buscaNome?.trim()) search.set('buscaNome', params.buscaNome.trim());
     if (params?.apenasComValorEmAberto === true) search.set('apenasComValorEmAberto', 'true');
     if (params?.apenasPagos === true) search.set('apenasPagos', 'true');
     const q = search.toString() ? `?${search.toString()}` : '';
@@ -305,9 +333,19 @@ class ControleRocaService {
   }
 
   // Produtos da roça
-  async listarProdutosRoca(produtorId?: number): Promise<ProdutoRoca[]> {
-    const q = produtorId != null ? `?produtorId=${produtorId}` : '';
-    return apiClient.get<ProdutoRoca[]>(`${BASE}/produtos${q}`);
+  async listarProdutosRoca(
+    produtorId?: number,
+    opts?: { page?: number; limit?: number },
+  ): Promise<ProdutoRoca[]> {
+    const params = new URLSearchParams();
+    if (produtorId != null) params.set('produtorId', String(produtorId));
+    params.set('page', String(opts?.page ?? 1));
+    params.set('limit', String(opts?.limit ?? LIST_ALL_LIMIT));
+    const res = await apiClient.get<
+      ProdutoRoca[] | { produtos: ProdutoRoca[]; total?: number }
+    >(`${BASE}/produtos?${params.toString()}`);
+    if (Array.isArray(res)) return res;
+    return (res as { produtos?: ProdutoRoca[] }).produtos ?? [];
   }
 
   async criarProdutoRoca(data: CreateProdutoRocaDto): Promise<ProdutoRoca> {
@@ -322,6 +360,8 @@ class ControleRocaService {
     dataInicial?: string;
     dataFinal?: string;
     incluirInativos?: boolean;
+    page?: number;
+    limit?: number;
   }): Promise<LancamentoProducaoRoca[]> {
     const search = new URLSearchParams();
     if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
@@ -330,8 +370,14 @@ class ControleRocaService {
     if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
     if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
     if (params?.incluirInativos === true) search.set('incluirInativos', 'true');
+    search.set('page', String(params?.page ?? 1));
+    search.set('limit', String(params?.limit ?? LIST_ALL_LIMIT));
     const q = search.toString() ? `?${search.toString()}` : '';
-    return apiClient.get<LancamentoProducaoRoca[]>(`${BASE}/lancamentos${q}`);
+    const res = await apiClient.get<
+      LancamentoProducaoRoca[] | { lancamentos: LancamentoProducaoRoca[]; total?: number }
+    >(`${BASE}/lancamentos${q}`);
+    if (Array.isArray(res)) return res;
+    return (res as { lancamentos?: LancamentoProducaoRoca[] }).lancamentos ?? [];
   }
 
   async obterLancamento(id: number): Promise<LancamentoDetalhesRoca | null> {

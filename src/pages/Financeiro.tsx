@@ -420,9 +420,7 @@ const Financeiro = () => {
   const totalPages = Math.ceil(totalAgrupado / limit) || 1;
 
   // Calcular estatísticas usando valores do backend (já consideram pagamentos parciais)
-  // Conforme GUIA_FRONTEND_DASHBOARD_FINANCEIRO_VALOR_PAGO.md:
   // - Receita do Mês = receita_mes (valor total a receber do mês atual)
-  // - Valor Pago do Mês = valor_pago_mes (valor pago no mês atual via pagamentos)
   // - Despesas do Mês = despesa_mes (valor total a pagar do mês atual)
   // - Saldo Atual = Receita Total Recebida - Despesa Total Paga
   const stats = useMemo(() => {
@@ -434,7 +432,6 @@ const Financeiro = () => {
     };
 
     const receitaMes = parseValor(contasReceberStats?.receita_mes) || 0;
-    const valorPagoMes = parseValor(contasReceberStats?.valor_pago_mes) || 0;
     const despesaMes = parseValor(contasPagarStats?.despesa_mes) || 0;
     const valorTotalRecebido = parseValor(contasReceberStats?.valor_total_recebido) ?? 0;
     const valorTotalPago = parseValor(contasPagarStats?.valor_total_pago) ?? 0;
@@ -450,15 +447,6 @@ const Financeiro = () => {
         iconWrap:
           "bg-sky-500/[0.12] text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
         cardFilter: "RECEBER" as const,
-      },
-      {
-        label: "Valor Pago do Mês",
-        value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valorPagoMes),
-        Icon: DollarSign,
-        border: "border-l-4 border-l-emerald-500",
-        iconWrap:
-          "bg-emerald-500/[0.12] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
-        cardFilter: "todos" as const,
       },
       {
         label: "Despesas do Mês",
@@ -960,63 +948,66 @@ const Financeiro = () => {
           </Dialog>
         </div>
 
-        {/* Stats — mesmo designer dos cards da página Centro de custos (clicável para filtrar) */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4 mb-6">
-          {stats.map((stat, index) => {
-            const Icon = stat.Icon;
-            const cardFilter = stat.cardFilter ?? "todos";
-            const filtroTipoAtivo =
-              cardFilter !== "todos" && cardTipoFilter === cardFilter;
-            return (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    setCardTipoFilter(cardFilter);
-                    setPage(1);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
+        {/* Stats — mesma interação; grid 3 colunas largura total (md+), responsivo */}
+        <div className="mb-6 w-full">
+          <div className="mx-auto grid w-full max-w-full grid-cols-1 gap-4 sm:gap-4 md:grid-cols-3 md:gap-5">
+            {stats.map((stat, index) => {
+              const Icon = stat.Icon;
+              const cardFilter = stat.cardFilter ?? "todos";
+              const filtroTipoAtivo =
+                cardFilter !== "todos" && cardTipoFilter === cardFilter;
+              return (
+                <motion.div
+                  key={stat.label}
+                  className="min-w-0"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Card
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
                       setCardTipoFilter(cardFilter);
                       setPage(1);
-                    }
-                  }}
-                  className={cn(
-                    "h-full overflow-hidden border border-border/60 shadow-sm cursor-pointer transition-all hover:shadow-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    stat.border,
-                    "bg-gradient-to-b from-background to-muted/30 dark:to-muted/20",
-                    filtroTipoAtivo ? "ring-2 ring-primary/45" : "",
-                  )}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
-                        {stat.label}
-                      </p>
-                      <div
-                        className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                          stat.iconWrap,
-                        )}
-                      >
-                        <Icon className="h-4 w-4" aria-hidden />
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setCardTipoFilter(cardFilter);
+                        setPage(1);
+                      }
+                    }}
+                    className={cn(
+                      "h-full overflow-hidden border border-border/60 shadow-sm cursor-pointer transition-all hover:shadow-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      stat.border,
+                      "bg-gradient-to-b from-background to-muted/30 dark:to-muted/20",
+                      filtroTipoAtivo ? "ring-2 ring-primary/45" : "",
+                    )}
+                  >
+                    <CardContent className="p-5 sm:p-6">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground sm:text-sm">
+                          {stat.label}
+                        </p>
+                        <div
+                          className={cn(
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                            stat.iconWrap,
+                          )}
+                        >
+                          <Icon className="h-5 w-5" aria-hidden />
+                        </div>
                       </div>
-                    </div>
-                    <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
-                      {stat.value}
-                    </p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
+                      <p className="mt-4 text-2xl font-bold tabular-nums tracking-tight sm:text-3xl text-slate-900 dark:text-foreground">
+                        {stat.value}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Filtros e busca — barra tipo Centro de Custos */}

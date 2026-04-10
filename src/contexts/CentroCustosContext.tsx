@@ -1,14 +1,26 @@
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  centroCustoService,
+  type ApiCentroCustoDespesa,
+  type ApiCentroCustoTipo,
+} from '@/services/centro-custo.service';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
 
-const STORAGE_KEY = 'topERP_centro_custos_demo_v1';
+export const CENTRO_CUSTO_PAGE_SIZE = 15;
+
+const QK_RESUMO = ['centro-custo', 'resumo'] as const;
+const QK_TIPOS_OPCOES = ['centro-custo', 'tipos-opcoes'] as const;
+const qkTiposPagina = (page: number) => ['centro-custo', 'tipos', page] as const;
+const qkDespesasPagina = (page: number) =>
+  ['centro-custo', 'despesas', page] as const;
 
 export type CentroCustoTipo = {
   id: string;
@@ -25,6 +37,8 @@ export type CentroCustoDespesa = {
   id: string;
   descricao: string;
   tipoId: string;
+  /** Nome do tipo vindo da API (lista paginada). */
+  tipoNome?: string;
   rocaId: number;
   rocaNome: string;
   valor: number;
@@ -33,13 +47,32 @@ export type CentroCustoDespesa = {
   pagamentos: CentroCustoPagamento[];
 };
 
-type PersistShape = {
-  tipos: CentroCustoTipo[];
-  despesas: CentroCustoDespesa[];
-};
+function mapTipo(row: ApiCentroCustoTipo): CentroCustoTipo {
+  return { id: String(row.id), nome: row.nome };
+}
 
-function novoId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+function dataIso(d: string | Date): string {
+  if (typeof d === 'string') return d.length >= 10 ? d.slice(0, 10) : d;
+  return d.toISOString().slice(0, 10);
+}
+
+function mapDespesa(row: ApiCentroCustoDespesa): CentroCustoDespesa {
+  return {
+    id: String(row.id),
+    descricao: row.descricao,
+    tipoId: String(row.tipoId),
+    tipoNome: row.tipoNome,
+    rocaId: row.rocaId,
+    rocaNome: row.rocaNome ?? '',
+    valor: Number(row.valor),
+    data: dataIso(row.data as string),
+    observacoes: row.observacoes ?? undefined,
+    pagamentos: (row.pagamentos ?? []).map((p) => ({
+      id: String(p.id),
+      valor: Number(p.valor),
+      data: dataIso(p.data as string),
+    })),
+  };
 }
 
 export function totalPagoNaDespesa(d: CentroCustoDespesa): number {
@@ -58,151 +91,252 @@ export function valorAberto(d: CentroCustoDespesa): number {
   return Math.max(0, (Number(d.valor) || 0) - totalPagoNaDespesa(d));
 }
 
-function despesaNaCompetenciaMes(d: CentroCustoDespesa, yyyyMm: string): boolean {
-  const data = (d.data || '').slice(0, 7);
-  return data === yyyyMm;
-}
+type AtualizarDespesaInput = Partial<
+  Omit<CentroCustoDespesa, 'id' | 'pagamentos'>
+>;
 
 type CentroCustosContextValue = {
+  /** Página atual da tabela de tipos. */
+  tiposPage: number;
+  setTiposPage: (p: number | ((prev: number) => number)) => void;
+  tiposTotal: number;
+  /** Página atual da tabela de despesas. */
+  despesasPage: number;
+  setDespesasPage: (p: number | ((prev: number) => number)) => void;
+  despesasTotal: number;
+  /** Itens da página atual (tipos). */
   tipos: CentroCustoTipo[];
+  /** Todos os tipos para selects (limitado no servidor). */
+  tiposOpcoes: CentroCustoTipo[];
   despesas: CentroCustoDespesa[];
-  adicionarTipo: (nome: string) => CentroCustoTipo;
-  atualizarTipo: (id: string, nome: string) => void;
-  excluirTipo: (id: string) => void;
-  adicionarDespesa: (data: Omit<CentroCustoDespesa, 'id' | 'pagamentos'>) => CentroCustoDespesa;
-  atualizarDespesa: (id: string, data: Partial<Omit<CentroCustoDespesa, 'id' | 'pagamentos'>>) => void;
-  excluirDespesa: (id: string) => void;
-  registrarPagamento: (despesaId: string, valor: number, data: string) => CentroCustoDespesa | undefined;
-  /** Soma dos valores (competência) das despesas cuja data cai no mês — para o card "Despesa do mês". */
-  somaCompetenciaCentroCustosMes: (yyyyMm: string) => number;
-  /** Resumo interno do módulo (todas as despesas em memória). */
-  resumoModulo: () => {
+  resumo: {
     qAbertas: number;
     qQuitadas: number;
     valorAbertoTotal: number;
     valorPagoTotal: number;
   };
+  /** Carregamento inicial (primeira busca de tipos ou despesas). */
+  isLoading: boolean;
+  adicionarTipo: (nome: string) => Promise<CentroCustoTipo>;
+  atualizarTipo: (id: string, nome: string) => Promise<void>;
+  excluirTipo: (id: string) => Promise<void>;
+  adicionarDespesa: (
+    data: Omit<CentroCustoDespesa, 'id' | 'pagamentos'>,
+  ) => Promise<CentroCustoDespesa>;
+  atualizarDespesa: (id: string, data: AtualizarDespesaInput) => Promise<void>;
+  excluirDespesa: (id: string) => Promise<void>;
+  registrarPagamento: (
+    despesaId: string,
+    valor: number,
+    data: string,
+  ) => Promise<CentroCustoDespesa | undefined>;
 };
 
 const CentroCustosContext = createContext<CentroCustosContextValue | null>(null);
 
-function carregar(): PersistShape {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { tipos: [], despesas: [] };
-    const p = JSON.parse(raw) as PersistShape;
-    return {
-      tipos: Array.isArray(p.tipos) ? p.tipos : [],
-      despesas: Array.isArray(p.despesas) ? p.despesas : [],
-    };
-  } catch {
-    return { tipos: [], despesas: [] };
-  }
-}
-
 export function CentroCustosProvider({ children }: { children: ReactNode }) {
-  const [tipos, setTipos] = useState<CentroCustoTipo[]>(() => carregar().tipos);
-  const [despesas, setDespesas] = useState<CentroCustoDespesa[]>(() => carregar().despesas);
+  const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const podeSincronizar = !authLoading && isAuthenticated;
 
-  useEffect(() => {
-    const payload: PersistShape = { tipos, despesas };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [tipos, despesas]);
+  const [tiposPage, setTiposPage] = useState(1);
+  const [despesasPage, setDespesasPage] = useState(1);
 
-  const adicionarTipo = useCallback((nome: string) => {
-    const t: CentroCustoTipo = { id: novoId('tipo'), nome: nome.trim() };
-    setTipos((prev) => [...prev, t]);
-    return t;
+  const resumoQuery = useQuery({
+    queryKey: QK_RESUMO,
+    enabled: podeSincronizar,
+    queryFn: () => centroCustoService.resumoModulo(),
+  });
+
+  const tiposOpcoesQuery = useQuery({
+    queryKey: QK_TIPOS_OPCOES,
+    enabled: podeSincronizar,
+    queryFn: async () => {
+      const rows = await centroCustoService.listarTiposOpcoes();
+      return rows.map(mapTipo);
+    },
+  });
+
+  const tiposQuery = useQuery({
+    queryKey: qkTiposPagina(tiposPage),
+    enabled: podeSincronizar,
+    queryFn: async () => {
+      const res = await centroCustoService.listarTipos(
+        tiposPage,
+        CENTRO_CUSTO_PAGE_SIZE,
+      );
+      return {
+        items: res.items.map(mapTipo),
+        total: res.total,
+        page: res.page,
+        limit: res.limit,
+      };
+    },
+  });
+
+  const despesasQuery = useQuery({
+    queryKey: qkDespesasPagina(despesasPage),
+    enabled: podeSincronizar,
+    queryFn: async () => {
+      const res = await centroCustoService.listarDespesas(
+        despesasPage,
+        CENTRO_CUSTO_PAGE_SIZE,
+      );
+      return {
+        items: res.items.map(mapDespesa),
+        total: res.total,
+        page: res.page,
+        limit: res.limit,
+      };
+    },
+  });
+
+  const tipos = tiposQuery.data?.items ?? [];
+  const tiposTotal = tiposQuery.data?.total ?? 0;
+  const tiposOpcoes = tiposOpcoesQuery.data ?? [];
+  const despesas = despesasQuery.data?.items ?? [];
+  const despesasTotal = despesasQuery.data?.total ?? 0;
+
+  const resumo = resumoQuery.data ?? {
+    qAbertas: 0,
+    qQuitadas: 0,
+    valorAbertoTotal: 0,
+    valorPagoTotal: 0,
+  };
+
+  const invalidateCentroCustoLists = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['centro-custo'] });
+  }, [queryClient]);
+
+  const buscarDespesaPorId = useCallback(async (id: string) => {
+    const first = await centroCustoService.listarDespesas(
+      1,
+      CENTRO_CUSTO_PAGE_SIZE,
+    );
+    const pages = Math.max(
+      1,
+      Math.ceil(first.total / CENTRO_CUSTO_PAGE_SIZE),
+    );
+    for (let p = 1; p <= pages; p++) {
+      const res =
+        p === 1
+          ? first
+          : await centroCustoService.listarDespesas(p, CENTRO_CUSTO_PAGE_SIZE);
+      const found = res.items.map(mapDespesa).find((d) => d.id === id);
+      if (found) return found;
+    }
+    return undefined;
   }, []);
 
-  const atualizarTipo = useCallback((id: string, nome: string) => {
-    setTipos((prev) => prev.map((t) => (t.id === id ? { ...t, nome: nome.trim() } : t)));
-  }, []);
+  const adicionarTipo = useCallback(
+    async (nome: string) => {
+      const row = await centroCustoService.criarTipo({ nome: nome.trim() });
+      await invalidateCentroCustoLists();
+      return mapTipo(row);
+    },
+    [invalidateCentroCustoLists],
+  );
 
-  const excluirTipo = useCallback((id: string) => {
-    setTipos((prev) => prev.filter((t) => t.id !== id));
-    setDespesas((prev) => prev.filter((d) => d.tipoId !== id));
-  }, []);
+  const atualizarTipo = useCallback(
+    async (id: string, nome: string) => {
+      await centroCustoService.atualizarTipo(Number(id), { nome: nome.trim() });
+      await invalidateCentroCustoLists();
+    },
+    [invalidateCentroCustoLists],
+  );
+
+  const excluirTipo = useCallback(
+    async (id: string) => {
+      await centroCustoService.excluirTipo(Number(id));
+      await invalidateCentroCustoLists();
+    },
+    [invalidateCentroCustoLists],
+  );
 
   const adicionarDespesa = useCallback(
-    (data: Omit<CentroCustoDespesa, 'id' | 'pagamentos'>) => {
-      const d: CentroCustoDespesa = {
-        ...data,
-        id: novoId('desp'),
-        pagamentos: [],
-      };
-      setDespesas((prev) => [...prev, d]);
-      return d;
+    async (data: Omit<CentroCustoDespesa, 'id' | 'pagamentos'>) => {
+      const row = await centroCustoService.criarDespesa({
+        tipoId: Number(data.tipoId),
+        rocaId: data.rocaId,
+        descricao: data.descricao.trim(),
+        valor: data.valor,
+        data: dataIso(data.data),
+        observacoes: data.observacoes?.trim() || undefined,
+      });
+      setDespesasPage(1);
+      await invalidateCentroCustoLists();
+      const res = await centroCustoService.listarDespesas(
+        1,
+        CENTRO_CUSTO_PAGE_SIZE,
+      );
+      const created = res.items
+        .map(mapDespesa)
+        .find((d) => d.id === String(row.id));
+      if (!created) {
+        throw new Error('Despesa salva, mas a lista não pôde ser atualizada.');
+      }
+      return created;
     },
-    [],
+    [invalidateCentroCustoLists],
   );
 
   const atualizarDespesa = useCallback(
-    (id: string, data: Partial<Omit<CentroCustoDespesa, 'id' | 'pagamentos'>>) => {
-      setDespesas((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, ...data, id: d.id, pagamentos: d.pagamentos } : d)),
-      );
+    async (id: string, data: AtualizarDespesaInput) => {
+      const payload: Parameters<typeof centroCustoService.atualizarDespesa>[1] = {};
+      if (data.tipoId !== undefined) payload.tipoId = Number(data.tipoId);
+      if (data.rocaId !== undefined) payload.rocaId = data.rocaId;
+      if (data.descricao !== undefined) payload.descricao = data.descricao.trim();
+      if (data.valor !== undefined) payload.valor = data.valor;
+      if (data.data !== undefined) payload.data = dataIso(data.data);
+      if (data.observacoes !== undefined) {
+        payload.observacoes = data.observacoes?.trim() ? data.observacoes.trim() : null;
+      }
+      await centroCustoService.atualizarDespesa(Number(id), payload);
+      await invalidateCentroCustoLists();
     },
-    [],
+    [invalidateCentroCustoLists],
   );
 
-  const excluirDespesa = useCallback((id: string) => {
-    setDespesas((prev) => prev.filter((d) => d.id !== id));
-  }, []);
-
-  const registrarPagamento = useCallback((despesaId: string, valor: number, data: string) => {
-    const v = Number(valor);
-    if (!Number.isFinite(v) || v <= 0) return undefined;
-    let out: CentroCustoDespesa | undefined;
-    setDespesas((prev) =>
-      prev.map((d) => {
-        if (d.id !== despesaId) return d;
-        const pago = totalPagoNaDespesa(d);
-        const restante = Math.max(0, Number(d.valor) - pago);
-        const aplicar = Math.min(v, restante);
-        if (aplicar <= 0) return d;
-        const next = {
-          ...d,
-          pagamentos: [
-            ...d.pagamentos,
-            { id: novoId('pag'), valor: aplicar, data: data.slice(0, 10) },
-          ],
-        };
-        out = next;
-        return next;
-      }),
-    );
-    return out;
-  }, []);
-
-  const somaCompetenciaCentroCustosMes = useCallback(
-    (yyyyMm: string) =>
-      despesas
-        .filter((d) => despesaNaCompetenciaMes(d, yyyyMm))
-        .reduce((s, d) => s + (Number(d.valor) || 0), 0),
-    [despesas],
+  const excluirDespesa = useCallback(
+    async (id: string) => {
+      await centroCustoService.excluirDespesa(Number(id));
+      await invalidateCentroCustoLists();
+    },
+    [invalidateCentroCustoLists],
   );
 
-  const resumoModulo = useCallback(() => {
-    let qAbertas = 0;
-    let qQuitadas = 0;
-    let valorAbertoTotal = 0;
-    let valorPagoTotal = 0;
-    for (const d of despesas) {
-      const st = statusDespesa(d);
-      const pago = totalPagoNaDespesa(d);
-      valorPagoTotal += pago;
-      if (st === 'QUITADO') qQuitadas += 1;
-      else qAbertas += 1;
-      valorAbertoTotal += Math.max(0, Number(d.valor) - pago);
-    }
-    return { qAbertas, qQuitadas, valorAbertoTotal, valorPagoTotal };
-  }, [despesas]);
+  const registrarPagamento = useCallback(
+    async (despesaId: string, valor: number, dataPag: string) => {
+      await centroCustoService.registrarPagamento(Number(despesaId), {
+        valor,
+        data: dataIso(dataPag),
+      });
+      await invalidateCentroCustoLists();
+      return buscarDespesaPorId(despesaId);
+    },
+    [invalidateCentroCustoLists, buscarDespesaPorId],
+  );
+
+  const isLoading =
+    podeSincronizar &&
+    (tiposQuery.isPending ||
+      despesasQuery.isPending ||
+      resumoQuery.isPending ||
+      tiposOpcoesQuery.isPending);
 
   const value = useMemo(
     () => ({
+      tiposPage,
+      setTiposPage,
+      tiposTotal,
+      despesasPage,
+      setDespesasPage,
+      despesasTotal,
       tipos,
+      tiposOpcoes,
       despesas,
+      resumo,
+      isLoading,
       adicionarTipo,
       atualizarTipo,
       excluirTipo,
@@ -210,12 +344,17 @@ export function CentroCustosProvider({ children }: { children: ReactNode }) {
       atualizarDespesa,
       excluirDespesa,
       registrarPagamento,
-      somaCompetenciaCentroCustosMes,
-      resumoModulo,
     }),
     [
+      tiposPage,
+      tiposTotal,
+      despesasPage,
+      despesasTotal,
       tipos,
+      tiposOpcoes,
       despesas,
+      resumo,
+      isLoading,
       adicionarTipo,
       atualizarTipo,
       excluirTipo,
@@ -223,8 +362,6 @@ export function CentroCustosProvider({ children }: { children: ReactNode }) {
       atualizarDespesa,
       excluirDespesa,
       registrarPagamento,
-      somaCompetenciaCentroCustosMes,
-      resumoModulo,
     ],
   );
 

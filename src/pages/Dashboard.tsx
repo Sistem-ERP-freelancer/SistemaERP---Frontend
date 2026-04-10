@@ -33,6 +33,7 @@ type PainelMetricKind = "compras" | "vendas" | "saldo";
 function painelMetricKindFromLegenda(legenda: string): PainelMetricKind {
   const l = legenda.toLowerCase();
   if (l.includes("saldo")) return "saldo";
+  if (l.includes("recebido")) return "vendas";
   if (l.includes("venda")) return "vendas";
   if (l.includes("compra")) return "compras";
   return "compras";
@@ -347,11 +348,11 @@ const Dashboard = () => {
                         : "Acumulado de todas as competências no sistema (independente do mês das linhas acima).",
                       celulas: [
                         {
-                          legenda: "Total compras paga",
+                          legenda: "Total pago",
                           valor: painelFinanceiro.linha_totais_periodo.compras,
                         },
                         {
-                          legenda: "vendas recebida no período",
+                          legenda: "Total recebido",
                           valor: painelFinanceiro.linha_totais_periodo.vendas,
                         },
                         {

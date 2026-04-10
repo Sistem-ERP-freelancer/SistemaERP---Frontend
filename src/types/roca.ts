@@ -122,6 +122,8 @@ export interface MeeiroCadastroIncompletoItem {
 export interface RelatorioMeeirosCadastroIncompletoResponse {
   total: number;
   itens: MeeiroCadastroIncompletoItem[];
+  page?: number;
+  limit?: number;
 }
 
 export interface CreateMeeiroRocaDto {
@@ -216,6 +218,10 @@ export interface ResumoPagamentoMeeirosResponse {
   total: number;
   page: number;
   limit: number;
+  /** Contagem da aba Em aberto (mesmos filtros da lista). */
+  totalEmAberto?: number;
+  /** Meeiros totalmente quitados: pagamento registrado, sem empréstimo em aberto e sem produção a receber. */
+  totalQuitados?: number;
 }
 
 /** Payload para registrar pagamento de meeiro. */

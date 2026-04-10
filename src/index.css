@@ -198,6 +198,17 @@
 }
 
 @layer utilities {
+  /** Permite scroll com mouse/trackpad/teclado sem exibir a barra nativa */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }

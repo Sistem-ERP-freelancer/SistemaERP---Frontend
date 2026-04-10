@@ -39,9 +39,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  CENTRO_CUSTO_PAGE_SIZE,
   useCentroCustos,
   statusDespesa,
   totalPagoNaDespesa,
@@ -130,7 +139,7 @@ function DespesasTable({
   onExcluir,
 }: {
   despesas: CentroCustoDespesa[];
-  nomeTipo: (tipoId: string) => string;
+  nomeTipo: (d: CentroCustoDespesa) => string;
   onDetalhe: (d: CentroCustoDespesa) => void;
   onPagar: (d: CentroCustoDespesa) => void;
   onEditar: (d: CentroCustoDespesa) => void;
@@ -142,8 +151,7 @@ function DespesasTable({
   );
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden">
-      <Table>
+    <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Descrição</TableHead>
@@ -171,7 +179,7 @@ function DespesasTable({
                 <TableRow key={d.id}>
                   <TableCell className="font-medium max-w-[180px] truncate">{d.descricao}</TableCell>
                   <TableCell>{d.rocaNome}</TableCell>
-                  <TableCell>{nomeTipo(d.tipoId)}</TableCell>
+                  <TableCell>{nomeTipo(d)}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatCurrency(Number(d.valor))}
                   </TableCell>
@@ -207,15 +215,107 @@ function DespesasTable({
             })
           )}
         </TableBody>
-      </Table>
+    </Table>
+  );
+}
+
+function CentroCustoTablePagination({
+  page,
+  setPage,
+  total,
+  totalPages,
+}: {
+  page: number;
+  setPage: (p: number | ((prev: number) => number)) => void;
+  total: number;
+  totalPages: number;
+}) {
+  if (totalPages <= 1) return null;
+  const from = total > 0 ? (page - 1) * CENTRO_CUSTO_PAGE_SIZE + 1 : 0;
+  const to = Math.min(page * CENTRO_CUSTO_PAGE_SIZE, total);
+  return (
+    <div className="border-t border-border px-4 py-3 space-y-2">
+      <Pagination className="justify-end">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setPage((prev) => Math.max(1, prev - 1));
+              }}
+              className={
+                page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+              }
+            />
+          </PaginationItem>
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum: number;
+            if (totalPages <= 5) {
+              pageNum = i + 1;
+            } else if (page <= 3) {
+              pageNum = i + 1;
+            } else if (page >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = page - 2 + i;
+            }
+            return (
+              <PaginationItem key={pageNum}>
+                <PaginationLink
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setPage(pageNum);
+                  }}
+                  isActive={page === pageNum}
+                  className="cursor-pointer"
+                >
+                  {pageNum}
+                </PaginationLink>
+              </PaginationItem>
+            );
+          })}
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setPage((prev) => Math.min(totalPages, prev + 1));
+              }}
+              className={
+                page === totalPages
+                  ? 'pointer-events-none opacity-50'
+                  : 'cursor-pointer'
+              }
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+      <p className="text-center text-sm text-muted-foreground">
+        Mostrando {from} a {to} de {total}
+      </p>
     </div>
   );
+}
+
+function msgErro(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
 }
 
 export default function CentroCustos() {
   const {
     tipos,
+    tiposOpcoes,
+    tiposPage,
+    setTiposPage,
+    tiposTotal,
     despesas,
+    despesasPage,
+    setDespesasPage,
+    despesasTotal,
+    isLoading,
     adicionarTipo,
     atualizarTipo,
     excluirTipo,
@@ -223,7 +323,7 @@ export default function CentroCustos() {
     atualizarDespesa,
     excluirDespesa,
     registrarPagamento,
-    resumoModulo,
+    resumo,
   } = useCentroCustos();
 
   const { data: rocasApi = [], isLoading: loadingRocas } = useQuery({
@@ -240,7 +340,17 @@ export default function CentroCustos() {
     [rocasApi],
   );
 
-  const resumo = resumoModulo();
+  const totalTiposPages = Math.max(
+    1,
+    Math.ceil(tiposTotal / CENTRO_CUSTO_PAGE_SIZE),
+  );
+  const totalDespesasPages = Math.max(
+    1,
+    Math.ceil(despesasTotal / CENTRO_CUSTO_PAGE_SIZE),
+  );
+
+  const nomeTipoDespesa = (d: CentroCustoDespesa) =>
+    d.tipoNome ?? tiposOpcoes.find((t) => t.id === d.tipoId)?.nome ?? '—';
 
   const [tab, setTab] = useState('visao');
 
@@ -280,30 +390,38 @@ export default function CentroCustos() {
     setTipoDialogOpen(true);
   };
 
-  const salvarTipo = () => {
+  const salvarTipo = async () => {
     const n = tipoNome.trim();
     if (!n) {
       toast.error('Informe o nome do tipo.');
       return;
     }
-    if (tipoEdit) atualizarTipo(tipoEdit.id, n);
-    else adicionarTipo(n);
-    setTipoDialogOpen(false);
-    toast.success(tipoEdit ? 'Tipo atualizado.' : 'Tipo cadastrado.');
+    try {
+      if (tipoEdit) await atualizarTipo(tipoEdit.id, n);
+      else await adicionarTipo(n);
+      setTipoDialogOpen(false);
+      toast.success(tipoEdit ? 'Tipo atualizado.' : 'Tipo cadastrado.');
+    } catch (e) {
+      toast.error(msgErro(e, 'Não foi possível salvar o tipo.'));
+    }
   };
 
-  const salvarQuickTipo = () => {
+  const salvarQuickTipo = async () => {
     const n = quickTipoNome.trim();
     if (!n) {
       toast.error('Informe o nome.');
       return;
     }
-    const t = adicionarTipo(n);
-    setTipoIdSel(t.id);
-    setQuickTipoNome('');
-    setQuickTipoOpen(false);
-    setTipoPopOpen(false);
-    toast.success('Tipo cadastrado.');
+    try {
+      const t = await adicionarTipo(n);
+      setTipoIdSel(t.id);
+      setQuickTipoNome('');
+      setQuickTipoOpen(false);
+      setTipoPopOpen(false);
+      toast.success('Tipo cadastrado.');
+    } catch (e) {
+      toast.error(msgErro(e, 'Não foi possível cadastrar o tipo.'));
+    }
   };
 
   const parseValor = (s: string): number => {
@@ -312,7 +430,7 @@ export default function CentroCustos() {
     return Number.isFinite(n) ? n : NaN;
   };
 
-  const salvarDespesa = () => {
+  const salvarDespesa = async () => {
     const v = parseValor(valorStr);
     if (!descricao.trim()) {
       toast.error('Informe a descrição da despesa.');
@@ -330,24 +448,28 @@ export default function CentroCustos() {
       toast.error('Informe um valor válido.');
       return;
     }
-    adicionarDespesa({
-      descricao: descricao.trim(),
-      tipoId: tipoIdSel,
-      rocaId: rocaSel.id,
-      rocaNome: rocaSel.nome,
-      valor: v,
-      data: dataDesp,
-      observacoes: observacoes.trim() || undefined,
-    });
-    setDescricao('');
-    setValorStr('');
-    setObservacoes('');
-    toast.success('Despesa cadastrada (demonstração).');
+    try {
+      await adicionarDespesa({
+        descricao: descricao.trim(),
+        tipoId: tipoIdSel,
+        rocaId: rocaSel.id,
+        rocaNome: rocaSel.nome,
+        valor: v,
+        data: dataDesp,
+        observacoes: observacoes.trim() || undefined,
+      });
+      setDescricao('');
+      setValorStr('');
+      setObservacoes('');
+      toast.success('Despesa cadastrada.');
+    } catch (e) {
+      toast.error(msgErro(e, 'Não foi possível cadastrar a despesa.'));
+    }
   };
 
-  const despesaNomeTipo = (tipoId: string) => tipos.find((t) => t.id === tipoId)?.nome ?? '—';
+  const despesaNomeTipo = nomeTipoDespesa;
 
-  const salvarEdicaoDespesa = () => {
+  const salvarEdicaoDespesa = async () => {
     if (!editDesp) return;
     const v = parseValor(valorStr);
     if (!descricao.trim()) {
@@ -366,17 +488,21 @@ export default function CentroCustos() {
       toast.error('Valor não pode ser menor que o total já pago.');
       return;
     }
-    atualizarDespesa(editDesp.id, {
-      descricao: descricao.trim(),
-      tipoId: tipoIdSel,
-      rocaId: rocaSel.id,
-      rocaNome: rocaSel.nome,
-      valor: v,
-      data: dataDesp,
-      observacoes: observacoes.trim() || undefined,
-    });
-    setEditDesp(null);
-    toast.success('Despesa atualizada.');
+    try {
+      await atualizarDespesa(editDesp.id, {
+        descricao: descricao.trim(),
+        tipoId: tipoIdSel,
+        rocaId: rocaSel.id,
+        rocaNome: rocaSel.nome,
+        valor: v,
+        data: dataDesp,
+        observacoes: observacoes.trim() || undefined,
+      });
+      setEditDesp(null);
+      toast.success('Despesa atualizada.');
+    } catch (e) {
+      toast.error(msgErro(e, 'Não foi possível atualizar a despesa.'));
+    }
   };
 
   const abrirEditar = (d: CentroCustoDespesa) => {
@@ -427,8 +553,13 @@ export default function CentroCustos() {
             <div>
               <h1 className="text-2xl font-bold text-foreground">Centro de Despesa</h1>
               <p className="text-muted-foreground text-sm sm:text-base mt-1">
-                Cadastro de tipos de custo e despesas por roça — demonstração apenas no navegador (sem API).
+                Cadastro de{' '}
+                <span className="whitespace-nowrap">tipos de custo</span> e despesas por roça, sincronizado com o
+                banco do seu tenant.
               </p>
+              {isLoading ? (
+                <p className="text-xs text-muted-foreground mt-2">Carregando tipos e despesas…</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -506,14 +637,22 @@ export default function CentroCustos() {
           </div>
 
           {tab === 'visao' && (
-            <DespesasTable
-              despesas={despesas}
-              nomeTipo={despesaNomeTipo}
-              onDetalhe={abrirDetalhe}
-              onPagar={abrirPagarRapido}
-              onEditar={abrirEditar}
-              onExcluir={setDeleteDesp}
-            />
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <DespesasTable
+                despesas={despesas}
+                nomeTipo={despesaNomeTipo}
+                onDetalhe={abrirDetalhe}
+                onPagar={abrirPagarRapido}
+                onEditar={abrirEditar}
+                onExcluir={setDeleteDesp}
+              />
+              <CentroCustoTablePagination
+                page={despesasPage}
+                setPage={setDespesasPage}
+                total={despesasTotal}
+                totalPages={totalDespesasPages}
+              />
+            </div>
           )}
 
           <TabsContent value="visao" className="mt-0">
@@ -570,6 +709,12 @@ export default function CentroCustos() {
                   )}
                 </TableBody>
               </Table>
+              <CentroCustoTablePagination
+                page={tiposPage}
+                setPage={setTiposPage}
+                total={tiposTotal}
+                totalPages={totalTiposPages}
+              />
             </div>
           </TabsContent>
 
@@ -596,7 +741,7 @@ export default function CentroCustos() {
                       >
                         <span className="truncate">
                           {tipoIdSel
-                            ? tipos.find((t) => t.id === tipoIdSel)?.nome ?? 'Selecione…'
+                            ? tiposOpcoes.find((t) => t.id === tipoIdSel)?.nome ?? 'Selecione…'
                             : 'Buscar ou selecionar tipo…'}
                         </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -608,7 +753,7 @@ export default function CentroCustos() {
                         <CommandList>
                           <CommandEmpty>Nenhum tipo encontrado.</CommandEmpty>
                           <CommandGroup>
-                            {tipos.map((t) => (
+                            {tiposOpcoes.map((t) => (
                               <CommandItem
                                 key={t.id}
                                 value={t.nome}
@@ -725,14 +870,22 @@ export default function CentroCustos() {
 
             <div className="space-y-2">
               <h2 className="text-base font-semibold">Lista de despesas</h2>
-              <DespesasTable
-                despesas={despesas}
-                nomeTipo={despesaNomeTipo}
-                onDetalhe={abrirDetalhe}
-                onPagar={abrirPagarRapido}
-                onEditar={abrirEditar}
-                onExcluir={setDeleteDesp}
-              />
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <DespesasTable
+                  despesas={despesas}
+                  nomeTipo={despesaNomeTipo}
+                  onDetalhe={abrirDetalhe}
+                  onPagar={abrirPagarRapido}
+                  onEditar={abrirEditar}
+                  onExcluir={setDeleteDesp}
+                />
+                <CentroCustoTablePagination
+                  page={despesasPage}
+                  setPage={setDespesasPage}
+                  total={despesasTotal}
+                  totalPages={totalDespesasPages}
+                />
+              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -742,7 +895,7 @@ export default function CentroCustos() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{tipoEdit ? 'Editar tipo' : 'Novo tipo de custo'}</DialogTitle>
-              <DialogDescription>Nome exibido nos lançamentos e relatórios de demonstração.</DialogDescription>
+              <DialogDescription>Nome exibido nos lançamentos e relatórios.</DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               <Label>Nome</Label>
@@ -841,21 +994,25 @@ export default function CentroCustos() {
                 Cancelar
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   if (!pagarRapidoDesp) return;
                   const v = parseValor(pagarRapidoValor);
                   if (!Number.isFinite(v) || v <= 0) {
                     toast.error('Informe o valor do pagamento.');
                     return;
                   }
-                  const atualizado = registrarPagamento(pagarRapidoDesp.id, v, pagarRapidoData);
-                  if (!atualizado) {
-                    toast.error('Não foi possível registrar (valor inválido ou já quitada).');
-                    return;
+                  try {
+                    const atualizado = await registrarPagamento(pagarRapidoDesp.id, v, pagarRapidoData);
+                    if (!atualizado) {
+                      toast.error('Não foi possível registrar (valor inválido ou já quitada).');
+                      return;
+                    }
+                    if (detailDesp?.id === pagarRapidoDesp.id) setDetailDesp(atualizado);
+                    setPagarRapidoDesp(null);
+                    toast.success('Pagamento registrado.');
+                  } catch (e) {
+                    toast.error(msgErro(e, 'Não foi possível registrar o pagamento.'));
                   }
-                  if (detailDesp?.id === pagarRapidoDesp.id) setDetailDesp(atualizado);
-                  setPagarRapidoDesp(null);
-                  toast.success('Pagamento registrado.');
                 }}
               >
                 Confirmar pagamento
@@ -874,7 +1031,7 @@ export default function CentroCustos() {
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Detalhes da despesa</DialogTitle>
-              <DialogDescription>Lançamento e pagamentos parciais (demonstração).</DialogDescription>
+              <DialogDescription>Lançamento e histórico de pagamentos.</DialogDescription>
             </DialogHeader>
             {detailDesp ? (
               <div className="space-y-4 text-sm">
@@ -885,7 +1042,7 @@ export default function CentroCustos() {
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Tipo</p>
-                    <p className="font-medium">{despesaNomeTipo(detailDesp.tipoId)}</p>
+                    <p className="font-medium">{despesaNomeTipo(detailDesp)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Roça</p>
@@ -949,21 +1106,25 @@ export default function CentroCustos() {
                     </div>
                     <Button
                       size="sm"
-                      onClick={() => {
+                      onClick={async () => {
                         const v = parseValor(pagValor);
                         if (!detailDesp) return;
                         if (!Number.isFinite(v) || v <= 0) {
                           toast.error('Informe o valor do pagamento.');
                           return;
                         }
-                        const atualizado = registrarPagamento(detailDesp.id, v, pagData);
-                        if (!atualizado) {
-                          toast.error('Não foi possível registrar (valor inválido ou despesa já quitada).');
-                          return;
+                        try {
+                          const atualizado = await registrarPagamento(detailDesp.id, v, pagData);
+                          if (!atualizado) {
+                            toast.error('Não foi possível registrar (valor inválido ou despesa já quitada).');
+                            return;
+                          }
+                          setDetailDesp(atualizado);
+                          setPagValor('');
+                          toast.success('Pagamento registrado.');
+                        } catch (e) {
+                          toast.error(msgErro(e, 'Não foi possível registrar o pagamento.'));
                         }
-                        setDetailDesp(atualizado);
-                        setPagValor('');
-                        toast.success('Pagamento registrado.');
                       }}
                     >
                       Registrar pagamento
@@ -1009,7 +1170,7 @@ export default function CentroCustos() {
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-between font-normal">
-                      {tipoIdSel ? tipos.find((t) => t.id === tipoIdSel)?.nome : 'Selecione'}
+                      {tipoIdSel ? tiposOpcoes.find((t) => t.id === tipoIdSel)?.nome : 'Selecione'}
                       <ChevronsUpDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -1019,7 +1180,7 @@ export default function CentroCustos() {
                       <CommandList>
                         <CommandEmpty>Nenhum.</CommandEmpty>
                         <CommandGroup>
-                          {tipos.map((t) => (
+                          {tiposOpcoes.map((t) => (
                             <CommandItem key={t.id} value={t.nome} onSelect={() => setTipoIdSel(t.id)}>
                               {t.nome}
                             </CommandItem>
@@ -1088,16 +1249,22 @@ export default function CentroCustos() {
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir tipo?</AlertDialogTitle>
               <AlertDialogDescription>
-                Despesas vinculadas a este tipo serão removidas da demonstração.
+                Só é possível excluir um tipo que não tenha despesas vinculadas.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (tipoDelete) excluirTipo(tipoDelete.id);
-                  setTipoDelete(null);
-                  toast.success('Tipo excluído.');
+                onClick={async (ev) => {
+                  ev.preventDefault();
+                  if (!tipoDelete) return;
+                  try {
+                    await excluirTipo(tipoDelete.id);
+                    setTipoDelete(null);
+                    toast.success('Tipo excluído.');
+                  } catch (e) {
+                    toast.error(msgErro(e, 'Não foi possível excluir o tipo.'));
+                  }
                 }}
               >
                 Excluir
@@ -1110,15 +1277,23 @@ export default function CentroCustos() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir despesa?</AlertDialogTitle>
-              <AlertDialogDescription>Esta ação remove o lançamento da demonstração.</AlertDialogDescription>
+              <AlertDialogDescription>Esta ação remove o lançamento e os pagamentos associados.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (deleteDesp) excluirDespesa(deleteDesp.id);
-                  setDeleteDesp(null);
-                  toast.success('Despesa excluída.');
+                onClick={async (ev) => {
+                  ev.preventDefault();
+                  const alvo = deleteDesp;
+                  if (!alvo) return;
+                  try {
+                    await excluirDespesa(alvo.id);
+                    setDeleteDesp(null);
+                    if (detailDesp?.id === alvo.id) setDetailDesp(null);
+                    toast.success('Despesa excluída.');
+                  } catch (e) {
+                    toast.error(msgErro(e, 'Não foi possível excluir a despesa.'));
+                  }
                 }}
               >
                 Excluir

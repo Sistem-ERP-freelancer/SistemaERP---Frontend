@@ -30,6 +30,7 @@ import {
     Wallet,
     X
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -122,7 +123,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div 
@@ -131,16 +132,16 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         />
       )}
 
-      {/* Sidebar: no mobile é overlay (fixed); no desktop faz parte do layout (não fixa) */}
+      {/* Sidebar: fixed na viewport; largura fluida em telas pequenas; main compensa com pl no lg+ */}
       <aside 
-        className={`
-          flex flex-col bg-sidebar transition-all duration-300 ease-out flex-shrink-0
-          fixed inset-y-0 left-0 z-50 lg:relative lg:inset-auto lg:z-auto
-          ${sidebarOpen 
-            ? "w-[200px] sm:w-[220px] min-[1920px]:w-[240px] translate-x-0 shadow-xl lg:shadow-none" 
-            : "w-0 -translate-x-full lg:w-16 xl:w-20 lg:translate-x-0"
-          }
-        `}
+        className={cn(
+          "flex flex-col bg-sidebar transition-[width,transform] duration-300 ease-out touch-manipulation",
+          "fixed inset-y-0 left-0 z-50 h-[100dvh] max-h-[100dvh] min-h-0 overflow-x-hidden shadow-xl lg:shadow-none",
+          "pb-[env(safe-area-inset-bottom,0px)] pl-[max(0px,env(safe-area-inset-left,0px))]",
+          sidebarOpen
+            ? "translate-x-0 max-lg:w-[min(18rem,calc(100vw-0.75rem))] lg:w-[220px] min-[1920px]:lg:w-60"
+            : "w-0 -translate-x-full border-0 overflow-hidden lg:overflow-visible lg:w-16 xl:w-20 lg:translate-x-0",
+        )}
       >
         {/* Logo - Fixo no topo */}
         <div className="h-14 sm:h-16 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 border-b border-sidebar-border gap-2">
@@ -167,14 +168,19 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </div>
 
         {/* Navigation - Área rolável */}
-        <nav className="flex-1 py-3 sm:py-4 px-2 sm:px-3 space-y-0.5 overflow-y-auto overflow-x-hidden min-h-0">
+        <nav className="flex-1 py-3 sm:py-4 px-2 sm:px-3 space-y-0.5 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-none overscroll-y-contain">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.href;
             return (
               <Link
                 key={item.label}
                 to={item.href}
-                className={`flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 ${
+                onClick={() => {
+                  if (typeof window !== "undefined" && window.innerWidth < LARGURA_MENU_COMPLETO_PX) {
+                    setSidebarOpen(false);
+                  }
+                }}
+                className={`flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 active:opacity-90 ${
                   isActive 
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow" 
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -206,8 +212,16 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         </div>
       </aside>
 
-      {/* Main Content - ocupa o espaço restante; sem margem fixa pois a sidebar está no fluxo no desktop */}
-      <main className="flex-1 min-w-0 flex flex-col min-h-0 transition-all duration-300">
+      {/* Main: padding esquerdo = largura da sidebar no desktop (sidebar fora do fluxo) */}
+      <main
+        className={cn(
+          "min-h-[100dvh] min-w-0 flex flex-col transition-[padding] duration-300 ease-out",
+          "pr-[max(0px,env(safe-area-inset-right,0px))]",
+          sidebarOpen
+            ? "lg:pl-[220px] min-[1920px]:lg:pl-60"
+            : "lg:pl-16 xl:pl-20",
+        )}
+      >
         {/* Header */}
         <header className="h-14 sm:h-16 bg-card border-b border-border flex items-center justify-between px-3 sm:px-6 gap-2">
           <div className="flex items-center gap-2 min-w-0">

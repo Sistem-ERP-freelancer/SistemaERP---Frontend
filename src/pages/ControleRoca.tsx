@@ -163,24 +163,6 @@ const CORES_GRAFICO_ROCA_DASHBOARD = [
   '#0d9488',
 ];
 
-/** Pendência em aberto: ainda há empréstimo em aberto, ou valor líquido sem pagamento quitado. */
-function isMeeiroPagamentoEmAberto(m: ResumoPagamentoMeeiro): boolean {
-  if ((m.totalEmprestimosAbertos ?? 0) > 0) return true;
-  // Se entrou nova produção (totalReceber > 0), deve aparecer em "Em aberto"
-  // mesmo que já exista pagamento anterior registrado.
-  if ((m.totalReceber ?? 0) > 0) return true;
-  return false;
-}
-
-/** Quitado: já houve pagamento registrado e não restou empréstimo em aberto. */
-function isMeeiroPagamentoQuitado(m: ResumoPagamentoMeeiro): boolean {
-  return (
-    m.jaPago === true &&
-    (m.totalEmprestimosAbertos ?? 0) === 0 &&
-    (m.totalReceber ?? 0) === 0
-  );
-}
-
 /** Permite registrar liquidação (dinheiro ou abate da produção na dívida). */
 function podeRegistrarPagamentoMeeiro(m: ResumoPagamentoMeeiro): boolean {
   const tr = m.totalReceber ?? 0;
@@ -199,12 +181,7 @@ function apenasDividaEmprestimoSemProducaoRemanescente(m: ResumoPagamentoMeeiro)
   return (m.totalReceber ?? 0) <= 0 && (m.totalEmprestimosAbertos ?? 0) > 0;
 }
 
-/** Filtro local da tabela de pagamento por nome do meeiro. */
-function meeiroPagamentoMatchesBusca(m: ResumoPagamentoMeeiro, busca: string): boolean {
-  const t = busca.trim().toLowerCase();
-  if (!t) return true;
-  return (m.nome ?? '').toLowerCase().includes(t);
-}
+const PAGAMENTO_MEEIROS_PAGE_SIZE = 15;
 
 /** Retorna a data de hoje no fuso local em YYYY-MM-DD (evita deslocamento de 1 dia do toISOString/UTC). */
 function getDataHojeLocal(): string {
@@ -1526,6 +1503,8 @@ export default function ControleRoca() {
   }, [meeirosParaRelatorio, pagamentoFiltrosDraft.produtorId, pagamentoDraftMeeiroSearch]);
   const [pagamentoSubTab, setPagamentoSubTab] = useState<'em-aberto' | 'quitados'>('em-aberto');
   const [pagamentoBuscaMeeiro, setPagamentoBuscaMeeiro] = useState('');
+  const [pagamentoMeeirosPage, setPagamentoMeeirosPage] = useState(1);
+  const [debouncedPagamentoBusca, setDebouncedPagamentoBusca] = useState('');
   const [openPagarModal, setOpenPagarModal] = useState(false);
   const [meeiroParaPagar, setMeeiroParaPagar] = useState<ResumoPagamentoMeeiro | null>(null);
   const [formPagamento, setFormPagamento] = useState({
@@ -1605,6 +1584,50 @@ export default function ControleRoca() {
       .finally(() => setRelLoading(false));
   };
 
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedPagamentoBusca(pagamentoBuscaMeeiro.trim()), 350);
+    return () => window.clearTimeout(id);
+  }, [pagamentoBuscaMeeiro]);
+
+  const pagamentoResumoFiltrosApi = useMemo(
+    () => ({
+      dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
+      dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
+      produtorId:
+        pagamentoFiltrosAplicados.produtorId === ''
+          ? undefined
+          : Number(pagamentoFiltrosAplicados.produtorId),
+      meeiroId:
+        pagamentoFiltrosAplicados.meeiroId === ''
+          ? undefined
+          : Number(pagamentoFiltrosAplicados.meeiroId),
+      rocas: pagamentoFiltrosAplicados.rocaIds.length
+        ? pagamentoFiltrosAplicados.rocaIds
+        : undefined,
+      buscaNome: debouncedPagamentoBusca || undefined,
+    }),
+    [
+      pagamentoFiltrosAplicados.dataInicial,
+      pagamentoFiltrosAplicados.dataFinal,
+      pagamentoFiltrosAplicados.produtorId,
+      pagamentoFiltrosAplicados.meeiroId,
+      pagamentoFiltrosAplicados.rocaIds,
+      debouncedPagamentoBusca,
+    ],
+  );
+
+  useEffect(() => {
+    setPagamentoMeeirosPage(1);
+  }, [
+    debouncedPagamentoBusca,
+    pagamentoSubTab,
+    pagamentoFiltrosAplicados.dataInicial,
+    pagamentoFiltrosAplicados.dataFinal,
+    pagamentoFiltrosAplicados.produtorId,
+    pagamentoFiltrosAplicados.meeiroId,
+    pagamentoFiltrosAplicados.rocaIds.join(','),
+  ]);
+
   const { data: pagamentoRocas = [] } = useQuery({
     queryKey: ['controle-roca', 'rocas', pagamentoFiltrosDraft.produtorId],
     queryFn: () =>
@@ -1632,38 +1655,42 @@ export default function ControleRoca() {
   } = useQuery({
     queryKey: [
       'controle-roca',
-      'pagamentos-meeiros-resumo',
-      pagamentoFiltrosAplicados.dataInicial,
-      pagamentoFiltrosAplicados.dataFinal,
-      pagamentoFiltrosAplicados.produtorId,
-      pagamentoFiltrosAplicados.meeiroId,
-      pagamentoFiltrosAplicados.rocaIds,
+      'pagamentos-meeiros',
+      'resumo',
+      pagamentoResumoFiltrosApi,
+      pagamentoSubTab,
+      pagamentoMeeirosPage,
     ],
     queryFn: () =>
       controleRocaService.listarResumoPagamentoMeeiros({
-        dataInicial: pagamentoFiltrosAplicados.dataInicial || undefined,
-        dataFinal: pagamentoFiltrosAplicados.dataFinal || undefined,
-        produtorId:
-          pagamentoFiltrosAplicados.produtorId === ''
-            ? undefined
-            : Number(pagamentoFiltrosAplicados.produtorId),
-        meeiroId:
-          pagamentoFiltrosAplicados.meeiroId === ''
-            ? undefined
-            : Number(pagamentoFiltrosAplicados.meeiroId),
-        rocas: pagamentoFiltrosAplicados.rocaIds.length
-          ? pagamentoFiltrosAplicados.rocaIds
-          : undefined,
+        ...pagamentoResumoFiltrosApi,
+        subTab: pagamentoSubTab,
+        page: pagamentoMeeirosPage,
+        limit: PAGAMENTO_MEEIROS_PAGE_SIZE,
       }),
     enabled: tab === 'pagamento-meeiros',
   });
 
+  const totalPagamentoEmAbertoBadge = resumoPagamentoMeeiros?.totalEmAberto ?? 0;
+  const totalPagamentoQuitadosBadge = resumoPagamentoMeeiros?.totalQuitados ?? 0;
+
+  const totalPagamentoMeeirosLista = resumoPagamentoMeeiros?.total ?? 0;
+  const totalPagamentoMeeirosPages = Math.max(
+    1,
+    Math.ceil(totalPagamentoMeeirosLista / PAGAMENTO_MEEIROS_PAGE_SIZE),
+  );
+
+  useEffect(() => {
+    if (totalPagamentoMeeirosLista === 0) return;
+    if (pagamentoMeeirosPage > totalPagamentoMeeirosPages) {
+      setPagamentoMeeirosPage(totalPagamentoMeeirosPages);
+    }
+  }, [totalPagamentoMeeirosLista, totalPagamentoMeeirosPages, pagamentoMeeirosPage]);
+
   const aplicarFiltrosPagamentoMeeiros = () => {
     setPagamentoFiltrosAplicados({ ...pagamentoFiltrosDraft });
     setPagamentoFiltrosSheetOpen(false);
-    void queryClient.invalidateQueries({
-      queryKey: ['controle-roca', 'pagamentos-meeiros-resumo'],
-    });
+    void queryClient.invalidateQueries({ queryKey: ['controle-roca', 'pagamentos-meeiros'] });
   };
 
   const limparFiltrosPagamentoMeeiros = () => {
@@ -1671,9 +1698,7 @@ export default function ControleRoca() {
     setPagamentoFiltrosDraft(def);
     setPagamentoFiltrosAplicados(def);
     setPagamentoFiltrosSheetOpen(false);
-    void queryClient.invalidateQueries({
-      queryKey: ['controle-roca', 'pagamentos-meeiros-resumo'],
-    });
+    void queryClient.invalidateQueries({ queryKey: ['controle-roca', 'pagamentos-meeiros'] });
   };
   const registrarPagamento = useMutation({
     mutationFn: (data: {
@@ -2999,13 +3024,16 @@ export default function ControleRoca() {
                         return (
                           <li
                             key={row.meeiroId}
-                            className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2.5 text-sm min-w-0"
+                            className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2.5 text-sm min-w-0 text-center"
                           >
-                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0">
+                            <div className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-0.5 min-w-0">
                               <span className="font-mono text-xs font-semibold tabular-nums shrink-0 bg-background/80 px-1.5 py-0.5 rounded border border-border/60">
                                 {row.codigo}
                               </span>
-                              <span className="font-medium text-foreground break-words min-w-0 flex-1 basis-[12rem]">
+                              <span
+                                className="font-medium text-foreground max-w-[min(100%,28rem)] truncate"
+                                title={row.nome}
+                              >
                                 {row.nome}
                               </span>
                             </div>
@@ -3088,7 +3116,11 @@ export default function ControleRoca() {
                       meeirosOrdenados.map((m) => (
                         <TableRow key={m.id}>
                           <TableCell className="font-medium">{m.codigo}</TableCell>
-                          <TableCell>{m.nome}</TableCell>
+                          <TableCell className="max-w-[min(320px,55vw)]">
+                            <span className="block truncate" title={m.nome}>
+                              {m.nome}
+                            </span>
+                          </TableCell>
                           <TableCell>{m.cpf || '—'}</TableCell>
                           <TableCell>{m.telefone || '—'}</TableCell>
                           <TableCell>{m.porcentagem_padrao}%</TableCell>
@@ -5545,14 +5577,14 @@ className={
                     <Banknote className="w-4 h-4" />
                     Em aberto
                     <span className="ml-1 text-xs bg-primary/20 text-primary rounded-full px-2 py-0.5">
-                      {(resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoEmAberto).length}
+                      {totalPagamentoEmAbertoBadge}
                     </span>
                   </TabsTrigger>
                   <TabsTrigger value="quitados" className="gap-2">
                     <Archive className="w-4 h-4" />
                     Quitados
                     <span className="ml-1 text-xs bg-muted-foreground/20 rounded-full px-2 py-0.5">
-                      {(resumoPagamentoMeeiros?.items ?? []).filter(isMeeiroPagamentoQuitado).length}
+                      {totalPagamentoQuitadosBadge}
                     </span>
                   </TabsTrigger>
                 </TabsList>
@@ -5632,6 +5664,7 @@ className={
                       <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : (
+                    <>
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
@@ -5644,33 +5677,14 @@ className={
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(() => {
-                          const emAbertoTodos = (resumoPagamentoMeeiros?.items ?? []).filter(
-                            isMeeiroPagamentoEmAberto,
-                          );
-                          const emAberto = emAbertoTodos.filter((m) =>
-                            meeiroPagamentoMatchesBusca(m, pagamentoBuscaMeeiro),
-                          );
-                          if (emAbertoTodos.length === 0) {
-                            return (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  Nenhum meeiro em aberto neste período (valor líquido a pagar ou empréstimo pendente, ainda não quitado no sistema). Verifique filtros, lançamentos e datas.
-                                </TableCell>
-                              </TableRow>
-                            );
-                          }
-                          if (emAberto.length === 0) {
-                            return (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  Nenhum meeiro corresponde à busca &quot;{pagamentoBuscaMeeiro.trim()}&quot;. Ajuste o
-                                  texto ou limpe o campo.
-                                </TableCell>
-                              </TableRow>
-                            );
-                          }
-                          return emAberto.map((m) => (
+                        {totalPagamentoMeeirosLista === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                              Nenhum meeiro em aberto neste período (valor líquido a pagar ou empréstimo pendente, ainda não quitado no sistema). Verifique filtros, lançamentos e datas.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          (resumoPagamentoMeeiros?.items ?? []).map((m) => (
                             <TableRow key={m.meeiroId}>
                               <TableCell className="font-medium">
                                 <div className="flex items-center gap-2 min-w-0">
@@ -5739,10 +5753,56 @@ className={
                                 </Button>
                               </TableCell>
                             </TableRow>
-                          ));
-                        })()}
+                          ))
+                        )}
                       </TableBody>
                     </Table>
+                    {totalPagamentoMeeirosLista > 0 && totalPagamentoMeeirosPages > 1 && (
+                      <div className="border-t px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-xs text-muted-foreground">
+                          Mostrando{' '}
+                          {(pagamentoMeeirosPage - 1) * PAGAMENTO_MEEIROS_PAGE_SIZE + 1} a{' '}
+                          {Math.min(
+                            pagamentoMeeirosPage * PAGAMENTO_MEEIROS_PAGE_SIZE,
+                            totalPagamentoMeeirosLista,
+                          )}{' '}
+                          de {totalPagamentoMeeirosLista} meeiros
+                        </div>
+                        <Pagination className="justify-end">
+                          <PaginationContent>
+                            <PaginationItem>
+                              <PaginationPrevious
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setPagamentoMeeirosPage((prev) => Math.max(1, prev - 1));
+                                }}
+                                className={
+                                  pagamentoMeeirosPage === 1 ? 'pointer-events-none opacity-50' : ''
+                                }
+                              />
+                            </PaginationItem>
+                            <PaginationItem>
+                              <PaginationNext
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setPagamentoMeeirosPage((prev) =>
+                                    Math.min(totalPagamentoMeeirosPages, prev + 1),
+                                  );
+                                }}
+                                className={
+                                  pagamentoMeeirosPage === totalPagamentoMeeirosPages
+                                    ? 'pointer-events-none opacity-50'
+                                    : ''
+                                }
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
+                      </div>
+                    )}
+                    </>
                   )}
                 </div>
               </TabsContent>
@@ -5754,6 +5814,7 @@ className={
                       <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : (
+                    <>
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
@@ -5765,33 +5826,14 @@ className={
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(() => {
-                          const quitadosTodos = (resumoPagamentoMeeiros?.items ?? []).filter(
-                            isMeeiroPagamentoQuitado,
-                          );
-                          const quitados = quitadosTodos.filter((m) =>
-                            meeiroPagamentoMatchesBusca(m, pagamentoBuscaMeeiro),
-                          );
-                          if (quitadosTodos.length === 0) {
-                            return (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  Nenhum meeiro totalmente quitado (pagamento registrado e sem empréstimo em aberto). Quem ainda tiver dívida aparece em Em aberto.
-                                </TableCell>
-                              </TableRow>
-                            );
-                          }
-                          if (quitados.length === 0) {
-                            return (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  Nenhum meeiro corresponde à busca &quot;{pagamentoBuscaMeeiro.trim()}&quot;. Ajuste o
-                                  texto ou limpe o campo.
-                                </TableCell>
-                              </TableRow>
-                            );
-                          }
-                          return quitados.map((m) => (
+                        {totalPagamentoMeeirosLista === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                              Nenhum meeiro totalmente quitado (pagamento registrado e sem empréstimo em aberto). Quem ainda tiver dívida aparece em Em aberto.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          (resumoPagamentoMeeiros?.items ?? []).map((m) => (
                             <TableRow key={m.meeiroId}>
                               <TableCell className="font-medium">{m.nome}</TableCell>
                               <TableCell className="font-mono text-sm max-w-[220px] truncate" title={m.chavePix ?? undefined}>
@@ -5827,10 +5869,56 @@ className={
                                 </Button>
                               </TableCell>
                             </TableRow>
-                          ));
-                        })()}
+                          ))
+                        )}
                       </TableBody>
                     </Table>
+                    {totalPagamentoMeeirosLista > 0 && totalPagamentoMeeirosPages > 1 && (
+                      <div className="border-t px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-xs text-muted-foreground">
+                          Mostrando{' '}
+                          {(pagamentoMeeirosPage - 1) * PAGAMENTO_MEEIROS_PAGE_SIZE + 1} a{' '}
+                          {Math.min(
+                            pagamentoMeeirosPage * PAGAMENTO_MEEIROS_PAGE_SIZE,
+                            totalPagamentoMeeirosLista,
+                          )}{' '}
+                          de {totalPagamentoMeeirosLista} meeiros
+                        </div>
+                        <Pagination className="justify-end">
+                          <PaginationContent>
+                            <PaginationItem>
+                              <PaginationPrevious
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setPagamentoMeeirosPage((prev) => Math.max(1, prev - 1));
+                                }}
+                                className={
+                                  pagamentoMeeirosPage === 1 ? 'pointer-events-none opacity-50' : ''
+                                }
+                              />
+                            </PaginationItem>
+                            <PaginationItem>
+                              <PaginationNext
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setPagamentoMeeirosPage((prev) =>
+                                    Math.min(totalPagamentoMeeirosPages, prev + 1),
+                                  );
+                                }}
+                                className={
+                                  pagamentoMeeirosPage === totalPagamentoMeeirosPages
+                                    ? 'pointer-events-none opacity-50'
+                                    : ''
+                                }
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
+                      </div>
+                    )}
+                    </>
                   )}
                 </div>
               </TabsContent>
