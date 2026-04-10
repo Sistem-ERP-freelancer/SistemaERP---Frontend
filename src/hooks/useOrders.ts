@@ -179,7 +179,7 @@ export function useOrders() {
   const { data: allOrdersResponse } = useQuery({
     queryKey: ['pedidos', 'all'],
     queryFn: async () => {
-      return await pedidosService.listar({ limit: 1000 });
+      return await pedidosService.listar({ limit: 500 });
     },
   });
 
@@ -221,7 +221,7 @@ export function useOrders() {
     queryKey: ['fornecedores', 'all'],
     queryFn: async () => {
       try {
-        const response = await fornecedoresService.listar({ limit: 1000 });
+        const response = await fornecedoresService.listar({ limit: 500 });
         return Array.isArray(response) ? response : response.data || [];
       } catch {
         return [];
@@ -235,7 +235,7 @@ export function useOrders() {
       try {
         // Solicitar limite alto para obter todos os produtos ativos
         // O backend retorna todos os produtos quando limit >= 100 e statusProduto=ATIVO
-        const response = await produtosService.listar({ limit: 1000, statusProduto: 'ATIVO' });
+        const response = await produtosService.listar({ limit: 500, statusProduto: 'ATIVO' });
         
         // Priorizar o novo formato: { data: Produto[], total, page, limit }
         // O backend já filtra produtos sem preco_venda válido, mas validamos novamente por segurança
