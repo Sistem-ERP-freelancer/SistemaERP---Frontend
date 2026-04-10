@@ -150,7 +150,11 @@ function ContasAPagar() {
           limit: 100,
           statusFornecedor: "ATIVO",
         });
-        return Array.isArray(response) ? response : response.data || [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as any)?.data)) return (response as any).data;
+        if (Array.isArray((response as any)?.fornecedores)) return (response as any).fornecedores;
+        if (Array.isArray((response as any)?.items)) return (response as any).items;
+        return [];
       } catch (error) {
         console.warn("API de fornecedores não disponível:", error);
         return [];
@@ -159,9 +163,12 @@ function ContasAPagar() {
     retry: false,
   });
 
-  const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData) 
-    ? fornecedoresData 
-    : fornecedoresData?.data || [];
+  const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData)
+    ? fornecedoresData
+    : (fornecedoresData as any)?.data ||
+      (fornecedoresData as any)?.fornecedores ||
+      (fornecedoresData as any)?.items ||
+      [];
 
   // Buscar pedidos de compra
   const { data: pedidosData } = useQuery({

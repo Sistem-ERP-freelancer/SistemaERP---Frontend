@@ -127,9 +127,13 @@ const Financeiro = () => {
       try {
         const response = await clientesService.listar({
           limit: 100,
-          status: "ATIVO",
+          statusCliente: "ATIVO",
         });
-        return Array.isArray(response) ? response : response.data || [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as any)?.data)) return (response as any).data;
+        if (Array.isArray((response as any)?.clientes)) return (response as any).clientes;
+        if (Array.isArray((response as any)?.items)) return (response as any).items;
+        return [];
       } catch (error) {
         console.warn("API de clientes não disponível:", error);
         return [];
@@ -138,9 +142,12 @@ const Financeiro = () => {
     retry: false,
   });
 
-  const clientes: Cliente[] = Array.isArray(clientesData) 
-    ? clientesData 
-    : clientesData?.data || [];
+  const clientes: Cliente[] = Array.isArray(clientesData)
+    ? clientesData
+    : (clientesData as any)?.data ||
+      (clientesData as any)?.clientes ||
+      (clientesData as any)?.items ||
+      [];
 
   // Buscar fornecedores
   const { data: fornecedoresData } = useQuery({
@@ -151,7 +158,11 @@ const Financeiro = () => {
           limit: 100,
           statusFornecedor: "ATIVO",
         });
-        return Array.isArray(response) ? response : response.data || [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as any)?.data)) return (response as any).data;
+        if (Array.isArray((response as any)?.fornecedores)) return (response as any).fornecedores;
+        if (Array.isArray((response as any)?.items)) return (response as any).items;
+        return [];
       } catch (error) {
         console.warn("API de fornecedores não disponível:", error);
         return [];
@@ -160,9 +171,12 @@ const Financeiro = () => {
     retry: false,
   });
 
-  const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData) 
-    ? fornecedoresData 
-    : fornecedoresData?.data || [];
+  const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData)
+    ? fornecedoresData
+    : (fornecedoresData as any)?.data ||
+      (fornecedoresData as any)?.fornecedores ||
+      (fornecedoresData as any)?.items ||
+      [];
 
   // Parâmetros de filtro para dashboard (tipo vem dos cards clicáveis; demais do painel)
   const dashboardFiltros = useMemo(() => {

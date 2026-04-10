@@ -206,9 +206,13 @@ const ContasAReceber = () => {
       try {
         const response = await clientesService.listar({
           limit: 100,
-          status: "ATIVO",
+          statusCliente: "ATIVO",
         });
-        return Array.isArray(response) ? response : response.data || [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as any)?.data)) return (response as any).data;
+        if (Array.isArray((response as any)?.clientes)) return (response as any).clientes;
+        if (Array.isArray((response as any)?.items)) return (response as any).items;
+        return [];
       } catch (error) {
         console.warn("API de clientes não disponível:", error);
         return [];
@@ -217,9 +221,12 @@ const ContasAReceber = () => {
     retry: false,
   });
 
-  const clientes: Cliente[] = Array.isArray(clientesData) 
-    ? clientesData 
-    : clientesData?.data || [];
+  const clientes: Cliente[] = Array.isArray(clientesData)
+    ? clientesData
+    : (clientesData as any)?.data ||
+      (clientesData as any)?.clientes ||
+      (clientesData as any)?.items ||
+      [];
 
   const relatorioClienteIdParsed = useMemo(() => {
     if (!relatorioClienteIdSelect) return null;

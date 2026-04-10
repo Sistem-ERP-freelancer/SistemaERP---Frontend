@@ -209,8 +209,12 @@ export function useOrders() {
     queryKey: ['clientes', 'ativos'],
     queryFn: async () => {
       try {
-        const response = await clientesService.listar({ limit: 100, status: 'ATIVO' });
-        return Array.isArray(response) ? response : response.data || [];
+        const response = await clientesService.listar({ limit: 100, statusCliente: 'ATIVO' });
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as any)?.data)) return (response as any).data;
+        if (Array.isArray((response as any)?.clientes)) return (response as any).clientes;
+        if (Array.isArray((response as any)?.items)) return (response as any).items;
+        return [];
       } catch {
         return [];
       }
