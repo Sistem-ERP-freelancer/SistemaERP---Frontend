@@ -374,6 +374,8 @@ class ControleRocaService {
     dataInicial?: string;
     dataFinal?: string;
     incluirInativos?: boolean;
+    /** Quando true, envia `todos=true` ao backend (todos os lançamentos, sem LIMIT no SQL). */
+    todos?: boolean;
     page?: number;
     limit?: number;
   }): Promise<ListaLancamentosRocaResponse> {
@@ -384,8 +386,12 @@ class ControleRocaService {
     if (params?.dataInicial) search.set('dataInicial', params.dataInicial);
     if (params?.dataFinal) search.set('dataFinal', params.dataFinal);
     if (params?.incluirInativos === true) search.set('incluirInativos', 'true');
-    search.set('page', String(params?.page ?? 1));
-    search.set('limit', String(params?.limit ?? 15));
+    if (params?.todos === true) {
+      search.set('todos', 'true');
+    } else {
+      search.set('page', String(params?.page ?? 1));
+      search.set('limit', String(params?.limit ?? 15));
+    }
     const q = search.toString() ? `?${search.toString()}` : '';
     const res = await apiClient.get<
       LancamentoProducaoRoca[] | { lancamentos?: LancamentoProducaoRoca[]; total?: number; page?: number; limit?: number }
@@ -401,6 +407,61 @@ class ControleRocaService {
       page: Number(obj.page ?? params?.page ?? 1),
       limit: Number(obj.limit ?? params?.limit ?? 15),
     };
+  }
+
+  /**
+   * Todos os lançamentos para a UI (paginação só no cliente).
+   * Usa `todos=true` no backend; se retornar 400 por limite (API antiga), pagina com `limit` máximo permitido.
+   */
+  async listarLancamentosTodos(params?: {
+    produtorId?: number;
+    rocaId?: number;
+    meeiroId?: number;
+    dataInicial?: string;
+    dataFinal?: string;
+    incluirInativos?: boolean;
+  }): Promise<ListaLancamentosRocaResponse> {
+    try {
+      return await this.listarLancamentos({ ...params, todos: true });
+    } catch (err: unknown) {
+      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      const status = res?.status;
+      const message = String(res?.data?.message ?? (err as Error)?.message ?? '');
+      const limitRejeitado =
+        status === 400 && message.toLowerCase().includes('limit');
+      if (!limitRejeitado) {
+        throw err;
+      }
+
+      const pageLimit = LIST_ALL_LIMIT;
+      let page = 1;
+      const items: LancamentoProducaoRoca[] = [];
+      let total = 0;
+      for (;;) {
+        const response = await this.listarLancamentos({
+          ...params,
+          page,
+          limit: pageLimit,
+        });
+        const pageItems = response.items ?? [];
+        items.push(...pageItems);
+        total = Number(response.total ?? items.length);
+        if (
+          pageItems.length === 0 ||
+          items.length >= total ||
+          pageItems.length < pageLimit
+        ) {
+          break;
+        }
+        page += 1;
+      }
+      return {
+        items,
+        total: Math.max(total, items.length),
+        page: 1,
+        limit: pageLimit,
+      };
+    }
   }
 
   async obterLancamento(id: number): Promise<LancamentoDetalhesRoca | null> {

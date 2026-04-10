@@ -852,10 +852,9 @@ export default function ControleRoca() {
       filtrosLancamento.meeiroId,
       filtrosLancamento.dataInicio,
       filtrosLancamento.dataFim,
-      lancPage,
     ],
     queryFn: () =>
-      controleRocaService.listarLancamentos({
+      controleRocaService.listarLancamentosTodos({
         ...(filtrosLancamento.produtorId !== ''
           ? { produtorId: Number(filtrosLancamento.produtorId) }
           : {}),
@@ -871,8 +870,6 @@ export default function ControleRoca() {
         ...(filtrosLancamento.dataFim !== ''
           ? { dataFinal: filtrosLancamento.dataFim }
           : {}),
-        page: lancPage,
-        limit: LANC_PAGE_SIZE,
       }),
   });
   /**
@@ -882,16 +879,13 @@ export default function ControleRoca() {
   const { data: lancamentosDashboardResponse } = useQuery({
     queryKey: ['controle-roca', 'lancamentos-dashboard', dashboardRocaId],
     queryFn: () =>
-      controleRocaService.listarLancamentos({
+      controleRocaService.listarLancamentosTodos({
         ...(dashboardRocaId !== '' ? { rocaId: Number(dashboardRocaId) } : {}),
-        page: 1,
-        limit: 500,
       }),
     enabled: tab === 'dashboard',
   });
   const lancamentos = lancamentosResponse?.items ?? [];
   const lancamentosDashboardTodos = lancamentosDashboardResponse?.items ?? [];
-  const totalLancamentosServidor = lancamentosResponse?.total ?? 0;
   const [detalheLancamentoId, setDetalheLancamentoId] = useState<number | null>(null);
   const { data: detalheLancamento } = useQuery({
     queryKey: ['controle-roca', 'lancamento', detalheLancamentoId],
@@ -1333,16 +1327,17 @@ export default function ControleRoca() {
     [filteredLancamentos]
   );
 
-  const temFiltroLocalLancamentos =
-    searchLancamento.trim() !== '' || filtrosLancamento.produto.trim() !== '';
-  const totalLancamentosLista = temFiltroLocalLancamentos
-    ? filteredLancamentos.length
-    : totalLancamentosServidor;
+  /** Sempre o tamanho da lista em memória (filtros locais + ordenação); paginação é só visual na tabela. */
+  const totalLancamentosLista = filteredLancamentos.length;
   const totalLancPages =
     totalLancamentosLista > 0
       ? Math.ceil(totalLancamentosLista / LANC_PAGE_SIZE)
       : 1;
-  const lancamentosPagina = filteredLancamentos;
+  const lancamentosPagina = useMemo(() => {
+    const start = (lancPage - 1) * LANC_PAGE_SIZE;
+    const end = start + LANC_PAGE_SIZE;
+    return filteredLancamentos.slice(start, end);
+  }, [filteredLancamentos, lancPage]);
 
   /** Uma linha por produto: lançamentos com mais de um produto viram várias linhas */
   const linhasExpandidas = useMemo(
@@ -4055,7 +4050,7 @@ className={
                 </Table>
               )}
             </div>
-            {totalLancPages > 1 && (
+            {!loadingLancamentos && totalLancamentosLista > 0 && (
               <div className="border-t border-border p-4">
                 <Pagination className="justify-end">
                   <PaginationContent>
@@ -4067,39 +4062,40 @@ className={
                           setLancPage((prev) => Math.max(1, prev - 1));
                         }}
                         className={
-                          lancPage === 1
+                          lancPage === 1 || totalLancPages <= 1
                             ? 'pointer-events-none opacity-50'
                             : 'cursor-pointer'
                         }
                       />
                     </PaginationItem>
-                    {Array.from({ length: Math.min(5, totalLancPages) }, (_, i) => {
-                      let pageNum: number;
-                      if (totalLancPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (lancPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (lancPage >= totalLancPages - 2) {
-                        pageNum = totalLancPages - 4 + i;
-                      } else {
-                        pageNum = lancPage - 2 + i;
-                      }
-                      return (
-                        <PaginationItem key={pageNum}>
-                          <PaginationLink
-                            href="#"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setLancPage(pageNum);
-                            }}
-                            isActive={lancPage === pageNum}
-                            className="cursor-pointer"
-                          >
-                            {pageNum}
-                          </PaginationLink>
-                        </PaginationItem>
-                      );
-                    })}
+                    {totalLancPages > 1 &&
+                      Array.from({ length: Math.min(5, totalLancPages) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalLancPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (lancPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (lancPage >= totalLancPages - 2) {
+                          pageNum = totalLancPages - 4 + i;
+                        } else {
+                          pageNum = lancPage - 2 + i;
+                        }
+                        return (
+                          <PaginationItem key={pageNum}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setLancPage(pageNum);
+                              }}
+                              isActive={lancPage === pageNum}
+                              className="cursor-pointer"
+                            >
+                              {pageNum}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
                     <PaginationItem>
                       <PaginationNext
                         href="#"
@@ -4110,7 +4106,7 @@ className={
                           );
                         }}
                         className={
-                          lancPage === totalLancPages
+                          lancPage === totalLancPages || totalLancPages <= 1
                             ? 'pointer-events-none opacity-50'
                             : 'cursor-pointer'
                         }
@@ -4129,6 +4125,9 @@ className={
                     totalLancamentosLista
                   )}{' '}
                   de {totalLancamentosLista} lançamentos
+                  {totalLancPages > 1
+                    ? ` · Página ${lancPage} de ${totalLancPages}`
+                    : null}
                 </div>
               </div>
             )}
