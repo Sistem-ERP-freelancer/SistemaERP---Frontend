@@ -321,6 +321,13 @@ export interface LancamentoProducaoRoca {
   meeiros?: LancamentoMeeiroRoca[];
 }
 
+export interface ListaLancamentosRocaResponse {
+  items: LancamentoProducaoRoca[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface LancamentoMeeiroRoca {
   meeiroId: number;
   meeiroNome?: string;

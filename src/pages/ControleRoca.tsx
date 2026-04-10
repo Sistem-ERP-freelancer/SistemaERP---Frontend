@@ -623,6 +623,9 @@ export default function ControleRoca() {
   const [openEmprestimo, setOpenEmprestimo] = useState(false);
   const [meeiroEmprestimo, setMeeiroEmprestimo] = useState<MeeiroRoca | null>(null);
   const [formEmprestimo, setFormEmprestimo] = useState({ meeiroId: 0, valor: 0, data: '', observacao: '' });
+  const [openEditEmprestimo, setOpenEditEmprestimo] = useState(false);
+  const [emprestimoEditando, setEmprestimoEditando] = useState<{ id: number; valor: number } | null>(null);
+  const [formEditEmprestimo, setFormEditEmprestimo] = useState<{ valor: number }>({ valor: 0 });
   const createEmprestimo = useMutation({
     mutationFn: (data: { meeiroId: number; valor: number; data: string; observacao?: string }) =>
       controleRocaService.criarEmprestimo(data),
@@ -634,6 +637,43 @@ export default function ControleRoca() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao registrar empréstimo');
+    },
+  });
+  const liquidarEmprestimo = useMutation({
+    mutationFn: (id: number) =>
+      controleRocaService.atualizarStatusEmprestimo(id, { status: 'LIQUIDADO' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca', 'meeiro-detail', detailMeeiroId] });
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Empréstimo marcado como quitado');
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.message || 'Erro ao atualizar');
+    },
+  });
+  const updateEmprestimo = useMutation({
+    mutationFn: ({ id, valor }: { id: number; valor: number }) =>
+      controleRocaService.atualizarEmprestimo(id, { valor }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca', 'meeiro-detail', detailMeeiroId] });
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Valor do empréstimo atualizado');
+      setOpenEditEmprestimo(false);
+      setEmprestimoEditando(null);
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.message || 'Erro ao atualizar empréstimo');
+    },
+  });
+  const deleteEmprestimo = useMutation({
+    mutationFn: (id: number) => controleRocaService.excluirEmprestimo(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['controle-roca', 'meeiro-detail', detailMeeiroId] });
+      queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Empréstimo excluído com sucesso');
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.message || 'Erro ao excluir empréstimo');
     },
   });
   const updateMeeiro = useMutation({
@@ -663,7 +703,6 @@ export default function ControleRoca() {
       );
     },
   });
-
   // Catálogo unificado de produtos (todos do sistema, incluindo os do Controle de Roça)
   const { data: produtosCatalogo = [], isLoading: loadingProdutosCatalogo } = useQuery({
     queryKey: ['controle-roca', 'produtos-catalogo'],
@@ -674,7 +713,7 @@ export default function ControleRoca() {
   });
   const [catalogPage, setCatalogPage] = useState(1);
   const CATALOG_PAGE_SIZE = 10;
-  const LANC_PAGE_SIZE = 10;
+  const LANC_PAGE_SIZE = 15;
   const [lancPage, setLancPage] = useState(1);
   const produtosCatalogoFiltrados = useMemo(() => {
     const s = searchProdutoCatalogo.trim().toLowerCase();
@@ -804,7 +843,7 @@ export default function ControleRoca() {
     queryFn: () => controleRocaService.listarRocas(),
     enabled: tab === 'relatorio',
   });
-  const { data: lancamentos = [], isLoading: loadingLancamentos } = useQuery({
+  const { data: lancamentosResponse, isLoading: loadingLancamentos } = useQuery({
     queryKey: [
       'controle-roca',
       'lancamentos',
@@ -813,6 +852,7 @@ export default function ControleRoca() {
       filtrosLancamento.meeiroId,
       filtrosLancamento.dataInicio,
       filtrosLancamento.dataFim,
+      lancPage,
     ],
     queryFn: () =>
       controleRocaService.listarLancamentos({
@@ -831,8 +871,12 @@ export default function ControleRoca() {
         ...(filtrosLancamento.dataFim !== ''
           ? { dataFinal: filtrosLancamento.dataFim }
           : {}),
+        page: lancPage,
+        limit: LANC_PAGE_SIZE,
       }),
   });
+  const lancamentos = lancamentosResponse?.items ?? [];
+  const totalLancamentosServidor = lancamentosResponse?.total ?? 0;
   const [detalheLancamentoId, setDetalheLancamentoId] = useState<number | null>(null);
   const { data: detalheLancamento } = useQuery({
     queryKey: ['controle-roca', 'lancamento', detalheLancamentoId],
@@ -1210,20 +1254,7 @@ export default function ControleRoca() {
         );
       });
     }
-    if (filtrosLancamento.rocaId !== '') {
-      const rocaIdNum = Number(filtrosLancamento.rocaId);
-      list = list.filter((l) => Number(l.rocaId) === rocaIdNum);
-    }
-    if (filtrosLancamento.meeiroId !== '') {
-      const meeiroIdNum = Number(filtrosLancamento.meeiroId);
-      list = list.filter((l) =>
-        (l.itens ?? []).some((item) =>
-          (item.meeiros ?? []).some(
-            (m) => Number(m.meeiroId) === meeiroIdNum
-          )
-        )
-      );
-    }
+    // produtor/roça/meeiro/data já chegam filtrados do backend.
     if (filtrosLancamento.produto.trim() !== '') {
       const produtoSelecionado = filtrosLancamento.produto.trim().toLowerCase();
       list = list.filter((l) =>
@@ -1255,13 +1286,20 @@ export default function ControleRoca() {
     lancamentos,
     rocasParaLancamento,
     searchLancamento,
+    filtrosLancamento.produto,
+    lancOrdenacao,
+  ]);
+
+  useEffect(() => {
+    setLancPage(1);
+  }, [
     filtrosLancamento.produtorId,
     filtrosLancamento.rocaId,
     filtrosLancamento.meeiroId,
-    filtrosLancamento.produto,
     filtrosLancamento.dataInicio,
     filtrosLancamento.dataFim,
-    lancOrdenacao,
+    searchLancamento,
+    filtrosLancamento.produto,
   ]);
 
   const valorTotalFiltrado = useMemo(
@@ -1278,14 +1316,16 @@ export default function ControleRoca() {
     [filteredLancamentos]
   );
 
+  const temFiltroLocalLancamentos =
+    searchLancamento.trim() !== '' || filtrosLancamento.produto.trim() !== '';
+  const totalLancamentosLista = temFiltroLocalLancamentos
+    ? filteredLancamentos.length
+    : totalLancamentosServidor;
   const totalLancPages =
-    filteredLancamentos.length > 0
-      ? Math.ceil(filteredLancamentos.length / LANC_PAGE_SIZE)
+    totalLancamentosLista > 0
+      ? Math.ceil(totalLancamentosLista / LANC_PAGE_SIZE)
       : 1;
-  const lancamentosPagina = filteredLancamentos.slice(
-    (lancPage - 1) * LANC_PAGE_SIZE,
-    lancPage * LANC_PAGE_SIZE
-  );
+  const lancamentosPagina = filteredLancamentos;
 
   /** Uma linha por produto: lançamentos com mais de um produto viram várias linhas */
   const linhasExpandidas = useMemo(
@@ -3145,6 +3185,15 @@ export default function ControleRoca() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => {
+                                    setDetailMeeiroId(m.id);
+                                    setOpenDetailMeeiro(true);
+                                  }}
+                                >
+                                  <Wallet className="w-4 h-4 mr-2" />
+                                  Gerenciar Empréstimos
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
                                     setEditMeeiro(m);
                                     setFormEditMeeiro({
                                       codigo: m.codigo,
@@ -3161,16 +3210,6 @@ export default function ControleRoca() {
                                 >
                                   <Pencil className="w-4 h-4 mr-2" />
                                   Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setMeeiroEmprestimo(m);
-                                    setFormEmprestimo({ meeiroId: m.id, valor: 0, data: getDataHojeLocal(), observacao: '' });
-                                    setOpenEmprestimo(true);
-                                  }}
-                                >
-                                  <Banknote className="w-4 h-4 mr-2" />
-                                  Registrar Empréstimo
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
@@ -4059,15 +4098,15 @@ className={
                 </Pagination>
                 <div className="text-center text-sm text-muted-foreground mt-2">
                   Mostrando{' '}
-                  {filteredLancamentos.length > 0
+                  {totalLancamentosLista > 0
                     ? (lancPage - 1) * LANC_PAGE_SIZE + 1
                     : 0}{' '}
                   a{' '}
                   {Math.min(
                     lancPage * LANC_PAGE_SIZE,
-                    filteredLancamentos.length
+                    totalLancamentosLista
                   )}{' '}
-                  de {filteredLancamentos.length} lançamentos
+                  de {totalLancamentosLista} lançamentos
                 </div>
               </div>
             )}
@@ -8248,7 +8287,7 @@ className={
 
         {/* Modal de reajuste em massa */}
         <Dialog open={openReajuste} onOpenChange={setOpenReajuste}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" overlayClassName="bg-black/50">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Pencil className="h-5 w-5 text-primary" />
@@ -8713,55 +8752,106 @@ className={
                   </div>
                 )}
 
-                {Array.isArray(detailMeeiro.emprestimos) && detailMeeiro.emprestimos.length > 0 && (
+                {Array.isArray(detailMeeiro.emprestimos) && (
                   <div className="space-y-3">
-                    <h3 className="text-lg font-semibold">Empréstimos</h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-lg font-semibold">Empréstimos</h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setMeeiroEmprestimo(detailMeeiro);
+                          setFormEmprestimo({
+                            meeiroId: detailMeeiro.id,
+                            valor: 0,
+                            data: getDataHojeLocal(),
+                            observacao: '',
+                          });
+                          setOpenEmprestimo(true);
+                        }}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Novo empréstimo
+                      </Button>
+                    </div>
                     <div className="border rounded-lg overflow-hidden">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/50">
                             <TableHead>Data</TableHead>
                             <TableHead className="text-right">Valor</TableHead>
-                            <TableHead>Observação</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="w-[100px] text-right">Ações</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {detailMeeiro.emprestimos.map((emp) => (
-                            <TableRow key={emp.id}>
-                              <TableCell>{formatDate(emp.data)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(Number(emp.valor))}</TableCell>
-                              <TableCell className="max-w-[180px] truncate">{emp.observacao || '—'}</TableCell>
-                              <TableCell>
-                                <span className={cn(
-                                  'text-xs font-medium px-2 py-1 rounded',
-                                  emp.status === 'ABERTO' && 'bg-amber-100 text-amber-800',
-                                  emp.status === 'LIQUIDADO' && 'bg-green-100 text-green-800',
-                                  emp.status === 'CANCELADO' && 'bg-gray-100 text-gray-600'
-                                )}>
-                                  {emp.status === 'ABERTO' ? 'Em aberto' : emp.status === 'LIQUIDADO' ? 'Liquidado' : 'Cancelado'}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {emp.status === 'ABERTO' && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      controleRocaService.atualizarStatusEmprestimo(emp.id, { status: 'LIQUIDADO' }).then(() => {
-                                        queryClient.invalidateQueries({ queryKey: ['controle-roca', 'meeiro-detail', detailMeeiroId] });
-                                        queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
-                                        toast.success('Empréstimo marcado como quitado');
-                                      }).catch((e: any) => toast.error(e?.response?.data?.message || 'Erro ao atualizar'));
-                                    }}
-                                  >
-                                    Marcar quitado
-                                  </Button>
-                                )}
+                          {detailMeeiro.emprestimos.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                Nenhum empréstimo cadastrado.
                               </TableCell>
                             </TableRow>
-                          ))}
+                          ) : (
+                            detailMeeiro.emprestimos.map((emp) => (
+                              <TableRow key={emp.id}>
+                                <TableCell>{formatDate(emp.data)}</TableCell>
+                                <TableCell className="text-right tabular-nums">{formatCurrency(Number(emp.valor))}</TableCell>
+                                <TableCell>
+                                  <span className={cn(
+                                    'text-xs font-medium px-2 py-1 rounded',
+                                    emp.status === 'ABERTO' && 'bg-amber-100 text-amber-800',
+                                    emp.status === 'LIQUIDADO' && 'bg-green-100 text-green-800',
+                                    emp.status === 'CANCELADO' && 'bg-gray-100 text-gray-600'
+                                  )}>
+                                    {emp.status === 'ABERTO' ? 'Em aberto' : emp.status === 'LIQUIDADO' ? 'Liquidado' : 'Cancelado'}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {emp.status === 'ABERTO' && (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" size="sm">
+                                          <MoreHorizontal className="w-4 h-4 mr-1" />
+                                          Ações
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            setEmprestimoEditando({ id: emp.id, valor: Number(emp.valor) });
+                                            setFormEditEmprestimo({ valor: Number(emp.valor) });
+                                            setOpenEditEmprestimo(true);
+                                          }}
+                                        >
+                                          <Pencil className="w-4 h-4 mr-2" />
+                                          Editar
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => liquidarEmprestimo.mutate(emp.id)}
+                                          disabled={liquidarEmprestimo.isPending}
+                                        >
+                                          <Check className="w-4 h-4 mr-2" />
+                                          Marcar quitado
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() => {
+                                            const ok = window.confirm('Deseja excluir este empréstimo?');
+                                            if (!ok) return;
+                                            deleteEmprestimo.mutate(emp.id);
+                                          }}
+                                          disabled={deleteEmprestimo.isPending}
+                                        >
+                                          <Trash2 className="w-4 h-4 mr-2" />
+                                          Excluir
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
                         </TableBody>
                       </Table>
                     </div>
@@ -8827,6 +8917,66 @@ className={
                 </div>
               </div>
             ) : null}
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Editar Empréstimo */}
+        <Dialog
+          open={openEditEmprestimo}
+          onOpenChange={(open) => {
+            setOpenEditEmprestimo(open);
+            if (!open) setEmprestimoEditando(null);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar valor do empréstimo</DialogTitle>
+              <DialogDescription>
+                Informe o novo valor para o empréstimo selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 pt-2">
+              <Label>Novo valor</Label>
+              <Input
+                type="number"
+                min={0.01}
+                step={0.01}
+                value={formEditEmprestimo.valor || ''}
+                onChange={(e) =>
+                  setFormEditEmprestimo({ valor: Number(e.target.value) || 0 })
+                }
+                placeholder="0,00"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenEditEmprestimo(false)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="gradient"
+                disabled={
+                  updateEmprestimo.isPending ||
+                  !emprestimoEditando ||
+                  !(formEditEmprestimo.valor > 0)
+                }
+                onClick={() => {
+                  if (!emprestimoEditando) return;
+                  if (!(formEditEmprestimo.valor > 0)) {
+                    toast.error('Informe um valor maior que zero.');
+                    return;
+                  }
+                  updateEmprestimo.mutate({
+                    id: emprestimoEditando.id,
+                    valor: formEditEmprestimo.valor,
+                  });
+                }}
+              >
+                {updateEmprestimo.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                Salvar
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
