@@ -516,7 +516,15 @@ class PedidosService {
     }
     
     try {
-      return await apiClient.get<ContaReceber[]>(url);
+      const response = await apiClient.get<any>(url);
+
+      if (Array.isArray(response)) return response as ContaReceber[];
+      if (Array.isArray(response?.contasReceber)) return response.contasReceber as ContaReceber[];
+      if (Array.isArray(response?.contas_receber)) return response.contas_receber as ContaReceber[];
+      if (Array.isArray(response?.data)) return response.data as ContaReceber[];
+      if (Array.isArray(response?.itens)) return response.itens as ContaReceber[];
+      if (Array.isArray(response?.pedidos)) return response.pedidos as ContaReceber[];
+      return [];
     } catch (error: any) {
       // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
       // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
@@ -609,7 +617,15 @@ class PedidosService {
     }
     
     try {
-      return await apiClient.get<ContaPagar[]>(url);
+      const response = await apiClient.get<any>(url);
+
+      if (Array.isArray(response)) return response as ContaPagar[];
+      if (Array.isArray(response?.contasPagar)) return response.contasPagar as ContaPagar[];
+      if (Array.isArray(response?.contas_pagar)) return response.contas_pagar as ContaPagar[];
+      if (Array.isArray(response?.data)) return response.data as ContaPagar[];
+      if (Array.isArray(response?.itens)) return response.itens as ContaPagar[];
+      if (Array.isArray(response?.pedidos)) return response.pedidos as ContaPagar[];
+      return [];
     } catch (error: any) {
       // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
       // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
