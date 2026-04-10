@@ -226,7 +226,11 @@ export function useOrders() {
     queryFn: async () => {
       try {
         const response = await fornecedoresService.listar({ limit: 500 });
-        return Array.isArray(response) ? response : response.data || [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as any)?.data)) return (response as any).data;
+        if (Array.isArray((response as any)?.fornecedores)) return (response as any).fornecedores;
+        if (Array.isArray((response as any)?.items)) return (response as any).items;
+        return [];
       } catch {
         return [];
       }
