@@ -1795,18 +1795,20 @@ export default function ControleRoca() {
         : 0,
     [somaQuantidadeDashboard, valorTotalDashboardParcial]
   );
-  const mesReferenciaMetricas = useMemo(() => {
-    if (dashboardMes !== 'all') return dashboardMes;
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  }, [dashboardMes]);
-  const lancamentosMesReferencia = useMemo(
-    () =>
-      lancamentosPorRocaDashboard.filter((l) =>
-        String(l.data ?? '').startsWith(mesReferenciaMetricas)
-      ),
-    [lancamentosPorRocaDashboard, mesReferenciaMetricas]
+  const mesReferenciaMetricas = useMemo(
+    () => (dashboardMes === 'all' ? 'all' : dashboardMes),
+    [dashboardMes]
   );
+  const lancamentosMesReferencia = useMemo(() => {
+    if (mesReferenciaMetricas === 'all') return lancamentosPorRocaDashboard;
+    return lancamentosPorRocaDashboard.filter((l) =>
+      String(l.data ?? '').startsWith(mesReferenciaMetricas)
+    );
+  }, [lancamentosPorRocaDashboard, mesReferenciaMetricas]);
+  const referenciaMetricasLabel = useMemo(() => {
+    if (mesReferenciaMetricas === 'all') return 'Todos os meses';
+    return `${mesReferenciaMetricas.slice(5, 7)}/${mesReferenciaMetricas.slice(0, 4)}`;
+  }, [mesReferenciaMetricas]);
   const metricasProducaoMensal = useMemo(() => {
     const quantidade = lancamentosMesReferencia.reduce((acc, l) => {
       const qtd = (l.itens ?? []).reduce((s, item) => s + (Number(item.quantidade) || 0), 0);
@@ -2306,7 +2308,7 @@ export default function ControleRoca() {
                   {metricasProducaoMensal.quantidade.toLocaleString('pt-BR')}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Referência: {mesReferenciaMetricas.slice(5, 7)}/{mesReferenciaMetricas.slice(0, 4)}
+                  Referência: {referenciaMetricasLabel}
                 </p>
               </div>
               <div className="rounded-xl border bg-card p-4">
@@ -2315,7 +2317,7 @@ export default function ControleRoca() {
                   {formatCurrency(metricasProducaoMensal.valor)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Referência: {mesReferenciaMetricas.slice(5, 7)}/{mesReferenciaMetricas.slice(0, 4)}
+                  Referência: {referenciaMetricasLabel}
                 </p>
               </div>
               <div className="rounded-xl border bg-card p-4">
