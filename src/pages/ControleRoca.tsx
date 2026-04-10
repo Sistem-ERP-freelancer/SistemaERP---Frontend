@@ -875,7 +875,22 @@ export default function ControleRoca() {
         limit: LANC_PAGE_SIZE,
       }),
   });
+  /**
+   * Base exclusiva do Dashboard (independente da paginação/filtros da aba Lançamentos),
+   * para evitar "sumiço" de meses quando a lista de lançamentos muda.
+   */
+  const { data: lancamentosDashboardResponse } = useQuery({
+    queryKey: ['controle-roca', 'lancamentos-dashboard', dashboardRocaId],
+    queryFn: () =>
+      controleRocaService.listarLancamentos({
+        ...(dashboardRocaId !== '' ? { rocaId: Number(dashboardRocaId) } : {}),
+        page: 1,
+        limit: 500,
+      }),
+    enabled: tab === 'dashboard',
+  });
   const lancamentos = lancamentosResponse?.items ?? [];
+  const lancamentosDashboardTodos = lancamentosDashboardResponse?.items ?? [];
   const totalLancamentosServidor = lancamentosResponse?.total ?? 0;
   const [detalheLancamentoId, setDetalheLancamentoId] = useState<number | null>(null);
   const { data: detalheLancamento } = useQuery({
@@ -1287,6 +1302,8 @@ export default function ControleRoca() {
     rocasParaLancamento,
     searchLancamento,
     filtrosLancamento.produto,
+    filtrosLancamento.dataInicio,
+    filtrosLancamento.dataFim,
     lancOrdenacao,
   ]);
 
@@ -1774,9 +1791,9 @@ export default function ControleRoca() {
   const lancamentosPorRocaDashboard = useMemo(
     () =>
       dashboardRocaId === ''
-        ? filteredLancamentos
-        : filteredLancamentos.filter((l) => Number(l.rocaId) === Number(dashboardRocaId)),
-    [dashboardRocaId, filteredLancamentos]
+        ? lancamentosDashboardTodos
+        : lancamentosDashboardTodos.filter((l) => Number(l.rocaId) === Number(dashboardRocaId)),
+    [dashboardRocaId, lancamentosDashboardTodos]
   );
   const rocasDashboardSelectOrdenadas = useMemo(
     () =>
@@ -1805,6 +1822,11 @@ export default function ControleRoca() {
         : lancamentosPorRocaDashboard.filter((l) => String(l.data ?? '').startsWith(dashboardMes)),
     [dashboardMes, lancamentosPorRocaDashboard]
   );
+  useEffect(() => {
+    if (dashboardMes === 'all') return;
+    const existe = mesesDisponiveisDashboard.some((m) => m.value === dashboardMes);
+    if (!existe) setDashboardMes('all');
+  }, [dashboardMes, mesesDisponiveisDashboard]);
   /** Nome da roça vindo da API (útil quando o cadastro não está nas listas do filtro). */
   const rocaNomePorIdDosLancamentos = useMemo(() => {
     const m = new Map<number, string>();
