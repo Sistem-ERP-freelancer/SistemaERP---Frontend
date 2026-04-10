@@ -330,7 +330,7 @@ const Financeiro = () => {
       try {
         const response = await pedidosService.listar({
           page: 1,
-          limit: 1000,
+          limit: 500,
         });
         // Tratar diferentes formatos de resposta
         if (Array.isArray(response)) {

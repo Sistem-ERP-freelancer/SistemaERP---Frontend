@@ -668,7 +668,7 @@ export default function ControleRoca() {
   const { data: produtosCatalogo = [], isLoading: loadingProdutosCatalogo } = useQuery({
     queryKey: ['controle-roca', 'produtos-catalogo'],
     queryFn: async () => {
-      const resp = await produtosService.listar({ page: 1, limit: 1000, statusProduto: 'ATIVO' });
+      const resp = await produtosService.listar({ page: 1, limit: 500, statusProduto: 'ATIVO' });
       return resp.data ?? resp.produtos ?? [];
     },
   });

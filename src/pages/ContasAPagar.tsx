@@ -171,7 +171,7 @@ function ContasAPagar() {
         const response = await pedidosService.listar({
           tipo: "COMPRA",
           page: 1,
-          limit: 1000,
+          limit: 500,
         });
         if (Array.isArray(response)) {
           return response;

@@ -203,7 +203,7 @@ const Fornecedores = () => {
     queryFn: async () => {
       try {
         const response = await fornecedoresService.listar({
-          limit: 10000, // Buscar um número grande para pegar todos
+          limit: 500, // Limite máximo aceito pelo backend
         });
         // Extrair array de fornecedores
         if (Array.isArray(response)) {

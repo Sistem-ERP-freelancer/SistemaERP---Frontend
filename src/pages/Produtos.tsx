@@ -237,7 +237,7 @@ const Produtos = () => {
       try {
         // Buscar todos os fornecedores (sem filtro de status para mostrar todos)
         const response = await fornecedoresService.listar({
-          limit: 1000, // Aumentar limite para buscar mais fornecedores
+          limit: 500, // Limite máximo aceito pelo backend
           // Removido filtro de status para mostrar todos os fornecedores
         });
         
@@ -414,7 +414,7 @@ const Produtos = () => {
   const { data: todosProdutosParaCount = [] } = useQuery({
     queryKey: ["produtos", "todos-para-count", categoriasDialogOpen],
     queryFn: async () => {
-      const response = await produtosService.listar({ page: 1, limit: 10000 });
+      const response = await produtosService.listar({ page: 1, limit: 500 });
       if (response?.data && Array.isArray(response.data)) return response.data;
       if (Array.isArray(response)) return response;
       if (response?.produtos && Array.isArray(response.produtos)) return response.produtos;

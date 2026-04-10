@@ -69,7 +69,7 @@ const Estoque = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("Todos");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(15);
   const [ordenacaoMov, setOrdenacaoMov] = useState<"desc" | "asc">("desc");
   const [dialogMovimentacaoOpen, setDialogMovimentacaoOpen] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
@@ -781,7 +781,7 @@ const Estoque = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                  movimentacoesFiltradas.map((mov) => {
+                  movimentacoes.map((mov) => {
                     const entrada = isEntrada(mov.tipo);
                     const saida = isSaida(mov.tipo);
 
