@@ -4052,24 +4052,24 @@ className={
             </div>
             {!loadingLancamentos && totalLancamentosLista > 0 && (
               <div className="border-t border-border p-4">
-                <Pagination className="justify-end">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setLancPage((prev) => Math.max(1, prev - 1));
-                        }}
-                        className={
-                          lancPage === 1 || totalLancPages <= 1
-                            ? 'pointer-events-none opacity-50'
-                            : 'cursor-pointer'
-                        }
-                      />
-                    </PaginationItem>
-                    {totalLancPages > 1 &&
-                      Array.from({ length: Math.min(5, totalLancPages) }, (_, i) => {
+                {totalLancPages > 1 && (
+                  <Pagination className="justify-end">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setLancPage((prev) => Math.max(1, prev - 1));
+                          }}
+                          className={
+                            lancPage === 1
+                              ? 'pointer-events-none opacity-50'
+                              : 'cursor-pointer'
+                          }
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: Math.min(5, totalLancPages) }, (_, i) => {
                         let pageNum: number;
                         if (totalLancPages <= 5) {
                           pageNum = i + 1;
@@ -4096,25 +4096,31 @@ className={
                           </PaginationItem>
                         );
                       })}
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setLancPage((prev) =>
-                            Math.min(totalLancPages, prev + 1)
-                          );
-                        }}
-                        className={
-                          lancPage === totalLancPages || totalLancPages <= 1
-                            ? 'pointer-events-none opacity-50'
-                            : 'cursor-pointer'
-                        }
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-                <div className="text-center text-sm text-muted-foreground mt-2">
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setLancPage((prev) =>
+                              Math.min(totalLancPages, prev + 1)
+                            );
+                          }}
+                          className={
+                            lancPage === totalLancPages
+                              ? 'pointer-events-none opacity-50'
+                              : 'cursor-pointer'
+                          }
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
+                <div
+                  className={cn(
+                    'text-center text-sm text-muted-foreground',
+                    totalLancPages > 1 && 'mt-2'
+                  )}
+                >
                   Mostrando{' '}
                   {totalLancamentosLista > 0
                     ? (lancPage - 1) * LANC_PAGE_SIZE + 1
@@ -4127,7 +4133,7 @@ className={
                   de {totalLancamentosLista} lançamentos
                   {totalLancPages > 1
                     ? ` · Página ${lancPage} de ${totalLancPages}`
-                    : null}
+                    : ''}
                 </div>
               </div>
             )}

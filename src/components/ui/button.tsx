@@ -19,6 +19,12 @@ const buttonVariants = cva(
         accent: "accent-gradient text-accent-foreground shadow-md hover:shadow-glow",
         hero: "bg-card text-foreground border-2 border-cyan hover:bg-cyan hover:text-navy shadow-md hover:shadow-glow transition-all duration-300",
         sidebar: "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
+        /** Modais de relatório: azul sólido + texto branco */
+        relatorioPrimary:
+          "h-12 min-h-11 rounded-xl border-0 bg-[#3558a8] px-4 text-sm font-medium text-white shadow-sm hover:bg-[#2a4788] hover:text-white focus-visible:ring-[#3558a8]/45",
+        /** Modais de relatório: fundo claro + azul (mesma família do primário) */
+        relatorioSecondary:
+          "h-12 min-h-11 rounded-xl border border-[#3558a8]/40 bg-[#f4f6fb] px-4 text-sm font-medium text-[#3558a8] shadow-sm hover:bg-[#e8ecf5] hover:text-[#2a4788] focus-visible:ring-[#3558a8]/35",
       },
       size: {
         default: "h-10 px-4 py-2",

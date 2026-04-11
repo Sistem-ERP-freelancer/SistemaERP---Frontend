@@ -23,6 +23,7 @@ import ControleRoca from "./pages/ControleRoca";
 import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
 import Financeiro from "./pages/Financeiro";
+import RelatorioComprasCliente from "./pages/RelatorioComprasCliente";
 import Fornecedores from "./pages/Fornecedores";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -122,6 +123,14 @@ const App = () => (
                   <Financeiro />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/relatorio/compras-cliente"
+              element={
+                <ProtectedRoute>
+                  <RelatorioComprasCliente />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/contas-a-pagar" 

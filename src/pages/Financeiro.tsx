@@ -1,3 +1,4 @@
+import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -115,6 +116,8 @@ const Financeiro = () => {
   const [relatorioFornecedorDataFinal, setRelatorioFornecedorDataFinal] = useState("");
   const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
     useState<string>("Todos");
+  const [relatorioProdutosClienteOpen, setRelatorioProdutosClienteOpen] =
+    useState(false);
   /** Filtro por card clicável: Receita do Mês / Despesas do Mês (como em Contas a Receber) */
   const [cardTipoFilter, setCardTipoFilter] = useState<"todos" | "RECEBER" | "PAGAR">("todos");
 
@@ -701,19 +704,21 @@ const Financeiro = () => {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Financeiro</h1>
-            <p className="text-muted-foreground">Controle suas receitas e despesas</p>
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Financeiro</h1>
+              <p className="text-muted-foreground">Controle suas receitas e despesas</p>
+            </div>
+            <Button
+              variant="gradient"
+              className="gap-2"
+              onClick={() => setDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4" />
+              Nova Transação
+            </Button>
           </div>
-          <Button 
-            variant="gradient" 
-            className="gap-2"
-            onClick={() => setDialogOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            Nova Transação
-          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -1078,6 +1083,11 @@ const Financeiro = () => {
                     onClick={() => setRelatorioClientePdfOpen(true)}
                   >
                     Relatório financeiro por cliente
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setRelatorioProdutosClienteOpen(true)}
+                  >
+                    Relatório de produtos por cliente
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setRelatorioFornecedorPdfOpen(true)}
@@ -1959,7 +1969,7 @@ const Financeiro = () => {
               <div className="space-y-2">
                 <Label htmlFor="relatorio-cliente-select">Cliente</Label>
                 <Select
-                  value={relatorioClienteIdSelect || undefined}
+                  value={relatorioClienteIdSelect}
                   onValueChange={setRelatorioClienteIdSelect}
                 >
                   <SelectTrigger id="relatorio-cliente-select">
@@ -2083,78 +2093,82 @@ const Financeiro = () => {
                   </p>
                 )}
 
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  className="gap-2"
-                  disabled={
-                    relatorioClienteIdParsed == null ||
-                    relatorioPreviewFetching ||
-                    !relatorioTemDados ||
-                    relatorioClientePdfLoading
-                  }
-                  onClick={async () => {
-                    const id = relatorioClienteIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um cliente.");
-                      return;
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Button
+                    type="button"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioClienteIdParsed == null ||
+                      relatorioPreviewFetching ||
+                      !relatorioTemDados ||
+                      relatorioClientePdfLoading
                     }
-                    setRelatorioClientePdfLoading(true);
-                    try {
-                      await relatoriosClienteService.downloadRelatorioFinanceiro(
-                        id,
-                        relatorioFiltrosForPdf,
-                      );
-                      toast.success("PDF baixado.");
-                    } catch (e: unknown) {
-                      const msg =
-                        e instanceof Error ? e.message : "Erro ao gerar PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioClientePdfLoading(false);
+                    onClick={async () => {
+                      const id = relatorioClienteIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um cliente.");
+                        return;
+                      }
+                      setRelatorioClientePdfLoading(true);
+                      try {
+                        await relatoriosClienteService.downloadRelatorioFinanceiro(
+                          id,
+                          relatorioFiltrosForPdf,
+                        );
+                        toast.success("PDF baixado.");
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioClientePdfLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioClientePdfLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioClienteIdParsed == null ||
+                      relatorioPreviewFetching ||
+                      !relatorioTemDados ||
+                      relatorioClientePdfLoading
                     }
-                  }}
-                >
-                  {relatorioClientePdfLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Baixar PDF
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={
-                    relatorioClienteIdParsed == null ||
-                    relatorioPreviewFetching ||
-                    !relatorioTemDados ||
-                    relatorioClientePdfLoading
-                  }
-                  onClick={async () => {
-                    const id = relatorioClienteIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um cliente.");
-                      return;
-                    }
-                    setRelatorioClientePdfLoading(true);
-                    try {
-                      await relatoriosClienteService.imprimirRelatorioFinanceiro(
-                        id,
-                        relatorioFiltrosForPdf,
-                      );
-                    } catch (e: unknown) {
-                      const msg =
-                        e instanceof Error ? e.message : "Erro ao abrir PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioClientePdfLoading(false);
-                    }
-                  }}
-                >
-                  <Printer className="h-4 w-4" />
-                  Abrir para imprimir
-                </Button>
+                    onClick={async () => {
+                      const id = relatorioClienteIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um cliente.");
+                        return;
+                      }
+                      setRelatorioClientePdfLoading(true);
+                      try {
+                        await relatoriosClienteService.imprimirRelatorioFinanceiro(
+                          id,
+                          relatorioFiltrosForPdf,
+                        );
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioClientePdfLoading(false);
+                      }
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Abrir para imprimir
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
@@ -2186,7 +2200,7 @@ const Financeiro = () => {
               <div className="space-y-2">
                 <Label htmlFor="financeiro-relatorio-fornecedor-select">Fornecedor</Label>
                 <Select
-                  value={relatorioFornecedorIdSelect || undefined}
+                  value={relatorioFornecedorIdSelect}
                   onValueChange={setRelatorioFornecedorIdSelect}
                 >
                   <SelectTrigger id="financeiro-relatorio-fornecedor-select">
@@ -2310,82 +2324,93 @@ const Financeiro = () => {
                   </p>
                 )}
 
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  className="gap-2"
-                  disabled={
-                    relatorioFornecedorIdParsed == null ||
-                    relatorioFornecedorPreviewFetching ||
-                    !relatorioFornecedorTemDados ||
-                    relatorioFornecedorPdfLoading
-                  }
-                  onClick={async () => {
-                    const id = relatorioFornecedorIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um fornecedor.");
-                      return;
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Button
+                    type="button"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioFornecedorIdParsed == null ||
+                      relatorioFornecedorPreviewFetching ||
+                      !relatorioFornecedorTemDados ||
+                      relatorioFornecedorPdfLoading
                     }
-                    setRelatorioFornecedorPdfLoading(true);
-                    try {
-                      await relatoriosClienteService.downloadRelatorioFinanceiroFornecedor(
-                        id,
-                        relatorioFornecedorFiltrosForPdf,
-                      );
-                      toast.success("PDF baixado.");
-                    } catch (e: unknown) {
-                      const msg =
-                        e instanceof Error ? e.message : "Erro ao gerar PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioFornecedorPdfLoading(false);
+                    onClick={async () => {
+                      const id = relatorioFornecedorIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um fornecedor.");
+                        return;
+                      }
+                      setRelatorioFornecedorPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.downloadRelatorioFinanceiroFornecedor(
+                          id,
+                          relatorioFornecedorFiltrosForPdf,
+                        );
+                        toast.success("PDF baixado.");
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioFornecedorPdfLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioFornecedorPdfLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioFornecedorIdParsed == null ||
+                      relatorioFornecedorPreviewFetching ||
+                      !relatorioFornecedorTemDados ||
+                      relatorioFornecedorPdfLoading
                     }
-                  }}
-                >
-                  {relatorioFornecedorPdfLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Baixar PDF
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={
-                    relatorioFornecedorIdParsed == null ||
-                    relatorioFornecedorPreviewFetching ||
-                    !relatorioFornecedorTemDados ||
-                    relatorioFornecedorPdfLoading
-                  }
-                  onClick={async () => {
-                    const id = relatorioFornecedorIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um fornecedor.");
-                      return;
-                    }
-                    setRelatorioFornecedorPdfLoading(true);
-                    try {
-                      await relatoriosClienteService.imprimirRelatorioFinanceiroFornecedor(
-                        id,
-                        relatorioFornecedorFiltrosForPdf,
-                      );
-                    } catch (e: unknown) {
-                      const msg =
-                        e instanceof Error ? e.message : "Erro ao abrir PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioFornecedorPdfLoading(false);
-                    }
-                  }}
-                >
-                  <Printer className="h-4 w-4" />
-                  Abrir para imprimir
-                </Button>
+                    onClick={async () => {
+                      const id = relatorioFornecedorIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um fornecedor.");
+                        return;
+                      }
+                      setRelatorioFornecedorPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.imprimirRelatorioFinanceiroFornecedor(
+                          id,
+                          relatorioFornecedorFiltrosForPdf,
+                        );
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioFornecedorPdfLoading(false);
+                      }
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Abrir para imprimir
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        <RelatorioProdutosClienteDialog
+          open={relatorioProdutosClienteOpen}
+          onOpenChange={setRelatorioProdutosClienteOpen}
+          clientes={clientes}
+          defaultClienteId={clienteFilterId ?? null}
+        />
       </div>
     </AppLayout>
   );

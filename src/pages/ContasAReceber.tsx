@@ -1,3 +1,4 @@
+import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,6 +111,8 @@ const ContasAReceber = () => {
   const [relatorioLoadingAction, setRelatorioLoadingAction] = useState<
     "download" | "print" | null
   >(null);
+  const [relatorioProdutosClienteOpen, setRelatorioProdutosClienteOpen] =
+    useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1345,10 +1348,12 @@ const ContasAReceber = () => {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Contas a Receber</h1>
-            <p className="text-muted-foreground">Gerencie recebimentos por cliente e parcela</p>
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Contas a Receber</h1>
+              <p className="text-muted-foreground">Gerencie recebimentos por cliente e parcela</p>
+            </div>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1814,6 +1819,11 @@ const ContasAReceber = () => {
                 <DropdownMenuItem onClick={() => setRelatorioClientePdfOpen(true)}>
                   Relatório financeiro por cliente
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setRelatorioProdutosClienteOpen(true)}
+                >
+                  Relatório de produtos por cliente
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1995,7 +2005,7 @@ const ContasAReceber = () => {
               <div className="space-y-2">
                 <Label htmlFor="relatorio-cliente-select-receber">Cliente</Label>
                 <Select
-                  value={relatorioClienteIdSelect || undefined}
+                  value={relatorioClienteIdSelect}
                   onValueChange={setRelatorioClienteIdSelect}
                 >
                   <SelectTrigger id="relatorio-cliente-select-receber">
@@ -2046,56 +2056,60 @@ const ContasAReceber = () => {
               {!relatorioClientePreviewFetching && !relatorioClientePreviewError && relatorioClienteIdParsed != null && relatorioClientePreviewData?.total === 0 && (
                 <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">{relatorioClienteMensagemSemDados}</p>
               )}
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  className="gap-2"
-                  disabled={relatorioClienteIdParsed == null || relatorioClientePreviewFetching || !relatorioClienteTemDados || relatorioClientePdfLoading}
-                  onClick={async () => {
-                    const id = relatorioClienteIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um cliente.");
-                      return;
-                    }
-                    setRelatorioClientePdfLoading(true);
-                    try {
-                      await relatoriosClienteService.downloadRelatorioFinanceiro(id, relatorioClienteFiltrosForPdf);
-                      toast.success("PDF baixado.");
-                    } catch (e: unknown) {
-                      const msg = e instanceof Error ? e.message : "Erro ao gerar PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioClientePdfLoading(false);
-                    }
-                  }}
-                >
-                  {relatorioClientePdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  Baixar PDF
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={relatorioClienteIdParsed == null || relatorioClientePreviewFetching || !relatorioClienteTemDados || relatorioClientePdfLoading}
-                  onClick={async () => {
-                    const id = relatorioClienteIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um cliente.");
-                      return;
-                    }
-                    setRelatorioClientePdfLoading(true);
-                    try {
-                      await relatoriosClienteService.imprimirRelatorioFinanceiro(id, relatorioClienteFiltrosForPdf);
-                    } catch (e: unknown) {
-                      const msg = e instanceof Error ? e.message : "Erro ao abrir PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioClientePdfLoading(false);
-                    }
-                  }}
-                >
-                  <Printer className="h-4 w-4" />
-                  Abrir para imprimir
-                </Button>
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Button
+                    type="button"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
+                    disabled={relatorioClienteIdParsed == null || relatorioClientePreviewFetching || !relatorioClienteTemDados || relatorioClientePdfLoading}
+                    onClick={async () => {
+                      const id = relatorioClienteIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um cliente.");
+                        return;
+                      }
+                      setRelatorioClientePdfLoading(true);
+                      try {
+                        await relatoriosClienteService.downloadRelatorioFinanceiro(id, relatorioClienteFiltrosForPdf);
+                        toast.success("PDF baixado.");
+                      } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioClientePdfLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioClientePdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
+                    disabled={relatorioClienteIdParsed == null || relatorioClientePreviewFetching || !relatorioClienteTemDados || relatorioClientePdfLoading}
+                    onClick={async () => {
+                      const id = relatorioClienteIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um cliente.");
+                        return;
+                      }
+                      setRelatorioClientePdfLoading(true);
+                      try {
+                        await relatoriosClienteService.imprimirRelatorioFinanceiro(id, relatorioClienteFiltrosForPdf);
+                      } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioClientePdfLoading(false);
+                      }
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Abrir para imprimir
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
@@ -2486,6 +2500,13 @@ const ContasAReceber = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        <RelatorioProdutosClienteDialog
+          open={relatorioProdutosClienteOpen}
+          onOpenChange={setRelatorioProdutosClienteOpen}
+          clientes={clientes}
+          defaultClienteId={clienteFilterId}
+        />
       </div>
     </AppLayout>
   );

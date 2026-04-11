@@ -421,18 +421,7 @@ class ControleRocaService {
     dataFinal?: string;
     incluirInativos?: boolean;
   }): Promise<ListaLancamentosRocaResponse> {
-    try {
-      return await this.listarLancamentos({ ...params, todos: true });
-    } catch (err: unknown) {
-      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
-      const status = res?.status;
-      const message = String(res?.data?.message ?? (err as Error)?.message ?? '');
-      const limitRejeitado =
-        status === 400 && message.toLowerCase().includes('limit');
-      if (!limitRejeitado) {
-        throw err;
-      }
-
+    const buscarPaginadoServidor = async (): Promise<ListaLancamentosRocaResponse> => {
       const pageLimit = LIST_ALL_LIMIT;
       let page = 1;
       const items: LancamentoProducaoRoca[] = [];
@@ -461,6 +450,32 @@ class ControleRocaService {
         page: 1,
         limit: pageLimit,
       };
+    };
+
+    try {
+      const first = await this.listarLancamentos({ ...params, todos: true });
+      const itemsFirst = first.items ?? [];
+      const total = Number(first.total ?? itemsFirst.length);
+      if (itemsFirst.length >= total) {
+        return {
+          items: itemsFirst,
+          total,
+          page: 1,
+          limit: total,
+        };
+      }
+      // API antiga ou `todos` ignorado: veio um lote menor que o total — busca tudo paginando (sem reutilizar o primeiro lote, evita duplicar linhas).
+      return buscarPaginadoServidor();
+    } catch (err: unknown) {
+      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      const status = res?.status;
+      const message = String(res?.data?.message ?? (err as Error)?.message ?? '');
+      const limitRejeitado =
+        status === 400 && message.toLowerCase().includes('limit');
+      if (!limitRejeitado) {
+        throw err;
+      }
+      return buscarPaginadoServidor();
     }
   }
 

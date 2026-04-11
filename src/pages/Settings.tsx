@@ -48,11 +48,8 @@ import {
     Edit,
     FileText,
     Globe,
-    Hash,
     Loader2,
-    Mail,
     MoreVertical,
-    Phone,
     Plus,
     Power,
     PowerOff,
@@ -760,29 +757,9 @@ const Settings = () => {
                         )}
                       </div>
 
-                      {/* Grid de informações */}
+                      {/* Demais dados da empresa */}
                       <div className="grid md:grid-cols-2 gap-6">
                         <div className="space-y-4">
-                          <div className="flex items-start gap-3">
-                            <Hash className="h-5 w-5 text-muted-foreground mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium text-foreground">CNPJ</p>
-                              <p className="text-sm text-muted-foreground">
-                                {tenantInfo.cnpj ? 
-                                  tenantInfo.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5") 
-                                  : "—"}
-                              </p>
-                            </div>
-                          </div>
-                          {tenantInfo.telefone && (
-                            <div className="flex items-start gap-3">
-                              <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                              <div>
-                                <p className="text-sm font-medium text-foreground">Telefone</p>
-                                <p className="text-sm text-muted-foreground">{tenantInfo.telefone}</p>
-                              </div>
-                            </div>
-                          )}
                           {(tenantInfo.created_at || tenantInfo.dataCriacao) && (
                             <div className="flex items-start gap-3">
                               <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
@@ -796,13 +773,6 @@ const Settings = () => {
                           )}
                         </div>
                         <div className="space-y-4">
-                          <div className="flex items-start gap-3">
-                            <Mail className="h-5 w-5 text-muted-foreground mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium text-foreground">Email</p>
-                              <p className="text-sm text-muted-foreground">{tenantInfo.email || "—"}</p>
-                            </div>
-                          </div>
                           {tenantInfo.subdominio && (
                             <div className="flex items-start gap-3">
                               <Globe className="h-5 w-5 text-muted-foreground mt-0.5" />

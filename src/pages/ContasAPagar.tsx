@@ -2185,7 +2185,7 @@ function ContasAPagar() {
               <div className="space-y-2">
                 <Label htmlFor="relatorio-fornecedor-select">Fornecedor</Label>
                 <Select
-                  value={relatorioFornecedorIdSelect || undefined}
+                  value={relatorioFornecedorIdSelect}
                   onValueChange={setRelatorioFornecedorIdSelect}
                 >
                   <SelectTrigger id="relatorio-fornecedor-select">
@@ -2269,78 +2269,82 @@ function ContasAPagar() {
                   </p>
                 )}
 
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  className="gap-2"
-                  disabled={
-                    relatorioFornecedorIdParsed == null ||
-                    relatorioFornecedorPreviewFetching ||
-                    !relatorioFornecedorTemDados ||
-                    relatorioFornecedorPdfLoading
-                  }
-                  onClick={async () => {
-                    const id = relatorioFornecedorIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um fornecedor.");
-                      return;
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Button
+                    type="button"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioFornecedorIdParsed == null ||
+                      relatorioFornecedorPreviewFetching ||
+                      !relatorioFornecedorTemDados ||
+                      relatorioFornecedorPdfLoading
                     }
-                    setRelatorioFornecedorPdfLoading(true);
-                    try {
-                      await relatoriosClienteService.downloadRelatorioFinanceiroFornecedor(
-                        id,
-                        relatorioFornecedorFiltrosForPdf,
-                      );
-                      toast.success("PDF baixado.");
-                    } catch (e: unknown) {
-                      const msg =
-                        e instanceof Error ? e.message : "Erro ao gerar PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioFornecedorPdfLoading(false);
+                    onClick={async () => {
+                      const id = relatorioFornecedorIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um fornecedor.");
+                        return;
+                      }
+                      setRelatorioFornecedorPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.downloadRelatorioFinanceiroFornecedor(
+                          id,
+                          relatorioFornecedorFiltrosForPdf,
+                        );
+                        toast.success("PDF baixado.");
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioFornecedorPdfLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioFornecedorPdfLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioFornecedorIdParsed == null ||
+                      relatorioFornecedorPreviewFetching ||
+                      !relatorioFornecedorTemDados ||
+                      relatorioFornecedorPdfLoading
                     }
-                  }}
-                >
-                  {relatorioFornecedorPdfLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Baixar PDF
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={
-                    relatorioFornecedorIdParsed == null ||
-                    relatorioFornecedorPreviewFetching ||
-                    !relatorioFornecedorTemDados ||
-                    relatorioFornecedorPdfLoading
-                  }
-                  onClick={async () => {
-                    const id = relatorioFornecedorIdParsed;
-                    if (id == null) {
-                      toast.error("Selecione um fornecedor.");
-                      return;
-                    }
-                    setRelatorioFornecedorPdfLoading(true);
-                    try {
-                      await relatoriosClienteService.imprimirRelatorioFinanceiroFornecedor(
-                        id,
-                        relatorioFornecedorFiltrosForPdf,
-                      );
-                    } catch (e: unknown) {
-                      const msg =
-                        e instanceof Error ? e.message : "Erro ao abrir PDF.";
-                      toast.error(msg);
-                    } finally {
-                      setRelatorioFornecedorPdfLoading(false);
-                    }
-                  }}
-                >
-                  <Printer className="h-4 w-4" />
-                  Abrir para imprimir
-                </Button>
+                    onClick={async () => {
+                      const id = relatorioFornecedorIdParsed;
+                      if (id == null) {
+                        toast.error("Selecione um fornecedor.");
+                        return;
+                      }
+                      setRelatorioFornecedorPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.imprimirRelatorioFinanceiroFornecedor(
+                          id,
+                          relatorioFornecedorFiltrosForPdf,
+                        );
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioFornecedorPdfLoading(false);
+                      }
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Abrir para imprimir
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>

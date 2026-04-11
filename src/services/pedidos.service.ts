@@ -12,11 +12,96 @@ import type { ItemHistoricoPagamento, RegistrarPagamentoBody, ResumoFinanceiroPe
 import { apiClient } from './api';
 import type { ConfirmarPagamentoPayload } from './contas-receber.service';
 
+/** Resposta de GET /pedidos/relatorio/compras-cliente */
+export interface RelatorioComprasClienteResponse {
+  cliente: { id: number; nome: string };
+  periodo: { inicio: string; fim: string };
+  filtros_aplicados: { status: string };
+  itens: Array<{
+    data: string;
+    produto_nome: string;
+    quantidade: number;
+    preco_unitario: number;
+    subtotal: number;
+    numero_pedido: string;
+    pedido_id: number;
+  }>;
+  total_geral: number;
+}
+
 // Re-exportar tipos para compatibilidade
 export type { PedidoItem as ItemPedido } from '@/types/pedido';
 export type { CreatePedidoDto, DashboardPedidos, FiltrosPedidos, Pedido, PedidosResponse };
 
 class PedidosService {
+  /**
+   * Relatório de produtos por cliente — GET /pedidos/relatorio/compras-cliente
+   */
+  async getRelatorioComprasCliente(params: {
+    cliente_id: number;
+    data_inicial: string;
+    data_final: string;
+    /** Todos | PENDENTE | PAGO_PARCIAL | PAGO_TOTAL | VENCIDO | CANCELADO */
+    status?: string;
+  }): Promise<RelatorioComprasClienteResponse> {
+    const q = new URLSearchParams();
+    q.set('cliente_id', String(params.cliente_id));
+    q.set('data_inicial', params.data_inicial);
+    q.set('data_final', params.data_final);
+    q.set('status', params.status ?? 'Todos');
+    return apiClient.get<RelatorioComprasClienteResponse>(
+      `/pedidos/relatorio/compras-cliente?${q.toString()}`,
+    );
+  }
+
+  /** GET /pedidos/relatorio/compras-cliente/pdf — mesmo filtro do JSON */
+  async downloadRelatorioComprasClientePdf(params: {
+    cliente_id: number;
+    data_inicial: string;
+    data_final: string;
+    status?: string;
+  }): Promise<void> {
+    const q = new URLSearchParams();
+    q.set('cliente_id', String(params.cliente_id));
+    q.set('data_inicial', params.data_inicial);
+    q.set('data_final', params.data_final);
+    q.set('status', params.status ?? 'Todos');
+    const blob = await apiClient.getBlob(
+      `/pedidos/relatorio/compras-cliente/pdf?${q.toString()}`,
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-produtos-cliente-${params.data_inicial}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async printRelatorioComprasClientePdf(params: {
+    cliente_id: number;
+    data_inicial: string;
+    data_final: string;
+    status?: string;
+  }): Promise<void> {
+    const q = new URLSearchParams();
+    q.set('cliente_id', String(params.cliente_id));
+    q.set('data_inicial', params.data_inicial);
+    q.set('data_final', params.data_final);
+    q.set('status', params.status ?? 'Todos');
+    const blob = await apiClient.getBlob(
+      `/pedidos/relatorio/compras-cliente/pdf?${q.toString()}`,
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error(
+        'Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.',
+      );
+    }
+  }
+
   async listar(params?: FiltrosPedidos): Promise<PedidosResponse> {
     const queryParams = new URLSearchParams();
     if (params?.id) queryParams.append('id', params.id.toString());
