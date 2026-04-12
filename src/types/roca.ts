@@ -200,6 +200,8 @@ export interface ResumoPagamentoMeeiro {
   nome: string;
   chavePix: string | null;
   totalReceber: number;
+  /** Vale de embalagem (R$) sobre a produção remanescente (mesma base do repasse). */
+  valesEmbalagem?: number;
   totalEmprestimosAbertos: number;
   /** Valor final a pagar (totalReceber - totalEmprestimosAbertos). */
   valorLiquido: number;
@@ -236,6 +238,8 @@ export interface RegistrarPagamentoMeeiroDto {
 }
 
 export interface RegistrarPagamentoMeeiroResponse {
+  /** ID do registro em tb_roca_pagamento_meeiro (para reemitir comprovante). */
+  pagamentoId: number;
   meeiroId: number;
   nome: string;
   dataPagamento: string;
@@ -243,11 +247,65 @@ export interface RegistrarPagamentoMeeiroResponse {
   contaCaixa: string | null;
   observacao: string | null;
   totalReceber: number;
+  valesEmbalagem: number;
   totalEmprestimos: number;
   valorAbaterEmprestimo: number;
   totalEmprestimosAbertosApos: number;
   valorLiquido: number;
   emprestimosLiquidados: Array<{ id: number; valor: number }>;
+}
+
+/** Item de GET /pagamentos-meeiros/historico (pagamento efetivado ou relatório gerado sem pagamento). */
+export interface HistoricoPagamentoMeeiroItem {
+  origem?: 'pagamento' | 'relatorio_pendente';
+  statusHistorico?: 'pendente' | 'concluido';
+  id: number;
+  meeiroId: number;
+  dataPagamento: string;
+  formaPagamento: string | null;
+  contaCaixa: string | null;
+  observacao: string | null;
+  totalReceber: number | null;
+  totalEmprestimos: number | null;
+  valorLiquido: number | null;
+  valesEmbalagem: number | null;
+  valorAbatidoEmprestimo: number | null;
+  createdAt?: string;
+  meeiroNome: string;
+  meeiroCodigo?: string | null;
+  meeiroCpf?: string | null;
+  meeiroPixChave?: string | null;
+  /** Produtor do meeiro (útil para registrar pendência / PDF). */
+  produtorId?: number | null;
+  /** Só em relatórios pendentes: período salvo ao gerar sem pagar. */
+  periodoDataInicial?: string | null;
+  periodoDataFinal?: string | null;
+}
+
+export interface HistoricoPagamentoMeeirosResponse {
+  items: HistoricoPagamentoMeeiroItem[];
+  total: number;
+  page: number;
+  limit: number;
+  /** Distintos no período filtrado (datas + produtor; ignora filtro de meeiro na listagem). */
+  resumo?: {
+    /** Meeiros distintos com ao menos um pagamento no período filtrado. */
+    meeirosDistintosConcluidosNoPeriodo: number;
+    /** Meeiros distintos com ao menos um relatório pendente no período. */
+    meeirosDistintosPendentesNoPeriodo: number;
+    /** Linhas de pagamento (cada confirmação conta). */
+    registrosPagamentoNoPeriodo?: number;
+    /** Linhas de “gerar sem pagar” (cada PDF gera um registro). */
+    registrosRelatorioPendenteNoPeriodo?: number;
+  };
+}
+
+export interface RegistrarRelatorioMeeiroPendenteDto {
+  meeiroId: number;
+  produtorId: number;
+  periodoDataInicial?: string;
+  periodoDataFinal?: string;
+  observacao?: string;
 }
 
 export type UnidadeMedidaRoca = 'UN' | 'KG' | 'LT' | 'CX' | 'SC' | 'ARROBA';

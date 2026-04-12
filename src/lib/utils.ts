@@ -85,6 +85,31 @@ export function formatDate(date: string | Date): string {
   }).format(d);
 }
 
+/** Data e hora (pt-BR), ex.: histórico com instante de registro. */
+export function formatDateTime(date: string | Date | null | undefined): string {
+  if (date == null || date === '') return '';
+  let d: Date;
+  if (typeof date === 'string') {
+    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})([^\dT]|$)/);
+    if (match && !date.includes('T') && !date.includes(':')) {
+      const [, y, m, day] = match;
+      d = new Date(Number(y), Number(m) - 1, Number(day));
+    } else {
+      d = new Date(date);
+    }
+  } else {
+    d = date;
+  }
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
 /**
  * Formata data para formato brasileiro (DD/MM/YYYY)
  * Alias para formatDate para manter compatibilidade

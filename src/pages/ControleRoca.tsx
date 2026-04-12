@@ -72,7 +72,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { cn, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import {
   cleanDocument,
   formatCPF,
@@ -1518,7 +1518,20 @@ export default function ControleRoca() {
   const [relPagPdfLoading, setRelPagPdfLoading] = useState<
     null | 'download' | 'print' | 'download-recibos' | 'print-recibos'
   >(null);
+  /** Carrega resumo na API ao abrir o modal a partir do painel lateral (não depende da lista da aba). */
+  const [sheetModalPagamentoLoading, setSheetModalPagamentoLoading] = useState(false);
   const [pagamentoPdfMeeiroDialogOpen, setPagamentoPdfMeeiroDialogOpen] = useState(false);
+  const [historicoPagamentosOpen, setHistoricoPagamentosOpen] = useState(false);
+  const [historicoComprovanteBusy, setHistoricoComprovanteBusy] = useState<{
+    rowKey: string;
+    action: 'download' | 'print';
+  } | null>(null);
+  const [historicoPendenteGerarBusy, setHistoricoPendenteGerarBusy] = useState<string | null>(null);
+  const [historicoFiltroMeeiroId, setHistoricoFiltroMeeiroId] = useState<number | ''>('');
+  const [historicoFiltroStatus, setHistoricoFiltroStatus] = useState<'todos' | 'pendente' | 'concluido'>('todos');
+  const [historicoFiltroDataInicial, setHistoricoFiltroDataInicial] = useState('');
+  const [historicoFiltroDataFinal, setHistoricoFiltroDataFinal] = useState('');
+  const [relatorioSemPagamentoLoading, setRelatorioSemPagamentoLoading] = useState(false);
   const [pdfPagMeeiroId, setPdfPagMeeiroId] = useState<number | ''>('');
   const [pdfPagDataInicial, setPdfPagDataInicial] = useState('');
   const [pdfPagDataFinal, setPdfPagDataFinal] = useState('');
@@ -1700,6 +1713,35 @@ export default function ControleRoca() {
       ),
     enabled: tab === 'pagamento-meeiros' && pagamentoPdfMeeiroDialogOpen,
   });
+  const { data: historicoPagamentosData, isLoading: loadingHistoricoPagamentos } = useQuery({
+    queryKey: [
+      'controle-roca',
+      'pagamentos-meeiros',
+      'historico',
+      historicoPagamentosOpen,
+      pagamentoFiltrosAplicados.produtorId,
+      historicoFiltroMeeiroId,
+      historicoFiltroStatus,
+      historicoFiltroDataInicial,
+      historicoFiltroDataFinal,
+    ],
+    queryFn: () =>
+      controleRocaService.listarHistoricoPagamentosMeeiros({
+        produtorId:
+          pagamentoFiltrosAplicados.produtorId === ''
+            ? undefined
+            : Number(pagamentoFiltrosAplicados.produtorId),
+        meeiroId:
+          historicoFiltroMeeiroId === '' ? undefined : Number(historicoFiltroMeeiroId),
+        dataPagamentoInicial: historicoFiltroDataInicial.trim() || undefined,
+        dataPagamentoFinal: historicoFiltroDataFinal.trim() || undefined,
+        statusHistorico: historicoFiltroStatus === 'todos' ? undefined : historicoFiltroStatus,
+        page: 1,
+        limit: 200,
+      }),
+    enabled: tab === 'pagamento-meeiros' && historicoPagamentosOpen,
+  });
+
   const {
     data: resumoPagamentoMeeiros,
     isLoading: loadingResumoPagamento,
@@ -1752,17 +1794,127 @@ export default function ControleRoca() {
     setPagamentoFiltrosSheetOpen(false);
     void queryClient.invalidateQueries({ queryKey: ['controle-roca', 'pagamentos-meeiros'] });
   };
+
+  const carregarMeeiroEAbrirModalPagamento = useCallback(
+    async (
+      meeiroId: number,
+      overrides?: { dataInicial?: string; dataFinal?: string; rocas?: number[] },
+    ) => {
+      setSheetModalPagamentoLoading(true);
+      try {
+        const produtorTab =
+          pagamentoFiltrosAplicados.produtorId === ''
+            ? undefined
+            : Number(pagamentoFiltrosAplicados.produtorId);
+        const meta = meeirosParaRelatorio.find((m) => Number(m.id) === Number(meeiroId));
+        /** Prioriza o produtor do cadastro do meeiro; filtro da aba Pagamento pode divergir e zerar o resumo. */
+        const produtorId =
+          meta?.produtorId != null && !Number.isNaN(Number(meta.produtorId))
+            ? Number(meta.produtorId)
+            : produtorTab;
+
+        const dataInicial =
+          overrides?.dataInicial?.trim() ||
+          relPagDataInicial.trim() ||
+          pagamentoFiltrosAplicados.dataInicial.trim() ||
+          undefined;
+        const dataFinal =
+          overrides?.dataFinal?.trim() ||
+          relPagDataFinal.trim() ||
+          pagamentoFiltrosAplicados.dataFinal.trim() ||
+          undefined;
+        let rocas: number[] | undefined;
+        if (overrides?.rocas !== undefined) {
+          rocas = overrides.rocas.length ? overrides.rocas : undefined;
+        } else {
+          rocas = relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)];
+        }
+
+        const baseParams = {
+          produtorId,
+          meeiroId,
+          dataInicial,
+          dataFinal,
+          rocas,
+          page: 1,
+          limit: 50,
+        };
+
+        /** Sem subTab: busca o meeiro independente das abas Em aberto / Quitados. */
+        let res = await controleRocaService.listarResumoPagamentoMeeiros(baseParams);
+        let row =
+          res.items.find((x) => Number(x.meeiroId) === Number(meeiroId)) ?? null;
+        if (!row && produtorId != null) {
+          res = await controleRocaService.listarResumoPagamentoMeeiros({
+            ...baseParams,
+            produtorId: undefined,
+          });
+          row =
+            res.items.find((x) => Number(x.meeiroId) === Number(meeiroId)) ?? null;
+        }
+        if (!row) {
+          toast.error(
+            'Não foi possível carregar os valores deste meeiro para o período e filtros atuais. Ajuste datas ou roça na lateral, ou os filtros da aba Pagamento.',
+          );
+          return;
+        }
+        setMeeiroParaPagar(row);
+        setFormPagamento({
+          formaPagamento: 'PIX',
+          contaCaixa: '',
+          dataPagamento: getDataHojeLocal(),
+          observacao: '',
+          valorAbaterEmprestimo: '',
+        });
+        setRelPagamentoMeeiroSheetOpen(false);
+        setHistoricoPagamentosOpen(false);
+        setOpenPagarModal(true);
+        void queryClient.invalidateQueries({ queryKey: ['controle-roca', 'pagamentos-meeiros'] });
+      } catch (e: any) {
+        toast.error(
+          e?.response?.data?.message || e?.message || 'Erro ao carregar dados para pagamento.',
+        );
+      } finally {
+        setSheetModalPagamentoLoading(false);
+      }
+    },
+    [
+      pagamentoFiltrosAplicados.produtorId,
+      meeirosParaRelatorio,
+      relPagDataInicial,
+      relPagDataFinal,
+      relPagRocaFiltroId,
+      pagamentoFiltrosAplicados.dataInicial,
+      pagamentoFiltrosAplicados.dataFinal,
+      queryClient,
+    ],
+  );
+
   const registrarPagamento = useMutation({
-    mutationFn: (data: {
-      meeiroId: number;
-      formaPagamento: string;
-      contaCaixa?: string;
-      dataPagamento: string;
-      observacao?: string;
-    }) => controleRocaService.registrarPagamentoMeeiro(data),
-    onSuccess: () => {
+    mutationFn: async (vars: {
+      data: {
+        meeiroId: number;
+        formaPagamento: string;
+        contaCaixa?: string;
+        dataPagamento: string;
+        observacao?: string;
+        valorAbaterEmprestimo?: number;
+      };
+      gerarComprovantePdf: boolean;
+    }) => {
+      const res = await controleRocaService.registrarPagamentoMeeiro(vars.data);
+      if (vars.gerarComprovantePdf && res.pagamentoId != null && res.pagamentoId > 0) {
+        await controleRocaService.downloadComprovantePagamentoMeeiroPdf(res.pagamentoId);
+      }
+      return res;
+    },
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
-      toast.success('Pagamento registrado');
+      toast.success(
+        vars.gerarComprovantePdf
+          ? 'Pagamento registrado e relatório Repasse ao parceiro baixado.'
+          : 'Pagamento registrado. Você pode baixar o relatório em Histórico de pagamentos.',
+      );
       setOpenPagarModal(false);
       setMeeiroParaPagar(null);
     },
@@ -4975,8 +5127,13 @@ className={
                 <SheetHeader className="shrink-0 space-y-2 text-left pb-4 border-b border-border/60">
                   <SheetTitle className="text-xl">Pagamento de meeiro</SheetTitle>
                   <SheetDescription className="text-xs sm:text-sm leading-relaxed">
-                    Ajuste os filtros abaixo e escolha o tipo de PDF. Campos vazios incluem todos os meeiros e roças;
-                    datas em branco seguem a regra do relatório no sistema.
+                    Com <strong className="font-medium text-foreground">um meeiro selecionado</strong>, ao{' '}
+                    <strong className="font-medium text-foreground">imprimir ou baixar</strong> o PDF abrimos em seguida a
+                    tela de registro (valores, empréstimo, forma de pagamento). Lá você pode{' '}
+                    <strong className="font-medium text-foreground">gerar relatório sem pagar</strong> (fica pendente no
+                    histórico) ou <strong className="font-medium text-foreground">confirmar o pagamento</strong>{' '}
+                    (concluído no histórico). Campos vazios incluem todos os meeiros/roças; datas em branco seguem a regra
+                    do relatório.
                   </SheetDescription>
                 </SheetHeader>
                 <div className="flex-1 min-h-0 overflow-y-auto py-4 space-y-6">
@@ -5365,21 +5522,13 @@ className={
                             type="button"
                             variant="outline"
                             className="gap-2 w-full"
-                            disabled={relPagPdfLoading !== null}
+                            disabled={relPagPdfLoading !== null || sheetModalPagamentoLoading}
                             onClick={async () => {
                               try {
                                 setRelPagPdfLoading('print');
-                                await controleRocaService.printRelatorioMeeirosPdf({
-                                  meeiroId: Number(relPagMeeiroFiltroId),
-                                  dataInicial: relPagDataInicial.trim() || undefined,
-                                  dataFinal: relPagDataFinal.trim() || undefined,
-                                  rocas:
-                                    relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
-                                  filtroPagamento: relPagFiltroPagamento,
-                                });
-                                setRelPagamentoMeeiroSheetOpen(false);
+                                await carregarMeeiroEAbrirModalPagamento(Number(relPagMeeiroFiltroId));
                               } catch (e: any) {
-                                toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir PDF');
+                                toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir registro');
                               } finally {
                                 setRelPagPdfLoading(null);
                               }
@@ -5396,22 +5545,13 @@ className={
                             type="button"
                             variant="gradient"
                             className="gap-2 w-full"
-                            disabled={relPagPdfLoading !== null}
+                            disabled={relPagPdfLoading !== null || sheetModalPagamentoLoading}
                             onClick={async () => {
                               try {
                                 setRelPagPdfLoading('download');
-                                await controleRocaService.downloadRelatorioMeeirosPdf({
-                                  meeiroId: Number(relPagMeeiroFiltroId),
-                                  dataInicial: relPagDataInicial.trim() || undefined,
-                                  dataFinal: relPagDataFinal.trim() || undefined,
-                                  rocas:
-                                    relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)],
-                                  filtroPagamento: relPagFiltroPagamento,
-                                });
-                                toast.success('PDF baixado');
-                                setRelPagamentoMeeiroSheetOpen(false);
+                                await carregarMeeiroEAbrirModalPagamento(Number(relPagMeeiroFiltroId));
                               } catch (e: any) {
-                                toast.error(e?.message || e?.response?.data?.message || 'Erro ao gerar PDF');
+                                toast.error(e?.message || e?.response?.data?.message || 'Erro ao abrir registro');
                               } finally {
                                 setRelPagPdfLoading(null);
                               }
@@ -5425,9 +5565,356 @@ className={
                             Baixar PDF
                           </Button>
                         </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
+                          Não precisa gerar PDF antes? Abra só o registro de pagamento com os valores do período.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="w-full gap-2"
+                          disabled={relPagPdfLoading !== null || sheetModalPagamentoLoading}
+                          onClick={() => void carregarMeeiroEAbrirModalPagamento(Number(relPagMeeiroFiltroId))}
+                        >
+                          {sheetModalPagamentoLoading ? (
+                            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          ) : null}
+                          Abrir registro de pagamento (sem PDF)
+                        </Button>
                       </div>
                     )}
                   </section>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <Sheet open={historicoPagamentosOpen} onOpenChange={setHistoricoPagamentosOpen}>
+              <SheetContent
+                side="right"
+                className="w-full sm:max-w-[min(100vw-1rem,720px)] flex min-h-0 flex-col gap-0 p-0"
+              >
+                <SheetHeader className="shrink-0 space-y-3 text-left px-6 pt-6 pb-4 border-b border-border/60">
+                  <SheetTitle className="text-xl">Histórico de pagamentos ao meeiro</SheetTitle>
+                  <SheetDescription className="text-xs sm:text-sm leading-relaxed">
+                    Combina <strong className="font-medium text-foreground">pagamentos concluídos</strong> e{' '}
+                    <strong className="font-medium text-foreground">relatórios gerados sem pagamento</strong> (pendentes).
+                    O produtor segue o filtro da aba. Comprovante PDF só existe após pagamento efetivado.
+                  </SheetDescription>
+                  {historicoPagamentosData?.resumo ? (
+                    <div className="flex flex-wrap gap-2 text-xs sm:text-sm pt-1">
+                      <span className="rounded-md border border-border/60 bg-muted/40 px-2.5 py-1">
+                        Pagamentos no período:{' '}
+                        <strong className="text-foreground">
+                          {historicoPagamentosData.resumo.registrosPagamentoNoPeriodo ??
+                            historicoPagamentosData.resumo.meeirosDistintosConcluidosNoPeriodo}
+                        </strong>
+                        <span className="text-muted-foreground font-normal">
+                          {' '}
+                          (
+                          {historicoPagamentosData.resumo.meeirosDistintosConcluidosNoPeriodo}{' '}
+                          {historicoPagamentosData.resumo.meeirosDistintosConcluidosNoPeriodo === 1
+                            ? 'meeiro'
+                            : 'meeiros'}
+                          )
+                        </span>
+                      </span>
+                      <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1">
+                        Relatórios pendentes:{' '}
+                        <strong className="text-foreground">
+                          {historicoPagamentosData.resumo.registrosRelatorioPendenteNoPeriodo ??
+                            historicoPagamentosData.resumo.meeirosDistintosPendentesNoPeriodo}
+                        </strong>
+                        <span className="text-muted-foreground font-normal">
+                          {' '}
+                          (
+                          {historicoPagamentosData.resumo.meeirosDistintosPendentesNoPeriodo}{' '}
+                          {historicoPagamentosData.resumo.meeirosDistintosPendentesNoPeriodo === 1
+                            ? 'meeiro'
+                            : 'meeiros'}
+                          )
+                        </span>
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="grid gap-3 sm:grid-cols-2 pt-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground">Meeiro</Label>
+                      <Select
+                        value={historicoFiltroMeeiroId === '' ? '_todos' : String(historicoFiltroMeeiroId)}
+                        onValueChange={(v) =>
+                          setHistoricoFiltroMeeiroId(v === '_todos' ? '' : Number(v))
+                        }
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Todos" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_todos">Todos os meeiros</SelectItem>
+                          {meeirosParaRelatorio.map((m) => (
+                            <SelectItem key={m.id} value={String(m.id)}>
+                              {m.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground">Status</Label>
+                      <Select
+                        value={historicoFiltroStatus}
+                        onValueChange={(v) =>
+                          setHistoricoFiltroStatus(v as 'todos' | 'pendente' | 'concluido')
+                        }
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todos">Todos</SelectItem>
+                          <SelectItem value="pendente">Pendente (só relatório)</SelectItem>
+                          <SelectItem value="concluido">Concluído (pagamento)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground">Data inicial</Label>
+                        <Input
+                          type="date"
+                          className="h-9 mt-1"
+                          value={historicoFiltroDataInicial}
+                          onChange={(e) => setHistoricoFiltroDataInicial(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground">Data final</Label>
+                        <Input
+                          type="date"
+                          className="h-9 mt-1"
+                          value={historicoFiltroDataFinal}
+                          onChange={(e) => setHistoricoFiltroDataFinal(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </SheetHeader>
+                <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
+                  {loadingHistoricoPagamentos ? (
+                    <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Carregando…
+                    </div>
+                  ) : (historicoPagamentosData?.items?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">
+                      Nenhum registro encontrado para este filtro.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {(historicoPagamentosData?.items ?? []).map((row) => {
+                        const origem = row.origem ?? 'pagamento';
+                        const isPendente = origem === 'relatorio_pendente';
+                        const rowKey = `${origem}-${row.id}`;
+                        return (
+                        <li
+                          key={rowKey}
+                          className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/50 p-4"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                              <span
+                                className={cn(
+                                  'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded shrink-0',
+                                  isPendente
+                                    ? 'bg-amber-500/15 text-amber-900 dark:text-amber-100'
+                                    : 'bg-primary/10 text-primary',
+                                )}
+                              >
+                                {isPendente ? 'Pendente' : 'Concluído'}
+                              </span>
+                              <span className="text-sm font-semibold tabular-nums text-foreground shrink-0">
+                                {row.createdAt
+                                  ? formatDateTime(row.createdAt)
+                                  : formatDate(row.dataPagamento)}
+                              </span>
+                              <span className="text-muted-foreground hidden sm:inline shrink-0">·</span>
+                              <span className="font-medium leading-snug break-words min-w-0" title={row.meeiroNome}>
+                                {row.meeiroNome}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {isPendente
+                                ? 'Relatório gerado sem registro de pagamento. Efetive o pagamento na aba quando houver quitação.'
+                                : 'Comprovante com repasse, vales, abatimentos e valor líquido gravados no pagamento.'}
+                            </p>
+                          </div>
+                          {!isPendente ? (
+                          <div className="flex flex-col gap-2 border-t border-border/50 pt-3 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2">
+                            <Button
+                              type="button"
+                              variant="default"
+                              className="h-10 w-full gap-2 sm:h-9 sm:w-auto sm:min-w-[12rem] sm:max-w-[min(100%,20rem)]"
+                              disabled={historicoComprovanteBusy?.rowKey === rowKey}
+                              onClick={async () => {
+                                try {
+                                  setHistoricoComprovanteBusy({ rowKey, action: 'download' });
+                                  await controleRocaService.downloadComprovantePagamentoMeeiroPdf(row.id);
+                                  toast.success('Relatório Repasse ao parceiro baixado.');
+                                } catch (e: any) {
+                                  toast.error(
+                                    e?.response?.data?.message ||
+                                      e?.message ||
+                                      'Erro ao baixar comprovante',
+                                  );
+                                } finally {
+                                  setHistoricoComprovanteBusy(null);
+                                }
+                              }}
+                            >
+                              {historicoComprovanteBusy?.rowKey === rowKey &&
+                              historicoComprovanteBusy.action === 'download' ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileText className="h-4 w-4" />
+                              )}
+                              Baixar comprovante (PDF)
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-10 w-full gap-2 sm:h-9 sm:w-auto sm:min-w-[9rem]"
+                              disabled={historicoComprovanteBusy?.rowKey === rowKey}
+                              onClick={async () => {
+                                try {
+                                  setHistoricoComprovanteBusy({ rowKey, action: 'print' });
+                                  await controleRocaService.printComprovantePagamentoMeeiroPdf(row.id);
+                                  toast.success('Comprovante aberto em nova aba para impressão.');
+                                } catch (e: any) {
+                                  toast.error(
+                                    e?.response?.data?.message ||
+                                      e?.message ||
+                                      'Erro ao abrir comprovante para impressão',
+                                  );
+                                } finally {
+                                  setHistoricoComprovanteBusy(null);
+                                }
+                              }}
+                            >
+                              {historicoComprovanteBusy?.rowKey === rowKey &&
+                              historicoComprovanteBusy.action === 'print' ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Printer className="h-4 w-4" />
+                              )}
+                              Imprimir
+                            </Button>
+                          </div>
+                          ) : (
+                            <div className="flex flex-col gap-2 border-t border-border/50 pt-3">
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                Gere o PDF de novo (registra outra pendência no histórico) ou abra o pagamento com
+                                valores do período.
+                              </p>
+                              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="h-10 w-full gap-2 sm:h-9 sm:w-auto sm:min-w-[11rem]"
+                                  disabled={historicoPendenteGerarBusy === rowKey}
+                                  onClick={async () => {
+                                    const produtorIdNum =
+                                      row.produtorId != null && !Number.isNaN(Number(row.produtorId))
+                                        ? Number(row.produtorId)
+                                        : meeirosParaRelatorio.find(
+                                            (m) => Number(m.id) === Number(row.meeiroId),
+                                          )?.produtorId;
+                                    if (produtorIdNum == null || Number.isNaN(Number(produtorIdNum))) {
+                                      toast.error(
+                                        'Não foi possível identificar o produtor. Aplique o filtro de produtor na aba Pagamento.',
+                                      );
+                                      return;
+                                    }
+                                    const dataIniRel =
+                                      (row.periodoDataInicial && String(row.periodoDataInicial).trim()) ||
+                                      pagamentoFiltrosAplicados.dataInicial.trim() ||
+                                      undefined;
+                                    const dataFimRel =
+                                      (row.periodoDataFinal && String(row.periodoDataFinal).trim()) ||
+                                      pagamentoFiltrosAplicados.dataFinal.trim() ||
+                                      undefined;
+                                    const rocasRel =
+                                      pagamentoFiltrosAplicados.rocaIds.length > 0
+                                        ? pagamentoFiltrosAplicados.rocaIds.map(Number)
+                                        : undefined;
+                                    try {
+                                      setHistoricoPendenteGerarBusy(rowKey);
+                                      await controleRocaService.downloadRelatorioMeeirosPdf({
+                                        meeiroId: row.meeiroId,
+                                        dataInicial: dataIniRel,
+                                        dataFinal: dataFimRel,
+                                        rocas: rocasRel,
+                                        filtroPagamento: 'pendentes',
+                                      });
+                                      await controleRocaService.registrarRelatorioMeeiroPendente({
+                                        meeiroId: row.meeiroId,
+                                        produtorId: Number(produtorIdNum),
+                                        periodoDataInicial: dataIniRel,
+                                        periodoDataFinal: dataFimRel,
+                                        observacao: row.observacao?.trim() || undefined,
+                                      });
+                                      toast.success('Relatório gerado e pendência registrada no histórico.');
+                                      void queryClient.invalidateQueries({
+                                        queryKey: ['controle-roca', 'pagamentos-meeiros', 'historico'],
+                                      });
+                                    } catch (e: any) {
+                                      toast.error(
+                                        e?.response?.data?.message ||
+                                          e?.message ||
+                                          'Erro ao gerar relatório',
+                                      );
+                                    } finally {
+                                      setHistoricoPendenteGerarBusy(null);
+                                    }
+                                  }}
+                                >
+                                  {historicoPendenteGerarBusy === rowKey ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <FileText className="h-4 w-4" />
+                                  )}
+                                  Gerar sem pagar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  className="h-10 w-full gap-2 sm:h-9 sm:w-auto sm:min-w-[11rem]"
+                                  disabled={sheetModalPagamentoLoading}
+                                  onClick={() => {
+                                    void carregarMeeiroEAbrirModalPagamento(row.meeiroId, {
+                                      dataInicial:
+                                        (row.periodoDataInicial && String(row.periodoDataInicial).trim()) ||
+                                        undefined,
+                                      dataFinal:
+                                        (row.periodoDataFinal && String(row.periodoDataFinal).trim()) ||
+                                        undefined,
+                                      rocas:
+                                        pagamentoFiltrosAplicados.rocaIds.length > 0
+                                          ? [...pagamentoFiltrosAplicados.rocaIds]
+                                          : undefined,
+                                    });
+                                  }}
+                                >
+                                  {sheetModalPagamentoLoading ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : null}
+                                  Gerar e pagar
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               </SheetContent>
             </Sheet>
@@ -5721,6 +6208,15 @@ className={
                   >
                     <FileText className="w-4 h-4" />
                     Relatórios
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setHistoricoPagamentosOpen(true)}
+                  >
+                    <Archive className="w-4 h-4" />
+                    Histórico de pagamentos
                   </Button>
                 </div>
               </div>
@@ -9319,22 +9815,22 @@ className={
             if (!open) setMeeiroParaPagar(null);
           }}
         >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Registrar pagamento</DialogTitle>
-              <DialogDescription>
+          <DialogContent className="w-[calc(100%-1rem)] max-w-4xl gap-10 p-8 sm:p-12 max-h-[min(96dvh,960px)] overflow-y-auto">
+            <DialogHeader className="space-y-3 sm:space-y-4 pr-10">
+              <DialogTitle className="text-2xl sm:text-3xl font-semibold tracking-tight">Registrar pagamento</DialogTitle>
+              <DialogDescription className="text-base sm:text-lg leading-relaxed text-muted-foreground">
                 {meeiroParaPagar ? `Pagamento para ${meeiroParaPagar.nome}` : 'Confirme os dados do pagamento.'}
               </DialogDescription>
             </DialogHeader>
             {meeiroParaPagar && (
-              <div className="space-y-4 pt-2">
-                <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Chave PIX</span>
+              <div className="space-y-10 pt-1">
+                <div className="rounded-xl border bg-muted/30 p-7 sm:p-10 text-sm sm:text-base leading-relaxed shadow-sm overflow-hidden">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 pb-6 border-b border-border/60">
+                    <span className="text-muted-foreground font-medium">Chave PIX</span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1"
+                      className="h-9 gap-1.5 self-start sm:self-auto shrink-0"
                       onClick={() => {
                         if (meeiroParaPagar.chavePix) {
                           navigator.clipboard.writeText(meeiroParaPagar.chavePix);
@@ -9347,74 +9843,97 @@ className={
                       Copiar
                     </Button>
                   </div>
-                  <p className="font-mono break-all">{meeiroParaPagar.chavePix || '—'}</p>
-                  <div className="flex justify-between pt-1">
-                    <span className="text-muted-foreground">Valor total a receber</span>
-                    <span className="font-semibold">{formatCurrency(meeiroParaPagar.totalReceber)}</span>
+                  <p className="font-mono break-all text-foreground text-[13px] sm:text-sm tracking-tight pb-6 border-b border-border/60 -mt-2 pt-1">
+                    {meeiroParaPagar.chavePix || '—'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-4 border-b border-border/40 items-start sm:items-center">
+                    <span className="text-muted-foreground">Valor total a receber (repasse)</span>
+                    <span className="text-foreground font-semibold tabular-nums text-left sm:text-right pt-1 sm:pt-0">
+                      {formatCurrency(meeiroParaPagar.totalReceber)}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-4 border-b border-border/40 items-start sm:items-center">
+                    <span className="text-muted-foreground">Vale de embalagem (desconto)</span>
+                    <span className="text-foreground font-medium tabular-nums text-left sm:text-right">
+                      {formatCurrency(Number(meeiroParaPagar.valesEmbalagem ?? 0))}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-4 border-b border-border/40 items-start sm:items-center">
                     <span className="text-muted-foreground">Empréstimos em aberto</span>
-                    <span>{formatCurrency(meeiroParaPagar.totalEmprestimosAbertos)}</span>
+                    <span className="text-foreground font-medium tabular-nums text-left sm:text-right">
+                      {formatCurrency(meeiroParaPagar.totalEmprestimosAbertos)}
+                    </span>
                   </div>
                   {(() => {
                     const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                    const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
                     const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                    const maxAbater = Math.max(0, totalEmp);
+                    const disponivel = Math.max(0, totalReceber - valesEmb);
+                    const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
                     const vRaw = formPagamento.valorAbaterEmprestimo;
                     const v = vRaw === '' ? 0 : Number(vRaw);
                     const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
                     if (totalEmp <= 0) return null;
                     return (
-                      <div className="flex justify-between">
+                      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-4 border-b border-border/40 items-start sm:items-center">
                         <span className="text-muted-foreground">Abater do empréstimo (neste pagamento)</span>
-                        <span className="font-medium">{formatCurrency(vSafe)}</span>
+                        <span className="text-foreground font-medium tabular-nums text-left sm:text-right">
+                          {formatCurrency(vSafe)}
+                        </span>
                       </div>
                     );
                   })()}
-                  <div className="flex justify-between border-t pt-2">
-                    <span className="text-muted-foreground">Valor final a pagar</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-6 border-t border-border/60 mt-1 items-start sm:items-center bg-muted/20 -mx-7 sm:-mx-10 px-7 sm:px-10 rounded-b-xl">
+                    <span className="text-muted-foreground font-medium">Valor líquido a pagar ao meeiro</span>
                     <span
                       className={cn(
-                        'font-semibold',
+                        'font-semibold tabular-nums text-left sm:text-right text-lg',
                         (() => {
                           const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                          const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
                           const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                          const maxAbater = Math.max(0, totalEmp);
+                          const disponivel = Math.max(0, totalReceber - valesEmb);
+                          const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
                           const vRaw = formPagamento.valorAbaterEmprestimo;
                           const v = vRaw === '' ? 0 : Number(vRaw);
                           const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
-                          const final = Math.max(0, totalReceber - vSafe);
+                          const final = Math.max(0, totalReceber - valesEmb - vSafe);
                           return final < 0 ? 'text-amber-700 dark:text-amber-300' : 'text-primary';
                         })(),
                       )}
                     >
                       {(() => {
                         const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                        const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
                         const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                        const maxAbater = Math.max(0, totalEmp);
+                        const disponivel = Math.max(0, totalReceber - valesEmb);
+                        const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
                         const vRaw = formPagamento.valorAbaterEmprestimo;
                         const v = vRaw === '' ? 0 : Number(vRaw);
                         const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
-                        return formatCurrency(Math.max(0, totalReceber - vSafe));
+                        return formatCurrency(Math.max(0, totalReceber - valesEmb - vSafe));
                       })()}
                     </span>
                   </div>
                   {(meeiroParaPagar.totalEmprestimosAbertos ?? 0) > 0 && (
-                    <p className="text-xs text-muted-foreground leading-snug">
-                      Informe quanto deseja <span className="font-medium">abater do empréstimo</span> agora. O restante do
-                      empréstimo permanece em aberto.
+                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed mt-5 pt-1">
+                      Informe quanto deseja <span className="font-medium text-foreground/90">abater do empréstimo</span>{' '}
+                      agora. O restante do empréstimo permanece em aberto.
                     </p>
                   )}
                 </div>
                 {(() => {
                   const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                  const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
                   const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                  const maxAbater = Math.max(0, totalEmp);
+                  const disponivel = Math.max(0, totalReceber - valesEmb);
+                  const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
                   if (totalEmp <= 0) return null;
                   return (
-                    <div className="space-y-2">
-                      <Label>Valor a abater do empréstimo (opcional)</Label>
+                    <div className="space-y-4">
+                      <Label className="text-base font-medium">Valor a abater do empréstimo (opcional)</Label>
                       <Input
+                        className="h-11"
                         type="number"
                         inputMode="decimal"
                         min={0}
@@ -9428,19 +9947,20 @@ className={
                           setFormPagamento((p) => ({ ...p, valorAbaterEmprestimo: raw }));
                         }}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Máximo permitido neste pagamento: <span className="font-medium">{formatCurrency(maxAbater)}</span>
+                      <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                        Máximo (empréstimo e produção líquida após embalagem):{' '}
+                        <span className="font-medium">{formatCurrency(maxAbater)}</span>
                       </p>
                     </div>
                   );
                 })()}
-                <div className="space-y-2">
-                  <Label>Forma de pagamento</Label>
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">Forma de pagamento</Label>
                   <Select
                     value={formPagamento.formaPagamento}
                     onValueChange={(v) => setFormPagamento((p) => ({ ...p, formaPagamento: v }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -9451,34 +9971,129 @@ className={
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Conta ou caixa utilizado (opcional)</Label>
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">Conta ou caixa utilizado (opcional)</Label>
                   <Input
+                    className="h-11"
                     value={formPagamento.contaCaixa}
                     onChange={(e) => setFormPagamento((p) => ({ ...p, contaCaixa: e.target.value }))}
                     placeholder="Ex: Caixa Geral"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Data do pagamento</Label>
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">Data do pagamento</Label>
                   <Input
+                    className="h-11"
                     type="date"
                     value={formPagamento.dataPagamento}
                     onChange={(e) => setFormPagamento((p) => ({ ...p, dataPagamento: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Observação (opcional)</Label>
+                <div className="space-y-4">
+                  <Label className="text-base font-medium">Observação (opcional)</Label>
                   <Textarea
                     value={formPagamento.observacao}
                     onChange={(e) => setFormPagamento((p) => ({ ...p, observacao: e.target.value }))}
                     placeholder="Observação"
-                    rows={2}
+                    rows={3}
+                    className="min-h-[5.5rem] resize-y leading-relaxed"
                   />
+                </div>
+
+                <div className="rounded-xl border border-dashed border-amber-500/35 bg-amber-500/[0.07] p-4 sm:p-5 space-y-3">
+                  <p className="text-sm font-medium text-foreground">Gerar relatório sem pagar</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Baixa o PDF do meeiro (mesmos filtros de período e roças da aba) e registra no histórico como{' '}
+                    <span className="font-medium text-foreground">pendente</span> até você confirmar o pagamento
+                    abaixo.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full sm:w-auto gap-2"
+                    disabled={relatorioSemPagamentoLoading || !meeiroParaPagar}
+                    onClick={async () => {
+                      if (!meeiroParaPagar) return;
+                      const produtorDoMeeiro = meeirosParaRelatorio.find(
+                        (m) => Number(m.id) === Number(meeiroParaPagar.meeiroId),
+                      )?.produtorId;
+                      const produtorIdNum =
+                        produtorDoMeeiro != null && !Number.isNaN(Number(produtorDoMeeiro))
+                          ? Number(produtorDoMeeiro)
+                          : pagamentoFiltrosAplicados.produtorId !== ''
+                            ? Number(pagamentoFiltrosAplicados.produtorId)
+                            : undefined;
+                      if (produtorIdNum == null || Number.isNaN(Number(produtorIdNum))) {
+                        toast.error('Não foi possível identificar o produtor deste meeiro. Use o filtro de produtor na aba.');
+                        return;
+                      }
+                      const dataIniRel =
+                        relPagDataInicial.trim() ||
+                        pagamentoFiltrosAplicados.dataInicial.trim() ||
+                        undefined;
+                      const dataFimRel =
+                        relPagDataFinal.trim() ||
+                        pagamentoFiltrosAplicados.dataFinal.trim() ||
+                        undefined;
+                      const rocasRel =
+                        relPagRocaFiltroId !== ''
+                          ? [Number(relPagRocaFiltroId)]
+                          : pagamentoFiltrosAplicados.rocaIds.length > 0
+                            ? pagamentoFiltrosAplicados.rocaIds.map(Number)
+                            : undefined;
+                      try {
+                        setRelatorioSemPagamentoLoading(true);
+                        const totalReceberRel = Number(meeiroParaPagar.totalReceber ?? 0);
+                        const valesEmbRel = Number(meeiroParaPagar.valesEmbalagem ?? 0);
+                        const totalEmpRel = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
+                        const disponivelRel = Math.max(0, totalReceberRel - valesEmbRel);
+                        const maxAbaterRel = Math.min(Math.max(0, totalEmpRel), disponivelRel);
+                        const vRawRel = formPagamento.valorAbaterEmprestimo;
+                        const vRel = vRawRel === '' ? 0 : Number(vRawRel);
+                        const vSafeRel = Number.isFinite(vRel)
+                          ? Math.max(0, Math.min(vRel, maxAbaterRel))
+                          : 0;
+                        await controleRocaService.downloadRelatorioMeeirosPdf({
+                          meeiroId: meeiroParaPagar.meeiroId,
+                          dataInicial: dataIniRel,
+                          dataFinal: dataFimRel,
+                          rocas: rocasRel,
+                          filtroPagamento: 'pendentes',
+                          ...(vSafeRel > 0
+                            ? { valorAbatimentoEmprestimoProjetado: vSafeRel }
+                            : {}),
+                        });
+                        await controleRocaService.registrarRelatorioMeeiroPendente({
+                          meeiroId: meeiroParaPagar.meeiroId,
+                          produtorId: Number(produtorIdNum),
+                          periodoDataInicial: dataIniRel,
+                          periodoDataFinal: dataFimRel,
+                          observacao: formPagamento.observacao?.trim() || undefined,
+                        });
+                        toast.success('Relatório baixado e registrado como pendente no histórico.');
+                        void queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+                        setOpenPagarModal(false);
+                        setMeeiroParaPagar(null);
+                      } catch (e: any) {
+                        toast.error(
+                          e?.response?.data?.message || e?.message || 'Erro ao gerar relatório',
+                        );
+                      } finally {
+                        setRelatorioSemPagamentoLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioSemPagamentoLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    Gerar relatório sem pagar
+                  </Button>
                 </div>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="flex-col gap-4 sm:flex-row sm:justify-end pt-10 mt-6 border-t border-border/60">
               <Button variant="outline" onClick={() => setOpenPagarModal(false)}>Cancelar</Button>
               <Button
                 variant="gradient"
@@ -9486,23 +10101,28 @@ className={
                 onClick={() => {
                   if (!meeiroParaPagar || !formPagamento.dataPagamento) return;
                   const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
+                  const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
                   const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                  const maxAbater = Math.max(0, totalEmp);
+                  const disponivel = Math.max(0, totalReceber - valesEmb);
+                  const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
                   const vRaw = formPagamento.valorAbaterEmprestimo;
                   const v = vRaw === '' ? 0 : Number(vRaw);
                   const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
                   registrarPagamento.mutate({
-                    meeiroId: meeiroParaPagar.meeiroId,
-                    formaPagamento: formPagamento.formaPagamento,
-                    contaCaixa: formPagamento.contaCaixa?.trim() || undefined,
-                    dataPagamento: formPagamento.dataPagamento,
-                    observacao: formPagamento.observacao?.trim() || undefined,
-                    ...(vSafe > 0 ? { valorAbaterEmprestimo: vSafe } : {}),
+                    gerarComprovantePdf: true,
+                    data: {
+                      meeiroId: meeiroParaPagar.meeiroId,
+                      formaPagamento: formPagamento.formaPagamento,
+                      contaCaixa: formPagamento.contaCaixa?.trim() || undefined,
+                      dataPagamento: formPagamento.dataPagamento,
+                      observacao: formPagamento.observacao?.trim() || undefined,
+                      ...(vSafe > 0 ? { valorAbaterEmprestimo: vSafe } : {}),
+                    },
                   });
                 }}
               >
                 {registrarPagamento.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Confirmar pagamento
+                Confirmar e baixar comprovante
               </Button>
             </DialogFooter>
           </DialogContent>

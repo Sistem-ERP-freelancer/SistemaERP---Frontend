@@ -18,6 +18,8 @@ import type {
     RelatorioMeeirosCadastroIncompletoResponse,
     ListaLancamentosRocaResponse,
     ResumoPagamentoMeeirosResponse,
+    HistoricoPagamentoMeeirosResponse,
+    RegistrarRelatorioMeeiroPendenteDto,
     Roca,
     RocaDetalhes,
     UpdateLancamentoProducaoRocaDto,
@@ -264,6 +266,66 @@ class ControleRocaService {
     );
   }
 
+  async listarHistoricoPagamentosMeeiros(params?: {
+    produtorId?: number;
+    meeiroId?: number;
+    dataPagamentoInicial?: string;
+    dataPagamentoFinal?: string;
+    statusHistorico?: 'pendente' | 'concluido';
+    page?: number;
+    limit?: number;
+  }): Promise<HistoricoPagamentoMeeirosResponse> {
+    const search = new URLSearchParams();
+    if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
+    if (params?.meeiroId != null) search.set('meeiroId', String(params.meeiroId));
+    if (params?.dataPagamentoInicial) search.set('dataPagamentoInicial', params.dataPagamentoInicial);
+    if (params?.dataPagamentoFinal) search.set('dataPagamentoFinal', params.dataPagamentoFinal);
+    if (params?.statusHistorico) search.set('statusHistorico', params.statusHistorico);
+    search.set('page', String(params?.page ?? 1));
+    search.set('limit', String(params?.limit ?? 50));
+    const q = search.toString() ? `?${search.toString()}` : '';
+    return apiClient.get<HistoricoPagamentoMeeirosResponse>(
+      `${BASE}/pagamentos-meeiros/historico${q}`
+    );
+  }
+
+  async registrarRelatorioMeeiroPendente(
+    data: RegistrarRelatorioMeeiroPendenteDto
+  ): Promise<{ id: number; createdAt: string }> {
+    return apiClient.post<{ id: number; createdAt: string }>(
+      `${BASE}/pagamentos-meeiros/relatorio-pendente`,
+      data
+    );
+  }
+
+  async downloadComprovantePagamentoMeeiroPdf(pagamentoId: number): Promise<void> {
+    const blob = await apiClient.getBlob(
+      `${BASE}/pagamentos-meeiros/${pagamentoId}/comprovante/pdf`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `repasse-parceiro-meeiro-${pagamentoId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /** Abre o mesmo comprovante em nova aba para imprimir (visualizador de PDF do navegador). */
+  async printComprovantePagamentoMeeiroPdf(pagamentoId: number): Promise<void> {
+    const blob = await apiClient.getBlob(
+      `${BASE}/pagamentos-meeiros/${pagamentoId}/comprovante/pdf`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      URL.revokeObjectURL(url);
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 120_000);
+  }
+
   /** Relatório de Meeiros (múltiplos) em PDF – filtro por período e roças. */
   async downloadRelatorioMeeirosPdf(params?: {
     meeiroId?: number;
@@ -272,6 +334,11 @@ class ControleRocaService {
     rocas?: number[];
     /** pagos = com registro de pagamento; pendentes = sem pagamento e valor a pagar; todos = todos */
     filtroPagamento?: 'todos' | 'pagos' | 'pendentes';
+    /**
+     * Com `meeiroId`: valor de abatimento simulado no PDF (ex.: relatório sem pagar).
+     * O backend aplica o mesmo teto do pagamento (empréstimo em aberto × produção líquida após embalagem).
+     */
+    valorAbatimentoEmprestimoProjetado?: number;
     /**
      * Sem meeiro: `recibos` = um único PDF com recibo detalhado por meeiro (cada um em páginas novas).
      * Ignora `meeiroId` se for enviado.
@@ -309,6 +376,7 @@ class ControleRocaService {
     dataFinal?: string;
     rocas?: number[];
     filtroPagamento?: 'todos' | 'pagos' | 'pendentes';
+    valorAbatimentoEmprestimoProjetado?: number;
     layout?: 'recibos';
   }): Promise<void> {
     const search = this.buildRelatorioMeeirosPdfSearchParams(params);
@@ -329,6 +397,7 @@ class ControleRocaService {
     dataFinal?: string;
     rocas?: number[];
     filtroPagamento?: 'todos' | 'pagos' | 'pendentes';
+    valorAbatimentoEmprestimoProjetado?: number;
     layout?: 'recibos';
   }): URLSearchParams {
     const search = new URLSearchParams();
@@ -341,6 +410,16 @@ class ControleRocaService {
     if (params?.rocas?.length) search.set('rocas', params.rocas.join(','));
     if (params?.filtroPagamento && params.filtroPagamento !== 'todos') {
       search.set('filtroPagamento', params.filtroPagamento);
+    }
+    if (
+      params?.valorAbatimentoEmprestimoProjetado != null &&
+      Number.isFinite(params.valorAbatimentoEmprestimoProjetado) &&
+      params.valorAbatimentoEmprestimoProjetado > 0
+    ) {
+      search.set(
+        'valorAbatimentoEmprestimoProjetado',
+        String(params.valorAbatimentoEmprestimoProjetado),
+      );
     }
     if (layoutRecibos) search.set('layout', 'recibos');
     return search;
