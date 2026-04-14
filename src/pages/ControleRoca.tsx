@@ -92,6 +92,8 @@ import type {
     MeeiroRoca,
     ProdutorRoca,
     RelatorioMeeiroResponse,
+    AtualizarPagamentoMeeiroDto,
+    HistoricoPagamentoMeeiroItem,
     ResumoPagamentoMeeiro,
     Roca,
     RocaDetalhes,
@@ -179,6 +181,56 @@ function podeRegistrarPagamentoMeeiro(m: ResumoPagamentoMeeiro): boolean {
 /** Produção já zerada nos cálculos, mas ainda há empréstimo em aberto (valor final pode ficar negativo). */
 function apenasDividaEmprestimoSemProducaoRemanescente(m: ResumoPagamentoMeeiro): boolean {
   return (m.totalReceber ?? 0) <= 0 && (m.totalEmprestimosAbertos ?? 0) > 0;
+}
+
+/** Teto de abatimento no registro de pagamento (mesma lógica do servidor: empréstimo × produção líquida após embalagem). */
+function maxAbaterEmprestimoResumoMeeiro(m: ResumoPagamentoMeeiro): number {
+  const totalReceber = Number(m.totalReceber ?? 0);
+  const valesEmb = Number(m.valesEmbalagem ?? 0);
+  const totalEmp = Number(m.totalEmprestimosAbertos ?? 0);
+  const disponivel = Math.max(0, totalReceber - valesEmb);
+  return Math.min(Math.max(0, totalEmp), disponivel);
+}
+
+/**
+ * Valor inicial no campo "abater empréstimo": usa a coluna Desc emprést. da grade quando &gt; 0
+ * (limitada ao máximo permitido); senão sugere o máximo abatível.
+ */
+function valorAbaterEmprestimoInicialString(m: ResumoPagamentoMeeiro): string {
+  const max = maxAbaterEmprestimoResumoMeeiro(m);
+  if (max <= 0) return '';
+  const fromGradeDesc = Number(m.descEmprest ?? 0);
+  const target =
+    Number.isFinite(fromGradeDesc) && fromGradeDesc > 0
+      ? Math.min(fromGradeDesc, max)
+      : max;
+  const rounded = Math.round(target * 100) / 100;
+  return rounded % 1 === 0 ? String(rounded) : rounded.toFixed(2);
+}
+
+/** Abatimento com limites alinhados ao backend (registrar pagamento). */
+function parsePagamentoMeeiroResumoForm(
+  m: ResumoPagamentoMeeiro,
+  form: { valorAbaterEmprestimo: string },
+) {
+  const totalReceber = Number(m.totalReceber ?? 0);
+  const valesEmb = Number(m.valesEmbalagem ?? 0);
+  const totalEmp = Number(m.totalEmprestimosAbertos ?? 0);
+  const disponivel = Math.max(0, totalReceber - valesEmb);
+  const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
+  const vRaw = form.valorAbaterEmprestimo;
+  const v = vRaw === '' ? 0 : Number(vRaw);
+  const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
+  const liquido = Math.max(0, totalReceber - valesEmb - vSafe);
+  return {
+    totalReceber,
+    valesEmb,
+    totalEmp,
+    disponivel,
+    maxAbater,
+    vSafe,
+    liquido,
+  };
 }
 
 const PAGAMENTO_MEEIROS_PAGE_SIZE = 15;
@@ -279,6 +331,7 @@ export default function ControleRoca() {
     telefone: '',
     whatsapp: '',
     endereco: '',
+    inscricao_estadual: '',
   });
   const createProdutor = useMutation({
     mutationFn: (data: CreateProdutorRocaDto) =>
@@ -295,6 +348,7 @@ export default function ControleRoca() {
         telefone: '',
         whatsapp: '',
         endereco: '',
+        inscricao_estadual: '',
       });
     },
     onError: (err: any) => {
@@ -318,6 +372,7 @@ export default function ControleRoca() {
     telefone: '',
     whatsapp: '',
     endereco: '',
+    inscricao_estadual: '',
   });
 
   const updateProdutor = useMutation({
@@ -574,6 +629,7 @@ export default function ControleRoca() {
     telefone: '',
     pixChave: '',
     endereco: '',
+    inscricaoEstadual: '',
     porcentagem_padrao: 40,
     produtorId: 0,
   });
@@ -591,6 +647,7 @@ export default function ControleRoca() {
         telefone: '',
         pixChave: '',
         endereco: '',
+        inscricaoEstadual: '',
         porcentagem_padrao: 40,
         produtorId: 0,
       });
@@ -617,6 +674,7 @@ export default function ControleRoca() {
     telefone: '',
     pixChave: '',
     endereco: '',
+    inscricaoEstadual: '',
     porcentagem_padrao: 40,
     produtorId: 0,
   });
@@ -1579,6 +1637,25 @@ export default function ControleRoca() {
     observacao: '',
     valorAbaterEmprestimo: '',
   });
+  const [openEditarPagamentoModal, setOpenEditarPagamentoModal] = useState(false);
+  const [meeiroEditarPagamento, setMeeiroEditarPagamento] = useState<ResumoPagamentoMeeiro | null>(
+    null,
+  );
+  const [editarPagamentoId, setEditarPagamentoId] = useState<number | null>(null);
+  const [formEditarPagamento, setFormEditarPagamento] = useState({
+    dataPagamento: '',
+    formaPagamento: 'PIX',
+    contaCaixa: '',
+    observacao: '',
+    descEmprest: '',
+  });
+  /** Evita spinner global: só o meeiro clicado entra em loading ao buscar o histórico. */
+  const [editPagamentoLoadingMeeiroId, setEditPagamentoLoadingMeeiroId] = useState<number | null>(
+    null,
+  );
+  /** Snapshot do item de histórico usado para o resumo financeiro (valores congelados do pagamento). */
+  const [editPagamentoHistoricoRow, setEditPagamentoHistoricoRow] =
+    useState<HistoricoPagamentoMeeiroItem | null>(null);
   const [relResult, setRelResult] = useState<RelatorioMeeiroResponse | null>(null);
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
@@ -1864,7 +1941,7 @@ export default function ControleRoca() {
           contaCaixa: '',
           dataPagamento: getDataHojeLocal(),
           observacao: '',
-          valorAbaterEmprestimo: '',
+          valorAbaterEmprestimo: valorAbaterEmprestimoInicialString(row),
         });
         setRelPagamentoMeeiroSheetOpen(false);
         setHistoricoPagamentosOpen(false);
@@ -1922,6 +1999,65 @@ export default function ControleRoca() {
       toast.error(err?.response?.data?.message || err?.message || 'Erro ao registrar pagamento');
     },
   });
+
+  const atualizarPagamentoMeeiroMut = useMutation({
+    mutationFn: async (vars: { id: number; data: AtualizarPagamentoMeeiroDto }) =>
+      controleRocaService.atualizarPagamentoMeeiro(vars.id, vars.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Pagamento atualizado.');
+      setOpenEditarPagamentoModal(false);
+      setMeeiroEditarPagamento(null);
+      setEditarPagamentoId(null);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Erro ao atualizar pagamento',
+      );
+    },
+  });
+
+  const abrirEditarPagamento = useCallback(async (m: ResumoPagamentoMeeiro) => {
+    const pid = m.ultimoPagamentoId;
+    if (pid == null || Number.isNaN(Number(pid))) {
+      toast.error('Não há pagamento registrado para editar.');
+      return;
+    }
+    setEditPagamentoLoadingMeeiroId(m.meeiroId);
+    try {
+      const hist = await controleRocaService.listarHistoricoPagamentosMeeiros({
+        meeiroId: m.meeiroId,
+        statusHistorico: 'concluido',
+        limit: 100,
+      });
+      const row = hist.items.find(
+        (i) => i.origem === 'pagamento' && Number(i.id) === Number(pid),
+      );
+      if (!row) {
+        toast.error('Não foi possível carregar o pagamento para edição.');
+        return;
+      }
+      const dataStr = String(row.dataPagamento ?? '').split('T')[0];
+      setMeeiroEditarPagamento(m);
+      setEditarPagamentoId(Number(pid));
+      setFormEditarPagamento({
+        dataPagamento: dataStr || getDataHojeLocal(),
+        formaPagamento: row.formaPagamento ?? 'PIX',
+        contaCaixa: row.contaCaixa ?? '',
+        observacao: row.observacao ?? '',
+        descEmprest:
+          row.descEmprest != null && !Number.isNaN(Number(row.descEmprest))
+            ? String(row.descEmprest)
+            : '',
+      });
+      setEditPagamentoHistoricoRow(row);
+      setOpenEditarPagamentoModal(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Erro ao carregar pagamento');
+    } finally {
+      setEditPagamentoLoadingMeeiroId(null);
+    }
+  }, []);
 
   const totalProdutoresAtivos = useMemo(
     () => produtores.filter((p) => p.ativo !== false).length,
@@ -2690,6 +2826,7 @@ export default function ControleRoca() {
                                       ),
                                       whatsapp: '',
                                       endereco: p.endereco ?? '',
+                                      inscricao_estadual: p.inscricao_estadual ?? '',
                                     });
                                     setTipoPessoaEdit(
                                       p.cpf_cnpj && cleanDocument(p.cpf_cnpj).length === 14
@@ -3371,6 +3508,7 @@ export default function ControleRoca() {
                                       telefone: m.telefone ?? '',
                                       pixChave: m.pixChave ?? '',
                                       endereco: m.endereco ?? '',
+                                      inscricaoEstadual: m.inscricaoEstadual ?? '',
                                       porcentagem_padrao: m.porcentagem_padrao,
                                       produtorId: m.produtorId,
                                     });
@@ -6236,86 +6374,109 @@ className={
                           <TableHead>Chave PIX</TableHead>
                           <TableHead className="text-right">Valor a receber</TableHead>
                           <TableHead className="text-right">Empréstimos em aberto</TableHead>
+                          <TableHead className="text-right">Desc emprést.</TableHead>
                           <TableHead className="text-right">Valor final a pagar</TableHead>
-                          <TableHead className="w-[100px] text-right">Ações</TableHead>
+                          <TableHead className="min-w-[150px] text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {totalPagamentoMeeirosLista === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                               Nenhum meeiro em aberto neste período (valor líquido a pagar ou empréstimo pendente, ainda não quitado no sistema). Verifique filtros, lançamentos e datas.
                             </TableCell>
                           </TableRow>
                         ) : (
                           (resumoPagamentoMeeiros?.items ?? []).map((m) => (
                             <TableRow key={m.meeiroId}>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  {apenasDividaEmprestimoSemProducaoRemanescente(m) && (
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <button
+                                  <TableCell className="font-medium">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {apenasDividaEmprestimoSemProducaoRemanescente(m) && (
+                                        <Popover>
+                                          <PopoverTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-amber-400 to-orange-600 p-0 text-white shadow-md ring-2 ring-amber-200/90 transition hover:from-amber-500 hover:to-orange-700 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:from-amber-500 dark:to-orange-600 dark:ring-amber-400/50"
+                                              aria-label="Entenda o saldo: só empréstimo em aberto, sem produção remanescente"
+                                            >
+                                              <AlertTriangle
+                                                className="h-4 w-4 drop-shadow-sm"
+                                                strokeWidth={2.5}
+                                                aria-hidden
+                                              />
+                                            </button>
+                                          </PopoverTrigger>
+                                          <PopoverContent className="max-w-md text-sm" align="start" side="bottom">
+                                            <p className="leading-relaxed text-foreground">
+                                              <span className="font-semibold">Só resta empréstimo em aberto.</span>{' '}
+                                              A produção deste período já foi considerada nos pagamentos; o valor final negativo
+                                              indica saldo de dívida, não pagamento em dinheiro. Para abater de novo por aqui, é
+                                              preciso ter{' '}
+                                              <span className="font-semibold">novos lançamentos</span> com valor a receber. Para
+                                              quitar a dívida em dinheiro, use o cadastro do meeiro em{' '}
+                                              <span className="font-semibold">Empréstimos</span>.
+                                            </p>
+                                          </PopoverContent>
+                                        </Popover>
+                                      )}
+                                      <span className="truncate">{m.nome}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
+                                    {m.chavePix || '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums">{formatCurrency(m.totalReceber)}</TableCell>
+                                  <TableCell className="text-right tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
+                                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                                    {formatCurrency(m.descEmprest ?? 0)}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1.5 flex-wrap">
+                                      {m.jaPago && m.ultimoPagamentoId != null && (
+                                        <Button
+                                          variant="secondary"
+                                          size="sm"
                                           type="button"
-                                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-amber-400 to-orange-600 p-0 text-white shadow-md ring-2 ring-amber-200/90 transition hover:from-amber-500 hover:to-orange-700 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:from-amber-500 dark:to-orange-600 dark:ring-amber-400/50"
-                                          aria-label="Entenda o saldo: só empréstimo em aberto, sem produção remanescente"
+                                          className="gap-1"
+                                          disabled={editPagamentoLoadingMeeiroId === m.meeiroId}
+                                          onClick={() => void abrirEditarPagamento(m)}
                                         >
-                                          <AlertTriangle
-                                            className="h-4 w-4 drop-shadow-sm"
-                                            strokeWidth={2.5}
-                                            aria-hidden
-                                          />
-                                        </button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="max-w-md text-sm" align="start" side="bottom">
-                                        <p className="leading-relaxed text-foreground">
-                                          <span className="font-semibold">Só resta empréstimo em aberto.</span>{' '}
-                                          A produção deste período já foi considerada nos pagamentos; o valor final negativo
-                                          indica saldo de dívida, não pagamento em dinheiro. Para abater de novo por aqui, é
-                                          preciso ter{' '}
-                                          <span className="font-semibold">novos lançamentos</span> com valor a receber. Para
-                                          quitar a dívida em dinheiro, use o cadastro do meeiro em{' '}
-                                          <span className="font-semibold">Empréstimos</span>.
-                                        </p>
-                                      </PopoverContent>
-                                    </Popover>
-                                  )}
-                                  <span className="truncate">{m.nome}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
-                                {m.chavePix || '—'}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalReceber)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
-                              <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={!podeRegistrarPagamentoMeeiro(m)}
-                                  title={
-                                    !podeRegistrarPagamentoMeeiro(m)
-                                      ? apenasDividaEmprestimoSemProducaoRemanescente(m)
-                                        ? 'Sem produção remanescente. Clique no ícone de alerta (triângulo) ao lado do nome.'
-                                        : 'É necessário valor de produção; se a dívida for maior, use Pagar para abater a produção nos empréstimos.'
-                                      : undefined
-                                  }
-                                  onClick={() => {
-                                    setMeeiroParaPagar(m);
-                                    setFormPagamento({
-                                      formaPagamento: 'PIX',
-                                      contaCaixa: '',
-                                      dataPagamento: getDataHojeLocal(),
-                                      observacao: '',
-                                      valorAbaterEmprestimo: '',
-                                    });
-                                    setOpenPagarModal(true);
-                                  }}
-                                >
-                                  Pagar
-                                </Button>
-                              </TableCell>
+                                          {editPagamentoLoadingMeeiroId === m.meeiroId ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : (
+                                            <Pencil className="w-4 h-4" />
+                                          )}
+                                          Editar
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={!podeRegistrarPagamentoMeeiro(m)}
+                                        title={
+                                          !podeRegistrarPagamentoMeeiro(m)
+                                            ? apenasDividaEmprestimoSemProducaoRemanescente(m)
+                                              ? 'Sem produção remanescente. Clique no ícone de alerta (triângulo) ao lado do nome.'
+                                              : 'É necessário valor de produção; se a dívida for maior, use Pagar para abater a produção nos empréstimos.'
+                                            : undefined
+                                        }
+                                        onClick={() => {
+                                          setMeeiroParaPagar(m);
+                                          setFormPagamento({
+                                            formaPagamento: 'PIX',
+                                            contaCaixa: '',
+                                            dataPagamento: getDataHojeLocal(),
+                                            observacao: '',
+                                            valorAbaterEmprestimo: valorAbaterEmprestimoInicialString(m),
+                                          });
+                                          setOpenPagarModal(true);
+                                        }}
+                                      >
+                                        Pagar
+                                      </Button>
+                                    </div>
+                                  </TableCell>
                             </TableRow>
                           ))
                         )}
@@ -6386,7 +6547,7 @@ className={
                           <TableHead className="w-[220px]">Chave PIX</TableHead>
                           <TableHead className="w-[180px] text-right">Valor total pago</TableHead>
                           <TableHead className="w-[140px] text-center">Teve empréstimo</TableHead>
-                          <TableHead className="w-[120px] text-right">Ações</TableHead>
+                          <TableHead className="min-w-[180px] text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -6419,18 +6580,37 @@ className={
                                 </span>
                               </TableCell>
                               <TableCell className="text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8"
-                                  onClick={() => {
-                                    setDetailMeeiroId(m.meeiroId);
-                                    setOpenDetailMeeiro(true);
-                                  }}
-                                >
-                                  <Eye className="w-4 h-4 mr-1" />
-                                  Ver detalhes
-                                </Button>
+                                <div className="flex justify-end gap-1.5 flex-wrap">
+                                  {m.ultimoPagamentoId != null && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      type="button"
+                                      className="h-8 gap-1"
+                                      disabled={editPagamentoLoadingMeeiroId === m.meeiroId}
+                                      onClick={() => void abrirEditarPagamento(m)}
+                                    >
+                                      {editPagamentoLoadingMeeiroId === m.meeiroId ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <Pencil className="w-4 h-4" />
+                                      )}
+                                      Editar
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8"
+                                    onClick={() => {
+                                      setDetailMeeiroId(m.meeiroId);
+                                      setOpenDetailMeeiro(true);
+                                    }}
+                                  >
+                                    <Eye className="w-4 h-4 mr-1" />
+                                    Ver detalhes
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))
@@ -7701,6 +7881,25 @@ className={
                   rows={2}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Inscrição estadual
+                  <span className="text-xs text-muted-foreground">(opcional)</span>
+                </Label>
+                <Input
+                  value={formProdutor.inscricao_estadual || ''}
+                  onChange={(e) =>
+                    setFormProdutor((p) => ({
+                      ...p,
+                      inscricao_estadual: e.target.value.slice(0, 30),
+                    }))
+                  }
+                  placeholder="Ex.: 123.456.789.012"
+                  maxLength={30}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenProdutor(false)}>
@@ -7721,6 +7920,7 @@ className={
                     codigo: formProdutor.codigo?.trim() || undefined,
                     telefone: telWa.telefone,
                     whatsapp: telWa.whatsapp,
+                    inscricao_estadual: formProdutor.inscricao_estadual?.trim() || undefined,
                   });
                 }}
                 disabled={createProdutor.isPending}
@@ -7786,6 +7986,12 @@ className={
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Telefone / WhatsApp</Label>
                       <p className="font-medium text-base">{detailProdutor.telefone || detailProdutor.whatsapp || '—'}</p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Inscrição estadual</Label>
+                      <p className="font-medium text-base font-mono">
+                        {detailProdutor.inscricao_estadual?.trim() || '—'}
+                      </p>
                     </div>
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
@@ -7893,6 +8099,7 @@ className={
                       ),
                       whatsapp: '',
                       endereco: detailProdutor.endereco ?? '',
+                      inscricao_estadual: detailProdutor.inscricao_estadual ?? '',
                     });
                     setTipoPessoaEdit(
                       detailProdutor.cpf_cnpj && cleanDocument(detailProdutor.cpf_cnpj).length === 14
@@ -8086,6 +8293,23 @@ className={
                     rows={2}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    Inscrição estadual <span className="text-xs text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    value={formEditProdutor.inscricao_estadual ?? ''}
+                    onChange={(e) =>
+                      setFormEditProdutor((p) => ({
+                        ...p,
+                        inscricao_estadual: e.target.value.slice(0, 30),
+                      }))
+                    }
+                    placeholder="Ex.: 123.456.789.012"
+                    maxLength={30}
+                  />
+                </div>
               </div>
             )}
             <DialogFooter>
@@ -8113,6 +8337,8 @@ className={
                       whatsapp: telWaEdit.whatsapp,
                       // Permite enviar endereço vazio para limpar o campo
                       endereco: formEditProdutor.endereco?.trim() ?? '',
+                      inscricao_estadual:
+                        (formEditProdutor.inscricao_estadual ?? '').trim() || null,
                     },
                   });
                 }}
@@ -8950,6 +9176,7 @@ className={
               telefone: '',
               pixChave: '',
               endereco: '',
+              inscricaoEstadual: '',
               porcentagem_padrao: 40,
               produtorId: 0,
             });
@@ -9144,6 +9371,25 @@ className={
                     rows={2}
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    Inscrição estadual
+                    <span className="text-xs text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    value={formMeeiro.inscricaoEstadual || ''}
+                    onChange={(e) =>
+                      setFormMeeiro((p) => ({
+                        ...p,
+                        inscricaoEstadual: e.target.value.slice(0, 30),
+                      }))
+                    }
+                    placeholder="Ex.: 123.456.789.012"
+                    maxLength={30}
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -9161,6 +9407,7 @@ className={
                     ...formMeeiro,
                     codigo: formMeeiro.codigo?.toString().trim() || undefined,
                     pixChave: formMeeiro.pixChave?.trim() || undefined,
+                    inscricaoEstadual: formMeeiro.inscricaoEstadual?.trim() || undefined,
                   });
                 }}
                 disabled={createMeeiro.isPending}
@@ -9231,6 +9478,12 @@ className={
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Telefone</Label>
                       <p className="font-medium text-base">{detailMeeiro.telefone || '—'}</p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Inscrição estadual</Label>
+                      <p className="font-medium text-base font-mono">
+                        {detailMeeiro.inscricaoEstadual?.trim() || '—'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -9428,6 +9681,7 @@ className={
                         telefone: detailMeeiro.telefone ?? '',
                         pixChave: detailMeeiro.pixChave ?? '',
                         endereco: detailMeeiro.endereco ?? '',
+                        inscricaoEstadual: detailMeeiro.inscricaoEstadual ?? '',
                         porcentagem_padrao: detailMeeiro.porcentagem_padrao,
                         produtorId: detailMeeiro.produtorId,
                       });
@@ -9766,6 +10020,25 @@ className={
                       rows={2}
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      Inscrição estadual
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      value={formEditMeeiro.inscricaoEstadual ?? ''}
+                      onChange={(e) =>
+                        setFormEditMeeiro((p) => ({
+                          ...p,
+                          inscricaoEstadual: e.target.value.slice(0, 30),
+                        }))
+                      }
+                      placeholder="Ex.: 123.456.789.012"
+                      maxLength={30}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -9781,6 +10054,7 @@ className={
                     toast.error('Nome e produtor são obrigatórios');
                     return;
                   }
+                  const ieTrim = (formEditMeeiro.inscricaoEstadual ?? '').trim();
                   updateMeeiro.mutate({
                     id: editMeeiro.id,
                     data: {
@@ -9790,6 +10064,7 @@ className={
                       telefone: formEditMeeiro.telefone || undefined,
                       pixChave: formEditMeeiro.pixChave?.trim() || undefined,
                       endereco: formEditMeeiro.endereco || undefined,
+                      inscricaoEstadual: ieTrim === '' ? null : ieTrim,
                       porcentagem_padrao:
                         formEditMeeiro.porcentagem_padrao ?? editMeeiro.porcentagem_padrao,
                       produtorId: formEditMeeiro.produtorId || editMeeiro.produtorId,
@@ -9865,20 +10140,13 @@ className={
                     </span>
                   </div>
                   {(() => {
-                    const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
-                    const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
-                    const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                    const disponivel = Math.max(0, totalReceber - valesEmb);
-                    const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
-                    const vRaw = formPagamento.valorAbaterEmprestimo;
-                    const v = vRaw === '' ? 0 : Number(vRaw);
-                    const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
-                    if (totalEmp <= 0) return null;
+                    const p = parsePagamentoMeeiroResumoForm(meeiroParaPagar, formPagamento);
+                    if (p.totalEmp <= 0) return null;
                     return (
                       <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-4 border-b border-border/40 items-start sm:items-center">
                         <span className="text-muted-foreground">Abater do empréstimo (neste pagamento)</span>
                         <span className="text-foreground font-medium tabular-nums text-left sm:text-right">
-                          {formatCurrency(vSafe)}
+                          {formatCurrency(p.vSafe)}
                         </span>
                       </div>
                     );
@@ -9889,30 +10157,14 @@ className={
                       className={cn(
                         'font-semibold tabular-nums text-left sm:text-right text-lg',
                         (() => {
-                          const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
-                          const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
-                          const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                          const disponivel = Math.max(0, totalReceber - valesEmb);
-                          const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
-                          const vRaw = formPagamento.valorAbaterEmprestimo;
-                          const v = vRaw === '' ? 0 : Number(vRaw);
-                          const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
-                          const final = Math.max(0, totalReceber - valesEmb - vSafe);
-                          return final < 0 ? 'text-amber-700 dark:text-amber-300' : 'text-primary';
+                          const p = parsePagamentoMeeiroResumoForm(meeiroParaPagar, formPagamento);
+                          return p.liquido < 0 ? 'text-amber-700 dark:text-amber-300' : 'text-primary';
                         })(),
                       )}
                     >
-                      {(() => {
-                        const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
-                        const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
-                        const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                        const disponivel = Math.max(0, totalReceber - valesEmb);
-                        const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
-                        const vRaw = formPagamento.valorAbaterEmprestimo;
-                        const v = vRaw === '' ? 0 : Number(vRaw);
-                        const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
-                        return formatCurrency(Math.max(0, totalReceber - valesEmb - vSafe));
-                      })()}
+                      {formatCurrency(
+                        parsePagamentoMeeiroResumoForm(meeiroParaPagar, formPagamento).liquido,
+                      )}
                     </span>
                   </div>
                   {(meeiroParaPagar.totalEmprestimosAbertos ?? 0) > 0 && (
@@ -9923,12 +10175,8 @@ className={
                   )}
                 </div>
                 {(() => {
-                  const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
-                  const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
-                  const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                  const disponivel = Math.max(0, totalReceber - valesEmb);
-                  const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
-                  if (totalEmp <= 0) return null;
+                  const p = parsePagamentoMeeiroResumoForm(meeiroParaPagar, formPagamento);
+                  if (p.totalEmp <= 0) return null;
                   return (
                     <div className="space-y-4">
                       <Label className="text-base font-medium">Valor a abater do empréstimo (opcional)</Label>
@@ -9937,19 +10185,19 @@ className={
                         type="number"
                         inputMode="decimal"
                         min={0}
-                        max={maxAbater}
+                        max={p.maxAbater}
                         step="0.01"
-                        placeholder={`Máx: ${formatCurrency(maxAbater)}`}
+                        placeholder={`Máx: ${formatCurrency(p.maxAbater)}`}
                         value={formPagamento.valorAbaterEmprestimo}
                         onChange={(e) => {
                           const raw = e.target.value;
-                          // mantém string para UX; valida/clampa no submit e no resumo acima
-                          setFormPagamento((p) => ({ ...p, valorAbaterEmprestimo: raw }));
+                          setFormPagamento((prev) => ({ ...prev, valorAbaterEmprestimo: raw }));
                         }}
                       />
                       <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                         Máximo (empréstimo e produção líquida após embalagem):{' '}
-                        <span className="font-medium">{formatCurrency(maxAbater)}</span>
+                        <span className="font-medium">{formatCurrency(p.maxAbater)}</span>. Se a grade tiver{' '}
+                        <span className="font-medium">Desc emprést.</span>, esse valor é sugerido aqui (até o teto).
                       </p>
                     </div>
                   );
@@ -10100,14 +10348,7 @@ className={
                 disabled={registrarPagamento.isPending || !meeiroParaPagar || !formPagamento.dataPagamento}
                 onClick={() => {
                   if (!meeiroParaPagar || !formPagamento.dataPagamento) return;
-                  const totalReceber = Number(meeiroParaPagar.totalReceber ?? 0);
-                  const valesEmb = Number(meeiroParaPagar.valesEmbalagem ?? 0);
-                  const totalEmp = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                  const disponivel = Math.max(0, totalReceber - valesEmb);
-                  const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
-                  const vRaw = formPagamento.valorAbaterEmprestimo;
-                  const v = vRaw === '' ? 0 : Number(vRaw);
-                  const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
+                  const p = parsePagamentoMeeiroResumoForm(meeiroParaPagar, formPagamento);
                   registrarPagamento.mutate({
                     gerarComprovantePdf: true,
                     data: {
@@ -10116,13 +10357,248 @@ className={
                       contaCaixa: formPagamento.contaCaixa?.trim() || undefined,
                       dataPagamento: formPagamento.dataPagamento,
                       observacao: formPagamento.observacao?.trim() || undefined,
-                      ...(vSafe > 0 ? { valorAbaterEmprestimo: vSafe } : {}),
+                      ...(p.vSafe > 0 ? { valorAbaterEmprestimo: p.vSafe } : {}),
                     },
                   });
                 }}
               >
                 {registrarPagamento.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Confirmar e baixar comprovante
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog Editar pagamento (último registro do meeiro) */}
+        <Dialog
+          open={openEditarPagamentoModal}
+          onOpenChange={(open) => {
+            setOpenEditarPagamentoModal(open);
+            if (!open) {
+              setMeeiroEditarPagamento(null);
+              setEditarPagamentoId(null);
+              setEditPagamentoHistoricoRow(null);
+            }
+          }}
+        >
+          <DialogContent className="w-[calc(100%-1rem)] max-w-4xl gap-8 p-6 sm:p-10 max-h-[min(96dvh,920px)] overflow-y-auto">
+            <DialogHeader className="space-y-3 sm:space-y-4 pr-10">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="space-y-2">
+                  <DialogTitle className="text-2xl sm:text-3xl font-semibold tracking-tight">
+                    Editar pagamento
+                  </DialogTitle>
+                  <DialogDescription className="text-base sm:text-lg leading-relaxed text-muted-foreground">
+                    {meeiroEditarPagamento
+                      ? `Pagamento para ${meeiroEditarPagamento.nome}`
+                      : 'Confirme os dados do pagamento.'}
+                  </DialogDescription>
+                </div>
+                {editarPagamentoId != null && (
+                  <span className="shrink-0 self-start rounded-lg border border-border/80 bg-muted/50 px-3 py-1.5 font-mono text-xs tabular-nums text-muted-foreground">
+                    Registro #{editarPagamentoId}
+                  </span>
+                )}
+              </div>
+            </DialogHeader>
+
+            {meeiroEditarPagamento && editPagamentoHistoricoRow && editarPagamentoId != null && (
+              <div className="space-y-10 pt-1">
+                {(() => {
+                  const m = meeiroEditarPagamento;
+                  const h = editPagamentoHistoricoRow;
+                  const trGrade = Number(m.totalReceber ?? 0);
+                  const valesGrade = Number(m.valesEmbalagem ?? 0);
+                  const empAbertoGrade = Number(m.totalEmprestimosAbertos ?? 0);
+                  const descGrade = Number(m.descEmprest ?? 0);
+                  const liqGrade = Number(m.valorLiquido ?? 0);
+                  const abatUltimo = Number(m.ultimoPagamentoValorAbatidoEmprestimo ?? 0);
+
+                  /** Mesma regra do backend para o último pagamento: remanescente atual − embalagem − abatido no registro. */
+                  const maxDescEmprest = Math.max(0, trGrade - valesGrade - abatUltimo);
+
+                  return (
+                    <>
+                      <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-sm space-y-3">
+                        <p className="font-medium text-foreground leading-snug">
+                          Mesmos valores da linha do meeiro na grade (Em aberto)
+                        </p>
+                        <ul className="space-y-1.5 text-muted-foreground">
+                          <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                            <span>Valor a receber</span>
+                            <span className="tabular-nums font-medium text-foreground">
+                              {formatCurrency(trGrade)}
+                            </span>
+                          </li>
+                          <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                            <span>Vale de embalagem</span>
+                            <span className="tabular-nums">{formatCurrency(valesGrade)}</span>
+                          </li>
+                          <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                            <span>Empréstimos em aberto</span>
+                            <span className="tabular-nums">{formatCurrency(empAbertoGrade)}</span>
+                          </li>
+                          <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                            <span>Desc emprést. (último pagamento)</span>
+                            <span className="tabular-nums">{formatCurrency(descGrade)}</span>
+                          </li>
+                          <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                            <span>Valor final a pagar</span>
+                            <span className="tabular-nums font-medium text-foreground">
+                              {formatCurrency(liqGrade)}
+                            </span>
+                          </li>
+                          {abatUltimo > 0 && (
+                            <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5 text-xs">
+                              <span>Abatido do empréstimo no último registro</span>
+                              <span className="tabular-nums">{formatCurrency(abatUltimo)}</span>
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                      <div className="space-y-4">
+                        <Label className="text-base font-medium" htmlFor="edit-pag-desc-emprest">
+                          Desconto empréstimo (opcional)
+                        </Label>
+                        <Input
+                          id="edit-pag-desc-emprest"
+                          className="h-11"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={maxDescEmprest}
+                          step="0.01"
+                          placeholder={`Máx: ${formatCurrency(maxDescEmprest)}`}
+                          value={formEditarPagamento.descEmprest}
+                          onChange={(e) =>
+                            setFormEditarPagamento((p) => ({ ...p, descEmprest: e.target.value }))
+                          }
+                        />
+                        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                          Não altera o abatimento já registrado nesse pagamento.
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                <div className="space-y-4">
+                  <p className="text-sm font-medium text-foreground">Dados do pagamento</p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-base font-medium">Forma de pagamento</Label>
+                      <Select
+                        value={formEditarPagamento.formaPagamento}
+                        onValueChange={(v) =>
+                          setFormEditarPagamento((p) => ({ ...p, formaPagamento: v }))
+                        }
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PIX">PIX</SelectItem>
+                          <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                          <SelectItem value="Transferência">Transferência</SelectItem>
+                          <SelectItem value="Outro">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-base font-medium">Data do pagamento</Label>
+                      <Input
+                        className="h-11"
+                        type="date"
+                        value={formEditarPagamento.dataPagamento}
+                        onChange={(e) =>
+                          setFormEditarPagamento((p) => ({ ...p, dataPagamento: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Conta ou caixa utilizado (opcional)</Label>
+                    <Input
+                      className="h-11"
+                      value={formEditarPagamento.contaCaixa}
+                      onChange={(e) =>
+                        setFormEditarPagamento((p) => ({ ...p, contaCaixa: e.target.value }))
+                      }
+                      placeholder="Ex: Caixa Geral"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Observação (opcional)</Label>
+                    <Textarea
+                      value={formEditarPagamento.observacao}
+                      onChange={(e) =>
+                        setFormEditarPagamento((p) => ({ ...p, observacao: e.target.value }))
+                      }
+                      rows={3}
+                      placeholder="Observação"
+                      className="min-h-[5.5rem] resize-y leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="flex-col-reverse gap-3 border-t border-border/60 pt-6 sm:flex-row sm:justify-end sm:gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setOpenEditarPagamentoModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="gradient"
+                className="w-full sm:w-auto"
+                disabled={
+                  atualizarPagamentoMeeiroMut.isPending ||
+                  editarPagamentoId == null ||
+                  !formEditarPagamento.dataPagamento ||
+                  !editPagamentoHistoricoRow
+                }
+                onClick={() => {
+                  if (editarPagamentoId == null || !formEditarPagamento.dataPagamento) return;
+                  const h = editPagamentoHistoricoRow;
+                  const m = meeiroEditarPagamento;
+                  if (!h || !m) return;
+                  const maxDescEmprest = Math.max(
+                    0,
+                    Number(m.totalReceber ?? 0) -
+                      Number(m.valesEmbalagem ?? 0) -
+                      Number(m.ultimoPagamentoValorAbatidoEmprestimo ?? 0),
+                  );
+                  const rawDesc = formEditarPagamento.descEmprest.trim();
+                  const descNum = rawDesc === '' ? 0 : Number(rawDesc.replace(',', '.'));
+                  if (!Number.isFinite(descNum) || descNum < 0) {
+                    toast.error('Informe um desconto de empréstimo válido (≥ 0).');
+                    return;
+                  }
+                  if (descNum > maxDescEmprest + 0.01) {
+                    toast.error(
+                      `O desconto não pode ser maior que ${formatCurrency(maxDescEmprest)}.`,
+                    );
+                    return;
+                  }
+                  const payload: AtualizarPagamentoMeeiroDto = {
+                    dataPagamento: formEditarPagamento.dataPagamento,
+                    formaPagamento: formEditarPagamento.formaPagamento,
+                    contaCaixa: formEditarPagamento.contaCaixa?.trim() || undefined,
+                    observacao: formEditarPagamento.observacao?.trim() || undefined,
+                    descEmprest: descNum,
+                  };
+                  atualizarPagamentoMeeiroMut.mutate({ id: editarPagamentoId, data: payload });
+                }}
+              >
+                {atualizarPagamentoMeeiroMut.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                Salvar alterações
               </Button>
             </DialogFooter>
           </DialogContent>

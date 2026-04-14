@@ -10,6 +10,7 @@ export interface ProdutorRoca {
   telefone?: string;
   whatsapp?: string;
   endereco?: string;
+  inscricao_estadual?: string | null;
   ativo?: boolean;
   criadoEm?: string;
   atualizadoEm?: string;
@@ -23,6 +24,7 @@ export interface CreateProdutorRocaDto {
   telefone?: string;
   whatsapp?: string;
   endereco?: string;
+  inscricao_estadual?: string;
 }
 
 export interface UpdateProdutorRocaDto {
@@ -32,6 +34,7 @@ export interface UpdateProdutorRocaDto {
   telefone?: string;
   whatsapp?: string;
   endereco?: string;
+  inscricao_estadual?: string | null;
   ativo?: boolean;
 }
 
@@ -97,6 +100,7 @@ export interface MeeiroRoca {
   telefone?: string;
   pixChave?: string;
   endereco?: string;
+  inscricaoEstadual?: string | null;
   porcentagem_padrao: number;
   produtorId: number;
   criadoEm?: string;
@@ -135,6 +139,7 @@ export interface CreateMeeiroRocaDto {
   /** Chave PIX (CPF, celular, e-mail ou chave aleatória), opcional, até 140 caracteres. */
   pixChave?: string;
   endereco?: string;
+  inscricaoEstadual?: string;
   porcentagem_padrao: number;
   produtorId: number;
 }
@@ -146,6 +151,7 @@ export interface UpdateMeeiroRocaDto {
   telefone?: string;
   pixChave?: string;
   endereco?: string;
+  inscricaoEstadual?: string | null;
   porcentagem_padrao?: number;
   produtorId?: number;
 }
@@ -213,6 +219,15 @@ export interface ResumoPagamentoMeeiro {
   valorBasePagamento?: number | null;
   /** Se em algum pagamento havia empréstimo a descontar. */
   teveEmprestimoNoPagamento?: boolean;
+  /** Desconto de empréstimo informado no último pagamento (ex.: para exibir na grade). */
+  descEmprest?: number;
+  /** ID do registro de pagamento mais recente (para editar via PATCH). */
+  ultimoPagamentoId?: number | null;
+  /** Snapshot do último pagamento em `tb_roca_pagamento_meeiro` (alinhado ao modal Editar). */
+  ultimoPagamentoValesEmbalagem?: number | null;
+  ultimoPagamentoTotalEmprestimosRegistro?: number | null;
+  ultimoPagamentoValorAbatidoEmprestimo?: number | null;
+  ultimoPagamentoValorLiquido?: number | null;
 }
 
 export interface ResumoPagamentoMeeirosResponse {
@@ -235,6 +250,17 @@ export interface RegistrarPagamentoMeeiroDto {
   observacao?: string;
   /** Valor digitado pelo usuário para abater dos empréstimos em aberto. */
   valorAbaterEmprestimo?: number;
+  /** Desconto de empréstimo (reduz o valor líquido). */
+  descEmprest?: number;
+}
+
+/** Payload para PATCH /pagamentos-meeiros/:id */
+export interface AtualizarPagamentoMeeiroDto {
+  dataPagamento?: string;
+  formaPagamento?: string;
+  contaCaixa?: string;
+  observacao?: string;
+  descEmprest?: number;
 }
 
 export interface RegistrarPagamentoMeeiroResponse {
@@ -270,6 +296,7 @@ export interface HistoricoPagamentoMeeiroItem {
   valorLiquido: number | null;
   valesEmbalagem: number | null;
   valorAbatidoEmprestimo: number | null;
+  descEmprest?: number | null;
   createdAt?: string;
   meeiroNome: string;
   meeiroCodigo?: string | null;

@@ -12,6 +12,7 @@ import type {
     MeeiroRoca,
     ProdutoRoca,
     ProdutorRoca,
+    AtualizarPagamentoMeeiroDto,
     RegistrarPagamentoMeeiroDto,
     RegistrarPagamentoMeeiroResponse,
     RelatorioMeeiroResponse,
@@ -264,6 +265,25 @@ class ControleRocaService {
       `${BASE}/pagamentos-meeiros`,
       data
     );
+  }
+
+  async atualizarPagamentoMeeiro(
+    pagamentoId: number,
+    data: AtualizarPagamentoMeeiroDto
+  ): Promise<{
+    pagamentoId: number;
+    meeiroId: number;
+    dataPagamento: string;
+    formaPagamento: string;
+    contaCaixa: string | null;
+    observacao: string | null;
+    totalReceber: number;
+    valesEmbalagem: number;
+    valorAbatidoEmprestimo: number;
+    descEmprest: number;
+    valorLiquido: number;
+  }> {
+    return apiClient.patch(`${BASE}/pagamentos-meeiros/${pagamentoId}`, data);
   }
 
   async listarHistoricoPagamentosMeeiros(params?: {
