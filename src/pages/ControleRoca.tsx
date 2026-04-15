@@ -6432,49 +6432,62 @@ className={
                                   </TableCell>
                                   <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
                                   <TableCell className="text-right">
-                                    <div className="flex justify-end gap-1.5 flex-wrap">
-                                      {m.jaPago && m.ultimoPagamentoId != null && (
-                                        <Button
-                                          variant="secondary"
-                                          size="sm"
-                                          type="button"
-                                          className="gap-1"
-                                          disabled={editPagamentoLoadingMeeiroId === m.meeiroId}
-                                          onClick={() => void abrirEditarPagamento(m)}
-                                        >
-                                          {editPagamentoLoadingMeeiroId === m.meeiroId ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                          ) : (
-                                            <Pencil className="w-4 h-4" />
-                                          )}
-                                          Editar
-                                        </Button>
-                                      )}
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={!podeRegistrarPagamentoMeeiro(m)}
-                                        title={
-                                          !podeRegistrarPagamentoMeeiro(m)
-                                            ? apenasDividaEmprestimoSemProducaoRemanescente(m)
-                                              ? 'Sem produção remanescente. Clique no ícone de alerta (triângulo) ao lado do nome.'
-                                              : 'É necessário valor de produção; se a dívida for maior, use Pagar para abater a produção nos empréstimos.'
-                                            : undefined
-                                        }
-                                        onClick={() => {
-                                          setMeeiroParaPagar(m);
-                                          setFormPagamento({
-                                            formaPagamento: 'PIX',
-                                            contaCaixa: '',
-                                            dataPagamento: getDataHojeLocal(),
-                                            observacao: '',
-                                            valorAbaterEmprestimo: valorAbaterEmprestimoInicialString(m),
-                                          });
-                                          setOpenPagarModal(true);
-                                        }}
-                                      >
-                                        Pagar
-                                      </Button>
+                                    <div className="flex justify-end">
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            type="button"
+                                            className="h-8 w-8"
+                                            aria-label={`Ações de ${m.nome}`}
+                                          >
+                                            <MoreHorizontal className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="min-w-[170px]">
+                                          <DropdownMenuItem
+                                            disabled={!(m.jaPago && m.ultimoPagamentoId != null)}
+                                            onClick={() => {
+                                              if (m.jaPago && m.ultimoPagamentoId != null) {
+                                                void abrirEditarPagamento(m);
+                                              }
+                                            }}
+                                          >
+                                            {editPagamentoLoadingMeeiroId === m.meeiroId ? (
+                                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            ) : (
+                                              <Pencil className="w-4 h-4 mr-2" />
+                                            )}
+                                            Editar
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            disabled={!podeRegistrarPagamentoMeeiro(m)}
+                                            onClick={() => {
+                                              if (!podeRegistrarPagamentoMeeiro(m)) return;
+                                              setMeeiroParaPagar(m);
+                                              setFormPagamento({
+                                                formaPagamento: 'PIX',
+                                                contaCaixa: '',
+                                                dataPagamento: getDataHojeLocal(),
+                                                observacao: '',
+                                                valorAbaterEmprestimo: valorAbaterEmprestimoInicialString(m),
+                                              });
+                                              setOpenPagarModal(true);
+                                            }}
+                                            title={
+                                              !podeRegistrarPagamentoMeeiro(m)
+                                                ? apenasDividaEmprestimoSemProducaoRemanescente(m)
+                                                  ? 'Sem produção remanescente. Clique no ícone de alerta (triângulo) ao lado do nome.'
+                                                  : 'É necessário valor de produção; se a dívida for maior, use Pagar para abater a produção nos empréstimos.'
+                                                : undefined
+                                            }
+                                          >
+                                            <Wallet className="w-4 h-4 mr-2" />
+                                            Pagar
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     </div>
                                   </TableCell>
                             </TableRow>
