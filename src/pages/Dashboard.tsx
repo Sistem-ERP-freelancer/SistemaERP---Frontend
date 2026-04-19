@@ -19,22 +19,35 @@ import {
     BarChart3,
     Calendar,
     Info,
+    ListFilter,
     Loader2,
     Scale,
     ShoppingCart,
     TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 type PainelMetricKind = "compras" | "vendas" | "saldo";
+
+/** Recorte da 3ª faixa quando "Todos os meses" (histórico geral). */
+type PainelTotaisGeraisModo = "emissao" | "pagos" | "a_receber";
 
 function painelMetricKindFromLegenda(legenda: string): PainelMetricKind {
   const l = legenda.toLowerCase();
   if (l.includes("saldo")) return "saldo";
+  if (l.includes("receber") && l.includes("aberto")) return "vendas";
   if (l.includes("recebido")) return "vendas";
   if (l.includes("venda")) return "vendas";
+  if (l.includes("pagar") && l.includes("aberto")) return "compras";
   if (l.includes("compra")) return "compras";
   return "compras";
 }
@@ -92,6 +105,16 @@ function mesAnoAtualLocal(): string {
 const Dashboard = () => {
   /** Vazio = totais da 3ª faixa são histórico geral; linhas 1–2 usam o mês atual como referência. */
   const [mesAnoFiltro, setMesAnoFiltro] = useState<string>("");
+  /** Só aplicado com "Todos os meses" (`painel_totais_gerais` no backend). */
+  const [totaisGeraisModo, setTotaisGeraisModo] =
+    useState<PainelTotaisGeraisModo>("emissao");
+
+  useEffect(() => {
+    if (mesAnoFiltro.trim()) {
+      setTotaisGeraisModo("emissao");
+    }
+  }, [mesAnoFiltro]);
+
   const refMesYyyyMm = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
     return mesEscolhido || mesAnoAtualLocal();
@@ -104,15 +127,24 @@ const Dashboard = () => {
     const [ano, mes] = ref;
     const primeiro = new Date(ano, mes - 1, 1);
     const ultimo = new Date(ano, mes, 0);
+    const painelHistorico = !mesEscolhido;
     return {
       data_inicial: formatISODateLocal(primeiro),
       data_final: formatISODateLocal(ultimo),
-      painel_totais_gerais: !mesEscolhido,
+      painel_totais_gerais: painelHistorico,
+      ...(painelHistorico && totaisGeraisModo !== "emissao"
+        ? { painel_totais_gerais_modo: totaisGeraisModo }
+        : {}),
     };
-  }, [mesAnoFiltro]);
+  }, [mesAnoFiltro, totaisGeraisModo]);
 
   const { data: dashboardUnificado, isLoading: loadingUnificado } = useQuery({
-    queryKey: ['dashboard', 'unificado', parametrosDashboardFinanceiro],
+    queryKey: [
+      "dashboard",
+      "unificado",
+      parametrosDashboardFinanceiro,
+      totaisGeraisModo,
+    ],
     queryFn: () => financeiroService.getDashboardUnificado(parametrosDashboardFinanceiro),
     refetchInterval: 30000,
     retry: false,
@@ -157,6 +189,95 @@ const Dashboard = () => {
       },
     };
   }, [dashboardUnificado]);
+
+  const painelBlocos = useMemo(() => {
+    if (!painelFinanceiro) return null;
+    const f = painelFinanceiro;
+    const mesEscolhido = mesAnoFiltro.trim();
+    const usarHistorico = !mesEscolhido;
+
+    let totaisCelulas: { legenda: string; valor: number }[];
+    let totaisSubtitulo: string;
+    if (!usarHistorico) {
+      totaisCelulas = [
+        { legenda: "Total pago", valor: f.linha_totais_periodo.compras },
+        { legenda: "Total recebido", valor: f.linha_totais_periodo.vendas },
+        { legenda: "saldo do período", valor: f.linha_totais_periodo.saldo },
+      ];
+      totaisSubtitulo =
+        "Fechamento de referência no período selecionado (competência).";
+    } else if (totaisGeraisModo === "pagos") {
+      const pagoTotal =
+        f.linha_totais_periodo.compras + f.linha_totais_periodo.despesas;
+      totaisCelulas = [
+        { legenda: "Total pago", valor: pagoTotal },
+        { legenda: "Total recebido", valor: f.linha_totais_periodo.vendas },
+        {
+          legenda: "Saldo (caixa acumulado)",
+          valor: f.linha_totais_periodo.saldo,
+        },
+      ];
+      totaisSubtitulo =
+        "Caixa acumulado: pagamentos em contas a pagar, recebimentos de vendas e despesas pagas (centro de custo).";
+    } else if (totaisGeraisModo === "a_receber") {
+      totaisCelulas = [
+        {
+          legenda: "A pagar (em aberto)",
+          valor: f.linha_totais_periodo.compras,
+        },
+        {
+          legenda: "A receber (em aberto)",
+          valor: f.linha_totais_periodo.vendas,
+        },
+        { legenda: "Saldo em aberto", valor: f.linha_totais_periodo.saldo },
+      ];
+      totaisSubtitulo =
+        "Soma do valor em aberto nas contas a pagar e a receber (pendente de quitação).";
+    } else {
+      totaisCelulas = [
+        { legenda: "Total pago", valor: f.linha_totais_periodo.compras },
+        { legenda: "Total recebido", valor: f.linha_totais_periodo.vendas },
+        { legenda: "saldo do período", valor: f.linha_totais_periodo.saldo },
+      ];
+      totaisSubtitulo =
+        "Acumulado de todas as competências no sistema (independente do mês das linhas acima).";
+    }
+
+    return [
+      {
+        etapa: 1 as const,
+        pill: "Competência",
+        titulo: "Lançamentos no mês",
+        subtitulo:
+          "Recorte por data de emissão da conta no período (competência contábil).",
+        celulas: [
+          { legenda: "compras do mês", valor: f.linha_registrado.compras },
+          { legenda: "venda do mês", valor: f.linha_registrado.vendas },
+          { legenda: "saldo do mês", valor: f.linha_registrado.saldo },
+        ],
+      },
+      {
+        etapa: 2 as const,
+        pill: "Caixa",
+        titulo: "Pago / recebido no período",
+        subtitulo:
+          "Efetivação financeira conforme datas de pagamento e recebimentos.",
+        celulas: [
+          { legenda: "compras paga", valor: f.linha_caixa.compras },
+          { legenda: "vendas recebida", valor: f.linha_caixa.vendas },
+          { legenda: "saldo", valor: f.linha_caixa.saldo },
+        ],
+      },
+      {
+        etapa: 3 as const,
+        pill: "Totais",
+        titulo: usarHistorico ? "Totais gerais" : "Totais no período",
+        subtitulo: totaisSubtitulo,
+        celulas: totaisCelulas,
+        mostrarFiltroTotais: usarHistorico,
+      },
+    ];
+  }, [painelFinanceiro, mesAnoFiltro, totaisGeraisModo]);
 
   // Buscar pedidos recentes (vendas)
   const { data: pedidosData, isLoading: loadingPedidos } = useQuery({
@@ -291,78 +412,9 @@ const Dashboard = () => {
                 Não foi possível carregar o resumo unificado. Verifique o endpoint{' '}
                 <code className="text-xs bg-muted px-1 rounded">GET /financeiro/dashboard</code>.
               </p>
-            ) : painelFinanceiro ? (
+            ) : painelFinanceiro && painelBlocos ? (
               <div className="space-y-6 sm:space-y-8">
-                {(
-                  [
-                    {
-                      etapa: 1 as const,
-                      pill: "Competência",
-                      titulo: "Lançamentos no mês",
-                      subtitulo:
-                        "Recorte por data de emissão da conta no período (competência contábil).",
-                      celulas: [
-                        {
-                          legenda: "compras do mês",
-                          valor: painelFinanceiro.linha_registrado.compras,
-                        },
-                        {
-                          legenda: "venda do mês",
-                          valor: painelFinanceiro.linha_registrado.vendas,
-                        },
-                        {
-                          legenda: "saldo do mês",
-                          valor: painelFinanceiro.linha_registrado.saldo,
-                        },
-                      ],
-                    },
-                    {
-                      etapa: 2 as const,
-                      pill: "Caixa",
-                      titulo: "Pago / recebido no período",
-                      subtitulo:
-                        "Efetivação financeira conforme datas de pagamento e recebimentos.",
-                      celulas: [
-                        {
-                          legenda: "compras paga",
-                          valor: painelFinanceiro.linha_caixa.compras,
-                        },
-                        {
-                          legenda: "vendas recebida",
-                          valor: painelFinanceiro.linha_caixa.vendas,
-                        },
-                        {
-                          legenda: "saldo",
-                          valor: painelFinanceiro.linha_caixa.saldo,
-                        },
-                      ],
-                    },
-                    {
-                      etapa: 3 as const,
-                      pill: "Totais",
-                      titulo: mesAnoFiltro.trim()
-                        ? "Totais no período"
-                        : "Totais gerais",
-                      subtitulo: mesAnoFiltro.trim()
-                        ? "Fechamento de referência no período selecionado (competência)."
-                        : "Acumulado de todas as competências no sistema (independente do mês das linhas acima).",
-                      celulas: [
-                        {
-                          legenda: "Total pago",
-                          valor: painelFinanceiro.linha_totais_periodo.compras,
-                        },
-                        {
-                          legenda: "Total recebido",
-                          valor: painelFinanceiro.linha_totais_periodo.vendas,
-                        },
-                        {
-                          legenda: "saldo do período",
-                          valor: painelFinanceiro.linha_totais_periodo.saldo,
-                        },
-                      ],
-                    },
-                  ] as const
-                ).map((bloco, blocoIdx) => (
+                {painelBlocos.map((bloco, blocoIdx) => (
                   <motion.section
                     key={bloco.titulo}
                     initial={{ opacity: 0, y: 8 }}
@@ -409,6 +461,41 @@ const Dashboard = () => {
                               </span>
                             ) : null}
                           </div>
+                        </div>
+                      ) : null}
+                      {bloco.etapa === 3 &&
+                      "mostrarFiltroTotais" in bloco &&
+                      bloco.mostrarFiltroTotais ? (
+                        <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[18rem] dark:bg-background/50">
+                          <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <ListFilter className="h-3.5 w-3.5 opacity-70" />
+                            Visão dos totais gerais
+                          </Label>
+                          <Select
+                            value={totaisGeraisModo}
+                            onValueChange={(v) =>
+                              setTotaisGeraisModo(v as PainelTotaisGeraisModo)
+                            }
+                          >
+                            <SelectTrigger
+                              id="dashboard-totais-gerais-modo"
+                              className="h-10"
+                              aria-label="Filtro da seção totais gerais"
+                            >
+                              <SelectValue placeholder="Escolher visão" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="emissao">
+                                Faturamento (competência acumulada)
+                              </SelectItem>
+                              <SelectItem value="pagos">
+                                Valores pagos e recebidos (caixa)
+                              </SelectItem>
+                              <SelectItem value="a_receber">
+                                Valores a receber e a pagar (em aberto)
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       ) : null}
                     </div>
