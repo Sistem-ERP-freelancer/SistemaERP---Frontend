@@ -109,12 +109,6 @@ const Dashboard = () => {
   const [totaisGeraisModo, setTotaisGeraisModo] =
     useState<PainelTotaisGeraisModo>("emissao");
 
-  useEffect(() => {
-    if (mesAnoFiltro.trim()) {
-      setTotaisGeraisModo("emissao");
-    }
-  }, [mesAnoFiltro]);
-
   const refMesYyyyMm = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
     return mesEscolhido || mesAnoAtualLocal();
@@ -127,12 +121,11 @@ const Dashboard = () => {
     const [ano, mes] = ref;
     const primeiro = new Date(ano, mes - 1, 1);
     const ultimo = new Date(ano, mes, 0);
-    const painelHistorico = !mesEscolhido;
     return {
       data_inicial: formatISODateLocal(primeiro),
       data_final: formatISODateLocal(ultimo),
-      painel_totais_gerais: painelHistorico,
-      ...(painelHistorico && totaisGeraisModo !== "emissao"
+      painel_totais_gerais: true,
+      ...(totaisGeraisModo !== "emissao"
         ? { painel_totais_gerais_modo: totaisGeraisModo }
         : {}),
     };
@@ -193,20 +186,10 @@ const Dashboard = () => {
   const painelBlocos = useMemo(() => {
     if (!painelFinanceiro) return null;
     const f = painelFinanceiro;
-    const mesEscolhido = mesAnoFiltro.trim();
-    const usarHistorico = !mesEscolhido;
 
     let totaisCelulas: { legenda: string; valor: number }[];
     let totaisSubtitulo: string;
-    if (!usarHistorico) {
-      totaisCelulas = [
-        { legenda: "Total pago", valor: f.linha_totais_periodo.compras },
-        { legenda: "Total recebido", valor: f.linha_totais_periodo.vendas },
-        { legenda: "saldo do período", valor: f.linha_totais_periodo.saldo },
-      ];
-      totaisSubtitulo =
-        "Fechamento de referência no período selecionado (competência).";
-    } else if (totaisGeraisModo === "pagos") {
+    if (totaisGeraisModo === "pagos") {
       const pagoTotal =
         f.linha_totais_periodo.compras + f.linha_totais_periodo.despesas;
       totaisCelulas = [
@@ -271,10 +254,10 @@ const Dashboard = () => {
       {
         etapa: 3 as const,
         pill: "Totais",
-        titulo: usarHistorico ? "Totais gerais" : "Totais no período",
+        titulo: "Totais gerais",
         subtitulo: totaisSubtitulo,
         celulas: totaisCelulas,
-        mostrarFiltroTotais: usarHistorico,
+        mostrarFiltroTotais: true,
       },
     ];
   }, [painelFinanceiro, mesAnoFiltro, totaisGeraisModo]);
