@@ -658,7 +658,6 @@ export default function ControleRoca() {
     telefone: '',
     pixChave: '',
     endereco: '',
-    inscricaoEstadual: '',
     porcentagem_padrao: 40,
     produtorId: 0,
   });
@@ -677,7 +676,6 @@ export default function ControleRoca() {
         telefone: '',
         pixChave: '',
         endereco: '',
-        inscricaoEstadual: '',
         porcentagem_padrao: 40,
         produtorId: 0,
       });
@@ -705,7 +703,6 @@ export default function ControleRoca() {
     telefone: '',
     pixChave: '',
     endereco: '',
-    inscricaoEstadual: '',
     porcentagem_padrao: 40,
     produtorId: 0,
   });
@@ -3630,7 +3627,6 @@ export default function ControleRoca() {
                                       telefone: m.telefone ?? '',
                                       pixChave: m.pixChave ?? '',
                                       endereco: m.endereco ?? '',
-                                      inscricaoEstadual: m.inscricaoEstadual ?? '',
                                       porcentagem_padrao: m.porcentagem_padrao,
                                       produtorId: m.produtorId,
                                     });
@@ -9312,7 +9308,6 @@ className={
               telefone: '',
               pixChave: '',
               endereco: '',
-              inscricaoEstadual: '',
               porcentagem_padrao: 40,
               produtorId: 0,
             });
@@ -9522,25 +9517,6 @@ className={
                     rows={2}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                    Inscrição estadual
-                    <span className="text-xs text-muted-foreground">(opcional)</span>
-                  </Label>
-                  <Input
-                    value={formMeeiro.inscricaoEstadual || ''}
-                    onChange={(e) =>
-                      setFormMeeiro((p) => ({
-                        ...p,
-                        inscricaoEstadual: e.target.value.slice(0, 30),
-                      }))
-                    }
-                    placeholder="Ex.: 123.456.789.012"
-                    maxLength={30}
-                  />
-                </div>
               </div>
             </div>
             <DialogFooter>
@@ -9559,7 +9535,6 @@ className={
                     codigo: formMeeiro.codigo?.toString().trim() || undefined,
                     nomeFantasia: formMeeiro.nomeFantasia?.trim() || undefined,
                     pixChave: formMeeiro.pixChave?.trim() || undefined,
-                    inscricaoEstadual: formMeeiro.inscricaoEstadual?.trim() || undefined,
                   });
                 }}
                 disabled={createMeeiro.isPending}
@@ -9634,12 +9609,6 @@ className={
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Telefone</Label>
                       <p className="font-medium text-base">{detailMeeiro.telefone || '—'}</p>
-                    </div>
-                    <div className="space-y-3">
-                      <Label className="text-sm text-muted-foreground">Inscrição estadual</Label>
-                      <p className="font-medium text-base font-mono">
-                        {detailMeeiro.inscricaoEstadual?.trim() || '—'}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -9838,7 +9807,6 @@ className={
                         telefone: detailMeeiro.telefone ?? '',
                         pixChave: detailMeeiro.pixChave ?? '',
                         endereco: detailMeeiro.endereco ?? '',
-                        inscricaoEstadual: detailMeeiro.inscricaoEstadual ?? '',
                         porcentagem_padrao: detailMeeiro.porcentagem_padrao,
                         produtorId: detailMeeiro.produtorId,
                       });
@@ -10192,25 +10160,6 @@ className={
                       rows={2}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-muted-foreground" />
-                      Inscrição estadual
-                      <span className="text-xs text-muted-foreground">(opcional)</span>
-                    </Label>
-                    <Input
-                      value={formEditMeeiro.inscricaoEstadual ?? ''}
-                      onChange={(e) =>
-                        setFormEditMeeiro((p) => ({
-                          ...p,
-                          inscricaoEstadual: e.target.value.slice(0, 30),
-                        }))
-                      }
-                      placeholder="Ex.: 123.456.789.012"
-                      maxLength={30}
-                    />
-                  </div>
                 </div>
               </div>
             )}
@@ -10226,7 +10175,6 @@ className={
                     toast.error('Nome e produtor são obrigatórios');
                     return;
                   }
-                  const ieTrim = (formEditMeeiro.inscricaoEstadual ?? '').trim();
                   updateMeeiro.mutate({
                     id: editMeeiro.id,
                     data: {
@@ -10237,7 +10185,6 @@ className={
                       telefone: formEditMeeiro.telefone || undefined,
                       pixChave: formEditMeeiro.pixChave?.trim() || undefined,
                       endereco: formEditMeeiro.endereco || undefined,
-                      inscricaoEstadual: ieTrim === '' ? null : ieTrim,
                       porcentagem_padrao:
                         formEditMeeiro.porcentagem_padrao ?? editMeeiro.porcentagem_padrao,
                       produtorId: formEditMeeiro.produtorId || editMeeiro.produtorId,
