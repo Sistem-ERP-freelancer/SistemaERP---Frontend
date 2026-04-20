@@ -463,9 +463,7 @@ const Dashboard = () => {
                           </div>
                         </div>
                       ) : null}
-                      {bloco.etapa === 3 &&
-                      "mostrarFiltroTotais" in bloco &&
-                      bloco.mostrarFiltroTotais ? (
+                      {String(bloco.etapa) === "3" ? (
                         <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[18rem] dark:bg-background/50">
                           <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <ListFilter className="h-3.5 w-3.5 opacity-70" />
