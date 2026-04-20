@@ -10889,7 +10889,7 @@ className={
                         role="combobox"
                         aria-expanded={lancMeeiroPopoverOpen}
                         disabled={!produtorIdLanc}
-                        className="w-full sm:w-[280px] min-h-10 justify-between font-normal"
+                        className="w-full sm:w-[420px] min-h-10 justify-between font-normal"
                       >
                         <span className="truncate">
                           {lancMeeiroSelecionado
@@ -10905,7 +10905,7 @@ className={
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      className="min-w-[280px] w-[var(--radix-popover-trigger-width)] max-w-[400px] p-0"
+                      className="min-w-[420px] w-[var(--radix-popover-trigger-width)] max-w-[620px] p-0"
                       align="start"
                     >
                       <Command shouldFilter={false}>
@@ -10951,7 +10951,7 @@ className={
                                         jaAdicionado ? 'opacity-100' : 'opacity-0'
                                       )}
                                     />
-                                    <span className="truncate">
+                                    <span className="whitespace-normal break-words">
                                       {m.codigo ?? ''} – {m.nome ?? ''}
                                       {jaAdicionado ? ' (já adicionado)' : ''}
                                     </span>
