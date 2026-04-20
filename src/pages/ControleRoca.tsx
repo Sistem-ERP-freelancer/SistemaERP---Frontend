@@ -1216,6 +1216,7 @@ export default function ControleRoca() {
     return sorted.filter(
       (m) =>
         (m.nome ?? '').toLowerCase().includes(term) ||
+        (m.nomeFantasia ?? '').toLowerCase().includes(term) ||
         (m.codigo ?? '').toLowerCase().includes(term)
     );
   }, [meeirosParaLancamento, lancMeeiroSearchTerm]);
@@ -11069,7 +11070,7 @@ className={
                     >
                       <Command shouldFilter={false}>
                         <CommandInput
-                          placeholder="Buscar por nome ou código do meeiro..."
+                          placeholder="Buscar por nome, nome fantasia ou código do meeiro..."
                           value={lancMeeiroSearchTerm}
                           onValueChange={setLancMeeiroSearchTerm}
                           className="h-10"
@@ -11094,7 +11095,7 @@ className={
                                 return (
                                   <CommandItem
                                     key={m.id}
-                                    value={`${m.codigo ?? ''} ${m.nome ?? ''}`.trim()}
+                                    value={`${m.codigo ?? ''} ${m.nome ?? ''} ${m.nomeFantasia ?? ''}`.trim()}
                                     disabled={jaAdicionado}
                                     onSelect={() => {
                                       if (jaAdicionado) return;
@@ -11111,8 +11112,15 @@ className={
                                       )}
                                     />
                                     <span className="whitespace-normal break-words">
-                                      {m.codigo ?? ''} – {m.nome ?? ''}
-                                      {jaAdicionado ? ' (já adicionado)' : ''}
+                                      <span className="block font-medium">
+                                        {m.codigo ?? ''} – {m.nome ?? ''}
+                                        {jaAdicionado ? ' (já adicionado)' : ''}
+                                      </span>
+                                      {m.nomeFantasia?.trim() ? (
+                                        <span className="block text-xs text-muted-foreground">
+                                          {m.nomeFantasia}
+                                        </span>
+                                      ) : null}
                                     </span>
                                   </CommandItem>
                                 );
