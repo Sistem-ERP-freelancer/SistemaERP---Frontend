@@ -310,6 +310,7 @@ export default function ControleRoca() {
   // Busca e painéis de filtro (layout igual ao de Lançamentos)
   const [searchProdutor, setSearchProdutor] = useState('');
   const [searchRoca, setSearchRoca] = useState('');
+  const [searchMeeiro, setSearchMeeiro] = useState('');
   const [searchProdutoCatalogo, setSearchProdutoCatalogo] = useState('');
   const [filtrosProdutorOpen, setFiltrosProdutorOpen] = useState(false);
   const [filtrosRocaOpen, setFiltrosRocaOpen] = useState(false);
@@ -614,13 +615,19 @@ export default function ControleRoca() {
         (p.codigo ?? '').toLowerCase().includes(term)
     );
   }, [produtores, filtroMeeiroProdutorSearch]);
-  const meeirosOrdenados = useMemo(
-    () =>
-      [...meeiros].sort((a, b) =>
-        (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
-      ),
-    [meeiros]
-  );
+  const meeirosOrdenados = useMemo(() => {
+    const sorted = [...meeiros].sort((a, b) =>
+      (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    const term = searchMeeiro.trim().toLowerCase();
+    if (!term) return sorted;
+    return sorted.filter(
+      (m) =>
+        (m.nome ?? '').toLowerCase().includes(term) ||
+        (m.nomeFantasia ?? '').toLowerCase().includes(term) ||
+        (m.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [meeiros, searchMeeiro]);
   const [openMeeiro, setOpenMeeiro] = useState(false);
   const [formMeeiro, setFormMeeiro] = useState<CreateMeeiroRocaDto>({
     codigo: '',
@@ -3126,6 +3133,15 @@ export default function ControleRoca() {
           <TabsContent value="meeiros" className="space-y-4">
             <div className="bg-card rounded-xl border border-border p-4 mb-6">
               <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-stretch sm:items-center">
+                <div className="relative flex-1 min-w-[260px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por meeiro ou nome fantasia..."
+                    className="pl-10"
+                    value={searchMeeiro}
+                    onChange={(e) => setSearchMeeiro(e.target.value)}
+                  />
+                </div>
                 <Button
                   variant="outline"
                   className="gap-2"
