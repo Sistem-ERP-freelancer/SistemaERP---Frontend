@@ -96,6 +96,7 @@ export interface MeeiroRoca {
   id: number;
   codigo: string;
   nome: string;
+  nomeFantasia?: string;
   cpf?: string;
   telefone?: string;
   pixChave?: string;
@@ -134,6 +135,7 @@ export interface CreateMeeiroRocaDto {
   /** Se não informado, o backend gera automaticamente (ex: M001, M002). */
   codigo?: string;
   nome: string;
+  nomeFantasia?: string;
   cpf?: string;
   telefone?: string;
   /** Chave PIX (CPF, celular, e-mail ou chave aleatória), opcional, até 140 caracteres. */
@@ -147,6 +149,7 @@ export interface CreateMeeiroRocaDto {
 export interface UpdateMeeiroRocaDto {
   codigo?: string;
   nome?: string;
+  nomeFantasia?: string;
   cpf?: string;
   telefone?: string;
   pixChave?: string;

@@ -625,6 +625,7 @@ export default function ControleRoca() {
   const [formMeeiro, setFormMeeiro] = useState<CreateMeeiroRocaDto>({
     codigo: '',
     nome: '',
+    nomeFantasia: '',
     cpf: '',
     telefone: '',
     pixChave: '',
@@ -643,6 +644,7 @@ export default function ControleRoca() {
       setFormMeeiro({
         codigo: '',
         nome: '',
+        nomeFantasia: '',
         cpf: '',
         telefone: '',
         pixChave: '',
@@ -670,6 +672,7 @@ export default function ControleRoca() {
   >({
     codigo: '',
     nome: '',
+    nomeFantasia: '',
     cpf: '',
     telefone: '',
     pixChave: '',
@@ -3447,6 +3450,7 @@ export default function ControleRoca() {
                     <TableRow>
                       <TableHead>Código</TableHead>
                       <TableHead>Nome</TableHead>
+                      <TableHead>Nome fantasia</TableHead>
                       <TableHead>CPF</TableHead>
                       <TableHead>Telefone</TableHead>
                       <TableHead>% padrão</TableHead>
@@ -3456,7 +3460,7 @@ export default function ControleRoca() {
                   <TableBody>
                     {meeirosOrdenados.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           Nenhum meeiro cadastrado
                         </TableCell>
                       </TableRow>
@@ -3467,6 +3471,11 @@ export default function ControleRoca() {
                           <TableCell className="max-w-[min(320px,55vw)]">
                             <span className="block truncate" title={m.nome}>
                               {m.nome}
+                            </span>
+                          </TableCell>
+                          <TableCell className="max-w-[min(280px,45vw)]">
+                            <span className="block truncate" title={m.nomeFantasia || '—'}>
+                              {m.nomeFantasia || '—'}
                             </span>
                           </TableCell>
                           <TableCell>{m.cpf || '—'}</TableCell>
@@ -3504,6 +3513,7 @@ export default function ControleRoca() {
                                     setFormEditMeeiro({
                                       codigo: m.codigo,
                                       nome: m.nome,
+                                      nomeFantasia: m.nomeFantasia ?? '',
                                       cpf: m.cpf ?? '',
                                       telefone: m.telefone ?? '',
                                       pixChave: m.pixChave ?? '',
@@ -9185,6 +9195,7 @@ className={
             setFormMeeiro({
               codigo: '',
               nome: '',
+              nomeFantasia: '',
               cpf: '',
               telefone: '',
               pixChave: '',
@@ -9277,6 +9288,21 @@ className={
                       placeholder="Nome completo"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    Nome fantasia
+                    <span className="text-xs text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    value={formMeeiro.nomeFantasia || ''}
+                    onChange={(e) =>
+                      setFormMeeiro((p) => ({ ...p, nomeFantasia: e.target.value }))
+                    }
+                    placeholder="Nome fantasia"
+                  />
                 </div>
 
                 {/* CPF e porcentagem */}
@@ -9419,6 +9445,7 @@ className={
                   createMeeiro.mutate({
                     ...formMeeiro,
                     codigo: formMeeiro.codigo?.toString().trim() || undefined,
+                    nomeFantasia: formMeeiro.nomeFantasia?.trim() || undefined,
                     pixChave: formMeeiro.pixChave?.trim() || undefined,
                     inscricaoEstadual: formMeeiro.inscricaoEstadual?.trim() || undefined,
                   });
@@ -9471,6 +9498,10 @@ className={
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Nome</Label>
                       <p className="font-medium text-base">{detailMeeiro.nome}</p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Nome fantasia</Label>
+                      <p className="font-medium text-base">{detailMeeiro.nomeFantasia?.trim() || '—'}</p>
                     </div>
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Documento (CPF)</Label>
@@ -9690,6 +9721,7 @@ className={
                       setFormEditMeeiro({
                         codigo: detailMeeiro.codigo,
                         nome: detailMeeiro.nome,
+                        nomeFantasia: detailMeeiro.nomeFantasia ?? '',
                         cpf: detailMeeiro.cpf ?? '',
                         telefone: detailMeeiro.telefone ?? '',
                         pixChave: detailMeeiro.pixChave ?? '',
@@ -9930,6 +9962,21 @@ className={
                     </div>
                   </div>
 
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      Nome fantasia
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      value={formEditMeeiro.nomeFantasia ?? ''}
+                      onChange={(e) =>
+                        setFormEditMeeiro((p) => ({ ...p, nomeFantasia: e.target.value }))
+                      }
+                      placeholder="Nome fantasia"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-7">
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
@@ -10073,6 +10120,7 @@ className={
                     data: {
                       codigo: formEditMeeiro.codigo?.trim() || undefined,
                       nome: formEditMeeiro.nome,
+                      nomeFantasia: formEditMeeiro.nomeFantasia?.trim() || undefined,
                       cpf: formEditMeeiro.cpf || undefined,
                       telefone: formEditMeeiro.telefone || undefined,
                       pixChave: formEditMeeiro.pixChave?.trim() || undefined,
