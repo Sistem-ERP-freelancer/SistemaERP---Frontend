@@ -541,6 +541,9 @@ export default function ControleRoca() {
   const [filtroMeeiroProdutorOpen, setFiltroMeeiroProdutorOpen] = useState(false);
   const [filtroMeeiroRocaSearch, setFiltroMeeiroRocaSearch] = useState('');
   const [filtroMeeiroRocaOpen, setFiltroMeeiroRocaOpen] = useState(false);
+  const [filtroMeeiroId, setFiltroMeeiroId] = useState<number | ''>('');
+  const [filtroMeeiroItemSearch, setFiltroMeeiroItemSearch] = useState('');
+  const [filtroMeeiroItemOpen, setFiltroMeeiroItemOpen] = useState(false);
   const [meeiroIncompletoDialogOpen, setMeeiroIncompletoDialogOpen] = useState(false);
   const { data: meeiroFiltroRocas = [] } = useQuery({
     queryKey: ['controle-roca', 'rocas', 'meeiros-tab-filtro', produtorIdMeeiros],
@@ -563,9 +566,10 @@ export default function ControleRoca() {
     let n = 0;
     if (produtorIdMeeiros !== '') n++;
     if (rocaIdMeeiros !== '') n++;
+    if (filtroMeeiroId !== '') n++;
     if (apenasComEmprestimosMeeiros) n++;
     return n;
-  }, [produtorIdMeeiros, rocaIdMeeiros, apenasComEmprestimosMeeiros]);
+  }, [produtorIdMeeiros, rocaIdMeeiros, filtroMeeiroId, apenasComEmprestimosMeeiros]);
   const { data: meeiros = [], isLoading: loadingMeeiros } = useQuery({
     queryKey: ['controle-roca', 'meeiros', produtorIdMeeiros, rocaIdMeeiros, apenasComEmprestimosMeeiros],
     queryFn: () =>
@@ -577,6 +581,19 @@ export default function ControleRoca() {
         },
       ),
   });
+  const meeirosFiltroPainelOrdenados = useMemo(() => {
+    const term = filtroMeeiroItemSearch.trim().toLowerCase();
+    const sorted = [...meeiros].sort((a, b) =>
+      (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!term) return sorted;
+    return sorted.filter(
+      (m) =>
+        (m.nome ?? '').toLowerCase().includes(term) ||
+        (m.nomeFantasia ?? '').toLowerCase().includes(term) ||
+        (m.codigo ?? '').toLowerCase().includes(term)
+    );
+  }, [meeiros, filtroMeeiroItemSearch]);
   const { data: meeirosCadastroIncompleto, isLoading: loadingMeeirosIncompleto } = useQuery({
     queryKey: ['controle-roca', 'meeiros-cadastro-incompleto'],
     queryFn: () => controleRocaService.relatorioMeeirosCadastroIncompleto(),
@@ -619,15 +636,19 @@ export default function ControleRoca() {
     const sorted = [...meeiros].sort((a, b) =>
       (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
     );
+    const filtradosPorMeeiro =
+      filtroMeeiroId === ''
+        ? sorted
+        : sorted.filter((m) => Number(m.id) === Number(filtroMeeiroId));
     const term = searchMeeiro.trim().toLowerCase();
-    if (!term) return sorted;
-    return sorted.filter(
+    if (!term) return filtradosPorMeeiro;
+    return filtradosPorMeeiro.filter(
       (m) =>
         (m.nome ?? '').toLowerCase().includes(term) ||
         (m.nomeFantasia ?? '').toLowerCase().includes(term) ||
         (m.codigo ?? '').toLowerCase().includes(term)
     );
-  }, [meeiros, searchMeeiro]);
+  }, [meeiros, searchMeeiro, filtroMeeiroId]);
   const [openMeeiro, setOpenMeeiro] = useState(false);
   const [formMeeiro, setFormMeeiro] = useState<CreateMeeiroRocaDto>({
     codigo: '',
@@ -3209,6 +3230,7 @@ export default function ControleRoca() {
                                     onSelect={() => {
                                       setProdutorIdMeeiros('');
                                       setRocaIdMeeiros('');
+                                      setFiltroMeeiroId('');
                                       setFiltroMeeiroProdutorOpen(false);
                                     }}
                                   >
@@ -3222,6 +3244,7 @@ export default function ControleRoca() {
                                       onSelect={() => {
                                         setProdutorIdMeeiros(p.id);
                                         setRocaIdMeeiros('');
+                                        setFiltroMeeiroId('');
                                         setFiltroMeeiroProdutorOpen(false);
                                       }}
                                     >
@@ -3299,6 +3322,78 @@ export default function ControleRoca() {
                         <p className="text-xs text-muted-foreground">
                           Lista só meeiros com lançamento na roça. O valor “a receber” considera apenas essa roça.
                         </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-sm font-semibold">Meeiro (opcional)</Label>
+                        <Popover
+                          open={filtroMeeiroItemOpen}
+                          onOpenChange={(o) => {
+                            setFiltroMeeiroItemOpen(o);
+                            if (!o) setFiltroMeeiroItemSearch('');
+                          }}
+                          modal
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={filtroMeeiroItemOpen}
+                              className="w-full justify-between font-normal"
+                            >
+                              <span className="truncate">
+                                {filtroMeeiroId === ''
+                                  ? 'Todos os meeiros'
+                                  : (() => {
+                                      const m = meeiros.find((x) => x.id === filtroMeeiroId);
+                                      return m ? `${m.codigo ?? ''} – ${m.nome ?? ''}`.trim() : 'Todos os meeiros';
+                                    })()}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Buscar meeiro..."
+                                value={filtroMeeiroItemSearch}
+                                onValueChange={setFiltroMeeiroItemSearch}
+                                className="h-10"
+                              />
+                              <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+                                <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="todos"
+                                    onSelect={() => {
+                                      setFiltroMeeiroId('');
+                                      setFiltroMeeiroItemOpen(false);
+                                    }}
+                                  >
+                                    <Check className={cn('mr-2 h-4 w-4', filtroMeeiroId === '' ? 'opacity-100' : 'opacity-0')} />
+                                    Todos os meeiros
+                                  </CommandItem>
+                                  {meeirosFiltroPainelOrdenados.map((m) => (
+                                    <CommandItem
+                                      key={m.id}
+                                      value={String(m.id)}
+                                      onSelect={() => {
+                                        setFiltroMeeiroId(m.id);
+                                        setFiltroMeeiroItemOpen(false);
+                                      }}
+                                    >
+                                      <Check className={cn('mr-2 h-4 w-4', filtroMeeiroId === m.id ? 'opacity-100' : 'opacity-0')} />
+                                      <span className="truncate">
+                                        {m.codigo ?? ''} – {m.nome ?? ''}
+                                        {m.nomeFantasia?.trim() ? ` (${m.nomeFantasia})` : ''}
+                                      </span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </div>
 
                       <div className="flex items-center space-x-2">
