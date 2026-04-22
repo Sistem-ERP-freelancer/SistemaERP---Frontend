@@ -2196,34 +2196,11 @@ export default function ControleRoca() {
     const datasLancamento = lancamentosMesReferencia
       .map((l) => String(l.data ?? '').slice(0, 10))
       .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    /** Quantidade de datas distintas com pelo menos um lançamento (não dias do calendário do mês). */
     const diasComLancamento = new Set(datasLancamento).size;
 
-    /**
-     * Média diária a partir do acumulado: total de caixas ÷ dias corridos do período
-     * (inclui dias sem lançamento). Mês fechado = dias do calendário; “Todos os meses”
-     * = do 1º ao último dia com lançamento, inclusive.
-     */
-    let diasCorridosPeriodo = 0;
-    if (mesReferenciaMetricas !== 'all') {
-      const parts = mesReferenciaMetricas.split('-');
-      const y = parseInt(parts[0] ?? '', 10);
-      const mo = parseInt(parts[1] ?? '', 10);
-      if (Number.isFinite(y) && Number.isFinite(mo) && mo >= 1 && mo <= 12) {
-        diasCorridosPeriodo = new Date(y, mo, 0).getDate();
-      }
-    } else if (datasLancamento.length > 0) {
-      const sorted = [...new Set(datasLancamento)].sort();
-      const min = sorted[0]!;
-      const max = sorted[sorted.length - 1]!;
-      const t0 = new Date(`${min}T12:00:00`).getTime();
-      const t1 = new Date(`${max}T12:00:00`).getTime();
-      if (Number.isFinite(t0) && Number.isFinite(t1)) {
-        diasCorridosPeriodo = Math.floor((t1 - t0) / 86_400_000) + 1;
-      }
-    }
-
     const mediaDiariaCaixas =
-      diasCorridosPeriodo > 0 ? quantidade / diasCorridosPeriodo : 0;
+      diasComLancamento > 0 ? quantidade / diasComLancamento : 0;
 
     return {
       quantidade,
@@ -2231,10 +2208,9 @@ export default function ControleRoca() {
       ticketMedio,
       totalLancamentos,
       diasComLancamento,
-      diasCorridosPeriodo,
       mediaDiariaCaixas,
     };
-  }, [lancamentosMesReferencia, mesReferenciaMetricas]);
+  }, [lancamentosMesReferencia]);
   const resumoRocasDashboard = useMemo(() => {
     const mapa = new Map<
       number,
@@ -2735,24 +2711,18 @@ export default function ControleRoca() {
               </div>
               <div className="rounded-xl border bg-card p-4">
                 <p className="text-sm text-muted-foreground">
-                  Média diária (acumulado ÷ dias corridos)
+                  Média diária (só dias com lançamento)
                 </p>
                 <p className="mt-2 text-2xl font-semibold">
                   {Math.round(metricasProducaoMensal.mediaDiariaCaixas).toLocaleString('pt-BR')}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {metricasProducaoMensal.diasCorridosPeriodo > 0
+                  {metricasProducaoMensal.diasComLancamento > 0
                     ? `${metricasProducaoMensal.quantidade.toLocaleString(
                         'pt-BR'
-                      )} caixas ÷ ${metricasProducaoMensal.diasCorridosPeriodo.toLocaleString(
+                      )} caixas ÷ ${metricasProducaoMensal.diasComLancamento.toLocaleString(
                         'pt-BR'
-                      )} dia(s) corridos${
-                        metricasProducaoMensal.diasComLancamento > 0
-                          ? ` · ${metricasProducaoMensal.diasComLancamento.toLocaleString(
-                              'pt-BR'
-                            )} com lançamento`
-                          : ''
-                      }`
+                      )} dia(s) com produção registrada · referência: ${referenciaMetricasLabel}`
                     : '—'}
                 </p>
               </div>
@@ -6533,17 +6503,22 @@ className={
                     </div>
                   ) : (
                     <>
-                    <div className="overflow-x-auto">
-                    <Table className="w-full min-w-[52rem]">
+                    <div className="overflow-x-auto bg-muted/50 [&_tbody_tr]:bg-card">
+                    <Table
+                      noGutter
+                      className="w-full min-w-[max(100%,44rem)] table-fixed border-collapse"
+                    >
                       <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="min-w-[8rem]">Meeiro</TableHead>
-                          <TableHead className="min-w-[7rem]">Chave PIX</TableHead>
-                          <TableHead className="min-w-[6.5rem] text-right">Valor a receber</TableHead>
-                          <TableHead className="min-w-[6.5rem] text-right">Empréstimos em aberto</TableHead>
-                          <TableHead className="min-w-[5rem] text-right">Desc emprést.</TableHead>
-                          <TableHead className="min-w-[6.5rem] text-right">Valor final a pagar</TableHead>
-                          <TableHead className="min-w-[100px] w-[120px] text-right sticky right-[20%] z-30 border-l border-border bg-muted shadow-[inset_1px_0_0_0_hsl(var(--border))]">
+                        <TableRow className="bg-muted/50 [&>th]:!h-auto [&>th]:min-h-10 [&>th]:md:min-h-12 [&>th]:bg-muted/50 [&>th]:align-middle [&>th]:py-2 md:[&>th]:py-3">
+                          <TableHead className="min-w-0 w-[18%]">Meeiro</TableHead>
+                          <TableHead className="min-w-0 w-[16%]">Chave PIX</TableHead>
+                          <TableHead className="min-w-0 w-[12%] text-right">Valor a receber</TableHead>
+                          <TableHead className="min-w-0 w-[14%] text-center">Empréstimos em aberto</TableHead>
+                          <TableHead className="min-w-0 w-[10%] text-right">Desc emprést.</TableHead>
+                          <TableHead className="min-w-0 w-[18%] text-right whitespace-nowrap">
+                            Valor final a pagar
+                          </TableHead>
+                          <TableHead className="hidden min-[1200px]:table-cell w-[12%] min-w-[5.5rem] text-right sticky right-0 z-30">
                             Ações
                           </TableHead>
                         </TableRow>
@@ -6558,7 +6533,7 @@ className={
                         ) : (
                           (resumoPagamentoMeeiros?.items ?? []).map((m) => (
                             <TableRow key={m.meeiroId} className="group/pag-aberto">
-                                  <TableCell className="font-medium">
+                                  <TableCell className="font-medium max-w-[14rem] sm:max-w-[18rem] xl:max-w-[22rem]">
                                     <div className="flex items-center gap-2 min-w-0">
                                       {apenasDividaEmprestimoSemProducaoRemanescente(m) && (
                                         <Popover>
@@ -6588,19 +6563,23 @@ className={
                                           </PopoverContent>
                                         </Popover>
                                       )}
-                                      <span className="truncate">{m.nome}</span>
+                                      <span className="min-w-0 flex-1 truncate" title={m.nome}>
+                                        {m.nome}
+                                      </span>
                                     </div>
                                   </TableCell>
                                   <TableCell className="font-mono text-sm max-w-[180px] truncate" title={m.chavePix ?? undefined}>
                                     {m.chavePix || '—'}
                                   </TableCell>
                                   <TableCell className="text-right tabular-nums">{formatCurrency(m.totalReceber)}</TableCell>
-                                  <TableCell className="text-right tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
+                                  <TableCell className="text-center tabular-nums">{formatCurrency(m.totalEmprestimosAbertos)}</TableCell>
                                   <TableCell className="text-right tabular-nums text-muted-foreground">
                                     {formatCurrency(m.descEmprest ?? 0)}
                                   </TableCell>
-                                  <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
-                                  <TableCell className="text-right sticky right-[20%] z-20 min-w-[100px] w-[120px] border-l border-border bg-card align-middle shadow-[inset_1px_0_0_0_hsl(var(--border))] group-hover/pag-aberto:bg-muted/50">
+                                  <TableCell className="text-right tabular-nums font-semibold">
+                                    {formatCurrency(m.valorLiquido)}
+                                  </TableCell>
+                                  <TableCell className="hidden min-[1200px]:table-cell w-[12%] min-w-[5.5rem] text-right sticky right-0 z-20 bg-card align-middle group-hover/pag-aberto:bg-muted/50">
                                     <div className="flex justify-end">
                                       <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -6723,15 +6702,18 @@ className={
                     </div>
                   ) : (
                     <>
-                    <div className="overflow-x-auto">
-                    <Table className="w-full min-w-[44rem]">
+                    <div className="overflow-x-auto bg-muted/50 [&_tbody_tr]:bg-card">
+                    <Table
+                      noGutter
+                      className="w-full min-w-[max(100%,44rem)] table-fixed border-collapse"
+                    >
                       <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="min-w-[10rem] w-[220px]">Meeiro</TableHead>
-                          <TableHead className="min-w-[10rem] w-[220px]">Chave PIX</TableHead>
-                          <TableHead className="min-w-[8rem] w-[180px] text-right">Valor total pago</TableHead>
-                          <TableHead className="min-w-[7rem] w-[140px] text-center">Teve empréstimo</TableHead>
-                          <TableHead className="min-w-[200px] text-right sticky right-[20%] z-30 border-l border-border bg-muted shadow-[inset_1px_0_0_0_hsl(var(--border))]">
+                        <TableRow className="bg-muted/50 [&>th]:!h-auto [&>th]:min-h-10 [&>th]:md:min-h-12 [&>th]:bg-muted/50 [&>th]:align-middle [&>th]:py-2 md:[&>th]:py-3">
+                          <TableHead className="min-w-0 w-[26%]">Meeiro</TableHead>
+                          <TableHead className="min-w-0 w-[24%]">Chave PIX</TableHead>
+                          <TableHead className="min-w-0 w-[18%] text-right">Valor total pago</TableHead>
+                          <TableHead className="min-w-0 w-[16%] text-center">Teve empréstimo</TableHead>
+                          <TableHead className="min-w-0 w-[16%] text-right sticky right-0 z-30 border-l border-border shadow-[inset_1px_0_0_0_hsl(var(--border))]">
                             Ações
                           </TableHead>
                         </TableRow>
@@ -6746,7 +6728,9 @@ className={
                         ) : (
                           (resumoPagamentoMeeiros?.items ?? []).map((m) => (
                             <TableRow key={m.meeiroId} className="group/pag-quit">
-                              <TableCell className="font-medium">{m.nome}</TableCell>
+                              <TableCell className="font-medium max-w-[14rem] sm:max-w-[18rem] xl:max-w-[22rem] truncate" title={m.nome}>
+                                {m.nome}
+                              </TableCell>
                               <TableCell className="font-mono text-sm max-w-[220px] truncate" title={m.chavePix ?? undefined}>
                                 {m.chavePix || '—'}
                               </TableCell>
@@ -6765,7 +6749,7 @@ className={
                                   {m.teveEmprestimoNoPagamento ? 'Sim' : 'Não'}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-right sticky right-[20%] z-20 min-w-[200px] border-l border-border bg-card align-middle shadow-[inset_1px_0_0_0_hsl(var(--border))] group-hover/pag-quit:bg-muted/50">
+                              <TableCell className="w-[16%] min-w-[10rem] text-right sticky right-0 z-20 border-l border-border bg-card align-middle shadow-[inset_1px_0_0_0_hsl(var(--border))] group-hover/pag-quit:bg-muted/50">
                                 <div className="flex justify-end gap-1.5 flex-wrap">
                                   {m.ultimoPagamentoId != null && (
                                     <Button
@@ -10782,15 +10766,15 @@ className={
 
         {/* Dialog Novo Produto */}
         <Dialog
-        open={openProduto}
-        onOpenChange={(open) => {
-          setOpenProduto(open);
-          if (!open) {
-            setProdutorIdProduto('');
-            setFormProduto({ produtorId: '', nome: '', codigo: '', unidade_medida: 'KG' });
-          }
-        }}
-      >
+          open={openProduto}
+          onOpenChange={(open) => {
+            setOpenProduto(open);
+            if (!open) {
+              setProdutorIdProduto('');
+              setFormProduto({ produtorId: '', nome: '', codigo: '', unidade_medida: 'KG' });
+            }
+          }}
+        >
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Novo Produto</DialogTitle>

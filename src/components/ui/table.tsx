@@ -2,13 +2,19 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full min-w-0 max-w-full overflow-auto -mx-1 px-1">
-      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-    </div>
-  ),
-);
+const Table = React.forwardRef<
+  HTMLTableElement,
+  React.HTMLAttributes<HTMLTableElement> & { noGutter?: boolean }
+>(({ className, noGutter, ...props }, ref) => (
+  <div
+    className={cn(
+      "relative w-full min-w-0 max-w-full overflow-auto",
+      !noGutter && "-mx-1 px-1",
+    )}
+  >
+    <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+  </div>
+));
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
