@@ -2192,16 +2192,49 @@ export default function ControleRoca() {
     /** Valor médio por unidade de produção (total R$ ÷ quantidade somada nos itens). */
     const ticketMedio = quantidade > 0 ? valor / quantidade : 0;
     const totalLancamentos = lancamentosMesReferencia.length;
-    const mediaCaixasPorLancamento =
-      totalLancamentos > 0 ? quantidade / totalLancamentos : 0;
+
+    const datasLancamento = lancamentosMesReferencia
+      .map((l) => String(l.data ?? '').slice(0, 10))
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    const diasComLancamento = new Set(datasLancamento).size;
+
+    /**
+     * Média diária a partir do acumulado: total de caixas ÷ dias corridos do período
+     * (inclui dias sem lançamento). Mês fechado = dias do calendário; “Todos os meses”
+     * = do 1º ao último dia com lançamento, inclusive.
+     */
+    let diasCorridosPeriodo = 0;
+    if (mesReferenciaMetricas !== 'all') {
+      const parts = mesReferenciaMetricas.split('-');
+      const y = parseInt(parts[0] ?? '', 10);
+      const mo = parseInt(parts[1] ?? '', 10);
+      if (Number.isFinite(y) && Number.isFinite(mo) && mo >= 1 && mo <= 12) {
+        diasCorridosPeriodo = new Date(y, mo, 0).getDate();
+      }
+    } else if (datasLancamento.length > 0) {
+      const sorted = [...new Set(datasLancamento)].sort();
+      const min = sorted[0]!;
+      const max = sorted[sorted.length - 1]!;
+      const t0 = new Date(`${min}T12:00:00`).getTime();
+      const t1 = new Date(`${max}T12:00:00`).getTime();
+      if (Number.isFinite(t0) && Number.isFinite(t1)) {
+        diasCorridosPeriodo = Math.floor((t1 - t0) / 86_400_000) + 1;
+      }
+    }
+
+    const mediaDiariaCaixas =
+      diasCorridosPeriodo > 0 ? quantidade / diasCorridosPeriodo : 0;
+
     return {
       quantidade,
       valor,
       ticketMedio,
       totalLancamentos,
-      mediaCaixasPorLancamento,
+      diasComLancamento,
+      diasCorridosPeriodo,
+      mediaDiariaCaixas,
     };
-  }, [lancamentosMesReferencia]);
+  }, [lancamentosMesReferencia, mesReferenciaMetricas]);
   const resumoRocasDashboard = useMemo(() => {
     const mapa = new Map<
       number,
@@ -2701,15 +2734,29 @@ export default function ControleRoca() {
                 </p>
               </div>
               <div className="rounded-xl border bg-card p-4">
-                <p className="text-sm text-muted-foreground">Média de caixas por lançamento</p>
+                <p className="text-sm text-muted-foreground">
+                  Média diária (acumulado ÷ dias corridos)
+                </p>
                 <p className="mt-2 text-2xl font-semibold">
-                  {metricasProducaoMensal.mediaCaixasPorLancamento.toLocaleString('pt-BR', {
+                  {metricasProducaoMensal.mediaDiariaCaixas.toLocaleString('pt-BR', {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 2,
                   })}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {metricasProducaoMensal.totalLancamentos.toLocaleString('pt-BR')} lançamento(s) no mês
+                  {metricasProducaoMensal.diasCorridosPeriodo > 0
+                    ? `${metricasProducaoMensal.quantidade.toLocaleString(
+                        'pt-BR'
+                      )} caixas ÷ ${metricasProducaoMensal.diasCorridosPeriodo.toLocaleString(
+                        'pt-BR'
+                      )} dia(s) corridos${
+                        metricasProducaoMensal.diasComLancamento > 0
+                          ? ` · ${metricasProducaoMensal.diasComLancamento.toLocaleString(
+                              'pt-BR'
+                            )} com lançamento`
+                          : ''
+                      }`
+                    : '—'}
                 </p>
               </div>
             </div>
