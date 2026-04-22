@@ -4353,13 +4353,14 @@ className={
               </span>
             </div>
 
-            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
+            <div className="bg-card border rounded-xl min-w-0 overflow-hidden">
               {loadingLancamentos ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <Table className="w-full table-fixed text-xs sm:text-sm">
+                <div className="overflow-x-auto">
+                  <Table className="w-full min-w-[56rem] table-fixed text-xs sm:text-sm">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[40px] px-2">
@@ -4381,7 +4382,9 @@ className={
                       <TableHead className="w-[3%] text-right py-2 px-1">%</TableHead>
                       <TableHead className="w-[9%] text-right">Valor do meeiro</TableHead>
                       <TableHead className="w-[9%] text-right">Valor total</TableHead>
-                      <TableHead className="w-[8%] min-w-[72px] text-right pl-4 pr-6">Ações</TableHead>
+                      <TableHead className="w-[72px] min-w-[72px] max-w-[72px] text-right pl-2 pr-3 sticky right-0 z-20 bg-card border-l border-border">
+                        Ações
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -4464,10 +4467,10 @@ className={
                             <TableCell className="text-right whitespace-nowrap">
                               {item != null ? formatCurrency(valorTotalItem) : formatCurrency(Number(l.total_geral))}
                             </TableCell>
-                            <TableCell className="text-right pl-4 pr-6">
+                            <TableCell className="w-[72px] min-w-[72px] max-w-[72px] text-right p-2 sticky right-0 z-10 bg-card align-middle border-l border-border">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                                     <MoreHorizontal className="w-4 h-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -4500,6 +4503,7 @@ className={
                     )}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </div>
             {!loadingLancamentos && totalLancamentosLista > 0 && (
