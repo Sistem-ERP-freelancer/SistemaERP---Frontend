@@ -112,7 +112,7 @@ type CentroCustosContextValue = {
   despesasTotal: number;
   /** Itens da página atual (tipos). */
   tipos: CentroCustoTipo[];
-  /** Todos os tipos para selects (limitado no servidor). */
+  /** Todos os tipos para selects (limitado no servidor)... */
   tiposOpcoes: CentroCustoTipo[];
   despesas: CentroCustoDespesa[];
   resumo: {
