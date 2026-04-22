@@ -58,9 +58,10 @@ import {
   type CentroCustoTipo,
 } from '@/contexts/CentroCustosContext';
 import { cn, formatCurrency } from '@/lib/utils';
+import { centroCustoService } from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
 import type { Roca } from '@/types/roca';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Banknote,
@@ -76,7 +77,8 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const CARD_STATS = [
@@ -146,7 +148,13 @@ function DespesasTable({
   onExcluir: (d: CentroCustoDespesa) => void;
 }) {
   const ordenadas = useMemo(
-    () => [...despesas].sort((a, b) => b.data.localeCompare(a.data)),
+    () =>
+      [...despesas].sort((a, b) => {
+        const qa = statusDespesa(a) === 'QUITADO' ? 1 : 0;
+        const qb = statusDespesa(b) === 'QUITADO' ? 1 : 0;
+        if (qa !== qb) return qa - qb;
+        return b.data.localeCompare(a.data);
+      }),
     [despesas],
   );
 
@@ -188,7 +196,14 @@ function DespesasTable({
                   <TableCell className="text-right tabular-nums">{formatCurrency(pago)}</TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => onDetalhe(d)} title="Detalhes">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          void onDetalhe(d);
+                        }}
+                        title="Detalhes"
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
                       <Button
@@ -205,9 +220,11 @@ function DespesasTable({
                       <Button variant="ghost" size="icon" onClick={() => onEditar(d)} title="Editar">
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => onExcluir(d)} title="Excluir">
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
+                      {pago <= 0.009 ? (
+                        <Button variant="ghost" size="icon" onClick={() => onExcluir(d)} title="Excluir">
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -322,9 +339,11 @@ export default function CentroCustos() {
     adicionarDespesa,
     atualizarDespesa,
     excluirDespesa,
-    registrarPagamento,
     resumo,
   } = useCentroCustos();
+
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: rocasApi = [], isLoading: loadingRocas } = useQuery({
     queryKey: ['centro-custos', 'rocas-ativas'],
@@ -373,16 +392,8 @@ export default function CentroCustos() {
   const [quickTipoNome, setQuickTipoNome] = useState('');
 
   /** Despesa dialogs */
-  const [detailDesp, setDetailDesp] = useState<CentroCustoDespesa | null>(null);
   const [editDesp, setEditDesp] = useState<CentroCustoDespesa | null>(null);
   const [deleteDesp, setDeleteDesp] = useState<CentroCustoDespesa | null>(null);
-  const [pagarRapidoDesp, setPagarRapidoDesp] = useState<CentroCustoDespesa | null>(null);
-  const [pagarRapidoValor, setPagarRapidoValor] = useState('');
-  const [pagarRapidoData, setPagarRapidoData] = useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
-  const [pagValor, setPagValor] = useState('');
-  const [pagData, setPagData] = useState(() => new Date().toISOString().slice(0, 10));
 
   const openNovoTipo = () => {
     setTipoEdit(null);
@@ -454,14 +465,15 @@ export default function CentroCustos() {
         tipoId: tipoIdSel,
         rocaId: rocaSel.id,
         rocaNome: rocaSel.nome,
+        tipoNome: tiposOpcoes.find((t) => t.id === tipoIdSel)?.nome,
         valor: v,
         data: dataDesp,
         observacoes: observacoes.trim() || undefined,
       });
+      toast.success('Despesa cadastrada.');
       setDescricao('');
       setValorStr('');
       setObservacoes('');
-      toast.success('Despesa cadastrada.');
     } catch (e) {
       toast.error(msgErro(e, 'Não foi possível cadastrar a despesa.'));
     }
@@ -516,22 +528,60 @@ export default function CentroCustos() {
     setRocaSel(r ?? ({ id: d.rocaId, nome: d.rocaNome, codigo: '', produtorId: 0 } as Roca));
   };
 
-  const abrirDetalhe = (d: CentroCustoDespesa) => {
-    setDetailDesp(d);
-    setPagValor('');
-    setPagData(new Date().toISOString().slice(0, 10));
-  };
+  /** Resolve o id da conta a pagar espelhada (sincroniza se necessário). */
+  const resolverContaFinanceiraId = useCallback(
+    async (d: CentroCustoDespesa): Promise<number | null> => {
+      let contaId = d.contaFinanceiraId ?? null;
+      if (contaId == null) {
+        try {
+          await centroCustoService.sincronizarContasFinanceiras();
+          await queryClient.invalidateQueries({ queryKey: ['centro-custo'] });
+          const fresh = await centroCustoService.buscarDespesaPorId(Number(d.id));
+          contaId =
+            fresh.contaFinanceiraId != null ? Number(fresh.contaFinanceiraId) : null;
+        } catch (e) {
+          toast.error(msgErro(e, 'Não foi possível vincular a conta a pagar.'));
+          return null;
+        }
+      }
+      if (contaId == null) {
+        toast.error(
+          'Esta despesa ainda não tem conta a pagar. Aguarde a sincronização ou contate o suporte.',
+        );
+        return null;
+      }
+      return contaId;
+    },
+    [queryClient],
+  );
 
-  const abrirPagarRapido = (d: CentroCustoDespesa) => {
-    if (statusDespesa(d) === 'QUITADO') {
-      toast.info('Esta despesa já está quitada.');
-      return;
-    }
-    const restante = Math.max(0, Number(d.valor) - totalPagoNaDespesa(d));
-    setPagarRapidoDesp(d);
-    setPagarRapidoValor(restante > 0 ? String(restante).replace('.', ',') : '');
-    setPagarRapidoData(new Date().toISOString().slice(0, 10));
-  };
+  /** Mesmo layout de detalhes que Contas a Pagar → despesa (cards + histórico). */
+  const abrirDetalhe = useCallback(
+    async (d: CentroCustoDespesa) => {
+      const contaId = await resolverContaFinanceiraId(d);
+      if (contaId == null) return;
+      navigate(`/financeiro/contas-pagar/despesa/${contaId}`, {
+        state: { voltarPara: '/centro-custos' },
+      });
+    },
+    [navigate, resolverContaFinanceiraId],
+  );
+
+  /** Mesma tela de Registrar Pagamento de Contas a Pagar (parcial/total + forma + observações). */
+  const abrirPagarRapido = useCallback(
+    async (d: CentroCustoDespesa) => {
+      if (statusDespesa(d) === 'QUITADO') {
+        toast.info('Esta despesa já está quitada.');
+        return;
+      }
+      const contaId = await resolverContaFinanceiraId(d);
+      if (contaId == null) return;
+      navigate(`/financeiro/contas-pagar/conta/${contaId}/pagamentos`, {
+        state: { voltarPara: '/centro-custos' },
+      });
+    },
+    [navigate, resolverContaFinanceiraId],
+  );
 
   const fecharEdicao = () => {
     setEditDesp(null);
@@ -930,225 +980,6 @@ export default function CentroCustos() {
           </DialogContent>
         </Dialog>
 
-        <Dialog
-          open={!!pagarRapidoDesp}
-          onOpenChange={(o) => {
-            if (!o) setPagarRapidoDesp(null);
-          }}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Pagar despesa</DialogTitle>
-              <DialogDescription>
-                Registro parcial ou total. O valor não pode ultrapassar o saldo em aberto.
-              </DialogDescription>
-            </DialogHeader>
-            {pagarRapidoDesp ? (
-              <div className="space-y-3 text-sm">
-                <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1">
-                  <p>
-                    <span className="text-muted-foreground">Descrição: </span>
-                    <span className="font-medium">{pagarRapidoDesp.descricao}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Valor da despesa: </span>
-                    <span className="font-medium tabular-nums">
-                      {formatCurrency(Number(pagarRapidoDesp.valor))}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Em aberto: </span>
-                    <span className="font-semibold tabular-nums">
-                      {formatCurrency(
-                        Math.max(
-                          0,
-                          Number(pagarRapidoDesp.valor) - totalPagoNaDespesa(pagarRapidoDesp),
-                        ),
-                      )}
-                    </span>
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label>Valor do pagamento</Label>
-                    <Input
-                      value={pagarRapidoValor}
-                      onChange={(e) => setPagarRapidoValor(e.target.value)}
-                      placeholder="0,00"
-                      inputMode="decimal"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Data do pagamento</Label>
-                    <Input
-                      type="date"
-                      value={pagarRapidoData}
-                      onChange={(e) => setPagarRapidoData(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPagarRapidoDesp(null)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={async () => {
-                  if (!pagarRapidoDesp) return;
-                  const v = parseValor(pagarRapidoValor);
-                  if (!Number.isFinite(v) || v <= 0) {
-                    toast.error('Informe o valor do pagamento.');
-                    return;
-                  }
-                  try {
-                    const atualizado = await registrarPagamento(pagarRapidoDesp.id, v, pagarRapidoData);
-                    if (!atualizado) {
-                      toast.error('Não foi possível registrar (valor inválido ou já quitada).');
-                      return;
-                    }
-                    if (detailDesp?.id === pagarRapidoDesp.id) setDetailDesp(atualizado);
-                    setPagarRapidoDesp(null);
-                    toast.success('Pagamento registrado.');
-                  } catch (e) {
-                    toast.error(msgErro(e, 'Não foi possível registrar o pagamento.'));
-                  }
-                }}
-              >
-                Confirmar pagamento
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Detalhe + pagamentos */}
-        <Dialog
-          open={!!detailDesp}
-          onOpenChange={(o) => {
-            if (!o) setDetailDesp(null);
-          }}
-        >
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Detalhes da despesa</DialogTitle>
-              <DialogDescription>Lançamento e histórico de pagamentos.</DialogDescription>
-            </DialogHeader>
-            {detailDesp ? (
-              <div className="space-y-4 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Descrição</p>
-                    <p className="font-medium">{detailDesp.descricao}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Tipo</p>
-                    <p className="font-medium">{despesaNomeTipo(detailDesp)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Roça</p>
-                    <p className="font-medium">{detailDesp.rocaNome}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Data</p>
-                    <p className="font-medium">{detailDesp.data}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Valor</p>
-                    <p className="font-semibold">{formatCurrency(Number(detailDesp.valor))}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Status</p>
-                    <div className="pt-0.5">{badgeStatus(statusDespesa(detailDesp))}</div>
-                  </div>
-                </div>
-                {detailDesp.observacoes ? (
-                  <div>
-                    <p className="text-muted-foreground text-xs">Observações</p>
-                    <p>{detailDesp.observacoes}</p>
-                  </div>
-                ) : null}
-
-                <div className="border-t pt-3 space-y-2">
-                  <p className="font-medium">Pagamentos</p>
-                  {detailDesp.pagamentos.length === 0 ? (
-                    <p className="text-muted-foreground text-xs">Nenhum pagamento registrado.</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {detailDesp.pagamentos.map((p) => (
-                        <li
-                          key={p.id}
-                          className="flex justify-between text-xs border rounded-md px-2 py-1.5 bg-muted/30"
-                        >
-                          <span>{p.data}</span>
-                          <span className="font-medium tabular-nums">{formatCurrency(p.valor)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="flex flex-wrap gap-2 items-end pt-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Valor</Label>
-                      <Input
-                        className="h-9 w-28"
-                        value={pagValor}
-                        onChange={(e) => setPagValor(e.target.value)}
-                        placeholder="0,00"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Data pagamento</Label>
-                      <Input
-                        type="date"
-                        className="h-9"
-                        value={pagData}
-                        onChange={(e) => setPagData(e.target.value)}
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={async () => {
-                        const v = parseValor(pagValor);
-                        if (!detailDesp) return;
-                        if (!Number.isFinite(v) || v <= 0) {
-                          toast.error('Informe o valor do pagamento.');
-                          return;
-                        }
-                        try {
-                          const atualizado = await registrarPagamento(detailDesp.id, v, pagData);
-                          if (!atualizado) {
-                            toast.error('Não foi possível registrar (valor inválido ou despesa já quitada).');
-                            return;
-                          }
-                          setDetailDesp(atualizado);
-                          setPagValor('');
-                          toast.success('Pagamento registrado.');
-                        } catch (e) {
-                          toast.error(msgErro(e, 'Não foi possível registrar o pagamento.'));
-                        }
-                      }}
-                    >
-                      Registrar pagamento
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Em aberto:{' '}
-                    <span className="font-medium text-foreground">
-                      {formatCurrency(
-                        Math.max(0, Number(detailDesp.valor) - totalPagoNaDespesa(detailDesp)),
-                      )}
-                    </span>
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDetailDesp(null)}>
-                Fechar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         {/* Editar despesa */}
         <Dialog
           open={!!editDesp}
@@ -1289,7 +1120,6 @@ export default function CentroCustos() {
                   try {
                     await excluirDespesa(alvo.id);
                     setDeleteDesp(null);
-                    if (detailDesp?.id === alvo.id) setDetailDesp(null);
                     toast.success('Despesa excluída.');
                   } catch (e) {
                     toast.error(msgErro(e, 'Não foi possível excluir a despesa.'));

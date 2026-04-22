@@ -15,7 +15,9 @@ import { CreateContaFinanceiraDto, financeiroService } from '@/services/financei
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, DollarSign, Loader2, Truck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+
+type PagamentoContaLocationState = { voltarPara?: string };
 import { toast } from 'sonner';
 
 const FORMAS_PAGAMENTO = [
@@ -35,6 +37,10 @@ const FORMAS_PAGAMENTO = [
 const ContasAPagarContaFinanceiraPagamentos = () => {
   const { contaId: contaIdParam } = useParams<{ contaId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const voltarPara =
+    (location.state as PagamentoContaLocationState | null)?.voltarPara ??
+    '/contas-a-pagar';
   const queryClient = useQueryClient();
   const contaId = contaIdParam ? Number(contaIdParam) : 0;
 
@@ -97,7 +103,8 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-resumo-financeiro'] });
       queryClient.invalidateQueries({ queryKey: ['conta-financeira', contaId] });
-      setTimeout(() => navigate('/contas-a-pagar'), 1000);
+      queryClient.invalidateQueries({ queryKey: ['centro-custo'] });
+      setTimeout(() => navigate(voltarPara), 1000);
     },
     onError: (error: any) => {
       toast.error(error?.message || error?.response?.data?.message || 'Erro ao registrar pagamento');
@@ -137,7 +144,7 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
     <AppLayout>
       <div className="p-4 sm:p-6 space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/contas-a-pagar')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(voltarPara)}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
@@ -278,7 +285,7 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
               />
             </div>
             <div className="flex justify-end gap-4 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => navigate('/contas-a-pagar')}>
+              <Button type="button" variant="outline" onClick={() => navigate(voltarPara)}>
                 Cancelar
               </Button>
               <Button

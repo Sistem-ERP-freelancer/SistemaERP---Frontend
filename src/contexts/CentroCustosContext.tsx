@@ -41,6 +41,8 @@ export type CentroCustoDespesa = {
   tipoNome?: string;
   rocaId: number;
   rocaNome: string;
+  /** ID da conta a pagar (mesma usada em Contas a Pagar). */
+  contaFinanceiraId?: number | null;
   valor: number;
   data: string;
   observacoes?: string;
@@ -64,6 +66,10 @@ function mapDespesa(row: ApiCentroCustoDespesa): CentroCustoDespesa {
     tipoNome: row.tipoNome,
     rocaId: row.rocaId,
     rocaNome: row.rocaNome ?? '',
+    contaFinanceiraId:
+      row.contaFinanceiraId != null && row.contaFinanceiraId !== undefined
+        ? Number(row.contaFinanceiraId)
+        : null,
     valor: Number(row.valor),
     data: dataIso(row.data as string),
     observacoes: row.observacoes ?? undefined,
@@ -264,20 +270,55 @@ export function CentroCustosProvider({ children }: { children: ReactNode }) {
         observacoes: data.observacoes?.trim() || undefined,
       });
       setDespesasPage(1);
-      await invalidateCentroCustoLists();
-      const res = await centroCustoService.listarDespesas(
-        1,
-        CENTRO_CUSTO_PAGE_SIZE,
+
+      const r = row as ApiCentroCustoDespesa;
+      const tipoNome =
+        data.tipoNome?.trim() ||
+        tiposOpcoesQuery.data?.find((t) => t.id === data.tipoId)?.nome ||
+        r.tipoNome;
+      const rocaNome = data.rocaNome?.trim() || r.rocaNome;
+      const newItem = mapDespesa({
+        ...r,
+        tipoNome: tipoNome || '—',
+        rocaNome: rocaNome || '—',
+        pagamentos: r.pagamentos ?? [],
+      });
+
+      queryClient.setQueryData(
+        qkDespesasPagina(1),
+        (
+          old:
+            | {
+                items: CentroCustoDespesa[];
+                total: number;
+                page: number;
+                limit: number;
+              }
+            | undefined,
+        ) => {
+          if (!old) {
+            return {
+              items: [newItem],
+              total: 1,
+              page: 1,
+              limit: CENTRO_CUSTO_PAGE_SIZE,
+            };
+          }
+          const items = [newItem, ...old.items].slice(0, CENTRO_CUSTO_PAGE_SIZE);
+          return {
+            ...old,
+            items,
+            total: old.total + 1,
+            page: 1,
+            limit: old.limit,
+          };
+        },
       );
-      const created = res.items
-        .map(mapDespesa)
-        .find((d) => d.id === String(row.id));
-      if (!created) {
-        throw new Error('Despesa salva, mas a lista não pôde ser atualizada.');
-      }
-      return created;
+
+      void queryClient.invalidateQueries({ queryKey: QK_RESUMO });
+      return newItem;
     },
-    [invalidateCentroCustoLists],
+    [queryClient, tiposOpcoesQuery.data],
   );
 
   const atualizarDespesa = useCallback(

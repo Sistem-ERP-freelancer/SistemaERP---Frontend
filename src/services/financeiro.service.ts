@@ -230,6 +230,8 @@ class FinanceiroService {
     pedido_id?: number;
     proximidade_vencimento?: 'VENCIDA' | 'VENCE_HOJE' | 'CRITICO' | 'ATENCAO' | 'NORMAL' | 'LONGO_PRAZO';
     dias_maximos?: number;
+    data_inicial?: string;
+    data_final?: string;
   }): Promise<ContasFinanceirasResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -241,6 +243,8 @@ class FinanceiroService {
     if (params?.pedido_id) queryParams.append('pedido_id', params.pedido_id.toString());
     if (params?.proximidade_vencimento) queryParams.append('proximidade_vencimento', params.proximidade_vencimento);
     if (params?.dias_maximos !== undefined) queryParams.append('dias_maximos', params.dias_maximos.toString());
+    if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
+    if (params?.data_final) queryParams.append('data_final', params.data_final);
 
     const query = queryParams.toString();
     return apiClient.get<ContasFinanceirasResponse>(`/contas-financeiras${query ? `?${query}` : ''}`);

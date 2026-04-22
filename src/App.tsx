@@ -12,6 +12,7 @@ import AdminPanel from "./pages/AdminPanel";
 import CentroCustos from "./pages/CentroCustos";
 import Clientes from "./pages/Clientes";
 import ContasAPagarContaFinanceiraPagamentos from "./pages/contas-a-pagar/ContasAPagarContaFinanceiraPagamentos";
+import ContasAPagarDespesaDetalhes from "./pages/contas-a-pagar/ContasAPagarDespesaDetalhes";
 import ContasAPagarPedidoDetalhes from "./pages/contas-a-pagar/ContasAPagarPedidoDetalhes";
 import ContasAPagarPedidoPagamentos from "./pages/contas-a-pagar/ContasAPagarPedidoPagamentos";
 import ContasAReceberClienteDetalhes from "./pages/contas-a-receber/ContasAReceberClienteDetalhes";
@@ -177,6 +178,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ContasAPagarContaFinanceiraPagamentos />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financeiro/contas-pagar/despesa/:contaId"
+              element={
+                <ProtectedRoute>
+                  <ContasAPagarDespesaDetalhes />
                 </ProtectedRoute>
               }
             />

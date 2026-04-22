@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -53,14 +54,18 @@ import { Textarea } from "@/components/ui/textarea";
 import {
     formatCurrency,
     formatDate,
+    formatarDataBR,
     formatarFormaPagamento,
     formatarStatus,
     parseDateOnlyLocal,
 } from "@/lib/utils";
-import { CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
+import {
+  type ContaFinanceira,
+  CreateContaFinanceiraDto,
+  financeiroService,
+} from "@/services/financeiro.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
-import type { ContaPagar } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -80,28 +85,48 @@ import {
     MoreVertical,
     Printer,
     Search,
-    ShoppingCart
+    ShoppingCart,
+    Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import { toast } from "sonner";
+import { contaEhDespesaSemPedido } from "@/pages/contas-a-pagar/despesaContaUtils";
 
-/** Saldo em aberto: confia em valor_em_aberto quando > 0; senão deriva de total − pago (evita menu “Pagar” oculto). */
-function valorEmAbertoContaPagar(p: ContaPagar): number {
-  const total = Number(p.valor_total) || 0;
-  const pago = Number(p.valor_pago ?? 0);
-  const declarado = Number(p.valor_em_aberto);
-  if (Number.isFinite(declarado) && declarado > 0.009) {
-    return Math.max(0, declarado);
+/** Evita linhas repetidas se a API devolver duplicatas (mesmo id ou mesmo numero_conta). */
+function dedupeContasFinanceirasPagar(contas: ContaFinanceira[]): ContaFinanceira[] {
+  const seenId = new Set<number>();
+  const seenNumero = new Set<string>();
+  const out: ContaFinanceira[] = [];
+  for (const c of contas) {
+    const id = Number(c.id);
+    const num = String(c.numero_conta || "").trim();
+    if (Number.isFinite(id) && seenId.has(id)) continue;
+    if (num && seenNumero.has(num)) continue;
+    if (Number.isFinite(id)) seenId.add(id);
+    if (num) seenNumero.add(num);
+    out.push(c);
   }
-  return Math.max(0, Number((total - pago).toFixed(2)));
+  return out;
 }
 
-function podeExibirPagarPedido(p: ContaPagar): boolean {
-  const st = String(p.status ?? "").toUpperCase().trim();
-  if (st === "QUITADO" || st === "CANCELADO") return false;
-  return valorEmAbertoContaPagar(p) > 0.009;
+/** Chave estável para React: nunca usar só numero_conta (pode repetir em duplicatas). */
+function rowKeyContasPagar(transacao: {
+  id: string;
+  contaId?: number;
+  pedidoId?: number;
+}): string {
+  if (transacao.contaId != null && Number.isFinite(Number(transacao.contaId))) {
+    return `conta-${transacao.contaId}`;
+  }
+  if (
+    transacao.pedidoId != null &&
+    Number.isFinite(Number(transacao.pedidoId))
+  ) {
+    return `pedido-${transacao.pedidoId}`;
+  }
+  return `row-${transacao.id}`;
 }
 
 function ContasAPagar() {
@@ -124,7 +149,6 @@ function ContasAPagar() {
   const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
     useState<string>("Todos");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
@@ -318,135 +342,41 @@ function ContasAPagar() {
     return true;
   };
 
-  // Buscar contas a pagar usando novo endpoint /pedidos/contas-pagar (cada linha = 1 pedido)
-  const { data: pedidosContasPagarResponse, isLoading: isLoadingPedidosContasPagar } = useQuery({
-    queryKey: ["pedidos", "contas-pagar", activeTab, currentPage, fornecedorFilterId, statusFilter, dataInicialFilter, dataFinalFilter],
-    queryFn: async () => {
-      if (!validarParametrosPaginação(currentPage, pageSize)) {
-        throw new Error('Parâmetros de paginação inválidos');
-      }
-
-      try {
-        const params: import('@/types/contas-financeiras.types').FiltrosContasPagar = {};
-        if (fornecedorFilterId != null && fornecedorFilterId > 0) {
-          params.fornecedor_id = fornecedorFilterId;
-        }
-        if (dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)) {
-          params.data_inicial = dataInicialFilter;
-        }
-        if (dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)) {
-          params.data_final = dataFinalFilter;
-        }
-        // Situação: prioridade do filtro avançado (statusFilter), senão tab (activeTab)
-        let situacao: 'em_aberto' | 'em_atraso' | 'concluido' | undefined = undefined;
-        if (statusFilter) {
-          if (statusFilter === 'ABERTO' || statusFilter === 'PARCIAL') situacao = 'em_aberto';
-          else if (statusFilter === 'QUITADO') situacao = 'concluido';
-          else if (statusFilter === 'VENCIDO') situacao = 'em_atraso';
-        } else {
-          if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE" || activeTab === "PAGO_PARCIAL") situacao = 'em_aberto';
-          else if (activeTab === "VENCIDO") situacao = 'em_atraso';
-          else if (activeTab === "PAGO_TOTAL") situacao = 'concluido';
-          else if (activeTab === "CANCELADO") situacao = undefined; // backend pode não ter; filtro client-side
-        }
-        if (situacao) params.situacao = situacao;
-
-        const hasFilters =
-          (params.fornecedor_id != null && params.fornecedor_id > 0) ||
-          !!params.data_inicial ||
-          !!params.data_final ||
-          !!params.situacao;
-        let pedidos = await pedidosService.listarContasPagar(hasFilters ? params : undefined);
-
-        // Refinar por status: quando há status ativo, mostrar SOMENTE pedidos daquele status (nunca "todos")
-        const statusAtivo = statusFilter || (activeTab !== "Todos" ? activeTab : null);
-        const norm = (s: string) => (s || "").toUpperCase().trim();
-        if (statusAtivo) {
-          if (statusAtivo === 'ABERTO' || statusAtivo === 'PENDENTE') {
-            // Apenas pendente (nada pago): status ABERTO ou valor_pago === 0
-            pedidos = pedidos.filter((p: ContaPagar) => {
-              const st = norm(p.status);
-              const vp = Number(p.valor_pago ?? 0);
-              return st === 'ABERTO' || (vp <= 0 && st !== 'QUITADO' && st !== 'CANCELADO');
-            });
-          } else if (statusAtivo === 'PARCIAL' || statusAtivo === 'PAGO_PARCIAL') {
-            // Apenas parcialmente pagos: 0 < valor_pago < valor_total
-            const total = (p: ContaPagar) => Number(p.valor_total) || 0;
-            const pago = (p: ContaPagar) => Number(p.valor_pago ?? 0);
-            pedidos = pedidos.filter((p: ContaPagar) => {
-              const st = norm(p.status);
-              if (st === 'QUITADO' || st === 'CANCELADO') return false;
-              const vp = pago(p);
-              const vt = total(p);
-              return st === 'PARCIAL' || (vp > 0 && vp < vt - 0.01);
-            });
-          } else if (statusAtivo === 'QUITADO' || statusAtivo === 'PAGO_TOTAL') {
-            pedidos = pedidos.filter((p: ContaPagar) => norm(p.status) === 'QUITADO');
-          } else if (statusAtivo === 'VENCIDO') {
-            pedidos = pedidos.filter((p: ContaPagar) => norm(p.status) === 'VENCIDO');
-          } else if (statusAtivo === 'CANCELADO') {
-            pedidos = pedidos.filter((p: ContaPagar) => norm(p.status) === 'CANCELADO');
-          }
-        }
-        
-        // Aplicar paginação manualmente (o endpoint não tem paginação ainda)
-        const startIndex = (currentPage - 1) * pageSize;
-        const endIndex = startIndex + pageSize;
-        const paginatedPedidos = pedidos.slice(startIndex, endIndex);
-        
-        return {
-          data: paginatedPedidos,
-          total: pedidos.length,
-        };
-      } catch (error: any) {
-        // Se o erro for 400 (Bad Request), pode ser que o banco esteja vazio
-        // Tratar como array vazio ao invés de erro para exibir 0 nos dashboards
-        if (error?.response?.status === 400) {
-          console.warn("Backend retornou 400 - tratando como banco vazio:", error);
-          return { data: [], total: 0 };
-        }
-        console.warn("API de contas a pagar não disponível:", error);
-        return { data: [], total: 0 };
-      }
-    },
-    retry: (failureCount, error: any) => {
-      if (error?.response) {
-        const status = error.response.status;
-        if ([400, 401, 403, 404].includes(status)) {
-          return false;
-        }
-      }
-      return failureCount < 2;
-    },
-    retryDelay: 1000,
-  });
-
-  // Buscar contas a pagar filtradas para exibir na tabela com paginação (fallback)
+  // Mesmo universo do dashboard (tb_conta_financeira tipo PAGAR): pedidos de compra + despesas do centro de custo + avulsas.
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "pagar", "tabela", activeTab, currentPage],
+    queryKey: [
+      "contas-financeiras",
+      "pagar",
+      "tabela",
+      activeTab,
+      currentPage,
+      pageSize,
+      fornecedorFilterId,
+      statusFilter,
+      dataInicialFilter,
+      dataFinalFilter,
+    ],
     queryFn: async () => {
       if (!validarParametrosPaginação(currentPage, pageSize)) {
-        throw new Error('Parâmetros de paginação inválidos');
+        throw new Error("Parâmetros de paginação inválidos");
       }
 
       try {
         let status: string | undefined;
         let proximidadeVencimento: string | undefined;
 
-        const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
-        const proximidadeTabs = ["VENCE_HOJE"];
-        
-        if (statusTabs.includes(activeTab)) {
-          // Se for filtro de vencidas, usar proximidade_vencimento ao invés de status
-          // pois contas vencidas podem ter status PENDENTE ou PAGO_PARCIAL
-          if (activeTab === "VENCIDO") {
-            proximidadeVencimento = "VENCIDA";
-          } else {
-          status = activeTab;
-          }
-        } else if (proximidadeTabs.includes(activeTab)) {
-          // Filtro por proximidade de vencimento
-          proximidadeVencimento = activeTab;
+        const filtro = (statusFilter ||
+          (activeTab !== "Todos" ? activeTab : "")) as string;
+
+        if (filtro) {
+          if (filtro === "VENCIDO") proximidadeVencimento = "VENCIDA";
+          else if (filtro === "VENCE_HOJE") proximidadeVencimento = "VENCE_HOJE";
+          else if (["ABERTO", "PARCIAL", "QUITADO"].includes(filtro))
+            status = filtro;
+          else if (
+            ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "CANCELADO"].includes(filtro)
+          )
+            status = filtro;
         }
 
         const response = await financeiroService.listar({
@@ -454,26 +384,42 @@ function ContasAPagar() {
           page: currentPage,
           limit: pageSize,
           status,
-          proximidade_vencimento: proximidadeVencimento,
+          proximidade_vencimento: proximidadeVencimento as
+            | "VENCIDA"
+            | "VENCE_HOJE"
+            | undefined,
+          fornecedor_id:
+            fornecedorFilterId != null && fornecedorFilterId > 0
+              ? fornecedorFilterId
+              : undefined,
+          data_inicial:
+            dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+              ? dataInicialFilter
+              : undefined,
+          data_final:
+            dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+              ? dataFinalFilter
+              : undefined,
         });
-        
-        // Tratar diferentes formatos de resposta
-        let contasData = [];
+
+        let contasData: ContaFinanceira[] = [];
         let totalData = 0;
-        
+
         if (Array.isArray(response)) {
           contasData = response;
           totalData = response.length;
         } else if (response?.data && Array.isArray(response.data)) {
           contasData = response.data;
           totalData = response.total || response.data.length;
-        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
+        } else if (
+          (response as any)?.contas &&
+          Array.isArray((response as any).contas)
+        ) {
           contasData = (response as any).contas;
-          totalData = (response as any).total || (response as any).contas.length;
+          totalData =
+            (response as any).total || (response as any).contas.length;
         }
-        
-        console.log('📊 [ContasAPagar] Resposta da API:', { response, contasData, totalData });
-        
+
         return {
           data: contasData,
           total: totalData,
@@ -485,8 +431,8 @@ function ContasAPagar() {
     },
     retry: (failureCount, error: any) => {
       if (error?.response) {
-        const status = error.response.status;
-        if ([400, 401, 403, 404].includes(status)) {
+        const st = error.response.status;
+        if ([400, 401, 403, 404].includes(st)) {
           return false;
         }
       }
@@ -495,70 +441,13 @@ function ContasAPagar() {
     retryDelay: 1000,
   });
 
-  const pedidosContasPagarList = pedidosContasPagarResponse?.data || [];
-  const totalPedidos = pedidosContasPagarResponse?.total || 0;
-  const totalPages = Math.ceil(totalPedidos / pageSize);
-  
-  // Fallback: manter contas financeiras para compatibilidade temporária (se não houver pedidos)
-  const { data: contasResponseFallback, isLoading: isLoadingContasFallback } = useQuery({
-    queryKey: ["contas-financeiras", "pagar", "tabela-fallback", activeTab, currentPage],
-    queryFn: async () => {
-      if (!validarParametrosPaginação(currentPage, pageSize)) {
-        throw new Error('Parâmetros de paginação inválidos');
-      }
+  const totalContas = contasResponse?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(totalContas / pageSize));
 
-      try {
-        let status: string | undefined;
-        let proximidadeVencimento: string | undefined;
-
-        const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
-        const proximidadeTabs = ["VENCE_HOJE"];
-        
-        if (statusTabs.includes(activeTab)) {
-          if (activeTab === "VENCIDO") {
-            proximidadeVencimento = "VENCIDA";
-          } else {
-            status = activeTab;
-          }
-        } else if (proximidadeTabs.includes(activeTab)) {
-          proximidadeVencimento = activeTab;
-        }
-
-        const response = await financeiroService.listar({
-          tipo: "PAGAR",
-          page: currentPage,
-          limit: pageSize,
-          status,
-          proximidade_vencimento: proximidadeVencimento,
-        });
-        
-        let contasData = [];
-        let totalData = 0;
-        
-        if (Array.isArray(response)) {
-          contasData = response;
-          totalData = response.length;
-        } else if (response?.data && Array.isArray(response.data)) {
-          contasData = response.data;
-          totalData = response.total || response.data.length;
-        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
-          contasData = (response as any).contas;
-          totalData = (response as any).total || (response as any).contas.length;
-        }
-        
-        return {
-          data: contasData,
-          total: totalData,
-        };
-      } catch (error) {
-        return { data: [], total: 0 };
-      }
-    },
-    enabled: pedidosContasPagarList.length === 0, // Usar fallback apenas se não houver pedidos
-    retry: false,
-  });
-  
-  const contasFallback = contasResponseFallback?.data || [];
+  const contasFallback = useMemo(
+    () => dedupeContasFinanceirasPagar(contasResponse?.data || []),
+    [contasResponse],
+  );
 
   const temFiltrosAtivos =
     (fornecedorFilterId != null && fornecedorFilterId > 0) ||
@@ -708,9 +597,17 @@ function ContasAPagar() {
       if (!selectedContaId) return null;
       return await financeiroService.buscarPorId(selectedContaId);
     },
-    enabled: !!selectedContaId && (viewDialogOpen || editDialogOpen),
+    enabled: !!selectedContaId && editDialogOpen,
     retry: false,
   });
+
+  const contaParaTituloModal = useMemo(() => {
+    if (contaSelecionada) return contaSelecionada;
+    if (selectedContaId != null) {
+      return contasFallback.find((c) => c.id === selectedContaId) ?? null;
+    }
+    return null;
+  }, [contaSelecionada, selectedContaId, contasFallback]);
 
   // Mutation para criar conta financeira
   const createContaMutation = useMutation({
@@ -1032,65 +929,22 @@ function ContasAPagar() {
     return { texto: `Vence em ${dias} dias`, cor: "text-gray-600", bgColor: "bg-gray-100" };
   };
 
-  // Mapear pedidos para o formato de exibição (novo formato - cada linha = 1 pedido)
+  // Uma linha por conta em tb_conta_financeira (PAGAR): alinhado ao dashboard e ao centro de custo.
   const transacoesDisplay = useMemo(() => {
-    // Usar pedidos do novo endpoint se disponíveis
-    if (pedidosContasPagarList.length > 0) {
-      return pedidosContasPagarList.map((pedido: ContaPagar) => {
-        const fornecedor = fornecedores.find(f => f.id === pedido.fornecedor_id);
-        const nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || pedido.fornecedor_nome || "N/A";
-
-        const valorTotal = Number(pedido.valor_total) || 0;
-        const valorEmAbertoPedido = valorEmAbertoContaPagar(pedido);
-        const valorPagoPedido = (pedido as any).valor_pago ?? (valorTotal - valorEmAbertoPedido);
-        const valorFormatado = formatCurrency(valorTotal);
-        const valorPagoFormatado = formatCurrency(valorPagoPedido);
-
-        const dataFormatada = pedido.data_pedido
-          ? formatDate(pedido.data_pedido)
-          : "N/A";
-
-        const statusFormatado = formatarStatus(pedido.status);
-        const formaPagamentoFormatada = formatarFormaPagamento(pedido.forma_pagamento);
-
-        // Calcular dias até vencimento: preferir data_vencimento quando existir
-        const dataParaVencimento = pedido.data_vencimento || pedido.data_pedido;
-        const diasAteVencimento = calcularDiasAteVencimento(dataParaVencimento);
-        const vencimentoStatus = getVencimentoStatus(diasAteVencimento, pedido.status);
-
-        return {
-          id: pedido.numero_pedido || `PED-${pedido.pedido_id}`,
-          descricao: `Pedido ${pedido.numero_pedido}`,
-          categoria: "Compras",
-          valor: valorFormatado,
-          valorPago: valorPagoFormatado,
-          data: dataFormatada,
-          status: statusFormatado,
-          statusOriginal: pedido.status,
-          contaId: undefined as number | undefined,
-          fornecedor: nomeFornecedor,
-          formaPagamento: formaPagamentoFormatada,
-          diasAteVencimento,
-          vencimentoStatus,
-          pedidoId: pedido.pedido_id,
-          valorEmAberto: valorEmAbertoPedido,
-          podePagar: podeExibirPagarPedido(pedido),
-        };
-      });
-    }
-    
-    // Fallback: usar contas financeiras se não houver pedidos
     return contasFallback.map((conta) => {
       let nomeFornecedor = "N/A";
-      let categoria = "N/A";
-      
+      const temPedido = !!(conta as any).pedido_id;
+      let categoria = temPedido ? "Compras" : "Centro de custo";
+
       if (conta.tipo === "PAGAR" && conta.fornecedor_id) {
         const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
         nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || "Fornecedor não encontrado";
-        categoria = "Fornecedores";
       }
 
-      const valorTotalConta = Number(conta.valor_original) || 0;
+      const valorTotalConta =
+        Number((conta as any).valor_total) ||
+        Number(conta.valor_original) ||
+        0;
       const valorRestante = Number((conta as any).valor_restante) ?? Number((conta as any).valor_em_aberto) ?? 0;
       const valorPagoConta = (conta as any).valor_pago != null ? Number((conta as any).valor_pago) : Math.max(0, valorTotalConta - valorRestante);
       const valorFormatado = new Intl.NumberFormat('pt-BR', {
@@ -1172,10 +1026,19 @@ function ContasAPagar() {
         stO !== "PAGO_TOTAL" &&
         stO !== "CANCELADO";
 
+      const pid =
+        (conta as any).pedido_id ??
+        (conta as any).pedido?.id;
+
+      /** Conta sem pedido = espelho do Centro de despesa (ou conta avulsa). */
+      const origemConta = temPedido ? ("COMPRA" as const) : ("DESPESA" as const);
+
       return {
         id: conta.numero_conta || `CONTA-${conta.id}`,
+        rowKey: `conta-${conta.id}`,
         descricao: conta.descricao,
         categoria: categoria,
+        origemConta,
         valor: valorFormatado,
         valorPago: valorPagoFormatado,
         data: dataFormatada,
@@ -1187,15 +1050,13 @@ function ContasAPagar() {
         vencimentoStatus,
         valorEmAberto: abertoFallback,
         podePagar: podePagarConta,
+        pedidoId: pid != null && Number.isFinite(Number(pid)) ? Number(pid) : undefined,
       };
     });
-  }, [pedidosContasPagarList, contasFallback, fornecedores]);
+  }, [contasFallback, fornecedores]);
 
-  // Busca: em Contas a Pagar a lista vem de PEDIDOS (COMP-2026-00001, etc.), não de contas.
-  // Só buscar conta por ID quando estivermos no fallback (lista de contas); senão filtrar por texto no número do pedido.
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
   const searchId = isNumericSearch ? Number(searchTerm) : null;
-  const usaListaPedidos = pedidosContasPagarList.length > 0;
 
   const { data: contaPorId } = useQuery({
     queryKey: ["conta-financeira", "busca", searchId],
@@ -1207,7 +1068,7 @@ function ContasAPagar() {
         return null;
       }
     },
-    enabled: !!searchId && isNumericSearch && !usaListaPedidos,
+    enabled: !!searchId && isNumericSearch,
     retry: false,
   });
 
@@ -1249,12 +1110,12 @@ function ContasAPagar() {
       if (contaEncontrada) {
         const conta = contaEncontrada;
         let nomeFornecedor = "N/A";
-        let categoria = "N/A";
-        
+        const temPedidoBusca = !!(conta as any).pedido_id;
+        const categoria = temPedidoBusca ? "Compras" : "Centro de custo";
+
         if (conta.fornecedor_id) {
           const fornecedor = fornecedores.find(f => f.id === conta.fornecedor_id);
           nomeFornecedor = fornecedor?.nome_fantasia || fornecedor?.nome_razao || "Fornecedor não encontrado";
-          categoria = "Fornecedores";
         }
 
         const valorTotalConta = Number(conta.valor_original) || 0;
@@ -1285,10 +1146,14 @@ function ContasAPagar() {
         
         const vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
 
+        const origemContaBusca = temPedidoBusca ? ("COMPRA" as const) : ("DESPESA" as const);
+
         return [{
           id: conta.numero_conta || `CONTA-${conta.id}`,
+          rowKey: `conta-${conta.id}`,
           descricao: conta.descricao,
           categoria: categoria,
+          origemConta: origemContaBusca,
           valor: valorFormatado,
           valorPago: valorPagoFormatado,
           data: dataFormatada,
@@ -1305,10 +1170,18 @@ function ContasAPagar() {
     // Filtrar por termo de busca
     if (searchTerm.trim()) {
       filtered = filtered.filter(t => {
-      const matchesSearch = 
-        t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      const o = (t as { origemConta?: string }).origemConta;
+      const origemTxt =
+        o === "DESPESA"
+          ? "despesa centro custo"
+          : o === "COMPRA"
+            ? "compra pedido"
+            : "";
+      const matchesSearch =
+        t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.fornecedor.toLowerCase().includes(searchTerm.toLowerCase());
+        t.fornecedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        origemTxt.includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
     }
@@ -1759,7 +1632,7 @@ function ContasAPagar() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número do pedido, fornecedor..."
+                placeholder="Buscar por número da conta, descrição, fornecedor..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1793,6 +1666,7 @@ function ContasAPagar() {
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
+                <TableHead className="w-[120px] min-w-[120px]">Tipo</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Valor</TableHead>
                 <TableHead>Valor Pago</TableHead>
@@ -1802,18 +1676,18 @@ function ContasAPagar() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(isLoadingPedidosContasPagar || isLoadingContasFallback) ? (
+              {isLoadingContas ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas...
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : (dataInicialFilter || dataFinalFilter) && !isLoadingPedidosContasPagar && pedidosContasPagarList.length === 0 ? (
+              ) : (dataInicialFilter || dataFinalFilter) && !isLoadingContas && totalContas === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">Não há contas no período selecionado.</p>
@@ -1822,7 +1696,7 @@ function ContasAPagar() {
                 </TableRow>
               ) : filteredTransacoes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">
@@ -1841,11 +1715,11 @@ function ContasAPagar() {
                               };
                               const statusAtivo = statusFilter || activeTab;
                               const label = labelPorStatus[statusAtivo] || statusAtivo;
-                              return `Não há pedidos com o status "${label}".`;
+                              return `Não há contas com o status "${label}".`;
                             })()
                           : fornecedorFilterId != null && fornecedorFilterId > 0
-                          ? "Não há pedidos ou contas desse fornecedor."
-                          : transacoesDisplay.length === 0 && !isLoadingPedidosContasPagar
+                          ? "Não há contas desse fornecedor."
+                          : transacoesDisplay.length === 0 && !isLoadingContas
                           ? "Não há contas a pagar no momento"
                           : dashboardPagar?.total === 0
                           ? "Nenhuma conta a pagar em aberto"
@@ -1856,9 +1730,43 @@ function ContasAPagar() {
                 </TableRow>
               ) : (
                 filteredTransacoes.map((transacao) => (
-                  <TableRow key={transacao.id}>
+                  <TableRow
+                    key={
+                      (transacao as { rowKey?: string }).rowKey ??
+                      rowKeyContasPagar(transacao as { id: string; contaId?: number; pedidoId?: number })
+                    }
+                  >
                     <TableCell>
                       <span className="font-medium">{transacao.id}</span>
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const o = (transacao as { origemConta?: string })
+                          .origemConta;
+                        const pedidoIdRow = (transacao as { pedidoId?: number })
+                          .pedidoId;
+                        const isDespesa =
+                          o === "DESPESA" ||
+                          (o === undefined &&
+                            (pedidoIdRow == null || !Number.isFinite(pedidoIdRow)));
+                        return isDespesa ? (
+                          <Badge
+                            variant="outline"
+                            className="whitespace-nowrap border-sky-300 bg-sky-50 font-medium text-sky-900"
+                            title="Conta gerada pelo Centro de despesa (ou avulsa, sem pedido de compra)"
+                          >
+                            Despesa
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="whitespace-nowrap border-sky-300 bg-sky-50 font-medium text-sky-900"
+                            title="Conta vinculada a pedido de compra"
+                          >
+                            Compra
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">{transacao.fornecedor}</span>
@@ -1893,9 +1801,10 @@ function ContasAPagar() {
                           <DropdownMenuItem onClick={() => {
                             if ((transacao as any).pedidoId) {
                               navigate(`/financeiro/contas-pagar/${(transacao as any).pedidoId}`);
-                            } else {
-                              setSelectedContaId(transacao.contaId);
-                              setViewDialogOpen(true);
+                            } else if (transacao.contaId != null) {
+                              navigate(
+                                `/financeiro/contas-pagar/despesa/${transacao.contaId}`,
+                              );
                             }
                           }}>
                             <Eye className="w-4 h-4 mr-2" />
@@ -2005,70 +1914,11 @@ function ContasAPagar() {
               </Pagination>
               
               <div className="text-center text-sm text-muted-foreground mt-2">
-                Mostrando {pedidosContasPagarList.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalPedidos)} de {totalPedidos} pedidos
+                Mostrando {totalContas > 0 ? (currentPage - 1) * pageSize + 1 : 0} a {Math.min(currentPage * pageSize, totalContas)} de {totalContas} contas
               </div>
             </div>
           )}
         </motion.div>
-
-        {/* Dialog de Visualização - Similar ao Financeiro.tsx mas simplificado */}
-        <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Eye className="w-5 h-5 text-primary" />
-                Detalhes da Conta a Pagar
-              </DialogTitle>
-            </DialogHeader>
-
-            {isLoadingConta ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : contaSelecionada ? (
-              <div className="space-y-6 pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-muted-foreground">Número da Conta</Label>
-                    <p className="text-sm font-medium">{contaSelecionada.numero_conta || `CONTA-${contaSelecionada.id}`}</p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Descrição</Label>
-                    <p className="text-sm font-medium">{contaSelecionada.descricao}</p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Valor Original</Label>
-                    <p className="text-sm font-medium">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_original)}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Valor Restante</Label>
-                    <p className="text-sm font-medium">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contaSelecionada.valor_restante || 0)}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Status</Label>
-                    <p className="text-sm font-medium">{contaSelecionada.status}</p>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground">Fornecedor</Label>
-                    <p className="text-sm font-medium">
-                      {contaSelecionada.fornecedor_id 
-                        ? fornecedores.find(f => f.id === contaSelecionada.fornecedor_id)?.nome_fantasia || `ID: ${contaSelecionada.fornecedor_id}`
-                        : "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-muted-foreground">
-                Conta não encontrada
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
 
         {/* Dialog de Edição - Similar ao Financeiro.tsx mas simplificado */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -2076,7 +1926,9 @@ function ContasAPagar() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Edit className="w-5 h-5 text-primary" />
-                Editar Conta a Pagar
+                {contaEhDespesaSemPedido(contaParaTituloModal ?? undefined)
+                  ? "Editar Despesa"
+                  : "Editar Conta a Pagar"}
               </DialogTitle>
             </DialogHeader>
 

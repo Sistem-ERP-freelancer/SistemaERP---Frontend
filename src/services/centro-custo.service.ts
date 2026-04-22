@@ -21,6 +21,9 @@ export type ApiCentroCustoDespesa = {
   tipoNome: string;
   rocaId: number;
   rocaNome: string;
+  fornecedorId?: number | null;
+  /** Conta a pagar espelhada (CPAG-…); necessário para abrir a tela de registrar pagamento. */
+  contaFinanceiraId?: number | null;
   descricao: string;
   valor: number;
   data: string;
@@ -84,6 +87,17 @@ class CentroCustoService {
     });
     return apiClient.get<PaginatedResult<ApiCentroCustoDespesa>>(
       `${BASE}/despesas?${q}`,
+    );
+  }
+
+  buscarDespesaPorId(id: number): Promise<ApiCentroCustoDespesa> {
+    return apiClient.get<ApiCentroCustoDespesa>(`${BASE}/despesas/${id}`);
+  }
+
+  sincronizarContasFinanceiras(): Promise<{ alvo: number; criadas: number }> {
+    return apiClient.post<{ alvo: number; criadas: number }>(
+      `${BASE}/despesas/sincronizar-contas-financeiras`,
+      {},
     );
   }
 
