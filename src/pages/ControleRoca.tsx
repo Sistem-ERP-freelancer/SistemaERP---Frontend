@@ -6526,23 +6526,26 @@ className={
               </div>
 
               <TabsContent value="em-aberto" className="mt-0">
-                <div className="bg-card border rounded-xl overflow-hidden">
+                <div className="bg-card border rounded-xl min-w-0 overflow-hidden">
                   {loadingResumoPagamento ? (
                     <div className="flex justify-center py-12">
                       <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : (
                     <>
-                    <Table>
+                    <div className="overflow-x-auto">
+                    <Table className="w-full min-w-[52rem]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead>Meeiro</TableHead>
-                          <TableHead>Chave PIX</TableHead>
-                          <TableHead className="text-right">Valor a receber</TableHead>
-                          <TableHead className="text-right">Empréstimos em aberto</TableHead>
-                          <TableHead className="text-right">Desc emprést.</TableHead>
-                          <TableHead className="text-right">Valor final a pagar</TableHead>
-                          <TableHead className="min-w-[150px] text-right">Ações</TableHead>
+                          <TableHead className="min-w-[8rem]">Meeiro</TableHead>
+                          <TableHead className="min-w-[7rem]">Chave PIX</TableHead>
+                          <TableHead className="min-w-[6.5rem] text-right">Valor a receber</TableHead>
+                          <TableHead className="min-w-[6.5rem] text-right">Empréstimos em aberto</TableHead>
+                          <TableHead className="min-w-[5rem] text-right">Desc emprést.</TableHead>
+                          <TableHead className="min-w-[6.5rem] text-right">Valor final a pagar</TableHead>
+                          <TableHead className="min-w-[100px] w-[120px] text-right sticky right-[20%] z-30 border-l border-border bg-muted shadow-[inset_1px_0_0_0_hsl(var(--border))]">
+                            Ações
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -6554,7 +6557,7 @@ className={
                           </TableRow>
                         ) : (
                           (resumoPagamentoMeeiros?.items ?? []).map((m) => (
-                            <TableRow key={m.meeiroId}>
+                            <TableRow key={m.meeiroId} className="group/pag-aberto">
                                   <TableCell className="font-medium">
                                     <div className="flex items-center gap-2 min-w-0">
                                       {apenasDividaEmprestimoSemProducaoRemanescente(m) && (
@@ -6597,7 +6600,7 @@ className={
                                     {formatCurrency(m.descEmprest ?? 0)}
                                   </TableCell>
                                   <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(m.valorLiquido)}</TableCell>
-                                  <TableCell className="text-right">
+                                  <TableCell className="text-right sticky right-[20%] z-20 min-w-[100px] w-[120px] border-l border-border bg-card align-middle shadow-[inset_1px_0_0_0_hsl(var(--border))] group-hover/pag-aberto:bg-muted/50">
                                     <div className="flex justify-end">
                                       <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -6605,7 +6608,7 @@ className={
                                             variant="ghost"
                                             size="icon"
                                             type="button"
-                                            className="h-8 w-8"
+                                            className="h-8 w-8 shrink-0"
                                             aria-label={`Ações de ${m.nome}`}
                                           >
                                             <MoreHorizontal className="h-4 w-4" />
@@ -6661,6 +6664,7 @@ className={
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                     {totalPagamentoMeeirosLista > 0 && totalPagamentoMeeirosPages > 1 && (
                       <div className="border-t px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-xs text-muted-foreground">
@@ -6712,21 +6716,24 @@ className={
               </TabsContent>
 
               <TabsContent value="quitados" className="mt-0">
-                <div className="bg-card border rounded-xl overflow-hidden">
+                <div className="bg-card border rounded-xl min-w-0 overflow-hidden">
                   {loadingResumoPagamento ? (
                     <div className="flex justify-center py-12">
                       <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : (
                     <>
-                    <Table>
+                    <div className="overflow-x-auto">
+                    <Table className="w-full min-w-[44rem]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="w-[220px]">Meeiro</TableHead>
-                          <TableHead className="w-[220px]">Chave PIX</TableHead>
-                          <TableHead className="w-[180px] text-right">Valor total pago</TableHead>
-                          <TableHead className="w-[140px] text-center">Teve empréstimo</TableHead>
-                          <TableHead className="min-w-[180px] text-right">Ações</TableHead>
+                          <TableHead className="min-w-[10rem] w-[220px]">Meeiro</TableHead>
+                          <TableHead className="min-w-[10rem] w-[220px]">Chave PIX</TableHead>
+                          <TableHead className="min-w-[8rem] w-[180px] text-right">Valor total pago</TableHead>
+                          <TableHead className="min-w-[7rem] w-[140px] text-center">Teve empréstimo</TableHead>
+                          <TableHead className="min-w-[200px] text-right sticky right-[20%] z-30 border-l border-border bg-muted shadow-[inset_1px_0_0_0_hsl(var(--border))]">
+                            Ações
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -6738,7 +6745,7 @@ className={
                           </TableRow>
                         ) : (
                           (resumoPagamentoMeeiros?.items ?? []).map((m) => (
-                            <TableRow key={m.meeiroId}>
+                            <TableRow key={m.meeiroId} className="group/pag-quit">
                               <TableCell className="font-medium">{m.nome}</TableCell>
                               <TableCell className="font-mono text-sm max-w-[220px] truncate" title={m.chavePix ?? undefined}>
                                 {m.chavePix || '—'}
@@ -6758,7 +6765,7 @@ className={
                                   {m.teveEmprestimoNoPagamento ? 'Sim' : 'Não'}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right sticky right-[20%] z-20 min-w-[200px] border-l border-border bg-card align-middle shadow-[inset_1px_0_0_0_hsl(var(--border))] group-hover/pag-quit:bg-muted/50">
                                 <div className="flex justify-end gap-1.5 flex-wrap">
                                   {m.ultimoPagamentoId != null && (
                                     <Button
@@ -6796,6 +6803,7 @@ className={
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                     {totalPagamentoMeeirosLista > 0 && totalPagamentoMeeirosPages > 1 && (
                       <div className="border-t px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-xs text-muted-foreground">
