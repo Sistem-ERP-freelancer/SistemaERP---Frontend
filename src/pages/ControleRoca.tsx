@@ -2738,10 +2738,7 @@ export default function ControleRoca() {
                   Média diária (acumulado ÷ dias corridos)
                 </p>
                 <p className="mt-2 text-2xl font-semibold">
-                  {metricasProducaoMensal.mediaDiariaCaixas.toLocaleString('pt-BR', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 2,
-                  })}
+                  {Math.round(metricasProducaoMensal.mediaDiariaCaixas).toLocaleString('pt-BR')}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {metricasProducaoMensal.diasCorridosPeriodo > 0
