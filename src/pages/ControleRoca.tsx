@@ -2867,7 +2867,7 @@ export default function ControleRoca() {
                           <TableCell>{p.nome_razao}</TableCell>
                           <TableCell>{p.cpf_cnpj || '—'}</TableCell>
                           <TableCell>{p.telefone || p.whatsapp || '—'}</TableCell>
-                          <TableCell className="max-w-[200px] truncate min-[1920px]:max-w-none min-[1920px]:overflow-visible min-[1920px]:whitespace-normal min-[1920px]:text-clip">
+                          <TableCell className="max-w-[200px] truncate xl:max-w-none xl:overflow-visible xl:whitespace-normal xl:text-clip">
                             {p.endereco || '—'}
                           </TableCell>
                           <TableCell className="text-right">
@@ -3109,7 +3109,7 @@ export default function ControleRoca() {
                               )}
                             </TableCell>
                             <TableCell>{r.nome}</TableCell>
-                            <TableCell className="max-w-[200px] truncate min-[1920px]:max-w-none min-[1920px]:overflow-visible min-[1920px]:whitespace-normal min-[1920px]:text-clip">
+                            <TableCell className="max-w-[200px] truncate xl:max-w-none xl:overflow-visible xl:whitespace-normal xl:text-clip">
                               {r.localizacao || '—'}
                             </TableCell>
                             <TableCell>{prod ? `${prod.codigo} – ${prod.nome_razao}` : r.produtorId}</TableCell>
@@ -4360,10 +4360,10 @@ className={
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table className="w-full min-w-[56rem] table-fixed text-xs sm:text-sm">
+                  <Table className="w-full min-w-[60rem] table-fixed text-xs sm:text-sm">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[40px] px-2">
+                      <TableHead className="w-10 min-w-10 max-w-10 px-1 sticky left-0 z-40 bg-card border-r border-border shadow-[1px_0_0_0_hsl(var(--border))]">
                         <Checkbox
                           checked={
                             lancamentosPagina.length > 0 &&
@@ -4373,15 +4373,15 @@ className={
                           aria-label="Selecionar todos"
                         />
                       </TableHead>
-                      <TableHead className="w-[9%] whitespace-nowrap">Data</TableHead>
-                      <TableHead className="w-[11%] whitespace-nowrap">Roça</TableHead>
-                      <TableHead className="w-[20%] whitespace-nowrap">Produtos</TableHead>
-                      <TableHead className="w-[6%] whitespace-nowrap">Qtde</TableHead>
-                      <TableHead className="w-[9%] whitespace-nowrap text-right">Valor Unit.</TableHead>
-                      <TableHead className="w-[11%] whitespace-nowrap">Meeiro</TableHead>
-                      <TableHead className="w-[3%] text-right py-2 px-1">%</TableHead>
-                      <TableHead className="w-[9%] text-right">Valor do meeiro</TableHead>
-                      <TableHead className="w-[9%] text-right">Valor total</TableHead>
+                      <TableHead className="min-w-[5.25rem] w-[9%] whitespace-nowrap">Data</TableHead>
+                      <TableHead className="min-w-[6rem] w-[11%] whitespace-nowrap">Roça</TableHead>
+                      <TableHead className="min-w-[8rem] w-[20%] whitespace-nowrap">Produtos</TableHead>
+                      <TableHead className="min-w-[3rem] w-[6%] whitespace-nowrap">Qtde</TableHead>
+                      <TableHead className="min-w-[5rem] w-[9%] whitespace-nowrap text-right">Valor Unit.</TableHead>
+                      <TableHead className="min-w-[6.5rem] w-[11%] whitespace-nowrap">Meeiro</TableHead>
+                      <TableHead className="min-w-[2.5rem] w-[3%] text-right py-2 px-1">%</TableHead>
+                      <TableHead className="min-w-[6rem] w-[9%] text-right whitespace-nowrap">Valor do meeiro</TableHead>
+                      <TableHead className="min-w-[5.5rem] w-[9%] text-right whitespace-nowrap">Valor total</TableHead>
                       <TableHead className="w-[72px] min-w-[72px] max-w-[72px] text-right pl-2 pr-3 sticky right-0 z-20 bg-card border-l border-border">
                         Ações
                       </TableHead>
@@ -4401,26 +4401,26 @@ className={
                         const valorTotalItem = item ? (Number(item.valor_total) || 0) : 0;
                         const meeirosDoItem = item?.meeiros ?? [];
                         return (
-                          <TableRow key={rowKey}>
-                            <TableCell className="px-2">
+                          <TableRow key={rowKey} className="group/lanc">
+                            <TableCell className="w-10 min-w-10 max-w-10 px-1 sticky left-0 z-30 bg-card group-hover/lanc:bg-muted/50 border-r border-border align-middle shadow-[1px_0_0_0_hsl(var(--border))]">
                               <Checkbox
                                 checked={lancamentosSelecionados.has(l.id)}
                                 onCheckedChange={() => toggleSelecionarLancamento(l.id)}
                                 aria-label={`Selecionar lançamento ${l.id}`}
                               />
                             </TableCell>
-                            <TableCell className="whitespace-nowrap">{formatDate(l.data)}</TableCell>
+                            <TableCell className="whitespace-nowrap tabular-nums">{formatDate(l.data)}</TableCell>
                             <TableCell
-                              className="max-w-0 overflow-hidden min-[1920px]:max-w-none min-[1920px]:overflow-visible"
+                              className="max-w-0 overflow-hidden xl:max-w-none xl:overflow-visible"
                               title={roca?.nome ?? l.rocaNome?.trim() ?? String(l.rocaId)}
                             >
-                              <span className="block truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip">
+                              <span className="block truncate xl:whitespace-normal xl:text-clip">
                                 {roca?.nome ?? l.rocaNome?.trim() ?? l.rocaId}
                               </span>
                             </TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
+                            <TableCell className="max-w-0 overflow-hidden min-w-0 xl:max-w-none xl:overflow-visible">
                               {item ? (
-                                <span className="block truncate whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={item.produto}>
+                                <span className="block truncate whitespace-nowrap xl:whitespace-normal xl:text-clip" title={item.produto}>
                                   {item.produto}
                                 </span>
                               ) : (
@@ -4433,13 +4433,13 @@ className={
                             <TableCell className="text-right text-sm">
                               {item != null ? formatCurrency(item.preco_unitario ?? 0) : '—'}
                             </TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-w-0 min-[1920px]:max-w-none min-[1920px]:overflow-visible">
+                            <TableCell className="max-w-0 overflow-hidden min-w-0 xl:max-w-none xl:overflow-visible">
                               {meeirosDoItem.length === 0
                                 ? '—'
                                 : (
                                     <>
                                       {meeirosDoItem.map((m, i) => (
-                                        <div key={i} className="truncate min-[1920px]:whitespace-normal min-[1920px]:text-clip" title={meeirosDoItem.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
+                                        <div key={i} className="truncate xl:whitespace-normal xl:text-clip" title={meeirosDoItem.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
                                           {m.meeiroNome ?? `ID ${m.meeiroId}`}
                                         </div>
                                       ))}
@@ -4467,7 +4467,7 @@ className={
                             <TableCell className="text-right whitespace-nowrap">
                               {item != null ? formatCurrency(valorTotalItem) : formatCurrency(Number(l.total_geral))}
                             </TableCell>
-                            <TableCell className="w-[72px] min-w-[72px] max-w-[72px] text-right p-2 sticky right-0 z-10 bg-card align-middle border-l border-border">
+                            <TableCell className="w-[72px] min-w-[72px] max-w-[72px] text-right p-2 sticky right-0 z-10 bg-card group-hover/lanc:bg-muted/50 align-middle border-l border-border">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
