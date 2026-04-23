@@ -57,6 +57,7 @@ import {
   type CentroCustoDespesa,
   type CentroCustoTipo,
 } from '@/contexts/CentroCustosContext';
+import { formatValorMonetarioBr, parseValorMonetarioEntrada } from '@/lib/parse-valor-monetario';
 import { cn, formatCurrency } from '@/lib/utils';
 import { centroCustoService } from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
@@ -436,9 +437,8 @@ export default function CentroCustos() {
   };
 
   const parseValor = (s: string): number => {
-    const x = s.replace(/\s/g, '').replace(',', '.');
-    const n = parseFloat(x);
-    return Number.isFinite(n) ? n : NaN;
+    const n = parseValorMonetarioEntrada(s);
+    return n === null || !Number.isFinite(n) ? NaN : n;
   };
 
   const salvarDespesa = async () => {
@@ -520,7 +520,7 @@ export default function CentroCustos() {
   const abrirEditar = (d: CentroCustoDespesa) => {
     setEditDesp(d);
     setDescricao(d.descricao);
-    setValorStr(String(d.valor));
+    setValorStr(formatValorMonetarioBr(Number(d.valor)));
     setDataDesp(d.data.slice(0, 10));
     setObservacoes(d.observacoes ?? '');
     setTipoIdSel(d.tipoId);

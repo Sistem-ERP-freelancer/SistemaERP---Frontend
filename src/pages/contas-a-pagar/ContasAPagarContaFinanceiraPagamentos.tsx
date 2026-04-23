@@ -59,6 +59,8 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
     queryFn: () => financeiroService.buscarDetalhePorId(contaId),
     enabled: !!contaId,
     retry: false,
+    /** Sempre alinhar ao servidor ao entrar (ex.: valor em aberto mudou após editar a despesa). */
+    refetchOnMount: 'always',
   });
 
   const valorEmAberto = Number(detalhe?.valor_em_aberto ?? 0);
@@ -70,14 +72,20 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
   const numeroConta = detalhe?.numero_conta ?? `CONTA-${contaId}`;
   const fornecedorNome = detalhe?.relacionamentos?.fornecedor_nome ?? '—';
 
-  const autoFilledRef = useRef(false);
+  /** Só deixa de syncar com a API se o usuário alterou o valor manualmente (ex.: parcial). */
+  const usuarioEditouValor = useRef(false);
+
   useEffect(() => {
-    if (autoFilledRef.current) return;
-    if (valorEmAberto > 0 && valorPago === '') {
-      setValorPago(valorEmAberto);
-      autoFilledRef.current = true;
+    usuarioEditouValor.current = false;
+    setValorPago('');
+  }, [contaId]);
+
+  useEffect(() => {
+    if (usuarioEditouValor.current) return;
+    if (valorEmAberto > 0) {
+      setValorPago(Number(valorEmAberto.toFixed(2)));
     }
-  }, [valorEmAberto, valorPago]);
+  }, [valorEmAberto]);
 
   const registrarMutation = useMutation({
     mutationFn: async () => {
@@ -196,7 +204,10 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
                 min="0"
                 max={valorEmAberto}
                 value={valorPago === '' ? '' : valorPago}
-                onChange={(e) => setValorPago(e.target.value ? Number(e.target.value) : '')}
+                onChange={(e) => {
+                  usuarioEditouValor.current = true;
+                  setValorPago(e.target.value ? Number(e.target.value) : '');
+                }}
                 required
               />
               <p className="text-xs text-muted-foreground">
