@@ -58,7 +58,7 @@ import {
   type CentroCustoTipo,
 } from '@/contexts/CentroCustosContext';
 import { formatValorMonetarioBr, parseValorMonetarioEntrada } from '@/lib/parse-valor-monetario';
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { centroCustoService } from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
 import type { Roca } from '@/types/roca';
@@ -192,7 +192,7 @@ function DespesasTable({
                   <TableCell className="text-right tabular-nums">
                     {formatCurrency(Number(d.valor))}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">{d.data}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(d.data)}</TableCell>
                   <TableCell>{badgeStatus(st)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(pago)}</TableCell>
                   <TableCell className="text-right">
