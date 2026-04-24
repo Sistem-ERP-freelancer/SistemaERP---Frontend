@@ -441,6 +441,15 @@ export default function CentroCustos() {
     return n === null || !Number.isFinite(n) ? NaN : n;
   };
 
+  /** Ao sair do campo, normaliza para pt-BR com 2 decimais (ex.: 2900 → 2.900,00). */
+  const onBlurFormatarValorDespesa = () => {
+    const s = valorStr.trim();
+    if (s === '') return;
+    const n = parseValorMonetarioEntrada(s);
+    if (n === null || !Number.isFinite(n)) return;
+    setValorStr(formatValorMonetarioBr(n));
+  };
+
   const salvarDespesa = async () => {
     const v = parseValor(valorStr);
     if (!descricao.trim()) {
@@ -894,8 +903,10 @@ export default function CentroCustos() {
                   <Input
                     value={valorStr}
                     onChange={(e) => setValorStr(e.target.value)}
+                    onBlur={onBlurFormatarValorDespesa}
                     placeholder="0,00"
                     inputMode="decimal"
+                    className="tabular-nums"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1054,7 +1065,13 @@ export default function CentroCustos() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label>Valor</Label>
-                  <Input value={valorStr} onChange={(e) => setValorStr(e.target.value)} />
+                  <Input
+                    value={valorStr}
+                    onChange={(e) => setValorStr(e.target.value)}
+                    onBlur={onBlurFormatarValorDespesa}
+                    inputMode="decimal"
+                    className="tabular-nums"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>Data</Label>

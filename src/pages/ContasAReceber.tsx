@@ -80,6 +80,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+/** Saldo em aberto (legado: valor_restante; modelo saldo: valor_em_aberto). */
+const saldoAbertoConta = (p: ContaFinanceira & { valorEmAberto?: number }): number => {
+  if (p.status === "CANCELADO" || p.status === "PAGO_TOTAL") return 0;
+  const r = p.valor_restante != null ? Number(p.valor_restante) : 0;
+  const emRaw = p.valor_em_aberto ?? p.valorEmAberto;
+  const em = emRaw != null ? Number(emRaw) : 0;
+  return Math.max(0, r || em);
+};
+
 const ContasAReceber = () => {
   const [viewMode, setViewMode] = useState<"clientes" | "pedidos">("pedidos");
   /** Guia: card Total a Receber preferir soma da lista de clientes (bate com a tabela). */
@@ -1083,7 +1092,7 @@ const ContasAReceber = () => {
       const restantes = parcelas.filter(
         (p) => p.status !== "CANCELADO" && !isPaga(p)
       ).length;
-      const valorAberto = parcelas.reduce((s, p) => s + (p.valor_restante ?? p.valor_original ?? 0), 0);
+      const valorAberto = parcelas.reduce((s, p) => s + saldoAbertoConta(p), 0);
       const descricaoBase = primeira?.descricao?.replace(/\s*-\s*\d+\/\d+\s*$/, "").trim() || primeira?.numero_conta || `Conta ${primeira?.id}`;
       const pendentes = parcelas.filter((p) => p.status !== "CANCELADO" && !isPaga(p));
       const primeiraVenc = pendentes
@@ -2220,10 +2229,27 @@ const ContasAReceber = () => {
                               <Eye className="w-4 h-4 mr-2" />
                               Visualizar
                             </DropdownMenuItem>
-                            {grupo?.pedido_id && (grupo?.valor_aberto ?? 0) > 0 && (
-                              <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${grupo.pedido_id}/pagamentos`)}>
-                                <DollarSign className="w-4 h-4 mr-2" />
-                                Pagamentos
+                            {grupo?.parcelas?.[0]?.id != null && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedContaId(grupo!.parcelas[0].id);
+                                  setEditDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="w-4 h-4 mr-2" />
+                                Editar
+                              </DropdownMenuItem>
+                            )}
+                            {grupo?.pedido_id != null && (grupo?.valor_aberto ?? 0) > 0 && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/financeiro/contas-receber/${grupo.pedido_id}/pagamentos`,
+                                  )
+                                }
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Pagar
                               </DropdownMenuItem>
                             )}
                             {(grupo?.parcelas?.[0]?.id != null) && (
@@ -2286,10 +2312,37 @@ const ContasAReceber = () => {
                             <Eye className="w-4 h-4 mr-2" />
                             Ver detalhes
                           </DropdownMenuItem>
+                          {transacao.pedidoId ? (
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                try {
+                                  const contaId = await financeiroService.getContaIdPorPedidoId(
+                                    transacao.pedidoId!,
+                                    "RECEBER",
+                                  );
+                                  if (contaId == null) {
+                                    toast.error("Conta financeira não encontrada para este pedido.");
+                                    return;
+                                  }
+                                  setSelectedContaId(contaId);
+                                  setEditDialogOpen(true);
+                                } catch (e) {
+                                  toast.error(
+                                    e instanceof Error
+                                      ? e.message
+                                      : "Não foi possível abrir a edição.",
+                                  );
+                                }
+                              }}
+                            >
+                              <Edit className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                          ) : null}
                           {(linhasPedidos.find((p: ContaReceber) => p.numero_pedido === transacao.id)?.valor_em_aberto ?? 0) > 0 && transacao.pedidoId ? (
                             <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${transacao.pedidoId}/pagamentos`)}>
-                              <DollarSign className="w-4 h-4 mr-2" />
-                              Pagamentos
+                              <CreditCard className="w-4 h-4 mr-2" />
+                              Pagar
                             </DropdownMenuItem>
                           ) : null}
                           <DropdownMenuItem

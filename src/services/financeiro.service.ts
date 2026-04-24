@@ -11,6 +11,8 @@ export interface ContaFinanceira {
   valor_original: number;
   valor_pago: number;
   valor_restante: number;
+  /** Modelo por saldo: pode vir preenchido quando `valor_restante` estiver 0 desatualizado. */
+  valor_em_aberto?: number;
   data_emissao: string;
   data_vencimento: string;
   data_pagamento?: string;

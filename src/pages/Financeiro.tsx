@@ -524,7 +524,6 @@ const Financeiro = () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
       toast.success("Transação registrada com sucesso!");
-      setDialogOpen(false);
       setNewTransacao({
         tipo: "RECEBER",
         descricao: "",
@@ -720,7 +719,11 @@ const Financeiro = () => {
             </Button>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent
+              className="max-w-4xl max-h-[90vh] overflow-y-auto"
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onEscapeKeyDown={(e) => e.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle>Nova Transação</DialogTitle>
                 <DialogDescription>
@@ -783,7 +786,11 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label>Cliente</Label>
                       <Select
-                        value={newTransacao.cliente_id?.toString() || undefined}
+                        value={
+                          newTransacao.cliente_id != null
+                            ? String(newTransacao.cliente_id)
+                            : "none"
+                        }
                         onValueChange={(value) => 
                           setNewTransacao({
                             ...newTransacao, 
@@ -807,7 +814,11 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label>Fornecedor</Label>
                       <Select
-                        value={newTransacao.fornecedor_id?.toString() || undefined}
+                        value={
+                          newTransacao.fornecedor_id != null
+                            ? String(newTransacao.fornecedor_id)
+                            : "none"
+                        }
                         onValueChange={(value) => 
                           setNewTransacao({
                             ...newTransacao, 
@@ -831,7 +842,11 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label>Pedido</Label>
                       <Select
-                        value={newTransacao.pedido_id?.toString() || undefined}
+                        value={
+                          newTransacao.pedido_id != null
+                            ? String(newTransacao.pedido_id)
+                            : "none"
+                        }
                         onValueChange={(value) => 
                           setNewTransacao({
                             ...newTransacao, 
@@ -906,11 +921,12 @@ const Financeiro = () => {
                   <div className="space-y-2">
                     <Label>Forma de Pagamento</Label>
                     <Select
-                      value={newTransacao.forma_pagamento || undefined}
+                      value={newTransacao.forma_pagamento ?? "none"}
                       onValueChange={(value) => 
                         setNewTransacao({
                           ...newTransacao, 
-                          forma_pagamento: value ? (value as any) : undefined
+                          forma_pagamento:
+                            value === "none" ? undefined : (value as any),
                         })
                       }
                     >
@@ -918,6 +934,7 @@ const Financeiro = () => {
                         <SelectValue placeholder="Selecione a forma de pagamento" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">Nenhuma</SelectItem>
                         <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
                         <SelectItem value="PIX">PIX</SelectItem>
                         <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
@@ -1728,7 +1745,11 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Cliente</Label>
                       <Select
-                        value={editConta.cliente_id?.toString() || undefined}
+                        value={
+                          editConta.cliente_id != null
+                            ? String(editConta.cliente_id)
+                            : "none"
+                        }
                         onValueChange={(value) =>
                           setEditConta({
                             ...editConta,
@@ -1752,7 +1773,11 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Fornecedor</Label>
                       <Select
-                        value={editConta.fornecedor_id?.toString() || undefined}
+                        value={
+                          editConta.fornecedor_id != null
+                            ? String(editConta.fornecedor_id)
+                            : "none"
+                        }
                         onValueChange={(value) =>
                           setEditConta({
                             ...editConta,
@@ -1776,7 +1801,11 @@ const Financeiro = () => {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Pedido</Label>
                       <Select
-                        value={editConta.pedido_id?.toString() || undefined}
+                        value={
+                          editConta.pedido_id != null
+                            ? String(editConta.pedido_id)
+                            : "none"
+                        }
                         onValueChange={(value) =>
                           setEditConta({
                             ...editConta,
@@ -1869,11 +1898,12 @@ const Financeiro = () => {
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Forma de Pagamento</Label>
                     <Select
-                      value={editConta.forma_pagamento || undefined}
+                      value={editConta.forma_pagamento ?? "none"}
                       onValueChange={(value) =>
                         setEditConta({
                           ...editConta,
-                          forma_pagamento: value ? (value as any) : undefined,
+                          forma_pagamento:
+                            value === "none" ? undefined : (value as any),
                         })
                       }
                     >
@@ -1881,6 +1911,7 @@ const Financeiro = () => {
                         <SelectValue placeholder="Selecione a forma de pagamento" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">Nenhuma</SelectItem>
                         <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
                         <SelectItem value="PIX">PIX</SelectItem>
                         <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
