@@ -80,11 +80,37 @@ class CentroCustoService {
   listarDespesas(
     page = 1,
     limit = PAGE,
+    filtros?: {
+      dataInicial?: string;
+      dataFinal?: string;
+      tipoId?: number;
+      rocaId?: number;
+      busca?: string;
+      status?: 'ABERTO' | 'PARCIAL' | 'QUITADO';
+    },
   ): Promise<PaginatedResult<ApiCentroCustoDespesa>> {
     const q = new URLSearchParams({
       page: String(page),
       limit: String(limit),
     });
+    if (filtros?.dataInicial?.trim()) {
+      q.set('dataInicial', filtros.dataInicial.trim().slice(0, 10));
+    }
+    if (filtros?.dataFinal?.trim()) {
+      q.set('dataFinal', filtros.dataFinal.trim().slice(0, 10));
+    }
+    if (filtros?.tipoId != null && filtros.tipoId > 0) {
+      q.set('tipoId', String(filtros.tipoId));
+    }
+    if (filtros?.rocaId != null && filtros.rocaId > 0) {
+      q.set('rocaId', String(filtros.rocaId));
+    }
+    if (filtros?.busca?.trim()) {
+      q.set('busca', filtros.busca.trim());
+    }
+    if (filtros?.status) {
+      q.set('status', filtros.status);
+    }
     return apiClient.get<PaginatedResult<ApiCentroCustoDespesa>>(
       `${BASE}/despesas?${q}`,
     );
@@ -101,8 +127,39 @@ class CentroCustoService {
     );
   }
 
-  resumoModulo(): Promise<CentroCustoResumoModulo> {
-    return apiClient.get<CentroCustoResumoModulo>(`${BASE}/resumo`);
+  resumoModulo(
+    filtros?: {
+      dataInicial?: string;
+      dataFinal?: string;
+      tipoId?: number;
+      rocaId?: number;
+      busca?: string;
+      status?: 'ABERTO' | 'PARCIAL' | 'QUITADO';
+    },
+  ): Promise<CentroCustoResumoModulo> {
+    const q = new URLSearchParams();
+    if (filtros?.dataInicial?.trim()) {
+      q.set('dataInicial', filtros.dataInicial.trim().slice(0, 10));
+    }
+    if (filtros?.dataFinal?.trim()) {
+      q.set('dataFinal', filtros.dataFinal.trim().slice(0, 10));
+    }
+    if (filtros?.tipoId != null && filtros.tipoId > 0) {
+      q.set('tipoId', String(filtros.tipoId));
+    }
+    if (filtros?.rocaId != null && filtros.rocaId > 0) {
+      q.set('rocaId', String(filtros.rocaId));
+    }
+    if (filtros?.busca?.trim()) {
+      q.set('busca', filtros.busca.trim());
+    }
+    if (filtros?.status) {
+      q.set('status', filtros.status);
+    }
+    const qs = q.toString();
+    return apiClient.get<CentroCustoResumoModulo>(
+      `${BASE}/resumo${qs ? `?${qs}` : ''}`,
+    );
   }
 
   criarDespesa(data: {

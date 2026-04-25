@@ -28,9 +28,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Table,
   TableBody,
@@ -51,11 +75,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   CENTRO_CUSTO_PAGE_SIZE,
+  isDespesasFiltroVazio,
   useCentroCustos,
   statusDespesa,
   totalPagoNaDespesa,
   type CentroCustoDespesa,
   type CentroCustoTipo,
+  type DespesasFiltro,
+  type DespesasStatusFiltro,
 } from '@/contexts/CentroCustosContext';
 import { formatValorMonetarioBr, parseValorMonetarioEntrada } from '@/lib/parse-valor-monetario';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
@@ -63,22 +90,26 @@ import { centroCustoService } from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
 import type { Roca } from '@/types/roca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
 import {
   Banknote,
+  BarChart3,
+  Calendar,
   Check,
   ChevronsUpDown,
+  Circle,
   Eye,
+  Filter,
   Landmark,
   Pencil,
   PiggyBank,
   Plus,
   Receipt,
   Scale,
+  Search,
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -140,6 +171,7 @@ function DespesasTable({
   onPagar,
   onEditar,
   onExcluir,
+  emptyMessage,
 }: {
   despesas: CentroCustoDespesa[];
   nomeTipo: (d: CentroCustoDespesa) => string;
@@ -147,6 +179,8 @@ function DespesasTable({
   onPagar: (d: CentroCustoDespesa) => void;
   onEditar: (d: CentroCustoDespesa) => void;
   onExcluir: (d: CentroCustoDespesa) => void;
+  /** Quando a lista veio vazia e há filtros ativos. */
+  emptyMessage?: string;
 }) {
   const ordenadas = useMemo(
     () =>
@@ -177,7 +211,7 @@ function DespesasTable({
           {ordenadas.length === 0 ? (
             <TableRow>
               <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
-                Nenhuma despesa lançada.
+                {emptyMessage ?? 'Nenhuma despesa lançada.'}
               </TableCell>
             </TableRow>
           ) : (
@@ -317,6 +351,383 @@ function CentroCustoTablePagination({
   );
 }
 
+function abrirSeletorDataNativo(input: HTMLInputElement | null) {
+  if (!input) return;
+  input.focus();
+  const el = input as HTMLInputElement & { showPicker?: () => void };
+  try {
+    if (typeof el.showPicker === 'function') {
+      el.showPicker();
+      return;
+    }
+  } catch {
+    // falha de permissão em alguns contextos
+  }
+  input.click();
+}
+
+function FiltroPeriodoDateInput({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="relative">
+      <Input
+        ref={inputRef}
+        id={id}
+        type="date"
+        className="h-10 w-full rounded-xl border-2 bg-muted/40 pl-3 pr-10 [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden [&::-moz-calendar-picker-indicator]:hidden"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={() => abrirSeletorDataNativo(inputRef.current)}
+        className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Abrir calendário"
+      >
+        <Calendar className="h-4 w-4 shrink-0" />
+      </button>
+    </div>
+  );
+}
+
+function DespesasFiltrosBar({
+  rocasAtivas,
+  loadingRocas,
+}: {
+  rocasAtivas: Roca[];
+  loadingRocas: boolean;
+}) {
+  const {
+    despesasFiltro,
+    aplicarFiltrosDespesas,
+    limparFiltrosDespesas,
+    despesasBusca,
+    setDespesasBusca,
+    tiposOpcoes,
+  } = useCentroCustos();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [dataIni, setDataIni] = useState('');
+  const [dataFim, setDataFim] = useState('');
+  const [tipoFiltro, setTipoFiltro] = useState('');
+  const [rocaFiltro, setRocaFiltro] = useState<number | null>(null);
+  const [statusFiltro, setStatusFiltro] = useState<'' | DespesasStatusFiltro>('');
+  const [qLocal, setQLocal] = useState(despesasBusca);
+
+  useEffect(() => {
+    setDataIni(despesasFiltro.dataInicial ?? '');
+    setDataFim(despesasFiltro.dataFinal ?? '');
+    setTipoFiltro(despesasFiltro.tipoId ?? '');
+    setRocaFiltro(
+      despesasFiltro.rocaId != null && despesasFiltro.rocaId > 0
+        ? despesasFiltro.rocaId
+        : null,
+    );
+    setStatusFiltro(
+      despesasFiltro.status === 'ABERTO' ||
+        despesasFiltro.status === 'PARCIAL' ||
+        despesasFiltro.status === 'QUITADO'
+        ? despesasFiltro.status
+        : '',
+    );
+  }, [despesasFiltro]);
+
+  useEffect(() => {
+    setQLocal(despesasBusca);
+  }, [despesasBusca]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (qLocal !== despesasBusca) {
+        setDespesasBusca(qLocal);
+      }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [qLocal, despesasBusca, setDespesasBusca]);
+
+  const handleAplicarFiltrosSheet = () => {
+    const a = dataIni.trim();
+    const b = dataFim.trim();
+    if (a && b && a > b) {
+      toast.error('A data inicial não pode ser maior que a data final.');
+      return;
+    }
+    const f: DespesasFiltro = {};
+    if (a) f.dataInicial = a.slice(0, 10);
+    if (b) f.dataFinal = b.slice(0, 10);
+    if (tipoFiltro) f.tipoId = tipoFiltro;
+    if (rocaFiltro != null && rocaFiltro > 0) f.rocaId = rocaFiltro;
+    if (statusFiltro) f.status = statusFiltro;
+    aplicarFiltrosDespesas(f);
+    setSheetOpen(false);
+  };
+
+  const handleLimparFiltrosSheet = () => {
+    setDataIni('');
+    setDataFim('');
+    setTipoFiltro('');
+    setRocaFiltro(null);
+    setStatusFiltro('');
+    limparFiltrosDespesas();
+    setSheetOpen(false);
+  };
+
+  const temFiltrosAtivos = !isDespesasFiltroVazio(despesasFiltro);
+  const contagemFiltrosAvancado =
+    (despesasFiltro.dataInicial ? 1 : 0) +
+    (despesasFiltro.dataFinal ? 1 : 0) +
+    (despesasFiltro.tipoId ? 1 : 0) +
+    (despesasFiltro.rocaId != null && despesasFiltro.rocaId > 0 ? 1 : 0) +
+    (despesasFiltro.status ? 1 : 0);
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4 mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-stretch sm:gap-4">
+        <div className="order-1 flex w-full min-w-0 sm:w-auto sm:shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 w-full sm:w-auto"
+            onClick={() => setSheetOpen(true)}
+            style={
+              temFiltrosAtivos
+                ? { borderColor: 'var(--primary)', borderWidth: '2px' }
+                : undefined
+            }
+          >
+            <Filter className="w-4 h-4" />
+            Filtros
+            {contagemFiltrosAvancado > 0 ? (
+              <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                {contagemFiltrosAvancado}
+              </span>
+            ) : null}
+          </Button>
+        </div>
+
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent
+            side="right"
+            className="w-[400px] sm:w-[540px] max-w-full overflow-y-auto"
+          >
+            <SheetHeader className="mb-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Filter className="w-5 h-5 text-primary" />
+                </div>
+                <SheetTitle className="text-xl">Filtros Avançados</SheetTitle>
+              </div>
+              <SheetDescription>Refine sua busca</SheetDescription>
+            </SheetHeader>
+
+            <div className="space-y-6">
+              {/* Tipo de despesa — mesmo padrão do select “Fornecedor” em Contas a Pagar */}
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Tipo de despesa</Label>
+                <Select
+                  value={tipoFiltro || 'todos'}
+                  onValueChange={(v) => setTipoFiltro(v === 'todos' ? '' : v)}
+                >
+                  <SelectTrigger className="w-full rounded-xl border-2">
+                    <SelectValue placeholder="Todos os tipos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os tipos</SelectItem>
+                    {tiposOpcoes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Período</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground" htmlFor="cc-filtro-data-ini">
+                      Data Inicial
+                    </Label>
+                    <FiltroPeriodoDateInput
+                      id="cc-filtro-data-ini"
+                      value={dataIni}
+                      onChange={setDataIni}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground" htmlFor="cc-filtro-data-fim">
+                      Data Final
+                    </Label>
+                    <FiltroPeriodoDateInput
+                      id="cc-filtro-data-fim"
+                      value={dataFim}
+                      onChange={setDataFim}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Roça</Label>
+                <Select
+                  value={rocaFiltro != null && rocaFiltro > 0 ? String(rocaFiltro) : 'todas'}
+                  onValueChange={(v) => {
+                    if (v === 'todas') {
+                      setRocaFiltro(null);
+                      return;
+                    }
+                    const n = parseInt(v, 10);
+                    setRocaFiltro(Number.isFinite(n) && n > 0 ? n : null);
+                  }}
+                  disabled={loadingRocas}
+                >
+                  <SelectTrigger className="w-full rounded-xl border-2">
+                    <SelectValue placeholder="Todas as roças" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas as roças</SelectItem>
+                    {rocasAtivas.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.nome}
+                        {r.codigo ? ` (${r.codigo})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Status</Label>
+                <RadioGroup
+                  value={statusFiltro || 'todos'}
+                  onValueChange={(v) => {
+                    setStatusFiltro(
+                      v === 'todos' || v === '' ? '' : (v as DespesasStatusFiltro),
+                    );
+                  }}
+                  className="space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="todos" id="cc-despesa-status-todos" />
+                    <Label
+                      htmlFor="cc-despesa-status-todos"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
+                      <Circle className="w-3 h-3 text-primary" />
+                      <span>Todos</span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="ABERTO" id="cc-despesa-status-aberto" />
+                    <Label
+                      htmlFor="cc-despesa-status-aberto"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
+                      <Circle className="w-3 h-3 text-amber-500" />
+                      <span>Aberto</span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="PARCIAL" id="cc-despesa-status-parcial" />
+                    <Label
+                      htmlFor="cc-despesa-status-parcial"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
+                      <Circle className="w-3 h-3 text-sky-500" />
+                      <span>Parcial</span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="QUITADO" id="cc-despesa-status-quitado" />
+                    <Label
+                      htmlFor="cc-despesa-status-quitado"
+                      className="flex items-center gap-2 cursor-pointer flex-1"
+                    >
+                      <Circle className="w-3 h-3 text-emerald-500" />
+                      <span>Quitado</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <Separator />
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  onClick={handleAplicarFiltrosSheet}
+                  className="flex-1 rounded-full"
+                >
+                  Aplicar Filtros
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleLimparFiltrosSheet}
+                  variant="outline"
+                  className="flex-1 rounded-full"
+                >
+                  Limpar Filtros
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <div className="relative order-2 min-w-0 w-full sm:flex-1 sm:min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Buscar por descrição, tipo, roça, número (id)…"
+            className="pl-10"
+            value={qLocal}
+            onChange={(e) => setQLocal(e.target.value)}
+            aria-label="Buscar despesas"
+          />
+        </div>
+
+        <div className="order-3 flex w-full min-w-0 sm:w-auto sm:shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 w-full sm:w-auto"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Relatórios
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  toast.info('Em breve: exportação e relatórios de centro de custo.');
+                }}
+              >
+                Resumo por período (em breve)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function msgErro(e: unknown, fallback: string): string {
   if (e instanceof Error && e.message) return e.message;
   return fallback;
@@ -333,7 +744,10 @@ export default function CentroCustos() {
     despesasPage,
     setDespesasPage,
     despesasTotal,
+    despesasFiltro,
+    despesasBusca,
     isLoading,
+    isLoadingTiposTabela,
     adicionarTipo,
     atualizarTipo,
     excluirTipo,
@@ -368,6 +782,11 @@ export default function CentroCustos() {
     1,
     Math.ceil(despesasTotal / CENTRO_CUSTO_PAGE_SIZE),
   );
+  const msgListaDespesasVazia =
+    despesas.length === 0 &&
+    (!isDespesasFiltroVazio(despesasFiltro) || despesasBusca.trim() !== '')
+      ? 'Nenhuma despesa encontrada com os filtros selecionados ou o termo buscado.'
+      : undefined;
 
   const nomeTipoDespesa = (d: CentroCustoDespesa) =>
     d.tipoNome ?? tiposOpcoes.find((t) => t.id === d.tipoId)?.nome ?? '—';
@@ -617,7 +1036,7 @@ export default function CentroCustos() {
                 banco do seu tenant.
               </p>
               {isLoading ? (
-                <p className="text-xs text-muted-foreground mt-2">Carregando tipos e despesas…</p>
+                <p className="text-xs text-muted-foreground mt-2">Carregando resumo e despesas…</p>
               ) : null}
             </div>
           </div>
@@ -627,7 +1046,7 @@ export default function CentroCustos() {
           {tab === 'visao' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-                {CARD_STATS.map((c, idx) => {
+                {CARD_STATS.map((c) => {
                   const Icon = c.Icon;
                   const valNum =
                     c.key === 'abertas'
@@ -640,32 +1059,26 @@ export default function CentroCustos() {
                   const display =
                     c.kind === 'count' ? String(valNum) : formatCurrency(valNum);
                   return (
-                    <motion.div
+                    <Card
                       key={c.key}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.05 }}
+                      className={`h-full overflow-hidden border border-border/60 shadow-sm ${c.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
                     >
-                      <Card
-                        className={`h-full overflow-hidden border border-border/60 shadow-sm ${c.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
-                              {c.label}
-                            </p>
-                            <div
-                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.iconWrap}`}
-                            >
-                              <Icon className="h-4 w-4" aria-hidden />
-                            </div>
-                          </div>
-                          <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
-                            {display}
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
+                            {c.label}
                           </p>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
+                          <div
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.iconWrap}`}
+                          >
+                            <Icon className="h-4 w-4" aria-hidden />
+                          </div>
+                        </div>
+                        <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
+                          {display}
+                        </p>
+                      </CardContent>
+                    </Card>
                   );
                 })}
               </div>
@@ -695,6 +1108,13 @@ export default function CentroCustos() {
             )}
           </div>
 
+          {(tab === 'visao' || tab === 'despesas') && (
+            <DespesasFiltrosBar
+              rocasAtivas={rocasAtivas}
+              loadingRocas={loadingRocas}
+            />
+          )}
+
           {tab === 'visao' && (
             <div className="rounded-xl border bg-card overflow-hidden">
               <DespesasTable
@@ -704,6 +1124,7 @@ export default function CentroCustos() {
                 onPagar={abrirPagarRapido}
                 onEditar={abrirEditar}
                 onExcluir={setDeleteDesp}
+                emptyMessage={msgListaDespesasVazia}
               />
               <CentroCustoTablePagination
                 page={despesasPage}
@@ -737,7 +1158,13 @@ export default function CentroCustos() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tipos.length === 0 ? (
+                  {isLoadingTiposTabela && tipos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center text-muted-foreground py-10">
+                        Carregando tipos…
+                      </TableCell>
+                    </TableRow>
+                  ) : tipos.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={2} className="text-center text-muted-foreground py-10">
                         Nenhum tipo cadastrado.
@@ -939,6 +1366,7 @@ export default function CentroCustos() {
                   onPagar={abrirPagarRapido}
                   onEditar={abrirEditar}
                   onExcluir={setDeleteDesp}
+                  emptyMessage={msgListaDespesasVazia}
                 />
                 <CentroCustoTablePagination
                   page={despesasPage}

@@ -1706,27 +1706,19 @@ const ContasAReceber = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                        <div className="relative">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                          <Input
-                            type="date"
-                            className="pl-10"
-                            value={dataInicialFilter}
-                            onChange={(e) => setDataInicialFilter(e.target.value || "")}
-                          />
-                        </div>
+                        <Input
+                          type="date"
+                          value={dataInicialFilter}
+                          onChange={(e) => setDataInicialFilter(e.target.value || "")}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Data Final</Label>
-                        <div className="relative">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                          <Input
-                            type="date"
-                            className="pl-10"
-                            value={dataFinalFilter}
-                            onChange={(e) => setDataFinalFilter(e.target.value || "")}
-                          />
-                        </div>
+                        <Input
+                          type="date"
+                          value={dataFinalFilter}
+                          onChange={(e) => setDataFinalFilter(e.target.value || "")}
+                        />
                       </div>
                     </div>
                   </div>
