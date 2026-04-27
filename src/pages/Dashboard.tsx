@@ -107,7 +107,7 @@ const Dashboard = () => {
   const [mesAnoFiltro, setMesAnoFiltro] = useState<string>("");
   /** Só aplicado com "Todos os meses" (`painel_totais_gerais` no backend). */
   const [totaisGeraisModo, setTotaisGeraisModo] =
-    useState<PainelTotaisGeraisModo>("emissao");
+    useState<PainelTotaisGeraisModo>("pagos");
 
   const refMesYyyyMm = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
@@ -206,12 +206,15 @@ const Dashboard = () => {
     if (totaisGeraisModo === "pagos") {
       const pagoTotal =
         f.linha_totais_periodo.compras + f.linha_totais_periodo.despesas;
+      const saldoCaixaAcumulado = Number(
+        (f.linha_totais_periodo.vendas - pagoTotal).toFixed(2),
+      );
       totaisCelulas = [
         { legenda: "Total pago", valor: pagoTotal },
         { legenda: "Total recebido", valor: f.linha_totais_periodo.vendas },
         {
           legenda: "Saldo (caixa acumulado)",
-          valor: f.linha_totais_periodo.saldo,
+          valor: saldoCaixaAcumulado,
         },
       ];
       totaisSubtitulo =
@@ -480,11 +483,11 @@ const Dashboard = () => {
                               <SelectValue placeholder="Escolher visão" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="emissao">
-                                Faturamento (competência acumulada)
-                              </SelectItem>
                               <SelectItem value="pagos">
                                 Valores pagos e recebidos (caixa)
+                              </SelectItem>
+                              <SelectItem value="emissao">
+                                Faturamento (competência acumulada)
                               </SelectItem>
                               <SelectItem value="a_receber">
                                 Valores a receber e a pagar (em aberto)
