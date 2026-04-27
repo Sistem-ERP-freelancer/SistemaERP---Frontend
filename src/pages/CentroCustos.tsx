@@ -100,6 +100,7 @@ import {
   Eye,
   Filter,
   Landmark,
+  MoreHorizontal,
   Pencil,
   PiggyBank,
   Plus,
@@ -248,47 +249,55 @@ function DespesasTable({
                     {dataPagamento ? formatDate(dataPagamento) : '—'}
                   </TableCell>
                   <TableCell className="text-center">
-                    <div className="inline-flex flex-wrap items-center justify-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          void onDetalhe(d);
-                        }}
-                        title="Detalhes"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2 shrink-0"
-                        onClick={() => onPagar(d)}
-                        disabled={st === 'QUITADO'}
-                        title={st === 'QUITADO' ? 'Despesa quitada' : 'Registrar pagamento'}
-                      >
-                        <Banknote className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Pagar</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2 shrink-0"
-                        onClick={() => onAlterarDataPagamento(d)}
-                        title="Alterar data de pagamento"
-                      >
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Data pgto</span>
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => onEditar(d)} title="Editar">
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      {pago <= 0.009 ? (
-                        <Button variant="ghost" size="icon" onClick={() => onExcluir(d)} title="Excluir">
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" title="Ações">
+                          <MoreHorizontal className="w-4 h-4" />
                         </Button>
-                      ) : null}
-                    </div>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="center" className="w-44">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void onDetalhe(d);
+                          }}
+                          className="gap-2"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Detalhes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => onPagar(d)}
+                          disabled={st === 'QUITADO'}
+                          className="gap-2"
+                        >
+                          <Banknote className="w-4 h-4" />
+                          Pagar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => onAlterarDataPagamento(d)}
+                          className="gap-2"
+                        >
+                          <Calendar className="w-4 h-4" />
+                          Data pgto
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => onEditar(d)} className="gap-2">
+                          <Pencil className="w-4 h-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        {pago <= 0.009 ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => onExcluir(d)}
+                              className="gap-2 text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               );
