@@ -407,20 +407,44 @@ class FinanceiroService {
     return apiClient.patch<ContaFinanceira>(`/contas-financeiras/${id}/cancelar`, {});
   }
 
-  async getDashboardReceber(params?: { mes?: number; ano?: number; mes_ano?: string }): Promise<DashboardFinanceiro> {
+  async getDashboardReceber(params?: {
+    mes?: number;
+    ano?: number;
+    mes_ano?: string;
+    data_inicial?: string;
+    data_final?: string;
+    dataInicial?: string;
+    dataFinal?: string;
+  }): Promise<DashboardFinanceiro> {
     const q = new URLSearchParams();
     if (params?.mes) q.append('mes', params.mes.toString());
     if (params?.ano) q.append('ano', params.ano.toString());
     if (params?.mes_ano) q.append('mes_ano', params.mes_ano);
+    if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
+    if (params?.data_final) q.append('data_final', params.data_final);
+    if (params?.dataInicial) q.append('dataInicial', params.dataInicial);
+    if (params?.dataFinal) q.append('dataFinal', params.dataFinal);
     const query = q.toString();
     return apiClient.get<DashboardFinanceiro>(`/contas-financeiras/dashboard/receber${query ? `?${query}` : ''}`);
   }
 
-  async getDashboardPagar(params?: { mes?: number; ano?: number; mes_ano?: string }): Promise<DashboardFinanceiro> {
+  async getDashboardPagar(params?: {
+    mes?: number;
+    ano?: number;
+    mes_ano?: string;
+    data_inicial?: string;
+    data_final?: string;
+    dataInicial?: string;
+    dataFinal?: string;
+  }): Promise<DashboardFinanceiro> {
     const q = new URLSearchParams();
     if (params?.mes) q.append('mes', params.mes.toString());
     if (params?.ano) q.append('ano', params.ano.toString());
     if (params?.mes_ano) q.append('mes_ano', params.mes_ano);
+    if (params?.data_inicial) q.append('data_inicial', params.data_inicial);
+    if (params?.data_final) q.append('data_final', params.data_final);
+    if (params?.dataInicial) q.append('dataInicial', params.dataInicial);
+    if (params?.dataFinal) q.append('dataFinal', params.dataFinal);
     const query = q.toString();
     return apiClient.get<DashboardFinanceiro>(`/contas-financeiras/dashboard/pagar${query ? `?${query}` : ''}`);
   }

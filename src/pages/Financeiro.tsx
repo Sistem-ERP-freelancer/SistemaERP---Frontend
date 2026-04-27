@@ -76,10 +76,12 @@ import {
     TrendingUp,
     Wallet
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const Financeiro = () => {
+  const dataInicialFiltroRef = useRef<HTMLInputElement | null>(null);
+  const dataFinalFiltroRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -120,6 +122,14 @@ const Financeiro = () => {
     useState(false);
   /** Filtro por card clicável: Receita do Mês / Despesas do Mês (como em Contas a Receber) */
   const [cardTipoFilter, setCardTipoFilter] = useState<"todos" | "RECEBER" | "PAGAR">("todos");
+
+  const abrirDatePicker = (input: HTMLInputElement | null) => {
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+    }
+  };
 
   const queryClient = useQueryClient();
 
@@ -436,10 +446,10 @@ const Financeiro = () => {
   const totalAgrupado = contasAgrupadasResponse?.total || 0;
   const totalPages = Math.ceil(totalAgrupado / limit) || 1;
 
-  // Calcular estatísticas usando valores do backend (já consideram pagamentos parciais)
-  // - Receita do Mês = receita_mes (valor total a receber do mês atual)
-  // - Despesas do Mês = despesa_mes (valor total a pagar do mês atual)
-  // - Saldo Atual = Receita Total Recebida - Despesa Total Paga
+  // Calcular estatísticas do topo com a mesma base de competência:
+  // - Receita do Mês = receita_mes
+  // - Despesas do Mês = despesa_mes
+  // - Saldo Atual = Receita do Mês - Despesas do Mês
   const stats = useMemo(() => {
     // Função auxiliar para converter valor para número seguro
     const parseValor = (valor: any): number => {
@@ -450,9 +460,7 @@ const Financeiro = () => {
 
     const receitaMes = parseValor(contasReceberStats?.receita_mes) || 0;
     const despesaMes = parseValor(contasPagarStats?.despesa_mes) || 0;
-    const valorTotalRecebido = parseValor(contasReceberStats?.valor_total_recebido) ?? 0;
-    const valorTotalPago = parseValor(contasPagarStats?.valor_total_pago) ?? 0;
-    const saldoAtual = dashboardUnificado?.saldo_atual ?? (valorTotalRecebido - valorTotalPago);
+    const saldoAtual = receitaMes - despesaMes;
 
     /** Mesmo padrão visual dos cards em Centro de custos (borda lateral + ícone + valor). */
     return [
@@ -489,7 +497,7 @@ const Financeiro = () => {
         cardFilter: "todos" as const,
       },
     ];
-  }, [resumoParaStats, dashboardUnificado, contasReceberStats, contasPagarStats]);
+  }, [contasReceberStats, contasPagarStats]);
 
   // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -1190,31 +1198,47 @@ const Financeiro = () => {
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Data Inicial</Label>
                         <div className="relative">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                           <Input
                             type="date"
-                            className="pl-10"
+                            ref={dataInicialFiltroRef}
+                            className="pr-10 [color-scheme:light] [appearance:textfield] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:pointer-events-none"
                             value={dataInicialFilter}
                             onChange={(e) => {
                               setDataInicialFilter(e.target.value || "");
                               setPage(1);
                             }}
                           />
+                          <button
+                            type="button"
+                            aria-label="Abrir calendário da data inicial"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => abrirDatePicker(dataInicialFiltroRef.current)}
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Data Final</Label>
                         <div className="relative">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                           <Input
                             type="date"
-                            className="pl-10"
+                            ref={dataFinalFiltroRef}
+                            className="pr-10 [color-scheme:light] [appearance:textfield] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:pointer-events-none"
                             value={dataFinalFilter}
                             onChange={(e) => {
                               setDataFinalFilter(e.target.value || "");
                               setPage(1);
                             }}
                           />
+                          <button
+                            type="button"
+                            aria-label="Abrir calendário da data final"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => abrirDatePicker(dataFinalFiltroRef.current)}
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     </div>

@@ -345,8 +345,18 @@ const ContasAReceber = () => {
 
   // Buscar dados do dashboard de contas a receber
   const { data: dashboardReceber, isLoading: isLoadingReceber } = useQuery({
-    queryKey: ["dashboard-receber"],
-    queryFn: () => financeiroService.getDashboardReceber(),
+    queryKey: ["dashboard-receber", dataInicialFilter, dataFinalFilter],
+    queryFn: () =>
+      financeiroService.getDashboardReceber({
+        data_inicial:
+          dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+            ? dataInicialFilter
+            : undefined,
+        data_final:
+          dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+            ? dataFinalFilter
+            : undefined,
+      }),
     refetchInterval: 30000,
     retry: false,
   });
@@ -366,7 +376,17 @@ const ContasAReceber = () => {
 
   // Buscar contas a receber filtradas para exibir na tabela com paginação (fallback contas-financeiras)
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "receber", "tabela", activeCardFilter, currentPage],
+    queryKey: [
+      "contas-financeiras",
+      "receber",
+      "tabela",
+      activeCardFilter,
+      currentPage,
+      clienteFilterId,
+      statusFilter,
+      dataInicialFilter,
+      dataFinalFilter,
+    ],
     queryFn: async () => {
       if (!validarParametrosPaginação(currentPage, pageSize)) {
         throw new Error('Parâmetros de paginação inválidos');
@@ -380,6 +400,12 @@ const ContasAReceber = () => {
         else if (activeCardFilter === "vencendo_hoje") proximidadeVencimento = "VENCE_HOJE";
         else if (activeCardFilter === "valor_pago") status = "PAGO_PARCIAL";
         // todos e vencendo_este_mes: filtro client-side em filteredGruposContas
+        if (!status && statusFilter) {
+          if (statusFilter === "ABERTO") status = "ABERTO";
+          else if (statusFilter === "PARCIAL") status = "PARCIAL";
+          else if (statusFilter === "QUITADO") status = "QUITADO";
+          else if (statusFilter === "VENCIDO") status = "VENCIDO";
+        }
 
         const response = await financeiroService.listar({
           tipo: "RECEBER",
@@ -387,6 +413,18 @@ const ContasAReceber = () => {
           limit: pageSize,
           status,
           proximidade_vencimento: proximidadeVencimento,
+          cliente_id:
+            clienteFilterId != null && clienteFilterId > 0
+              ? clienteFilterId
+              : undefined,
+          data_inicial:
+            dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+              ? dataInicialFilter
+              : undefined,
+          data_final:
+            dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+              ? dataFinalFilter
+              : undefined,
         });
         
         // Tratar diferentes formatos de resposta
@@ -2144,7 +2182,7 @@ const ContasAReceber = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : (clienteFilterId != null && clienteFilterId > 0 && !isLoadingPedidosContasReceber && pedidos.length === 0) ? (
+              ) : (clienteFilterId != null && clienteFilterId > 0 && !isLoadingPedidosContasReceber && pedidos.length === 0 && (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0) ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
@@ -2153,7 +2191,7 @@ const ContasAReceber = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : (dataInicialFilter || dataFinalFilter) && !isLoadingPedidosContasReceber && pedidos.length === 0 ? (
+              ) : (dataInicialFilter || dataFinalFilter) && !isLoadingPedidosContasReceber && pedidos.length === 0 && (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">

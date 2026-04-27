@@ -88,7 +88,7 @@ import {
     ShoppingCart,
     Truck,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import { toast } from "sonner";
@@ -130,6 +130,8 @@ function rowKeyContasPagar(transacao: {
 }
 
 function ContasAPagar() {
+  const dataInicialFiltroRef = useRef<HTMLInputElement | null>(null);
+  const dataFinalFiltroRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -292,40 +294,21 @@ function ContasAPagar() {
     ],
   );
 
-  // Buscar dados do dashboard de contas a pagar (sem filtros)
+  // Buscar dados do dashboard de contas a pagar (respeitando período selecionado)
   const { data: dashboardPagar, isLoading: isLoadingPagar } = useQuery({
-    queryKey: ["dashboard-pagar"],
-    queryFn: () => financeiroService.getDashboardPagar(),
+    queryKey: ["dashboard-pagar", dataInicialFilter, dataFinalFilter],
+    queryFn: () =>
+      financeiroService.getDashboardPagar({
+        data_inicial:
+          dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+            ? dataInicialFilter
+            : undefined,
+        data_final:
+          dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+            ? dataFinalFilter
+            : undefined,
+      }),
     refetchInterval: 30000,
-    retry: false,
-  });
-
-  // Parâmetros de filtro para resumo (mesmos da listagem) — cards filtráveis
-  const resumoFilterParams = useMemo((): import('@/types/contas-financeiras.types').FiltrosContasPagar | undefined => {
-    const params: import('@/types/contas-financeiras.types').FiltrosContasPagar = {};
-    if (fornecedorFilterId != null && fornecedorFilterId > 0) params.fornecedor_id = fornecedorFilterId;
-    if (dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)) params.data_inicial = dataInicialFilter;
-    if (dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)) params.data_final = dataFinalFilter;
-    let situacao: 'em_aberto' | 'em_atraso' | 'concluido' | undefined = undefined;
-    if (statusFilter) {
-      if (statusFilter === 'ABERTO' || statusFilter === 'PARCIAL') situacao = 'em_aberto';
-      else if (statusFilter === 'QUITADO') situacao = 'concluido';
-      else if (statusFilter === 'VENCIDO') situacao = 'em_atraso';
-    } else if (activeTab !== "Todos") {
-      if (activeTab === "PENDENTE" || activeTab === "VENCE_HOJE" || activeTab === "PAGO_PARCIAL") situacao = 'em_aberto';
-      else if (activeTab === "VENCIDO") situacao = 'em_atraso';
-      else if (activeTab === "PAGO_TOTAL") situacao = 'concluido';
-    }
-    if (situacao) params.situacao = situacao;
-    const hasAny = (params.fornecedor_id != null && params.fornecedor_id > 0) || !!params.data_inicial || !!params.data_final || !!params.situacao;
-    return hasAny ? params : undefined;
-  }, [fornecedorFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeTab]);
-
-  // Resumo filtrado para os cards (quando há filtros ativos)
-  const { data: resumoContasPagar } = useQuery({
-    queryKey: ["resumo-contas-pagar", resumoFilterParams],
-    queryFn: () => pedidosService.getResumoContasPagar(resumoFilterParams!),
-    enabled: !!resumoFilterParams,
     retry: false,
   });
 
@@ -568,17 +551,14 @@ function ContasAPagar() {
       return isNaN(num) ? 0 : num;
     };
 
-    // Cards filtráveis: quando há filtros ativos, usar resumo do mesmo filtro; senão dashboard global
-    const source = resumoContasPagar ?? dashboardPagar;
-    const totalPagar = resumoContasPagar
-      ? Number(resumoContasPagar.valor_total_pendente ?? 0)
-      : (parseValor(dashboardPagar?.valor_total_pendente) ?? 0);
-    const totalPago = resumoContasPagar
-      ? Number(resumoContasPagar.valor_total_pago_contabilizado ?? 0)
-      : (parseValor(dashboardPagar?.valor_total_pago_contabilizado ?? dashboardPagar?.valor_total_pago) ?? 0);
-    const totalVencidas = Number(source?.vencidas ?? 0);
-    const totalVencendoHoje = Number(source?.vencendo_hoje ?? 0);
-    const totalVencendoEsteMes = Number(source?.vencendo_este_mes ?? 0);
+    // Cards sempre usam resumo consolidado (não paginado) para não variar por página da tabela.
+    const totalPagar = parseValor(dashboardPagar?.valor_total_pendente) ?? 0;
+    const totalPago = parseValor(
+      dashboardPagar?.valor_total_pago_contabilizado ?? dashboardPagar?.valor_total_pago,
+    ) ?? 0;
+    const totalVencidas = Number(dashboardPagar?.vencidas ?? 0);
+    const totalVencendoHoje = Number(dashboardPagar?.vencendo_hoje ?? 0);
+    const totalVencendoEsteMes = Number(dashboardPagar?.vencendo_este_mes ?? 0);
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
@@ -588,7 +568,7 @@ function ContasAPagar() {
       { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
       { label: "Vencendo Este Mês", value: totalVencendoEsteMes.toString(), icon: Calendar, trend: null, color: "text-blue-600", bgColor: "bg-blue-100", filterKey: "vencendo_este_mes" as const },
     ];
-  }, [dashboardPagar, resumoContasPagar]);
+  }, [dashboardPagar]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -713,6 +693,14 @@ function ContasAPagar() {
 
   // Estado para edição
   const [editConta, setEditConta] = useState<CreateContaFinanceiraDto & { data_emissao: string } | null>(null);
+
+  const abrirDatePicker = (input: HTMLInputElement | null) => {
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+    }
+  };
 
   // Função auxiliar para converter data para formato ISO (YYYY-MM-DD)
   const converterDataParaISO = (data: string | undefined): string => {
@@ -1542,19 +1530,43 @@ function ContasAPagar() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                        <Input
-                          type="date"
-                          value={dataInicialFilter}
-                          onChange={(e) => setDataInicialFilter(e.target.value || "")}
-                        />
+                        <div className="relative">
+                          <Input
+                            type="date"
+                            ref={dataInicialFiltroRef}
+                            className="pr-10 [color-scheme:light] [appearance:textfield] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:pointer-events-none"
+                            value={dataInicialFilter}
+                            onChange={(e) => setDataInicialFilter(e.target.value || "")}
+                          />
+                          <button
+                            type="button"
+                            aria-label="Abrir calendário da data inicial"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => abrirDatePicker(dataInicialFiltroRef.current)}
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Data Final</Label>
-                        <Input
-                          type="date"
-                          value={dataFinalFilter}
-                          onChange={(e) => setDataFinalFilter(e.target.value || "")}
-                        />
+                        <div className="relative">
+                          <Input
+                            type="date"
+                            ref={dataFinalFiltroRef}
+                            className="pr-10 [color-scheme:light] [appearance:textfield] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:pointer-events-none"
+                            value={dataFinalFilter}
+                            onChange={(e) => setDataFinalFilter(e.target.value || "")}
+                          />
+                          <button
+                            type="button"
+                            aria-label="Abrir calendário da data final"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => abrirDatePicker(dataFinalFiltroRef.current)}
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

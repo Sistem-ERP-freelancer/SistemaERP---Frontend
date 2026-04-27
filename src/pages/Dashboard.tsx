@@ -161,24 +161,38 @@ const Dashboard = () => {
       (p.linha_totais_periodo as Record<string, unknown>) ??
       (p.linhaTotaisPeriodo as Record<string, unknown>);
     if (!linhaReg || !linhaCaixa || !linhaTot) return undefined;
+    const regCompras = numPainel(linhaReg.compras);
+    const regVendas = numPainel(linhaReg.vendas);
+    const regDespesas = numPainel(linhaReg.despesas);
+    const caixaCompras = numPainel(linhaCaixa.compras);
+    const caixaVendas = numPainel(linhaCaixa.vendas);
+    const caixaDespesas = numPainel(linhaCaixa.despesas);
+    const totCompras = numPainel(linhaTot.compras);
+    const totVendas = numPainel(linhaTot.vendas);
+    const totDespesas = numPainel(linhaTot.despesas);
+    /** Mantém o saldo visual coerente com os cards exibidos: vendas - compras. */
+    const saldoRegCalculado = Number((regVendas - regCompras).toFixed(2));
+    const saldoCaixaCalculado = Number((caixaVendas - caixaCompras).toFixed(2));
+    const saldoTotCalculado = Number((totVendas - totCompras).toFixed(2));
+
     return {
       linha_registrado: {
-        compras: numPainel(linhaReg.compras),
-        despesas: numPainel(linhaReg.despesas),
-        vendas: numPainel(linhaReg.vendas),
-        saldo: numPainel(linhaReg.saldo),
+        compras: regCompras,
+        despesas: regDespesas,
+        vendas: regVendas,
+        saldo: saldoRegCalculado,
       },
       linha_caixa: {
-        compras: numPainel(linhaCaixa.compras),
-        despesas: numPainel(linhaCaixa.despesas),
-        vendas: numPainel(linhaCaixa.vendas),
-        saldo: numPainel(linhaCaixa.saldo),
+        compras: caixaCompras,
+        despesas: caixaDespesas,
+        vendas: caixaVendas,
+        saldo: saldoCaixaCalculado,
       },
       linha_totais_periodo: {
-        compras: numPainel(linhaTot.compras),
-        despesas: numPainel(linhaTot.despesas),
-        vendas: numPainel(linhaTot.vendas),
-        saldo: numPainel(linhaTot.saldo),
+        compras: totCompras,
+        despesas: totDespesas,
+        vendas: totVendas,
+        saldo: saldoTotCalculado,
       },
     };
   }, [dashboardUnificado]);
