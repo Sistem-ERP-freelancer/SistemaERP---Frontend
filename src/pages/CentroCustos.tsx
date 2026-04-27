@@ -171,6 +171,7 @@ function DespesasTable({
   onPagar,
   onEditar,
   onExcluir,
+  onAlterarDataPagamento,
   emptyMessage,
 }: {
   despesas: CentroCustoDespesa[];
@@ -179,9 +180,21 @@ function DespesasTable({
   onPagar: (d: CentroCustoDespesa) => void;
   onEditar: (d: CentroCustoDespesa) => void;
   onExcluir: (d: CentroCustoDespesa) => void;
+  onAlterarDataPagamento: (d: CentroCustoDespesa) => void;
   /** Quando a lista veio vazia e há filtros ativos. */
   emptyMessage?: string;
 }) {
+  const dataPagamentoExibicao = (d: CentroCustoDespesa): string => {
+    if (d.dataPagamentoManual?.trim()) {
+      return d.dataPagamentoManual.trim().slice(0, 10);
+    }
+    const ultimaDataPagamento = [...d.pagamentos]
+      .map((p) => p.data?.slice(0, 10))
+      .filter((x): x is string => Boolean(x))
+      .sort((a, b) => b.localeCompare(a))[0];
+    return ultimaDataPagamento ?? '';
+  };
+
   const ordenadas = useMemo(
     () =>
       [...despesas].sort((a, b) => {
@@ -198,19 +211,20 @@ function DespesasTable({
         <TableHeader>
           <TableRow>
             <TableHead>Descrição</TableHead>
-            <TableHead>Roça</TableHead>
-            <TableHead>Tipo</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
-            <TableHead>Data</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Pago</TableHead>
-            <TableHead className="min-w-[220px] text-right">Ações</TableHead>
+            <TableHead className="text-center">Roça</TableHead>
+            <TableHead className="text-center">Tipo</TableHead>
+            <TableHead className="text-center">Valor</TableHead>
+            <TableHead className="text-center">Data</TableHead>
+            <TableHead className="text-center">Status</TableHead>
+            <TableHead className="text-center">Pago</TableHead>
+            <TableHead className="text-center">Data pagamento</TableHead>
+            <TableHead className="min-w-[220px] text-center">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {ordenadas.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
+              <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
                 {emptyMessage ?? 'Nenhuma despesa lançada.'}
               </TableCell>
             </TableRow>
@@ -218,19 +232,23 @@ function DespesasTable({
             ordenadas.map((d) => {
               const st = statusDespesa(d);
               const pago = totalPagoNaDespesa(d);
+              const dataPagamento = dataPagamentoExibicao(d);
               return (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium max-w-[180px] truncate">{d.descricao}</TableCell>
-                  <TableCell>{d.rocaNome}</TableCell>
-                  <TableCell>{nomeTipo(d)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-center">{d.rocaNome}</TableCell>
+                  <TableCell className="text-center">{nomeTipo(d)}</TableCell>
+                  <TableCell className="text-center tabular-nums">
                     {formatCurrency(Number(d.valor))}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">{formatDate(d.data)}</TableCell>
-                  <TableCell>{badgeStatus(st)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCurrency(pago)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                  <TableCell className="whitespace-nowrap text-center">{formatDate(d.data)}</TableCell>
+                  <TableCell className="text-center">{badgeStatus(st)}</TableCell>
+                  <TableCell className="text-center tabular-nums">{formatCurrency(pago)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-center">
+                    {dataPagamento ? formatDate(dataPagamento) : '—'}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="inline-flex flex-wrap items-center justify-center gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -251,6 +269,16 @@ function DespesasTable({
                       >
                         <Banknote className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Pagar</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2 shrink-0"
+                        onClick={() => onAlterarDataPagamento(d)}
+                        title="Alterar data de pagamento"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Data pgto</span>
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => onEditar(d)} title="Editar">
                         <Pencil className="w-4 h-4" />
@@ -814,6 +842,9 @@ export default function CentroCustos() {
   /** Despesa dialogs */
   const [editDesp, setEditDesp] = useState<CentroCustoDespesa | null>(null);
   const [deleteDesp, setDeleteDesp] = useState<CentroCustoDespesa | null>(null);
+  const [alterarDataPgDesp, setAlterarDataPgDesp] = useState<CentroCustoDespesa | null>(null);
+  const [novaDataPg, setNovaDataPg] = useState('');
+  const [salvandoDataPg, setSalvandoDataPg] = useState(false);
 
   const openNovoTipo = () => {
     setTipoEdit(null);
@@ -1020,6 +1051,39 @@ export default function CentroCustos() {
     setRocaSel(null);
   };
 
+  const abrirAlterarDataPagamento = (d: CentroCustoDespesa) => {
+    setAlterarDataPgDesp(d);
+    const dataInicial =
+      d.dataPagamentoManual ||
+      [...d.pagamentos]
+        .sort((a, b) => b.data.localeCompare(a.data))[0]?.data ||
+      new Date().toISOString().slice(0, 10);
+    setNovaDataPg(dataInicial.slice(0, 10));
+  };
+
+  const salvarAlteracaoDataPagamento = async () => {
+    if (!alterarDataPgDesp) return;
+    const data = novaDataPg.trim().slice(0, 10);
+    if (!data) {
+      toast.error('Selecione a nova data de pagamento.');
+      return;
+    }
+    setSalvandoDataPg(true);
+    try {
+      await centroCustoService.alterarDataPagamento(Number(alterarDataPgDesp.id), {
+        data,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['centro-custo'] });
+      setAlterarDataPgDesp(null);
+      setNovaDataPg('');
+      toast.success('Data de pagamento atualizada.');
+    } catch (e) {
+      toast.error(msgErro(e, 'Não foi possível alterar a data de pagamento.'));
+    } finally {
+      setSalvandoDataPg(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -1124,6 +1188,7 @@ export default function CentroCustos() {
                 onPagar={abrirPagarRapido}
                 onEditar={abrirEditar}
                 onExcluir={setDeleteDesp}
+                onAlterarDataPagamento={abrirAlterarDataPagamento}
                 emptyMessage={msgListaDespesasVazia}
               />
               <CentroCustoTablePagination
@@ -1366,6 +1431,7 @@ export default function CentroCustos() {
                   onPagar={abrirPagarRapido}
                   onEditar={abrirEditar}
                   onExcluir={setDeleteDesp}
+                  onAlterarDataPagamento={abrirAlterarDataPagamento}
                   emptyMessage={msgListaDespesasVazia}
                 />
                 <CentroCustoTablePagination
@@ -1576,6 +1642,50 @@ export default function CentroCustos() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog
+          open={!!alterarDataPgDesp}
+          onOpenChange={(open) => {
+            if (!open && !salvandoDataPg) {
+              setAlterarDataPgDesp(null);
+              setNovaDataPg('');
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Alterar data de pagamento</DialogTitle>
+              <DialogDescription>
+                Defina manualmente a data de pagamento desta despesa, mesmo se ela já estiver parcial ou quitada.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="cc-nova-data-pagamento">Nova data de pagamento</Label>
+              <Input
+                id="cc-nova-data-pagamento"
+                type="date"
+                value={novaDataPg}
+                onChange={(e) => setNovaDataPg(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (salvandoDataPg) return;
+                  setAlterarDataPgDesp(null);
+                  setNovaDataPg('');
+                }}
+                disabled={salvandoDataPg}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={salvarAlteracaoDataPagamento} disabled={salvandoDataPg}>
+                {salvandoDataPg ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

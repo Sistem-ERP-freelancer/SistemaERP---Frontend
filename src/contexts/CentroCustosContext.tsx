@@ -118,6 +118,7 @@ export type CentroCustoDespesa = {
   contaFinanceiraId?: number | null;
   valor: number;
   data: string;
+  dataPagamentoManual?: string;
   observacoes?: string;
   pagamentos: CentroCustoPagamento[];
 };
@@ -145,6 +146,9 @@ function mapDespesa(row: ApiCentroCustoDespesa): CentroCustoDespesa {
         : null,
     valor: Number(row.valor),
     data: dataIso(row.data as string),
+    dataPagamentoManual: row.dataPagamentoManual
+      ? dataIso(row.dataPagamentoManual)
+      : undefined,
     observacoes: row.observacoes ?? undefined,
     pagamentos: (row.pagamentos ?? []).map((p) => ({
       id: String(p.id),

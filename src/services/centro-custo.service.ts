@@ -27,6 +27,7 @@ export type ApiCentroCustoDespesa = {
   descricao: string;
   valor: number;
   data: string;
+  dataPagamentoManual?: string | null;
   observacoes?: string | null;
   pagamentos: ApiCentroCustoPagamento[];
 };
@@ -197,6 +198,16 @@ class CentroCustoService {
   ): Promise<ApiCentroCustoPagamento> {
     return apiClient.post<ApiCentroCustoPagamento>(
       `${BASE}/despesas/${despesaId}/pagamentos`,
+      data,
+    );
+  }
+
+  alterarDataPagamento(
+    despesaId: number,
+    data: { data: string },
+  ): Promise<{ id: number; dataPagamentoManual: string | null }> {
+    return apiClient.patch<{ id: number; dataPagamentoManual: string | null }>(
+      `${BASE}/despesas/${despesaId}/data-pagamento`,
       data,
     );
   }
