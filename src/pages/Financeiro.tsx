@@ -52,6 +52,7 @@ import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service
 import { pedidosService } from "@/services/pedidos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
     BarChart3,
     Calendar,
@@ -80,6 +81,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const Financeiro = () => {
+  const navigate = useNavigate();
   const dataInicialFiltroRef = useRef<HTMLInputElement | null>(null);
   const dataFinalFiltroRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState("Todos");
@@ -122,6 +124,10 @@ const Financeiro = () => {
     useState(false);
   /** Filtro por card clicável: Receita do Mês / Despesas do Mês (como em Contas a Receber) */
   const [cardTipoFilter, setCardTipoFilter] = useState<"todos" | "RECEBER" | "PAGAR">("todos");
+  /** Filtro de seção: despesas, contas a pagar e contas a receber. */
+  const [secaoTipoFilter, setSecaoTipoFilter] = useState<
+    "todos" | "despesas" | "contas_pagar" | "contas_receber"
+  >("todos");
 
   const abrirDatePicker = (input: HTMLInputElement | null) => {
     if (!input) return;
@@ -191,16 +197,25 @@ const Financeiro = () => {
       (fornecedoresData as any)?.items ||
       [];
 
-  // Parâmetros de filtro para dashboard (tipo vem dos cards clicáveis; demais do painel)
+  const tipoFiltroEfetivo = useMemo<"RECEBER" | "PAGAR" | undefined>(() => {
+    if (secaoTipoFilter === "contas_receber") return "RECEBER";
+    if (secaoTipoFilter === "despesas" || secaoTipoFilter === "contas_pagar") {
+      return "PAGAR";
+    }
+    if (cardTipoFilter !== "todos") return cardTipoFilter;
+    return undefined;
+  }, [secaoTipoFilter, cardTipoFilter]);
+
+  // Parâmetros de filtro para dashboard (tipo vem dos cards/ seção; demais do painel)
   const dashboardFiltros = useMemo(() => {
     const f: { data_inicial?: string; data_final?: string; tipo?: string; cliente_id?: number; fornecedor_id?: number } = {};
     if (dataInicialFilter) f.data_inicial = dataInicialFilter;
     if (dataFinalFilter) f.data_final = dataFinalFilter;
-    if (cardTipoFilter !== "todos") f.tipo = cardTipoFilter;
+    if (tipoFiltroEfetivo) f.tipo = tipoFiltroEfetivo;
     if (clienteFilterId != null) f.cliente_id = clienteFilterId;
     if (fornecedorFilterId != null) f.fornecedor_id = fornecedorFilterId;
     return Object.keys(f).length ? f : undefined;
-  }, [dataInicialFilter, dataFinalFilter, cardTipoFilter, clienteFilterId, fornecedorFilterId]);
+  }, [dataInicialFilter, dataFinalFilter, tipoFiltroEfetivo, clienteFilterId, fornecedorFilterId]);
 
   const relatorioClienteIdParsed = useMemo(() => {
     if (!relatorioClienteIdSelect) return null;
@@ -382,6 +397,7 @@ const Financeiro = () => {
 
   const temFiltrosAtivos =
     cardTipoFilter !== "todos" ||
+    secaoTipoFilter !== "todos" ||
     clienteFilterId != null ||
     fornecedorFilterId != null ||
     !!dataInicialFilter ||
@@ -390,6 +406,7 @@ const Financeiro = () => {
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     setCardTipoFilter("todos");
+    setSecaoTipoFilter("todos");
     setClienteFilterId(undefined);
     setFornecedorFilterId(undefined);
     setDataInicialFilter("");
@@ -401,10 +418,10 @@ const Financeiro = () => {
 
   // Buscar contas agrupadas (uma linha por cliente/pedido) - visão resumida
   const { data: contasAgrupadasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "agrupado", activeTab, cardTipoFilter, page, limit, clienteFilterId, fornecedorFilterId, dataInicialFilter, dataFinalFilter],
+    queryKey: ["contas-financeiras", "agrupado", activeTab, cardTipoFilter, secaoTipoFilter, page, limit, clienteFilterId, fornecedorFilterId, dataInicialFilter, dataFinalFilter],
     queryFn: async () => {
       try {
-        const tipo = cardTipoFilter !== "todos" ? cardTipoFilter : undefined;
+        const tipo = tipoFiltroEfetivo;
         const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
         const status = statusTabs.includes(activeTab) ? activeTab : undefined;
 
@@ -657,6 +674,7 @@ const Financeiro = () => {
       categoria: item.categoria,
       valor: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total ?? 0),
       status: statusMap[item.status] || item.status,
+      statusOriginal: item.status,
       contaId: item.id,
       pedido_id: item.pedido_id,
     }));
@@ -672,6 +690,21 @@ const Financeiro = () => {
       String(t.contaId).includes(term)
     );
   }, [transacoesDisplay, searchTerm]);
+
+  const filteredTransacoesComSecao = useMemo(() => {
+    if (secaoTipoFilter === "todos") return filteredTransacoes;
+    return filteredTransacoes.filter((t) => {
+      const categoria = String(t.categoria || "").toLowerCase();
+      if (secaoTipoFilter === "contas_receber") return t.tipo === "Receita";
+      if (secaoTipoFilter === "despesas") {
+        return t.tipo === "Despesa" && categoria.includes("despesa");
+      }
+      if (secaoTipoFilter === "contas_pagar") {
+        return t.tipo === "Despesa" && !categoria.includes("despesa");
+      }
+      return true;
+    });
+  }, [filteredTransacoes, secaoTipoFilter]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -706,6 +739,46 @@ const Financeiro = () => {
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Erro ao excluir transação");
     }
+  };
+
+  const abrirTelaPagamentos = (transacao: {
+    contaId: number;
+    pedido_id?: number | null;
+    tipo: string;
+    statusOriginal: string;
+  }) => {
+    const statusNormalizado = String(transacao.statusOriginal || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "_");
+
+    if (statusNormalizado === "PAGO_TOTAL" || statusNormalizado === "CANCELADO") {
+      toast.info("Essa conta não possui saldo em aberto para pagamento.");
+      return;
+    }
+    const ehReceita = transacao.tipo === "Receita";
+    if (ehReceita) {
+      if (transacao.pedido_id != null) {
+        navigate(`/financeiro/contas-receber/${transacao.pedido_id}/pagamentos`, {
+          state: { voltarPara: "/financeiro" },
+        });
+        return;
+      }
+      navigate(`/financeiro/contas-receber/conta/${transacao.contaId}/pagamentos`, {
+        state: { voltarPara: "/financeiro" },
+      });
+      return;
+    }
+
+    if (transacao.pedido_id != null) {
+      navigate(`/financeiro/contas-pagar/${transacao.pedido_id}/pagamentos`, {
+        state: { voltarPara: "/financeiro" },
+      });
+      return;
+    }
+    navigate(`/financeiro/contas-pagar/conta/${transacao.contaId}/pagamentos`, {
+      state: { voltarPara: "/financeiro" },
+    });
   };
 
   return (
@@ -1072,6 +1145,7 @@ const Financeiro = () => {
               {temFiltrosAtivos && (
                 <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
                   {(cardTipoFilter !== "todos" ? 1 : 0) +
+                    (secaoTipoFilter !== "todos" ? 1 : 0) +
                     (clienteFilterId != null ? 1 : 0) +
                     (fornecedorFilterId != null ? 1 : 0) +
                     (dataInicialFilter ? 1 : 0) +
@@ -1143,6 +1217,36 @@ const Financeiro = () => {
                 </SheetHeader>
 
                 <div className="space-y-6">
+                  {/* Seção */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Seção</Label>
+                    <Select
+                      value={secaoTipoFilter}
+                      onValueChange={(v) => {
+                        setSecaoTipoFilter(
+                          v as
+                            | "todos"
+                            | "despesas"
+                            | "contas_pagar"
+                            | "contas_receber",
+                        );
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as seções" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todas as seções</SelectItem>
+                        <SelectItem value="despesas">Despesas</SelectItem>
+                        <SelectItem value="contas_pagar">Contas a pagar</SelectItem>
+                        <SelectItem value="contas_receber">Contas a receber</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
                   {/* Cliente */}
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Cliente</Label>
@@ -1344,7 +1448,7 @@ const Financeiro = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : filteredTransacoes.length === 0 ? (
+              ) : filteredTransacoesComSecao.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
@@ -1354,7 +1458,7 @@ const Financeiro = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTransacoes.map((transacao) => (
+                filteredTransacoesComSecao.map((transacao) => (
                   <TableRow key={transacao.contaId}>
                     <TableCell>
                       <span className="font-medium">{transacao.cliente_nome || "—"}</span>
@@ -1405,6 +1509,12 @@ const Financeiro = () => {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onClick={() => abrirTelaPagamentos(transacao)}
+                          >
+                            <CreditCard className="w-4 h-4 mr-2" />
+                            Pagamentos
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={async () => {
                               try {
                                 await financeiroService.downloadReciboPagamento(transacao.contaId);
@@ -1437,7 +1547,7 @@ const Financeiro = () => {
           {totalAgrupado > 0 && (
             <div className="border-t border-border p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-sm text-muted-foreground">
-                Mostrando {filteredTransacoes.length} de {totalAgrupado} {totalAgrupado === 1 ? 'grupo' : 'grupos'}
+                Mostrando {filteredTransacoesComSecao.length} de {totalAgrupado} {totalAgrupado === 1 ? 'grupo' : 'grupos'}
               </div>
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">

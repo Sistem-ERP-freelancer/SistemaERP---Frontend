@@ -340,8 +340,9 @@ const ContasAReceber = () => {
 
   const pedidos = pedidosContasReceber ?? [];
   
-  // Fallback: usar contas-financeiras quando pedidos retornar vazio
-  const usarFallbackContasFinanceiras = !isLoadingPedidosContasReceber && pedidos.length === 0;
+  // Usar sempre tb_conta_financeira na tabela para também exibir contas avulsas do Financeiro.
+  // O endpoint de pedidos continua sendo usado como apoio para alguns cálculos/cards.
+  const usarFallbackContasFinanceiras = true;
 
   // Buscar dados do dashboard de contas a receber
   const { data: dashboardReceber, isLoading: isLoadingReceber } = useQuery({
