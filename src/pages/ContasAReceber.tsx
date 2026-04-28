@@ -1232,14 +1232,22 @@ const ContasAReceber = () => {
       .map((p: ContaReceber) => {
         const diasAteVencimento = calcularDiasAteVencimento(p.data_vencimento ?? p.data_pedido);
         const vencimentoStatus = getVencimentoStatus(diasAteVencimento, p.status);
-        const statusFormatado = formatarStatus(p.status);
+        const statusFormatado =
+          p.status === "PARCIAL"
+            ? "Pago Parcial"
+            : p.status === "QUITADO"
+              ? "Pago Total"
+            : formatarStatus(p.status);
         return {
           id: p.numero_pedido,
           descricao: `Pedido ${p.numero_pedido}`,
           cliente: p.cliente_nome || "—",
           categoria: "Vendas",
+          valorTotalNum: Number(p.valor_total ?? 0),
+          valorPagoNum: Number(p.valor_pago ?? 0),
           valor: formatarMoeda(p.valor_total),
           valorPago: formatarMoeda(p.valor_pago ?? 0),
+          valorAberto: Number(p.valor_em_aberto ?? 0),
           data: p.data_vencimento
             ? formatDate(p.data_vencimento)
             : formatDate(p.data_pedido),
@@ -2253,6 +2261,15 @@ const ContasAReceber = () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => {
+                              if (grupo?.pedido_id != null) {
+                                navigate(`/financeiro/contas-receber/${grupo.pedido_id}`);
+                                return;
+                              }
+                              const contaIdAvulsa = grupo?.parcelas?.[0]?.id ?? null;
+                              if (contaIdAvulsa != null) {
+                                navigate(`/financeiro/contas-receber/conta/${contaIdAvulsa}`);
+                                return;
+                              }
                               setSelectedContaId(grupo?.parcelas[0]?.id ?? null);
                               setViewDialogOpen(true);
                             }}>
@@ -2279,7 +2296,36 @@ const ContasAReceber = () => {
                                 }
                               >
                                 <CreditCard className="w-4 h-4 mr-2" />
-                                Pagar
+                                Pagamentos
+                              </DropdownMenuItem>
+                            )}
+                            {grupo?.pedido_id == null &&
+                              (grupo?.valor_aberto ?? 0) > 0 &&
+                              grupo?.parcelas?.[0]?.id != null && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/financeiro/contas-receber/conta/${grupo.parcelas[0].id}/pagamentos`,
+                                  )
+                                }
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Pagamentos
+                              </DropdownMenuItem>
+                            )}
+                            {grupo?.pedido_id != null &&
+                              (grupo?.valor_aberto ?? 0) <= 0 &&
+                              grupo?.statusConsolidado !== "Pago Total" &&
+                              grupo?.statusConsolidado !== "Cancelado" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/financeiro/contas-receber/${grupo.pedido_id}/pagamentos`,
+                                  )
+                                }
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Pagamentos
                               </DropdownMenuItem>
                             )}
                             {(grupo?.parcelas?.[0]?.id != null) && (
@@ -2369,10 +2415,31 @@ const ContasAReceber = () => {
                               Editar
                             </DropdownMenuItem>
                           ) : null}
-                          {(linhasPedidos.find((p: ContaReceber) => p.numero_pedido === transacao.id)?.valor_em_aberto ?? 0) > 0 && transacao.pedidoId ? (
+                          {(() => {
+                            const t = transacao as {
+                              valorAberto?: number;
+                              valorTotalNum?: number;
+                              valorPagoNum?: number;
+                            };
+                            const aberto =
+                              Number(t.valorAberto ?? 0) > 0
+                                ? Number(t.valorAberto ?? 0)
+                                : Math.max(
+                                    0,
+                                    Number(t.valorTotalNum ?? 0) -
+                                      Number(t.valorPagoNum ?? 0),
+                                  );
+                            const st = (transacao.status || "").toLowerCase();
+                            const podeReceber =
+                              !!transacao.pedidoId &&
+                              aberto > 0 &&
+                              st !== "quitado" &&
+                              st !== "cancelado";
+                            return podeReceber;
+                          })() ? (
                             <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${transacao.pedidoId}/pagamentos`)}>
                               <CreditCard className="w-4 h-4 mr-2" />
-                              Pagar
+                              Pagamentos
                             </DropdownMenuItem>
                           ) : null}
                           <DropdownMenuItem

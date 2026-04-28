@@ -16,6 +16,8 @@ import ContasAPagarDespesaDetalhes from "./pages/contas-a-pagar/ContasAPagarDesp
 import ContasAPagarPedidoDetalhes from "./pages/contas-a-pagar/ContasAPagarPedidoDetalhes";
 import ContasAPagarPedidoPagamentos from "./pages/contas-a-pagar/ContasAPagarPedidoPagamentos";
 import ContasAReceberClienteDetalhes from "./pages/contas-a-receber/ContasAReceberClienteDetalhes";
+import ContasAReceberContaDetalhes from "./pages/contas-a-receber/ContasAReceberContaDetalhes";
+import ContasAReceberContaPagamentos from "./pages/contas-a-receber/ContasAReceberContaPagamentos";
 import ContasAReceberPedidoDetalhes from "./pages/contas-a-receber/ContasAReceberPedidoDetalhes";
 import ContasAReceberPedidoPagamentos from "./pages/contas-a-receber/ContasAReceberPedidoPagamentos";
 import ContasAPagar from "./pages/ContasAPagar";
@@ -170,6 +172,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ContasAReceberPedidoPagamentos />
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/financeiro/contas-receber/conta/:contaId" 
+              element={
+                <ProtectedRoute>
+                  <ContasAReceberContaDetalhes />
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/financeiro/contas-receber/conta/:contaId/pagamentos" 
+              element={
+                <ProtectedRoute>
+                  <ContasAReceberContaPagamentos />
                 </ProtectedRoute>
               }
             />
