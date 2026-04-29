@@ -108,6 +108,14 @@ function parseValorDashboard(valor: unknown): number {
   return Number.isFinite(num) ? num : 0;
 }
 
+function normalizarTexto(valor: string): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function labelStatusPedidoLike(status: string): string {
   const s = status.toUpperCase();
   if (s === "ABERTO") return "Pendente";
@@ -140,6 +148,7 @@ const Dashboard = () => {
   /** Só aplicado com "Todos os meses" (`painel_totais_gerais` no backend). */
   const [totaisGeraisModo, setTotaisGeraisModo] =
     useState<PainelTotaisGeraisModo>("pagos");
+  const [dreMesAnoFiltro, setDreMesAnoFiltro] = useState<string>("");
 
   const refMesYyyyMm = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
@@ -162,6 +171,26 @@ const Dashboard = () => {
         : {}),
     };
   }, [mesAnoFiltro, totaisGeraisModo]);
+
+  const parametrosDre = useMemo(() => {
+    const anoReferencia = Number(refMesYyyyMm.split("-")[0]) || new Date().getFullYear();
+    const mesEscolhido = dreMesAnoFiltro?.trim();
+    if (!mesEscolhido) {
+      return {
+        data_inicial: `${anoReferencia}-01-01`,
+        data_final: `${anoReferencia}-12-31`,
+      };
+    }
+    const [ano, mes] = mesEscolhido.split("-").map(Number);
+    const anoValido = Number.isFinite(ano) && ano > 0 ? ano : anoReferencia;
+    const mesValido = Number.isFinite(mes) && mes > 0 ? mes : 1;
+    const primeiro = new Date(anoValido, mesValido - 1, 1);
+    const ultimo = new Date(anoValido, mesValido, 0);
+    return {
+      data_inicial: formatISODateLocal(primeiro),
+      data_final: formatISODateLocal(ultimo),
+    };
+  }, [dreMesAnoFiltro, refMesYyyyMm]);
 
   const { data: dashboardUnificado, isLoading: loadingUnificado } = useQuery({
     queryKey: [
@@ -462,6 +491,146 @@ const Dashboard = () => {
     status: pedido.status || 'Pendente',
   }));
 
+  const { data: dreDadosReais, isLoading: loadingDre } = useQuery({
+    queryKey: ["dashboard", "dre-real", parametrosDre],
+    queryFn: async () => {
+      const { data_inicial, data_final } = parametrosDre;
+      const limit = 200;
+
+      const [resumoFinanceiroMes, despesasPagina1] = await Promise.all([
+        financeiroService.getDashboardUnificado({
+          data_inicial,
+          data_final,
+          painel_totais_gerais: true,
+        }),
+        centroCustoService.listarDespesas(1, limit, {
+          dataInicial: data_inicial,
+          dataFinal: data_final,
+        }),
+      ]);
+
+      const despesas = [...(despesasPagina1?.items ?? [])];
+
+      const totalPaginasDespesas = Math.max(
+        1,
+        Math.ceil((despesasPagina1?.total ?? despesas.length) / limit),
+      );
+
+      for (let page = 2; page <= totalPaginasDespesas; page += 1) {
+        const resposta = await centroCustoService.listarDespesas(page, limit, {
+          dataInicial: data_inicial,
+          dataFinal: data_final,
+        });
+        despesas.push(...(resposta?.items ?? []));
+      }
+
+      const resumoRaw = resumoFinanceiroMes as Record<string, unknown>;
+      const painelRaw =
+        (resumoRaw.painel_acompanhamento as Record<string, unknown>) ??
+        (resumoRaw.painelAcompanhamento as Record<string, unknown>) ??
+        {};
+      const linhaReg =
+        (painelRaw.linha_registrado as Record<string, unknown>) ??
+        (painelRaw.linhaRegistrado as Record<string, unknown>) ??
+        {};
+      const totalVendasEfetivas = numPainel(linhaReg.vendas);
+      const totalFornecedores = numPainel(linhaReg.compras);
+
+      let totalGastosFixos = 0;
+      let totalDespesasVariaveis = 0;
+      let totalMeeiros = 0;
+      let totalInvestimentos = 0;
+
+      for (const despesa of despesas) {
+        const nomeTipo = normalizarTexto(despesa.tipoNome || "");
+        const valor = parseValorDashboard(despesa.valor);
+
+        if (nomeTipo.includes("meeiro")) {
+          totalMeeiros += valor;
+          continue;
+        }
+        if (nomeTipo.includes("invest")) {
+          totalInvestimentos += valor;
+          continue;
+        }
+        if (nomeTipo.includes("fix")) {
+          totalGastosFixos += valor;
+          continue;
+        }
+        if (nomeTipo.includes("vari")) {
+          totalDespesasVariaveis += valor;
+          continue;
+        }
+        totalDespesasVariaveis += valor;
+      }
+
+      return {
+        totalVendasEfetivas,
+        totalFornecedores,
+        totalGastosFixos,
+        totalDespesasVariaveis,
+        totalMeeiros,
+        totalInvestimentos,
+      };
+    },
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  const dreLinhas = useMemo(() => {
+    const totalVendas = dreDadosReais?.totalVendasEfetivas ?? 0;
+    const calcPct = (valor: number): number =>
+      totalVendas > 0 ? Math.round((valor / totalVendas) * 100) : 0;
+
+    return [
+      { descricao: "Vendas Primos", valor: totalVendas, percentual: 100 },
+      {
+        descricao: "Fornecedores",
+        valor: dreDadosReais?.totalFornecedores ?? 0,
+        percentual: calcPct(dreDadosReais?.totalFornecedores ?? 0),
+      },
+      {
+        descricao: "Gastos Fixos",
+        valor: dreDadosReais?.totalGastosFixos ?? 0,
+        percentual: calcPct(dreDadosReais?.totalGastosFixos ?? 0),
+      },
+      {
+        descricao: "Despesas Variáveis",
+        valor: dreDadosReais?.totalDespesasVariaveis ?? 0,
+        percentual: calcPct(dreDadosReais?.totalDespesasVariaveis ?? 0),
+      },
+      {
+        descricao: "Meeiros",
+        valor: dreDadosReais?.totalMeeiros ?? 0,
+        percentual: calcPct(dreDadosReais?.totalMeeiros ?? 0),
+      },
+      {
+        descricao: "Investimentos",
+        valor: dreDadosReais?.totalInvestimentos ?? 0,
+        percentual: null,
+      },
+    ];
+  }, [dreDadosReais]);
+
+  const dreTotais = useMemo(() => {
+    const totalVendasEfetivas = dreLinhas[0]?.valor ?? 0;
+    const totalDespesasEfetivas = dreLinhas
+      .slice(1)
+      .reduce((sum, linha) => sum + linha.valor, 0);
+    const resultadoEfetivoMes = totalVendasEfetivas - totalDespesasEfetivas;
+    const margemResultado =
+      totalVendasEfetivas > 0
+        ? Number(((resultadoEfetivoMes / totalVendasEfetivas) * 100).toFixed(0))
+        : 0;
+
+    return {
+      totalVendasEfetivas,
+      totalDespesasEfetivas,
+      resultadoEfetivoMes,
+      margemResultado,
+    };
+  }, [dreLinhas]);
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -647,17 +816,120 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
-        {/* Placeholder DRE (substitui a seção Contas Vencidas) */}
+        {/* DRE - Demonstrativo de Resultados no Exercício */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="mb-6"
         >
-          <div className="rounded-md border border-border bg-card px-6 py-16 sm:py-20 flex items-center justify-center min-h-[200px]">
-            <p className="text-center text-muted-foreground text-sm sm:text-base">
-              aqui está sendo implementado o DRE
-            </p>
+          <div className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60">
+            <div className="mb-4 border-b border-border/70 pb-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Financeiro
+                  </p>
+                  <h3 className="mt-1 text-xl font-bold tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
+                    DRE - Demonstrativo de Resultados no Exercício
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Resumo consolidado de receitas, despesas e resultado efetivo do período.
+                  </p>
+                </div>
+                <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
+                  <Label
+                    htmlFor="dashboard-dre-mes-ano"
+                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                  >
+                    <Calendar className="h-3.5 w-3.5 opacity-70" />
+                    Mês de referência
+                  </Label>
+                  <div className="relative">
+                    <input
+                      id="dashboard-dre-mes-ano"
+                      type="month"
+                      value={dreMesAnoFiltro}
+                      onChange={(e) => setDreMesAnoFiltro(e.target.value)}
+                      className={`h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        dreMesAnoFiltro
+                          ? "text-foreground"
+                          : "text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent"
+                      }`}
+                    />
+                    {!dreMesAnoFiltro ? (
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-muted-foreground">
+                        Todos os meses
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+              <div className="xl:col-span-8 overflow-x-auto rounded-xl border border-border/70 bg-background/70 dark:bg-background/40">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/60 hover:bg-muted/60">
+                      <TableHead className="min-w-[260px] text-foreground">
+                        Conta
+                      </TableHead>
+                      <TableHead className="text-right text-foreground">Valor</TableHead>
+                      <TableHead className="text-right text-foreground">Percentual</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dreLinhas.map((linha) => (
+                      <TableRow key={linha.descricao}>
+                        <TableCell className="font-medium">{linha.descricao}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap tabular-nums">
+                          {loadingDre ? "..." : formatCurrency(linha.valor)}
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap tabular-nums">
+                          {linha.percentual === null ? "-" : `${linha.percentual}%`}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="xl:col-span-4 space-y-3">
+                <div className="rounded-xl border border-border/70 overflow-hidden bg-background/70 dark:bg-background/40">
+                  <div className="bg-muted px-4 py-2 text-sm font-semibold text-foreground">
+                    Total de Vendas Efetivas
+                  </div>
+                  <div className="border-t border-border/60 px-4 py-2 text-right text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                    {formatCurrency(dreTotais.totalVendasEfetivas)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/70 overflow-hidden bg-background/70 dark:bg-background/40">
+                  <div className="bg-muted px-4 py-2 text-sm font-semibold text-foreground">
+                    Total de Despesas Efetivas
+                  </div>
+                  <div className="border-t border-border/60 px-4 py-2 text-right text-base font-bold text-red-700 dark:text-red-400 tabular-nums">
+                    {formatCurrency(dreTotais.totalDespesasEfetivas)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/70 overflow-hidden bg-background/70 dark:bg-background/40">
+                  <div className="bg-muted px-4 py-2 text-sm font-semibold text-foreground">
+                    RESULTADO EFETIVO MÊS
+                  </div>
+                  <div
+                    className={`border-t border-border/60 px-4 py-2 text-right text-base font-bold tabular-nums ${
+                      dreTotais.resultadoEfetivoMes < 0
+                        ? "text-destructive"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {formatCurrency(dreTotais.resultadoEfetivoMes)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-2 text-right text-sm font-semibold text-muted-foreground tabular-nums dark:bg-background/40">
+                  {dreTotais.margemResultado}%
+                </div>
+              </div>
+            </div>
           </div>
         </motion.div>
 
