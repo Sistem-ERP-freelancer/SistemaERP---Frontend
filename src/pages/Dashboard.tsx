@@ -9,16 +9,15 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDate, formatISODateLocal } from "@/lib/utils";
-import { estoqueService } from "@/services/estoque.service";
+import type { ApiCentroCustoDespesa } from "@/services/centro-custo.service";
+import { centroCustoService } from "@/services/centro-custo.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-    AlertTriangle,
     BarChart3,
     Calendar,
-    Info,
     ListFilter,
     Loader2,
     Scale,
@@ -100,6 +99,39 @@ function numPainel(v: unknown): number {
 function mesAnoAtualLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseValorDashboard(valor: unknown): number {
+  if (valor === null || valor === undefined || valor === "") return 0;
+  const num =
+    typeof valor === "string" ? parseFloat(valor) : Number(valor);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function labelStatusPedidoLike(status: string): string {
+  const s = status.toUpperCase();
+  if (s === "ABERTO") return "Pendente";
+  if (s === "PARCIAL") return "Aberto";
+  if (s === "QUITADO") return "Quitado";
+  if (s === "CANCELADO") return "Cancelado";
+  return status;
+}
+
+type VisualStatusLinha = "quitado" | "pendente" | "parcial" | "outro";
+
+function visualStatusLinha(status: string): VisualStatusLinha {
+  const s = status.toUpperCase();
+  if (s === "QUITADO") return "quitado";
+  if (s === "CANCELADO") return "outro";
+  if (s === "PARCIAL") return "parcial";
+  return "pendente";
+}
+
+function badgeClassesStatus(v: VisualStatusLinha): string {
+  if (v === "quitado") return "bg-cyan/10 text-cyan";
+  if (v === "pendente") return "bg-amber-500/10 text-amber-500";
+  if (v === "parcial") return "bg-azure/10 text-azure";
+  return "bg-muted text-muted-foreground";
 }
 
 const Dashboard = () => {
@@ -286,57 +318,129 @@ const Dashboard = () => {
     refetchInterval: 30000,
   });
 
-  // Buscar produtos com estoque baixo usando endpoint dedicado
-  const { data: estoqueBaixoData, isLoading: loadingProdutos } = useQuery({
-    queryKey: ['estoque', 'baixo'],
-    queryFn: () => estoqueService.obterEstoqueBaixo({ page: 1, limit: 10 }),
-    refetchInterval: 30000,
-  });
+  // Compras (pedidos) + despesas (centro de custo), mescladas por data
+  const { data: comprasDespesasLinhas = [], isLoading: loadingComprasDespesas } =
+    useQuery({
+      queryKey: ["dashboard", "compras-despesas-recentes"],
+      queryFn: async () => {
+        type Linha = {
+          key: string;
+          sort: number;
+          tipo: "COMPRA" | "DESPESA";
+          ref: string;
+          detalhe: string;
+          valorFmt: string;
+          statusLabel: string;
+          statusVisual: VisualStatusLinha;
+        };
 
-  // Buscar contas vencidas
-  const { data: contasVencidasData, isLoading: loadingContasVencidas } = useQuery({
-    queryKey: ['contas-financeiras', 'vencidas'],
-    queryFn: async () => {
-      try {
-        // Buscar contas vencidas usando proximidade_vencimento
-        const response = await financeiroService.listar({
-          page: 1,
-          limit: 10,
-          proximidade_vencimento: 'VENCIDA'
-        });
-        
-        // Tratar diferentes formatos de resposta
-        if (Array.isArray(response)) {
-          return response;
+        const [comprasRes, despesasRes] = await Promise.all([
+          pedidosService.listar({ page: 1, limit: 12, tipo: "COMPRA" }),
+          centroCustoService.listarDespesas(1, 12).catch(() => ({
+            items: [] as ApiCentroCustoDespesa[],
+            total: 0,
+            page: 1,
+            limit: 12,
+          })),
+        ]);
+
+        let comprasList: unknown[] = [];
+        if (Array.isArray(comprasRes)) comprasList = comprasRes;
+        else if (
+          comprasRes &&
+          typeof comprasRes === "object" &&
+          "data" in comprasRes &&
+          Array.isArray((comprasRes as { data: unknown[] }).data)
+        ) {
+          comprasList = (comprasRes as { data: unknown[] }).data;
+        } else if (
+          comprasRes &&
+          typeof comprasRes === "object" &&
+          "pedidos" in comprasRes &&
+          Array.isArray((comprasRes as { pedidos: unknown[] }).pedidos)
+        ) {
+          comprasList = (comprasRes as { pedidos: unknown[] }).pedidos;
         }
-        if (response?.data && Array.isArray(response.data)) {
-          return response.data;
+
+        const despesasItems = despesasRes?.items ?? [];
+
+        const linhas: Linha[] = [];
+
+        for (const raw of comprasList) {
+          const pedido = raw as {
+            id: number;
+            fornecedor?: {
+              nome_fantasia?: string;
+              nome_razao?: string;
+            };
+            fornecedor_id?: number;
+            numero_pedido?: string;
+            itens?: unknown[];
+            valor_total?: unknown;
+            status?: string;
+            created_at?: string;
+            data_pedido?: string;
+            updated_at?: string;
+          };
+          const forn = pedido.fornecedor;
+          const ref =
+            forn?.nome_fantasia ||
+            forn?.nome_razao ||
+            `Fornecedor #${pedido.fornecedor_id ?? "N/A"}`;
+          const dt =
+            pedido.created_at ||
+            pedido.data_pedido ||
+            pedido.updated_at ||
+            "";
+          const sort = dt ? new Date(dt).getTime() : 0;
+          const st = String(pedido.status || "ABERTO").toUpperCase();
+          const nItens = pedido.itens?.length ?? 0;
+          linhas.push({
+            key: `c-${pedido.id}`,
+            sort: Number.isFinite(sort) ? sort : 0,
+            tipo: "COMPRA",
+            ref,
+            detalhe: pedido.numero_pedido
+              ? `Ped. ${pedido.numero_pedido} · ${nItens} item(ns)`
+              : `${nItens} item(ns)`,
+            valorFmt: formatCurrency(parseValorDashboard(pedido.valor_total)),
+            statusLabel: labelStatusPedidoLike(st),
+            statusVisual: visualStatusLinha(st),
+          });
         }
-        if ((response as any)?.contas && Array.isArray((response as any).contas)) {
-          return (response as any).contas;
+
+        for (const d of despesasItems) {
+          const totalPag = (d.pagamentos || []).reduce(
+            (s, p) => s + parseValorDashboard(p.valor),
+            0,
+          );
+          const v = parseValorDashboard(d.valor);
+          let st: string;
+          if (totalPag <= 0) st = "ABERTO";
+          else if (totalPag >= v - 0.01) st = "QUITADO";
+          else st = "PARCIAL";
+
+          const dt = d.data || "";
+          const sort = dt ? new Date(dt).getTime() : 0;
+          const detalhe = [d.tipoNome, d.rocaNome].filter(Boolean).join(" · ");
+          linhas.push({
+            key: `d-${d.id}`,
+            sort: Number.isFinite(sort) ? sort : 0,
+            tipo: "DESPESA",
+            ref: d.descricao?.trim() || "Despesa",
+            detalhe: detalhe || "Centro de custo",
+            valorFmt: formatCurrency(v),
+            statusLabel: labelStatusPedidoLike(st),
+            statusVisual: visualStatusLinha(st),
+          });
         }
-        return [];
-      } catch (error) {
-        console.warn("Erro ao buscar contas vencidas:", error);
-        return [];
-      }
-    },
-    refetchInterval: 30000,
-  });
 
-  // Função auxiliar para converter valor para número seguro
-  const parseValor = (valor: any): number => {
-    if (valor === null || valor === undefined || valor === '') return 0;
-    const num = typeof valor === 'string' ? parseFloat(valor) : Number(valor);
-    return isNaN(num) ? 0 : num;
-  };
-
-  // Produtos com estoque baixo do endpoint dedicado
-  const produtosEstoqueBaixo = estoqueBaixoData?.produtos || [];
-  const countEstoqueBaixo = estoqueBaixoData?.total || 0;
-
-  // Contas vencidas
-  const contasVencidas = contasVencidasData || [];
+        linhas.sort((a, b) => b.sort - a.sort);
+        return linhas.slice(0, 6);
+      },
+      refetchInterval: 30000,
+      retry: false,
+    });
 
   // Tratar diferentes formatos de resposta de pedidos
   let pedidosRecentes: any[] = [];
@@ -353,16 +457,9 @@ const Dashboard = () => {
   const recentSales = pedidosRecentes.slice(0, 4).map(pedido => ({
     cliente: pedido.cliente?.nome || `Cliente #${pedido.cliente_id || 'N/A'}`,
     produto: `${pedido.itens?.length || 0} item(ns)`,
-    valor: formatCurrency(parseValor(pedido.valor_total)),
+    valor: formatCurrency(parseValorDashboard(pedido.valor_total)),
     data: pedido.created_at ? formatDate(pedido.created_at) : pedido.data_pedido ? formatDate(pedido.data_pedido) : 'N/A',
     status: pedido.status || 'Pendente',
-  }));
-
-  const lowStockProducts = produtosEstoqueBaixo.slice(0, 5).map(produto => ({
-    produto: produto.nome,
-    categoria: produto.categoria_nome || 'N/A',
-    estoque: produto.estoque_atual,
-    minimo: produto.estoque_minimo,
   }));
 
   return (
@@ -547,115 +644,28 @@ const Dashboard = () => {
                 <code className="text-xs bg-muted px-1 rounded">painel_acompanhamento</code>. Atualize a API e recarregue.
               </p>
             )}
-            {painelFinanceiro ? (
-              <div className="mt-6 flex gap-3 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 dark:border-sky-500/25 dark:bg-sky-950/30">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
-                <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                  <span className="font-semibold text-foreground">Competência</span> usa a{' '}
-                  <span className="font-semibold text-foreground">data de emissão</span> da conta no mês selecionado.{' '}
-                  <span className="font-semibold text-foreground">Compras</span> somam contas a pagar de pedidos de compra.{' '}
-                  <span className="font-semibold text-foreground">Caixa</span> segue pagamentos/recebimentos na data informada.
-                </p>
-              </div>
-            ) : null}
           </div>
         </motion.div>
 
-        {/* Contas Vencidas - Full Width */}
+        {/* Placeholder DRE (substitui a seção Contas Vencidas) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="mb-6"
         >
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-red-600" />
-              Contas Vencidas
-            </h2>
-          </div>
-          <div className="rounded-md border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingContasVencidas ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando contas vencidas...
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : contasVencidas.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                      Nenhuma conta vencida
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  contasVencidas.slice(0, 5).map((conta) => {
-                    const diasVencida = conta.dias_ate_vencimento || 0;
-                    const diasTexto = diasVencida < 0 
-                      ? `Vencida há ${Math.abs(diasVencida)} ${Math.abs(diasVencida) === 1 ? 'dia' : 'dias'}`
-                      : conta.status_vencimento || 'Vencida';
-                    
-                    // Modelo sem parcelas: exibir apenas descrição (GUIA_MIGRACAO_SEM_PARCELAS)
-                    const formatarDescricao = () => conta.descricao || '';
-                    
-                    return (
-                      <TableRow key={conta.id}>
-                        <TableCell>
-                          <span className="font-medium">{conta.numero_conta || `CONTA-${conta.id}`}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">{formatarDescricao()}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap inline-block ${
-                            conta.tipo === "RECEBER"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" 
-                              : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
-                          }`}>
-                            {conta.tipo === "RECEBER" ? "Receber" : "Pagar"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium whitespace-nowrap">
-                            {formatCurrency(parseValor(conta.valor_restante || conta.valor_original))}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 whitespace-nowrap inline-block">
-                            {diasTexto}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-            {contasVencidas.length > 5 && (
-              <div className="p-4 text-center text-sm text-muted-foreground border-t border-border">
-                Mostrando 5 de {contasVencidas.length} contas vencidas
-              </div>
-            )}
+          <div className="rounded-md border border-border bg-card px-6 py-16 sm:py-20 flex items-center justify-center min-h-[200px]">
+            <p className="text-center text-muted-foreground text-sm sm:text-base">
+              aqui está sendo implementado o DRE
+            </p>
           </div>
         </motion.div>
 
-        {/* Tables Grid - Vendas Recentes e Produtos com Estoque Baixo */}
-        <div className="grid lg:grid-cols-2 gap-6">
+        {/* Tables Grid - Vendas Recentes e Compras / despesas recentes */}
+        <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Recent Sales */}
           <motion.div
+            className="min-w-0"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
@@ -667,10 +677,10 @@ const Dashboard = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="text-center">Cliente</TableHead>
+                    <TableHead className="text-center">Produto</TableHead>
+                    <TableHead className="text-center">Valor</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -692,24 +702,40 @@ const Dashboard = () => {
                   ) : (
                     recentSales.map((sale, index) => (
                       <TableRow key={index}>
-                        <TableCell>
-                          <span className="font-medium">{sale.cliente}</span>
+                        <TableCell className="text-center align-middle">
+                          <span className="inline-block max-w-full font-medium">
+                            {sale.cliente}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">{sale.produto}</span>
+                        <TableCell className="text-center align-middle">
+                          <span className="inline-block max-w-full text-sm text-muted-foreground">
+                            {sale.produto}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <span className="font-medium whitespace-nowrap">{sale.valor}</span>
+                        <TableCell className="text-center align-middle">
+                          <span className="inline-block font-medium whitespace-nowrap tabular-nums">
+                            {sale.valor}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap inline-block ${
-                            sale.status === "QUITADO" || sale.status === "Quitado"
-                              ? "bg-cyan/10 text-cyan"
-                              : sale.status === "ABERTO" || sale.status === "Pendente"
-                                ? "bg-amber-500/10 text-amber-500"
-                                : "bg-azure/10 text-azure"
-                          }`}>
-                            {sale.status === "ABERTO" ? "Pendente" : sale.status === "PARCIAL" ? "Aberto" : sale.status === "QUITADO" ? "Quitado" : sale.status === "CANCELADO" ? "Cancelado" : sale.status}
+                        <TableCell className="text-center align-middle">
+                          <span
+                            className={`inline-block whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${
+                              sale.status === "QUITADO" || sale.status === "Quitado"
+                                ? "bg-cyan/10 text-cyan"
+                                : sale.status === "ABERTO" || sale.status === "Pendente"
+                                  ? "bg-amber-500/10 text-amber-500"
+                                  : "bg-azure/10 text-azure"
+                            }`}
+                          >
+                            {sale.status === "ABERTO"
+                              ? "Pendente"
+                              : sale.status === "PARCIAL"
+                                ? "Aberto"
+                                : sale.status === "QUITADO"
+                                  ? "Quitado"
+                                  : sale.status === "CANCELADO"
+                                    ? "Cancelado"
+                                    : sale.status}
                           </span>
                         </TableCell>
                       </TableRow>
@@ -720,55 +746,112 @@ const Dashboard = () => {
             </div>
           </motion.div>
 
-          {/* Low Stock */}
+          {/* Compras e despesas recentes (pedidos COMPRA + centro de custo) */}
           <motion.div
+            className="min-w-0"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
           >
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Produtos com Estoque Baixo</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                Compras e despesas recentes
+              </h2>
             </div>
-            <div className="rounded-md border overflow-hidden">
-              <Table>
+            <div className="min-w-0 overflow-hidden rounded-md border">
+              <Table
+                noGutter
+                contain
+                className="table-fixed w-full text-xs sm:text-sm"
+              >
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Em Estoque</TableHead>
-                    <TableHead>Mínimo</TableHead>
+                    <TableHead className="w-[14%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
+                      Tipo
+                    </TableHead>
+                    <TableHead className="w-[30%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
+                      Referência
+                    </TableHead>
+                    <TableHead className="w-[26%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
+                      Detalhe
+                    </TableHead>
+                    <TableHead className="w-[16%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
+                      Valor
+                    </TableHead>
+                    <TableHead className="w-[14%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
+                      Status
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loadingProdutos ? (
+                  {loadingComprasDespesas ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      <TableCell
+                        colSpan={5}
+                        className="px-2 py-8 text-center text-muted-foreground"
+                      >
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando produtos...
+                          Carregando compras e despesas...
                         </div>
                       </TableCell>
                     </TableRow>
-                  ) : lowStockProducts.length === 0 ? (
+                  ) : comprasDespesasLinhas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                        Nenhum produto com estoque baixo
+                      <TableCell
+                        colSpan={5}
+                        className="px-2 py-8 text-center text-muted-foreground"
+                      >
+                        Nenhuma compra ou despesa recente
                       </TableCell>
                     </TableRow>
                   ) : (
-                    lowStockProducts.map((product, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <span className="font-medium">{product.produto}</span>
+                    comprasDespesasLinhas.map((linha) => (
+                      <TableRow key={linha.key}>
+                        <TableCell className="w-[14%] p-1.5 text-center align-middle sm:p-2">
+                          <span
+                            className={`inline-block max-w-full rounded-full px-1.5 py-0.5 text-center text-[10px] font-medium leading-tight sm:px-2 sm:text-xs ${
+                              linha.tipo === "COMPRA"
+                                ? "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
+                                : "bg-amber-100 text-amber-900 dark:bg-amber-900/25 dark:text-amber-200"
+                            }`}
+                          >
+                            {linha.tipo === "COMPRA" ? "Compra" : "Despesa"}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground">{product.categoria}</span>
+                        <TableCell className="w-[30%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
+                          <span
+                            className="inline-block max-w-full truncate text-center font-medium"
+                            title={linha.ref}
+                          >
+                            {linha.ref}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-sm font-medium text-destructive whitespace-nowrap">{product.estoque}</span>
+                        <TableCell className="w-[26%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
+                          <span
+                            className="inline-block max-w-full truncate text-center text-muted-foreground"
+                            title={linha.detalhe}
+                          >
+                            {linha.detalhe}
+                          </span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground whitespace-nowrap">{product.minimo}</span>
+                        <TableCell className="w-[16%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
+                          <span
+                            className="inline-block max-w-full truncate text-center font-medium tabular-nums"
+                            title={linha.valorFmt}
+                          >
+                            {linha.valorFmt}
+                          </span>
+                        </TableCell>
+                        <TableCell className="w-[14%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
+                          <span
+                            className={`inline-block max-w-full truncate rounded-full px-1.5 py-0.5 text-center text-[10px] font-medium leading-tight sm:px-2 sm:text-xs ${badgeClassesStatus(
+                              linha.statusVisual,
+                            )}`}
+                            title={linha.statusLabel}
+                          >
+                            {linha.statusLabel}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))

@@ -4,11 +4,16 @@ import { cn } from "@/lib/utils";
 
 const Table = React.forwardRef<
   HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement> & { noGutter?: boolean }
->(({ className, noGutter, ...props }, ref) => (
+  React.HTMLAttributes<HTMLTableElement> & {
+    noGutter?: boolean;
+    /** Evita barra horizontal quando a tabela usa layout fixo + truncate no conteúdo */
+    contain?: boolean;
+  }
+>(({ className, noGutter, contain, ...props }, ref) => (
   <div
     className={cn(
-      "relative w-full min-w-0 max-w-full overflow-auto",
+      "relative w-full min-w-0 max-w-full",
+      contain ? "overflow-x-hidden overflow-y-visible" : "overflow-auto",
       !noGutter && "-mx-1 px-1",
     )}
   >
