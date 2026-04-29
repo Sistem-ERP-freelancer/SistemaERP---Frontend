@@ -100,6 +100,28 @@ export interface ContasAgrupadasResponse {
   total: number;
 }
 
+/** Resumo de conta PAGAR órfã (centro de custo sem vínculo em despesa). */
+export interface ContaOrfaCentroCustoResumo {
+  id: number;
+  numero_conta: string;
+  descricao: string;
+  valor_original: string | number;
+  valor_pago: string | number;
+  valor_total?: string | number | null;
+  status: string;
+  data_vencimento: string;
+}
+
+export interface ListarOrfasPagarCentroCustoResponse {
+  total: number;
+  itens: ContaOrfaCentroCustoResumo[];
+}
+
+export interface RemoverOrfasPagarCentroCustoResponse {
+  removidas: number;
+  ids: number[];
+}
+
 export interface DashboardFinanceiro {
   total: number;
   vencidas: number;
@@ -401,6 +423,20 @@ class FinanceiroService {
 
   async deletar(id: number): Promise<void> {
     return apiClient.delete<void>(`/contas-financeiras/${id}`);
+  }
+
+  /** Pré-visualização de contas a pagar órfãs (duplicatas de centro de custo). */
+  async listarOrfasPagarCentroCusto(): Promise<ListarOrfasPagarCentroCustoResponse> {
+    return apiClient.get<ListarOrfasPagarCentroCustoResponse>(
+      '/contas-financeiras/pagar/orfas-centro-custo',
+    );
+  }
+
+  /** Remove em lote as contas retornadas por listarOrfasPagarCentroCusto. */
+  async removerOrfasPagarCentroCusto(): Promise<RemoverOrfasPagarCentroCustoResponse> {
+    return apiClient.delete<RemoverOrfasPagarCentroCustoResponse>(
+      '/contas-financeiras/pagar/orfas-centro-custo',
+    );
   }
 
   async cancelar(id: number): Promise<ContaFinanceira> {
