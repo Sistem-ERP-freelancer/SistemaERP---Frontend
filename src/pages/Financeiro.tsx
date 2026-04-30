@@ -46,7 +46,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatDate } from "@/lib/utils";
 import { Cliente, clientesService } from "@/services/clientes.service";
+import { controleRocaService } from "@/services/controle-roca.service";
 import { CreateContaFinanceiraDto, financeiroService, ResumoFinanceiro } from "@/services/financeiro.service";
+import type { Roca } from "@/types/roca";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import { pedidosService } from "@/services/pedidos.service";
@@ -98,6 +100,7 @@ const Financeiro = () => {
     valor_original: 0,
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: "",
+    roca_id: undefined,
   });
 
   const [page, setPage] = useState(1);
@@ -196,6 +199,15 @@ const Financeiro = () => {
       (fornecedoresData as any)?.fornecedores ||
       (fornecedoresData as any)?.items ||
       [];
+
+  const { data: rocasData } = useQuery({
+    queryKey: ["financeiro", "rocas-ativas"],
+    queryFn: async () => controleRocaService.listarRocas(undefined, false),
+    retry: false,
+  });
+  const rocasLista: Roca[] = Array.isArray(rocasData)
+    ? rocasData
+    : (rocasData as any)?.rocas ?? [];
 
   const tipoFiltroEfetivo = useMemo<"RECEBER" | "PAGAR" | undefined>(() => {
     if (secaoTipoFilter === "contas_receber") return "RECEBER";
@@ -555,6 +567,7 @@ const Financeiro = () => {
         valor_original: 0,
         data_emissao: new Date().toISOString().split('T')[0],
         data_vencimento: "",
+        roca_id: undefined,
       });
     },
     onError: (error: any) => {
@@ -597,6 +610,7 @@ const Financeiro = () => {
         cliente_id: contaSelecionada.cliente_id,
         fornecedor_id: contaSelecionada.fornecedor_id,
         pedido_id: contaSelecionada.pedido_id,
+        roca_id: contaSelecionada.roca_id,
         forma_pagamento: contaSelecionada.forma_pagamento,
         data_pagamento: contaSelecionada.data_pagamento,
         observacoes: contaSelecionada.observacoes,
@@ -669,14 +683,24 @@ const Financeiro = () => {
     return itensAgrupados.map((item) => ({
       id: item.id,
       cliente_nome: item.cliente_nome,
-      descricao: item.descricao,
+      descricao:
+        item.descricao != null && String(item.descricao).trim() !== ""
+          ? String(item.descricao).trim()
+          : "—",
       tipo: item.tipo === "RECEBER" ? "Receita" : "Despesa",
-      categoria: item.categoria,
+      categoria:
+        item.categoria ||
+        (item.tipo === "RECEBER"
+          ? "Vendas"
+          : item.tipo === "PAGAR"
+            ? "Compras"
+            : "Outros"),
       valor: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total ?? 0),
       status: statusMap[item.status] || item.status,
       statusOriginal: item.status,
       contaId: item.id,
       pedido_id: item.pedido_id,
+      roca_nome: item.roca_nome,
     }));
   }, [itensAgrupados]);
 
@@ -687,6 +711,7 @@ const Financeiro = () => {
     return transacoesDisplay.filter(t => 
       (t.cliente_nome?.toLowerCase() || "").includes(term) ||
       (t.descricao?.toLowerCase() || "").includes(term) ||
+      (t.roca_nome?.toLowerCase() || "").includes(term) ||
       String(t.contaId).includes(term)
     );
   }, [transacoesDisplay, searchTerm]);
@@ -721,6 +746,7 @@ const Financeiro = () => {
       cliente_id: newTransacao.cliente_id || undefined,
       fornecedor_id: newTransacao.fornecedor_id || undefined,
       pedido_id: newTransacao.pedido_id || undefined,
+      roca_id: newTransacao.roca_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
       observacoes: newTransacao.observacoes || undefined,
@@ -839,8 +865,8 @@ const Financeiro = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="RECEBER">Receber</SelectItem>
-                          <SelectItem value="PAGAR">Pagar</SelectItem>
+                          <SelectItem value="RECEBER">Receita</SelectItem>
+                          <SelectItem value="PAGAR">Despesa</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -863,7 +889,7 @@ const Financeiro = () => {
                     <ShoppingCart className="w-4 h-4 text-blue-500" />
                     Relacionamentos
                   </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label>Cliente</Label>
                       <Select
@@ -953,6 +979,39 @@ const Financeiro = () => {
                                 </SelectItem>
                               );
                             })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Roça</Label>
+                      <Select
+                        value={
+                          newTransacao.roca_id != null
+                            ? String(newTransacao.roca_id)
+                            : "none"
+                        }
+                        onValueChange={(value) =>
+                          setNewTransacao({
+                            ...newTransacao,
+                            roca_id:
+                              value && value !== "none"
+                                ? Number(value)
+                                : undefined,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma roça" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {rocasLista
+                            .filter((r) => r.ativo !== false)
+                            .map((roca) => (
+                              <SelectItem key={roca.id} value={String(roca.id)}>
+                                {roca.nome}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1432,7 +1491,7 @@ const Financeiro = () => {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Categoria</TableHead>
+                <TableHead>Roça</TableHead>
                 <TableHead>Valor (total)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
@@ -1476,7 +1535,9 @@ const Financeiro = () => {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">{transacao.categoria}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {transacao.roca_nome?.trim() ? transacao.roca_nome : "—"}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{transacao.valor}</span>
@@ -1672,6 +1733,14 @@ const Financeiro = () => {
                       <Label className="text-muted-foreground">Pedido</Label>
                       <div className="text-sm font-medium">{contaDetalhe.relacionamentos?.pedido_numero ?? 'N/A'}</div>
                     </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Roça</Label>
+                      <div className="text-sm font-medium">
+                        {contaDetalhe.relacionamentos?.roca_nome?.trim()
+                          ? contaDetalhe.relacionamentos.roca_nome
+                          : 'N/A'}
+                      </div>
+                    </div>
                     {(contaDetalhe.relacionamentos?.nome_produto != null && contaDetalhe.relacionamentos.nome_produto !== '') && (
                       <div className="space-y-2 md:col-span-2">
                         <Label className="text-muted-foreground">Produtos</Label>
@@ -1841,8 +1910,8 @@ const Financeiro = () => {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="RECEBER">Receber</SelectItem>
-                            <SelectItem value="PAGAR">Pagar</SelectItem>
+                            <SelectItem value="RECEBER">Receita</SelectItem>
+                            <SelectItem value="PAGAR">Despesa</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1875,7 +1944,7 @@ const Financeiro = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Cliente</Label>
                       <Select
@@ -1965,6 +2034,39 @@ const Financeiro = () => {
                                 </SelectItem>
                               );
                             })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Roça</Label>
+                      <Select
+                        value={
+                          editConta.roca_id != null
+                            ? String(editConta.roca_id)
+                            : "none"
+                        }
+                        onValueChange={(value) =>
+                          setEditConta({
+                            ...editConta,
+                            roca_id:
+                              value && value !== "none"
+                                ? Number(value)
+                                : undefined,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma roça" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {rocasLista
+                            .filter((r) => r.ativo !== false)
+                            .map((roca) => (
+                              <SelectItem key={roca.id} value={String(roca.id)}>
+                                {roca.nome}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

@@ -11,6 +11,7 @@ import {
 import { formatCurrency, formatDate, formatISODateLocal } from "@/lib/utils";
 import type { ApiCentroCustoDespesa } from "@/services/centro-custo.service";
 import { centroCustoService } from "@/services/centro-custo.service";
+import { controleRocaService } from "@/services/controle-roca.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
@@ -149,6 +150,7 @@ const Dashboard = () => {
   const [totaisGeraisModo, setTotaisGeraisModo] =
     useState<PainelTotaisGeraisModo>("pagos");
   const [dreMesAnoFiltro, setDreMesAnoFiltro] = useState<string>("");
+  const [dreRocaFiltro, setDreRocaFiltro] = useState<string>("all");
 
   const refMesYyyyMm = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
@@ -201,6 +203,13 @@ const Dashboard = () => {
     ],
     queryFn: () => financeiroService.getDashboardUnificado(parametrosDashboardFinanceiro),
     refetchInterval: 30000,
+    retry: false,
+  });
+
+  const { data: rocasDre = [] } = useQuery({
+    queryKey: ["dashboard", "dre-rocas-opcoes"],
+    queryFn: () => controleRocaService.listarRocas(undefined, false),
+    staleTime: 5 * 60 * 1000,
     retry: false,
   });
 
@@ -492,10 +501,14 @@ const Dashboard = () => {
   }));
 
   const { data: dreDadosReais, isLoading: loadingDre } = useQuery({
-    queryKey: ["dashboard", "dre-real", parametrosDre],
+    queryKey: ["dashboard", "dre-real", parametrosDre, dreRocaFiltro],
     queryFn: async () => {
       const { data_inicial, data_final } = parametrosDre;
       const limit = 200;
+      const rocaIdFiltro =
+        dreRocaFiltro !== "all" && Number.isFinite(Number(dreRocaFiltro))
+          ? Number(dreRocaFiltro)
+          : undefined;
 
       const [resumoFinanceiroMes, despesasPagina1] = await Promise.all([
         financeiroService.getDashboardUnificado({
@@ -506,6 +519,7 @@ const Dashboard = () => {
         centroCustoService.listarDespesas(1, limit, {
           dataInicial: data_inicial,
           dataFinal: data_final,
+          ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
         }),
       ]);
 
@@ -520,6 +534,7 @@ const Dashboard = () => {
         const resposta = await centroCustoService.listarDespesas(page, limit, {
           dataInicial: data_inicial,
           dataFinal: data_final,
+          ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
         });
         despesas.push(...(resposta?.items ?? []));
       }
@@ -837,7 +852,8 @@ const Dashboard = () => {
                     Resumo consolidado de receitas, despesas e resultado efetivo do período.
                   </p>
                 </div>
-                <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
+                  <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
                   <Label
                     htmlFor="dashboard-dre-mes-ano"
                     className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
@@ -862,6 +878,26 @@ const Dashboard = () => {
                         Todos os meses
                       </span>
                     ) : null}
+                  </div>
+                  </div>
+                  <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
+                    <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                      <ListFilter className="h-3.5 w-3.5 opacity-70" />
+                      Roça
+                    </Label>
+                    <Select value={dreRocaFiltro} onValueChange={setDreRocaFiltro}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas as roças</SelectItem>
+                        {rocasDre.map((roca) => (
+                          <SelectItem key={roca.id} value={String(roca.id)}>
+                            {roca.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>

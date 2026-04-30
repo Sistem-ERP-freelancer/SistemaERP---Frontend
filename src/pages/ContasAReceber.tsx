@@ -397,15 +397,25 @@ const ContasAReceber = () => {
         let status: string | undefined;
         let proximidadeVencimento: string | undefined;
 
-        if (activeCardFilter === "vencidas") proximidadeVencimento = "VENCIDA";
-        else if (activeCardFilter === "vencendo_hoje") proximidadeVencimento = "VENCE_HOJE";
-        else if (activeCardFilter === "valor_pago") status = "PAGO_PARCIAL";
-        // todos e vencendo_este_mes: filtro client-side em filteredGruposContas
-        if (!status && statusFilter) {
+        /**
+         * "Vencido" na UI = data de vencimento já passou (dashboard conta assim).
+         * Na base o status costuma ser PENDENTE/ABERTO — não existe linha com status = VENCIDO.
+         * O backend filtra vencidas por data via proximidade_vencimento = VENCIDA.
+         */
+        if (statusFilter === "VENCIDO") {
+          proximidadeVencimento = "VENCIDA";
+        } else if (activeCardFilter === "vencidas") {
+          proximidadeVencimento = "VENCIDA";
+        } else if (activeCardFilter === "vencendo_hoje") {
+          proximidadeVencimento = "VENCE_HOJE";
+        } else if (activeCardFilter === "valor_pago") {
+          status = "PAGO_PARCIAL";
+        }
+
+        if (!status && statusFilter && statusFilter !== "VENCIDO") {
           if (statusFilter === "ABERTO") status = "ABERTO";
           else if (statusFilter === "PARCIAL") status = "PARCIAL";
           else if (statusFilter === "QUITADO") status = "QUITADO";
-          else if (statusFilter === "VENCIDO") status = "VENCIDO";
         }
 
         const response = await financeiroService.listar({
@@ -413,7 +423,10 @@ const ContasAReceber = () => {
           page: currentPage,
           limit: pageSize,
           status,
-          proximidade_vencimento: proximidadeVencimento,
+          proximidade_vencimento: proximidadeVencimento as
+            | "VENCIDA"
+            | "VENCE_HOJE"
+            | undefined,
           cliente_id:
             clienteFilterId != null && clienteFilterId > 0
               ? clienteFilterId
@@ -1050,6 +1063,7 @@ const ContasAReceber = () => {
         cliente: nomeCliente,
         diasAteVencimento,
         vencimentoStatus,
+        roca_nome: conta.roca_nome ?? null,
       };
     });
   }, [contas, clientes]);
@@ -1171,9 +1185,8 @@ const ContasAReceber = () => {
     );
   }, [contas, clientes, searchTerm]);
 
-  // Filtrar linhas e grupos pelo card clicado
+  // Filtrar linhas e grupos pelo card clicado e pela folha de filtros (status)
   const filteredLinhasPedidos = useMemo(() => {
-    if (activeCardFilter === "todos") return linhasPedidos;
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
@@ -1184,32 +1197,56 @@ const ContasAReceber = () => {
       const dataVenc = parseDateOnlyLocal(raw) ?? new Date(raw);
       dataVenc.setHours(0, 0, 0, 0);
 
+      if (statusFilter === "ABERTO" || statusFilter === "PARCIAL" || statusFilter === "QUITADO") {
+        if (p.status !== statusFilter) return false;
+      }
+      if (statusFilter === "VENCIDO") {
+        const st = (p.status || "").toUpperCase();
+        if (st === "QUITADO" || st === "PAGO_TOTAL") return false;
+        if (dataVenc.getTime() >= hoje.getTime()) return false;
+        return Number(p.valor_em_aberto ?? 0) > 0.009;
+      }
+
+      if (activeCardFilter === "todos") return true;
+
       if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
       if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
       if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
       if (activeCardFilter === "valor_pago") return p.status === "PARCIAL" || p.status === "QUITADO";
-      if (statusFilter) return p.status === statusFilter;
       return true;
     });
   }, [linhasPedidos, activeCardFilter, statusFilter]);
 
   const filteredGruposContas = useMemo(() => {
-    if (activeCardFilter === "todos") return gruposContas;
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
     fimDoMes.setHours(23, 59, 59, 999);
 
     return gruposContas.filter((g) => {
-      if (activeCardFilter === "valor_pago") return g.statusConsolidado === "Pago Parcial" || g.statusConsolidado === "Pago Total";
-      if (statusFilter) {
+      if (statusFilter === "ABERTO" || statusFilter === "PARCIAL" || statusFilter === "QUITADO") {
         const match =
           (statusFilter === "ABERTO" && g.statusConsolidado === "Pendente") ||
           (statusFilter === "PARCIAL" && g.statusConsolidado === "Pago Parcial") ||
           (statusFilter === "QUITADO" && g.statusConsolidado === "Pago Total");
         if (!match) return false;
       }
-      if (!g.primeira_vencimento && activeCardFilter === "todos") return true;
+
+      if (statusFilter === "VENCIDO") {
+        if (!g.primeira_vencimento) return false;
+        const dataVenc = parseDateOnlyLocal(g.primeira_vencimento);
+        if (!dataVenc) return false;
+        dataVenc.setHours(0, 0, 0, 0);
+        if (dataVenc.getTime() >= hoje.getTime()) return false;
+        return g.valor_aberto > 0.009;
+      }
+
+      if (activeCardFilter === "valor_pago") {
+        return g.statusConsolidado === "Pago Parcial" || g.statusConsolidado === "Pago Total";
+      }
+
+      if (activeCardFilter === "todos") return true;
+
       if (!g.primeira_vencimento) return false;
 
       const dataVenc = parseDateOnlyLocal(g.primeira_vencimento);
@@ -1243,6 +1280,7 @@ const ContasAReceber = () => {
           id: p.numero_pedido,
           descricao: `Pedido ${p.numero_pedido}`,
           cliente: p.cliente_nome || "—",
+          roca_nome: (p as ContaReceber & { roca_nome?: string | null }).roca_nome ?? null,
           categoria: "Vendas",
           valorTotalNum: Number(p.valor_total ?? 0),
           valorPagoNum: Number(p.valor_pago ?? 0),
@@ -1267,10 +1305,18 @@ const ContasAReceber = () => {
       const valorPagoGrupo = Math.max(0, totalGrupo - g.valor_aberto);
       const primeiraParcela = g.parcelas[0];
       const idExibicao = primeiraParcela?.numero_conta || g.descricaoBase?.split(" ")[0] || g.key;
+      const rocaNomes = g.parcelas
+        .map((p) => (p as { roca_nome?: string | null }).roca_nome)
+        .filter((n): n is string => typeof n === "string" && n.trim().length > 0);
+      const rocaExibicao =
+        rocaNomes.length === 0
+          ? null
+          : Array.from(new Set(rocaNomes)).join(", ");
       return {
         id: idExibicao,
         descricao: g.descricaoBase,
         cliente: g.cliente_nome,
+        roca_nome: rocaExibicao,
         categoria: g.categoria,
         valor: formatarMoeda(totalGrupo),
         valorPago: formatarMoeda(valorPagoGrupo),
@@ -2174,6 +2220,7 @@ const ContasAReceber = () => {
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Roça</TableHead>
                 <TableHead>Valor</TableHead>
                 <TableHead>Valor Pago</TableHead>
                 <TableHead>Data Vencimento</TableHead>
@@ -2184,7 +2231,7 @@ const ContasAReceber = () => {
             <TableBody>
               {(isLoadingPedidosContasReceber || (usarFallbackContasFinanceiras && isLoadingContas)) ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas a receber...
@@ -2193,7 +2240,7 @@ const ContasAReceber = () => {
                 </TableRow>
               ) : (clienteFilterId != null && clienteFilterId > 0 && !isLoadingPedidosContasReceber && pedidos.length === 0 && (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0) ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">Não há pedidos ou contas desse determinado cliente.</p>
@@ -2202,7 +2249,7 @@ const ContasAReceber = () => {
                 </TableRow>
               ) : (dataInicialFilter || dataFinalFilter) && !isLoadingPedidosContasReceber && pedidos.length === 0 && (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">Não há contas no período selecionado.</p>
@@ -2211,7 +2258,7 @@ const ContasAReceber = () => {
                 </TableRow>
               ) : (usarFallbackContasFinanceiras ? transacoesDisplayGrupos : transacoesDisplayReceber).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">
@@ -2234,6 +2281,13 @@ const ContasAReceber = () => {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground">{transacao.cliente}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {(transacao as { roca_nome?: string | null }).roca_nome?.trim()
+                            ? (transacao as { roca_nome?: string | null }).roca_nome
+                            : "—"}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <span className="font-medium">{transacao.valor}</span>
@@ -2358,6 +2412,11 @@ const ContasAReceber = () => {
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">{transacao.cliente}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {transacao.roca_nome?.trim() ? transacao.roca_nome : "—"}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{transacao.valor}</span>

@@ -7,6 +7,9 @@ export interface ContaFinanceira {
   pedido_id?: number;
   cliente_id?: number;
   fornecedor_id?: number;
+  roca_id?: number;
+  /** Preenchido em listagens com JOIN (tb_roca). */
+  roca_nome?: string | null;
   descricao: string;
   valor_original: number;
   valor_pago: number;
@@ -32,6 +35,7 @@ export interface CreateContaFinanceiraDto {
   pedido_id?: number;
   cliente_id?: number;
   fornecedor_id?: number;
+  roca_id?: number;
   descricao: string;
   valor_original: number;
   data_emissao: string;
@@ -65,6 +69,7 @@ export interface ContaFinanceiraDetalhe {
     fornecedor_nome: string | null;
     pedido_numero: string | null;
     nome_produto: string | null;
+    roca_nome?: string | null;
   };
   datas: {
     data_criacao: string | null;
@@ -93,6 +98,7 @@ export interface ContaFinanceiraAgrupada {
   categoria: string;
   valor_total: number;
   status: string;
+  roca_nome?: string | null;
 }
 
 export interface ContasAgrupadasResponse {

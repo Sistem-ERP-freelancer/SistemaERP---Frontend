@@ -111,6 +111,56 @@ function dedupeContasFinanceirasPagar(contas: ContaFinanceira[]): ContaFinanceir
   return out;
 }
 
+/** Normaliza resposta de GET /contas-financeiras para { data, total }. */
+function parseListarContasResponse(response: unknown): {
+  data: ContaFinanceira[];
+  total: number;
+} {
+  if (Array.isArray(response)) {
+    return { data: response, total: response.length };
+  }
+  const r = response as {
+    data?: ContaFinanceira[];
+    total?: number;
+    contas?: ContaFinanceira[];
+  };
+  if (r?.data && Array.isArray(r.data)) {
+    return { data: r.data, total: r.total ?? r.data.length };
+  }
+  if (r?.contas && Array.isArray(r.contas)) {
+    return { data: r.contas, total: r.total ?? r.contas.length };
+  }
+  return { data: [], total: 0 };
+}
+
+/**
+ * Busca todas as páginas para um mesmo filtro (necessário ao clicar nos cards
+ * "Total Pago" / "Total a Pagar", pois filtrar só as 15 linhas da página atual falha).
+ */
+async function listarContasPagarTodasAsPaginas(
+  base: Parameters<typeof financeiroService.listar>[0],
+): Promise<ContaFinanceira[]> {
+  const pageLimit = 200;
+  let page = 1;
+  const acc: ContaFinanceira[] = [];
+  let totalEsperado = 0;
+  for (;;) {
+    const response = await financeiroService.listar({
+      ...base,
+      page,
+      limit: pageLimit,
+    });
+    const { data, total } = parseListarContasResponse(response);
+    if (page === 1) totalEsperado = total;
+    acc.push(...data);
+    if (data.length < pageLimit || acc.length >= totalEsperado || data.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+  return dedupeContasFinanceirasPagar(acc);
+}
+
 /** Chave estável para React: nunca usar só numero_conta (pode repetir em duplicatas). */
 function rowKeyContasPagar(transacao: {
   id: string;
@@ -141,7 +191,9 @@ function ContasAPagar() {
   const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
   const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
   /** Filtro por card clicável (como Contas a Receber): ao clicar no card, filtra a tabela */
-  const [activeCardFilter, setActiveCardFilter] = useState<"todos" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes">("todos");
+  const [activeCardFilter, setActiveCardFilter] = useState<
+    "todos" | "a_pagar" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes"
+  >("todos");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
   const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState<string>("");
@@ -338,6 +390,7 @@ function ContasAPagar() {
       statusFilter,
       dataInicialFilter,
       dataFinalFilter,
+      activeCardFilter,
     ],
     queryFn: async () => {
       if (!validarParametrosPaginação(currentPage, pageSize)) {
@@ -362,6 +415,94 @@ function ContasAPagar() {
             status = filtro;
         }
 
+        const fornecedorArg =
+          fornecedorFilterId != null && fornecedorFilterId > 0
+            ? fornecedorFilterId
+            : undefined;
+        const dataInicialArg =
+          dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+            ? dataInicialFilter
+            : undefined;
+        const dataFinalArg =
+          dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+            ? dataFinalFilter
+            : undefined;
+
+        /**
+         * Cards de resumo: filtros da folha (status/fornecedor/período) têm prioridade.
+         * Sem filtro explícito na folha, buscamos no servidor conforme o card — não só
+         * nas 15 linhas da página atual.
+         */
+        if (!filtro) {
+          if (activeCardFilter === "valor_pago") {
+            const [pagasTotal, pagasParcial] = await Promise.all([
+              listarContasPagarTodasAsPaginas({
+                tipo: "PAGAR",
+                status: "PAGO_TOTAL",
+                fornecedor_id: fornecedorArg,
+                data_inicial: dataInicialArg,
+                data_final: dataFinalArg,
+              }),
+              listarContasPagarTodasAsPaginas({
+                tipo: "PAGAR",
+                status: "PAGO_PARCIAL",
+                fornecedor_id: fornecedorArg,
+                data_inicial: dataInicialArg,
+                data_final: dataFinalArg,
+              }),
+            ]);
+            const merged = dedupeContasFinanceirasPagar([
+              ...pagasTotal,
+              ...pagasParcial,
+            ]);
+            const start = (currentPage - 1) * pageSize;
+            return {
+              data: merged.slice(start, start + pageSize),
+              total: merged.length,
+            };
+          }
+          if (activeCardFilter === "a_pagar") {
+            const [emAberto, vencidasSt, parcial] = await Promise.all([
+              listarContasPagarTodasAsPaginas({
+                tipo: "PAGAR",
+                status: "PENDENTE",
+                fornecedor_id: fornecedorArg,
+                data_inicial: dataInicialArg,
+                data_final: dataFinalArg,
+              }),
+              listarContasPagarTodasAsPaginas({
+                tipo: "PAGAR",
+                status: "VENCIDO",
+                fornecedor_id: fornecedorArg,
+                data_inicial: dataInicialArg,
+                data_final: dataFinalArg,
+              }),
+              listarContasPagarTodasAsPaginas({
+                tipo: "PAGAR",
+                status: "PAGO_PARCIAL",
+                fornecedor_id: fornecedorArg,
+                data_inicial: dataInicialArg,
+                data_final: dataFinalArg,
+              }),
+            ]);
+            const merged = dedupeContasFinanceirasPagar([
+              ...emAberto,
+              ...vencidasSt,
+              ...parcial,
+            ]);
+            const start = (currentPage - 1) * pageSize;
+            return {
+              data: merged.slice(start, start + pageSize),
+              total: merged.length,
+            };
+          }
+          if (activeCardFilter === "vencidas") {
+            proximidadeVencimento = "VENCIDA";
+          } else if (activeCardFilter === "vencendo_hoje") {
+            proximidadeVencimento = "VENCE_HOJE";
+          }
+        }
+
         const response = await financeiroService.listar({
           tipo: "PAGAR",
           page: currentPage,
@@ -371,18 +512,9 @@ function ContasAPagar() {
             | "VENCIDA"
             | "VENCE_HOJE"
             | undefined,
-          fornecedor_id:
-            fornecedorFilterId != null && fornecedorFilterId > 0
-              ? fornecedorFilterId
-              : undefined,
-          data_inicial:
-            dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
-              ? dataInicialFilter
-              : undefined,
-          data_final:
-            dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
-              ? dataFinalFilter
-              : undefined,
+          fornecedor_id: fornecedorArg,
+          data_inicial: dataInicialArg,
+          data_final: dataFinalArg,
         });
 
         let contasData: ContaFinanceira[] = [];
@@ -562,7 +694,16 @@ function ContasAPagar() {
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
-      { label: "Total a Pagar", value: formatarMoedaCard(totalPagar), icon: DollarSign, trend: null, trendUp: false, color: "text-orange-600", bgColor: "bg-orange-100", filterKey: "todos" as const },
+      {
+        label: "Total a Pagar",
+        value: formatarMoedaCard(totalPagar),
+        icon: DollarSign,
+        trend: null,
+        trendUp: false,
+        color: "text-orange-600",
+        bgColor: "bg-orange-100",
+        filterKey: "a_pagar" as const,
+      },
       { label: "Total Pago", value: formatarMoedaCard(totalPago), icon: CheckCircle, trend: null, trendUp: false, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
       { label: "Vencidas", value: totalVencidas.toString(), icon: Calendar, trend: null, trendUp: false, color: "text-red-600", bgColor: "bg-red-100", filterKey: "vencidas" as const },
       { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
@@ -1039,6 +1180,7 @@ function ContasAPagar() {
         valorEmAberto: abertoFallback,
         podePagar: podePagarConta,
         pedidoId: pid != null && Number.isFinite(Number(pid)) ? Number(pid) : undefined,
+        roca_nome: (conta as { roca_nome?: string | null }).roca_nome ?? null,
       };
     });
   }, [contasFallback, fornecedores]);
@@ -1069,10 +1211,29 @@ function ContasAPagar() {
       filtered = filtered.filter((t: any) => {
         const dias = t.diasAteVencimento;
         const status = (t.statusOriginal || "").toUpperCase();
+        const aberto = Number(t.valorEmAberto) || 0;
         if (activeCardFilter === "vencidas") return dias != null && dias < 0;
         if (activeCardFilter === "vencendo_hoje") return dias === 0;
         if (activeCardFilter === "vencendo_este_mes") return dias != null && dias >= 1 && dias <= 30;
-        if (activeCardFilter === "valor_pago") return status === "PARCIAL" || status === "QUITADO";
+        /** Contas com saldo em aberto (alinha ao card "Total a Pagar" / resumo pendente). */
+        if (activeCardFilter === "a_pagar") {
+          if (status === "QUITADO" || status === "PAGO_TOTAL" || status === "CANCELADO") {
+            return false;
+          }
+          return aberto > 0.009;
+        }
+        /**
+         * Contas já quitadas ou com pagamento registrado — o backend usa PAGO_TOTAL / PAGO_PARCIAL,
+         * não só QUITADO / PARCIAL.
+         */
+        if (activeCardFilter === "valor_pago") {
+          return (
+            status === "PAGO_TOTAL" ||
+            status === "PAGO_PARCIAL" ||
+            status === "QUITADO" ||
+            status === "PARCIAL"
+          );
+        }
         return true;
       });
     }
@@ -1672,6 +1833,7 @@ function ContasAPagar() {
                 <TableHead>ID</TableHead>
                 <TableHead className="w-[120px] min-w-[120px]">Tipo</TableHead>
                 <TableHead>Fornecedor</TableHead>
+                <TableHead>Roça</TableHead>
                 <TableHead>Valor</TableHead>
                 <TableHead>Valor Pago</TableHead>
                 <TableHead>Data Vencimento</TableHead>
@@ -1682,7 +1844,7 @@ function ContasAPagar() {
             <TableBody>
               {isLoadingContas ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Carregando contas...
@@ -1691,7 +1853,7 @@ function ContasAPagar() {
                 </TableRow>
               ) : (dataInicialFilter || dataFinalFilter) && !isLoadingContas && totalContas === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">Não há contas no período selecionado.</p>
@@ -1700,7 +1862,7 @@ function ContasAPagar() {
                 </TableRow>
               ) : filteredTransacoes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <DollarSign className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-muted-foreground">
@@ -1774,6 +1936,13 @@ function ContasAPagar() {
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">{transacao.fornecedor}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {(transacao as { roca_nome?: string | null }).roca_nome?.trim()
+                          ? (transacao as { roca_nome?: string | null }).roca_nome
+                          : "—"}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{transacao.valor}</span>
