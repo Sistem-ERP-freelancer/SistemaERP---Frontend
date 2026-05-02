@@ -8,12 +8,11 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDate, formatISODateLocal } from "@/lib/utils";
+import { formatCurrency, formatISODateLocal } from "@/lib/utils";
 import type { ApiCentroCustoDespesa } from "@/services/centro-custo.service";
 import { centroCustoService } from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
 import { financeiroService } from "@/services/financeiro.service";
-import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -107,40 +106,6 @@ function parseValorDashboard(valor: unknown): number {
   const num =
     typeof valor === "string" ? parseFloat(valor) : Number(valor);
   return Number.isFinite(num) ? num : 0;
-}
-
-function normalizarTexto(valor: string): string {
-  return valor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-function labelStatusPedidoLike(status: string): string {
-  const s = status.toUpperCase();
-  if (s === "ABERTO") return "Pendente";
-  if (s === "PARCIAL") return "Aberto";
-  if (s === "QUITADO") return "Quitado";
-  if (s === "CANCELADO") return "Cancelado";
-  return status;
-}
-
-type VisualStatusLinha = "quitado" | "pendente" | "parcial" | "outro";
-
-function visualStatusLinha(status: string): VisualStatusLinha {
-  const s = status.toUpperCase();
-  if (s === "QUITADO") return "quitado";
-  if (s === "CANCELADO") return "outro";
-  if (s === "PARCIAL") return "parcial";
-  return "pendente";
-}
-
-function badgeClassesStatus(v: VisualStatusLinha): string {
-  if (v === "quitado") return "bg-cyan/10 text-cyan";
-  if (v === "pendente") return "bg-amber-500/10 text-amber-500";
-  if (v === "parcial") return "bg-azure/10 text-azure";
-  return "bg-muted text-muted-foreground";
 }
 
 const Dashboard = () => {
@@ -349,157 +314,6 @@ const Dashboard = () => {
     ];
   }, [painelFinanceiro, mesAnoFiltro, totaisGeraisModo]);
 
-  // Buscar pedidos recentes (vendas)
-  const { data: pedidosData, isLoading: loadingPedidos } = useQuery({
-    queryKey: ['pedidos', 'recentes'],
-    queryFn: () => pedidosService.listar({ page: 1, limit: 5, tipo: 'VENDA' }),
-    refetchInterval: 30000,
-  });
-
-  // Compras (pedidos) + despesas (centro de custo), mescladas por data
-  const { data: comprasDespesasLinhas = [], isLoading: loadingComprasDespesas } =
-    useQuery({
-      queryKey: ["dashboard", "compras-despesas-recentes"],
-      queryFn: async () => {
-        type Linha = {
-          key: string;
-          sort: number;
-          tipo: "COMPRA" | "DESPESA";
-          ref: string;
-          detalhe: string;
-          valorFmt: string;
-          statusLabel: string;
-          statusVisual: VisualStatusLinha;
-        };
-
-        const [comprasRes, despesasRes] = await Promise.all([
-          pedidosService.listar({ page: 1, limit: 12, tipo: "COMPRA" }),
-          centroCustoService.listarDespesas(1, 12).catch(() => ({
-            items: [] as ApiCentroCustoDespesa[],
-            total: 0,
-            page: 1,
-            limit: 12,
-          })),
-        ]);
-
-        let comprasList: unknown[] = [];
-        if (Array.isArray(comprasRes)) comprasList = comprasRes;
-        else if (
-          comprasRes &&
-          typeof comprasRes === "object" &&
-          "data" in comprasRes &&
-          Array.isArray((comprasRes as { data: unknown[] }).data)
-        ) {
-          comprasList = (comprasRes as { data: unknown[] }).data;
-        } else if (
-          comprasRes &&
-          typeof comprasRes === "object" &&
-          "pedidos" in comprasRes &&
-          Array.isArray((comprasRes as { pedidos: unknown[] }).pedidos)
-        ) {
-          comprasList = (comprasRes as { pedidos: unknown[] }).pedidos;
-        }
-
-        const despesasItems = despesasRes?.items ?? [];
-
-        const linhas: Linha[] = [];
-
-        for (const raw of comprasList) {
-          const pedido = raw as {
-            id: number;
-            fornecedor?: {
-              nome_fantasia?: string;
-              nome_razao?: string;
-            };
-            fornecedor_id?: number;
-            numero_pedido?: string;
-            itens?: unknown[];
-            valor_total?: unknown;
-            status?: string;
-            created_at?: string;
-            data_pedido?: string;
-            updated_at?: string;
-          };
-          const forn = pedido.fornecedor;
-          const ref =
-            forn?.nome_fantasia ||
-            forn?.nome_razao ||
-            `Fornecedor #${pedido.fornecedor_id ?? "N/A"}`;
-          const dt =
-            pedido.created_at ||
-            pedido.data_pedido ||
-            pedido.updated_at ||
-            "";
-          const sort = dt ? new Date(dt).getTime() : 0;
-          const st = String(pedido.status || "ABERTO").toUpperCase();
-          const nItens = pedido.itens?.length ?? 0;
-          linhas.push({
-            key: `c-${pedido.id}`,
-            sort: Number.isFinite(sort) ? sort : 0,
-            tipo: "COMPRA",
-            ref,
-            detalhe: pedido.numero_pedido
-              ? `Ped. ${pedido.numero_pedido} · ${nItens} item(ns)`
-              : `${nItens} item(ns)`,
-            valorFmt: formatCurrency(parseValorDashboard(pedido.valor_total)),
-            statusLabel: labelStatusPedidoLike(st),
-            statusVisual: visualStatusLinha(st),
-          });
-        }
-
-        for (const d of despesasItems) {
-          const totalPag = (d.pagamentos || []).reduce(
-            (s, p) => s + parseValorDashboard(p.valor),
-            0,
-          );
-          const v = parseValorDashboard(d.valor);
-          let st: string;
-          if (totalPag <= 0) st = "ABERTO";
-          else if (totalPag >= v - 0.01) st = "QUITADO";
-          else st = "PARCIAL";
-
-          const dt = d.data || "";
-          const sort = dt ? new Date(dt).getTime() : 0;
-          const detalhe = [d.tipoNome, d.rocaNome].filter(Boolean).join(" · ");
-          linhas.push({
-            key: `d-${d.id}`,
-            sort: Number.isFinite(sort) ? sort : 0,
-            tipo: "DESPESA",
-            ref: d.descricao?.trim() || "Despesa",
-            detalhe: detalhe || "Centro de custo",
-            valorFmt: formatCurrency(v),
-            statusLabel: labelStatusPedidoLike(st),
-            statusVisual: visualStatusLinha(st),
-          });
-        }
-
-        linhas.sort((a, b) => b.sort - a.sort);
-        return linhas.slice(0, 6);
-      },
-      refetchInterval: 30000,
-      retry: false,
-    });
-
-  // Tratar diferentes formatos de resposta de pedidos
-  let pedidosRecentes: any[] = [];
-  if (pedidosData) {
-    if (Array.isArray(pedidosData)) {
-      pedidosRecentes = pedidosData;
-    } else if (pedidosData?.data && Array.isArray(pedidosData.data)) {
-      pedidosRecentes = pedidosData.data;
-    } else if ((pedidosData as any)?.pedidos && Array.isArray((pedidosData as any).pedidos)) {
-      pedidosRecentes = (pedidosData as any).pedidos;
-    }
-  }
-
-  const recentSales = pedidosRecentes.slice(0, 4).map(pedido => ({
-    cliente: pedido.cliente?.nome || `Cliente #${pedido.cliente_id || 'N/A'}`,
-    produto: `${pedido.itens?.length || 0} item(ns)`,
-    valor: formatCurrency(parseValorDashboard(pedido.valor_total)),
-    data: pedido.created_at ? formatDate(pedido.created_at) : pedido.data_pedido ? formatDate(pedido.data_pedido) : 'N/A',
-    status: pedido.status || 'Pendente',
-  }));
-
   const { data: dreDadosReais, isLoading: loadingDre } = useQuery({
     queryKey: ["dashboard", "dre-real", parametrosDre, dreRocaFiltro],
     queryFn: async () => {
@@ -551,11 +365,6 @@ const Dashboard = () => {
       const totalVendasEfetivas = numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
-      let totalGastosFixos = 0;
-      let totalDespesasVariaveis = 0;
-      let totalMeeiros = 0;
-      let totalInvestimentos = 0;
-
       /** Soma por tipo de custo (centro de despesa) — espelha o que vira contas a pagar do CC. */
       const fornecedoresPorTipoMap = new Map<
         number,
@@ -563,7 +372,6 @@ const Dashboard = () => {
       >();
 
       for (const despesa of despesas) {
-        const nomeTipo = normalizarTexto(despesa.tipoNome || "");
         const valor = parseValorDashboard(despesa.valor);
         const tipoId = Number((despesa as ApiCentroCustoDespesa).tipoId) || 0;
         const nomeTipoExibicao = (
@@ -576,24 +384,6 @@ const Dashboard = () => {
           if (cur) cur.valor += valor;
           else fornecedoresPorTipoMap.set(tipoId, { nome: nomeTipoExibicao, valor });
         }
-
-        if (nomeTipo.includes("meeiro")) {
-          totalMeeiros += valor;
-          continue;
-        }
-        if (nomeTipo.includes("invest")) {
-          totalInvestimentos += valor;
-          continue;
-        }
-        if (nomeTipo.includes("fix")) {
-          totalGastosFixos += valor;
-          continue;
-        }
-        if (nomeTipo.includes("vari")) {
-          totalDespesasVariaveis += valor;
-          continue;
-        }
-        totalDespesasVariaveis += valor;
       }
 
       const somaCentroDespesaNoPeriodo = [...fornecedoresPorTipoMap.values()].reduce(
@@ -621,10 +411,6 @@ const Dashboard = () => {
         totalFornecedores,
         fornecedoresPorTipo,
         fornecedoresDemaisCompras,
-        totalGastosFixos,
-        totalDespesasVariaveis,
-        totalMeeiros,
-        totalInvestimentos,
       };
     },
     refetchInterval: 30000,
@@ -637,8 +423,6 @@ const Dashboard = () => {
     valor: number;
     percentual: number | null;
     indent?: boolean;
-    /** Só para exibição analítica — já compõe o total de compras; não somar de novo no resultado. */
-    somenteAnalitico?: boolean;
   };
 
   const dreLinhas = useMemo((): DreLinha[] => {
@@ -681,42 +465,10 @@ const Dashboard = () => {
     return [
       { key: "vendas", descricao: "Vendas", valor: totalVendas, percentual: 100 },
       ...linhasFornecedores,
-      {
-        key: "gastos-fixos",
-        descricao: "Gastos Fixos (analítico)",
-        valor: dreDadosReais?.totalGastosFixos ?? 0,
-        percentual: calcPct(dreDadosReais?.totalGastosFixos ?? 0),
-        somenteAnalitico: true,
-      },
-      {
-        key: "desp-var",
-        descricao: "Despesas Variáveis (analítico)",
-        valor: dreDadosReais?.totalDespesasVariaveis ?? 0,
-        percentual: calcPct(dreDadosReais?.totalDespesasVariaveis ?? 0),
-        somenteAnalitico: true,
-      },
-      {
-        key: "meeiros",
-        descricao: "Meeiros (analítico)",
-        valor: dreDadosReais?.totalMeeiros ?? 0,
-        percentual: calcPct(dreDadosReais?.totalMeeiros ?? 0),
-        somenteAnalitico: true,
-      },
-      {
-        key: "invest",
-        descricao: "Investimentos (analítico)",
-        valor: dreDadosReais?.totalInvestimentos ?? 0,
-        percentual: null,
-        somenteAnalitico: true,
-      },
     ];
   }, [dreDadosReais]);
 
-  /**
-   * Mesma base do painel «Lançamentos no mês» (competência): saldo = vendas − compras.
-   * Não somar todas as linhas da tabela — fornecedores por tipo + demais recompõem compras;
-   * linhas «analítico» classificam o mesmo universo sem entrar outra vez no total.
-   */
+  /** Mesma base do painel «Lançamentos no mês» (competência): resultado = vendas − compras. */
   const dreTotais = useMemo(() => {
     const totalVendasEfetivas = dreDadosReais?.totalVendasEfetivas ?? 0;
     const totalDespesasEfetivas = dreDadosReais?.totalFornecedores ?? 0;
@@ -941,10 +693,8 @@ const Dashboard = () => {
                   <p className="mt-1 text-sm text-muted-foreground">
                     Fornecedores por tipo de centro de despesa recompõem as{' '}
                     <strong className="font-medium text-foreground">compras do mês</strong> (competência).
-                    Linhas marcadas como analítico classificam por nome do tipo e{' '}
-                    <strong className="font-medium text-foreground">não somam de novo</strong> no total à
-                    direita — o resultado é <strong className="font-medium text-foreground">vendas − compras</strong>
-                    , igual ao saldo da 1.ª faixa.
+                    Os totais à direita seguem <strong className="font-medium text-foreground">vendas − compras</strong>
+                    , como no saldo da 1.ª faixa.
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
@@ -1011,17 +761,12 @@ const Dashboard = () => {
                   </TableHeader>
                   <TableBody>
                     {dreLinhas.map((linha) => (
-                      <TableRow
-                        key={linha.key}
-                        className={linha.somenteAnalitico ? "bg-muted/25" : undefined}
-                      >
+                      <TableRow key={linha.key}>
                         <TableCell
                           className={
-                            linha.somenteAnalitico
-                              ? "pl-3 text-sm italic text-muted-foreground"
-                              : linha.indent
-                                ? "pl-6 font-medium text-muted-foreground"
-                                : "font-medium"
+                            linha.indent
+                              ? "pl-6 font-medium text-muted-foreground"
+                              : "font-medium"
                           }
                         >
                           {linha.descricao}
@@ -1076,207 +821,6 @@ const Dashboard = () => {
             </div>
           </div>
         </motion.div>
-
-        {/* Tables Grid - Vendas Recentes e Compras / despesas recentes */}
-        <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Recent Sales */}
-          <motion.div
-            className="min-w-0"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Vendas Recentes</h2>
-            </div>
-            <div className="rounded-md border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-center">Cliente</TableHead>
-                    <TableHead className="text-center">Produto</TableHead>
-                    <TableHead className="text-center">Valor</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingPedidos ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        Carregando vendas...
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : recentSales.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                        Nenhuma venda recente
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    recentSales.map((sale, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="text-center align-middle">
-                          <span className="inline-block max-w-full font-medium">
-                            {sale.cliente}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center align-middle">
-                          <span className="inline-block max-w-full text-sm text-muted-foreground">
-                            {sale.produto}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center align-middle">
-                          <span className="inline-block font-medium whitespace-nowrap tabular-nums">
-                            {sale.valor}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center align-middle">
-                          <span
-                            className={`inline-block whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium ${
-                              sale.status === "QUITADO" || sale.status === "Quitado"
-                                ? "bg-cyan/10 text-cyan"
-                                : sale.status === "ABERTO" || sale.status === "Pendente"
-                                  ? "bg-amber-500/10 text-amber-500"
-                                  : "bg-azure/10 text-azure"
-                            }`}
-                          >
-                            {sale.status === "ABERTO"
-                              ? "Pendente"
-                              : sale.status === "PARCIAL"
-                                ? "Aberto"
-                                : sale.status === "QUITADO"
-                                  ? "Quitado"
-                                  : sale.status === "CANCELADO"
-                                    ? "Cancelado"
-                                    : sale.status}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </motion.div>
-
-          {/* Compras e despesas recentes (pedidos COMPRA + centro de custo) */}
-          <motion.div
-            className="min-w-0"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-foreground">
-                Compras e despesas recentes
-              </h2>
-            </div>
-            <div className="min-w-0 overflow-hidden rounded-md border">
-              <Table
-                noGutter
-                contain
-                className="table-fixed w-full text-xs sm:text-sm"
-              >
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[14%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
-                      Tipo
-                    </TableHead>
-                    <TableHead className="w-[30%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
-                      Referência
-                    </TableHead>
-                    <TableHead className="w-[26%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
-                      Detalhe
-                    </TableHead>
-                    <TableHead className="w-[16%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
-                      Valor
-                    </TableHead>
-                    <TableHead className="w-[14%] whitespace-normal px-1.5 py-2 text-center sm:px-2">
-                      Status
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingComprasDespesas ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="px-2 py-8 text-center text-muted-foreground"
-                      >
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Carregando compras e despesas...
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : comprasDespesasLinhas.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="px-2 py-8 text-center text-muted-foreground"
-                      >
-                        Nenhuma compra ou despesa recente
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    comprasDespesasLinhas.map((linha) => (
-                      <TableRow key={linha.key}>
-                        <TableCell className="w-[14%] p-1.5 text-center align-middle sm:p-2">
-                          <span
-                            className={`inline-block max-w-full rounded-full px-1.5 py-0.5 text-center text-[10px] font-medium leading-tight sm:px-2 sm:text-xs ${
-                              linha.tipo === "COMPRA"
-                                ? "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400"
-                                : "bg-amber-100 text-amber-900 dark:bg-amber-900/25 dark:text-amber-200"
-                            }`}
-                          >
-                            {linha.tipo === "COMPRA" ? "Compra" : "Despesa"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="w-[30%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
-                          <span
-                            className="inline-block max-w-full truncate text-center font-medium"
-                            title={linha.ref}
-                          >
-                            {linha.ref}
-                          </span>
-                        </TableCell>
-                        <TableCell className="w-[26%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
-                          <span
-                            className="inline-block max-w-full truncate text-center text-muted-foreground"
-                            title={linha.detalhe}
-                          >
-                            {linha.detalhe}
-                          </span>
-                        </TableCell>
-                        <TableCell className="w-[16%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
-                          <span
-                            className="inline-block max-w-full truncate text-center font-medium tabular-nums"
-                            title={linha.valorFmt}
-                          >
-                            {linha.valorFmt}
-                          </span>
-                        </TableCell>
-                        <TableCell className="w-[14%] overflow-hidden p-1.5 text-center align-middle sm:p-2">
-                          <span
-                            className={`inline-block max-w-full truncate rounded-full px-1.5 py-0.5 text-center text-[10px] font-medium leading-tight sm:px-2 sm:text-xs ${badgeClassesStatus(
-                              linha.statusVisual,
-                            )}`}
-                            title={linha.statusLabel}
-                          >
-                            {linha.statusLabel}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </motion.div>
-        </div>
       </div>
     </AppLayout>
   );
