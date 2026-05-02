@@ -47,7 +47,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, formatDate } from "@/lib/utils";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { controleRocaService } from "@/services/controle-roca.service";
-import { CreateContaFinanceiraDto, financeiroService, ResumoFinanceiro } from "@/services/financeiro.service";
+import {
+  type ContaFinanceira,
+  CreateContaFinanceiraDto,
+  financeiroService,
+  ResumoFinanceiro,
+} from "@/services/financeiro.service";
 import type { Roca } from "@/types/roca";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
@@ -81,6 +86,85 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+/** Valor para input type="date" (YYYY-MM-DD). */
+function toDateInputValue(val: unknown): string {
+  if (val == null || val === "") return "";
+  if (typeof val === "string") {
+    const ymd = val.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (ymd) return ymd[1];
+    const d = new Date(val);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+  }
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const day = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return "";
+}
+
+function toEditValorOriginal(val: unknown): number {
+  if (val == null || val === "") return 0;
+  if (typeof val === "number" && Number.isFinite(val)) return val;
+  if (typeof val === "string") {
+    const t = val.trim();
+    if (t.includes(",") && !/\.\d{2}$/.test(t)) {
+      return parseFloat(t.replace(/\./g, "").replace(",", ".")) || 0;
+    }
+    return parseFloat(t.replace(",", ".")) || 0;
+  }
+  const n = Number(val);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function pickOptionalId(...candidates: unknown[]): number | undefined {
+  for (const c of candidates) {
+    if (c == null || c === "") continue;
+    const n = typeof c === "number" ? c : parseInt(String(c), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return undefined;
+}
+
+/** Normaliza GET /contas-financeiras/:id para o formulário (snake_case, camelCase, decimal como string, relações aninhadas). */
+function mapContaApiParaEdicao(
+  raw: ContaFinanceira | Record<string, unknown>,
+): CreateContaFinanceiraDto & { data_emissao: string } {
+  const r = raw as Record<string, unknown>;
+  const cliente = r.cliente as { id?: number } | undefined;
+  const fornecedor = r.fornecedor as { id?: number } | undefined;
+  const pedido = r.pedido as { id?: number } | undefined;
+
+  return {
+    tipo: (r.tipo as CreateContaFinanceiraDto["tipo"]) || "PAGAR",
+    descricao: String(r.descricao ?? ""),
+    valor_original: toEditValorOriginal(r.valor_original),
+    data_emissao: toDateInputValue(r.data_emissao),
+    data_vencimento: toDateInputValue(r.data_vencimento),
+    data_pagamento: r.data_pagamento
+      ? toDateInputValue(r.data_pagamento)
+      : undefined,
+    cliente_id: pickOptionalId(r.cliente_id, cliente?.id, r.clienteId),
+    fornecedor_id: pickOptionalId(
+      r.fornecedor_id,
+      fornecedor?.id,
+      r.fornecedorId,
+    ),
+    pedido_id: pickOptionalId(r.pedido_id, pedido?.id, r.pedidoId),
+    roca_id: pickOptionalId(r.roca_id, r.rocaId),
+    forma_pagamento:
+      (r.forma_pagamento as CreateContaFinanceiraDto["forma_pagamento"]) ??
+      undefined,
+    observacoes: r.observacoes != null ? String(r.observacoes) : undefined,
+  };
+}
 
 const Financeiro = () => {
   const navigate = useNavigate();
@@ -589,6 +673,7 @@ const Financeiro = () => {
       toast.success("Conta atualizada com sucesso!");
       setEditDialogOpen(false);
       setSelectedContaId(null);
+      setEditConta(null);
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Erro ao atualizar conta");
@@ -598,25 +683,26 @@ const Financeiro = () => {
   // Estado para edição
   const [editConta, setEditConta] = useState<CreateContaFinanceiraDto & { data_emissao: string } | null>(null);
 
-  // Quando a conta for carregada, preencher o formulário de edição
+  // Quando a conta for carregada, preencher o formulário (evita exibir dados da edição anterior)
   useEffect(() => {
-    if (contaSelecionada && editDialogOpen) {
-      setEditConta({
-        tipo: contaSelecionada.tipo,
-        descricao: contaSelecionada.descricao,
-        valor_original: contaSelecionada.valor_original,
-        data_emissao: contaSelecionada.data_emissao,
-        data_vencimento: contaSelecionada.data_vencimento,
-        cliente_id: contaSelecionada.cliente_id,
-        fornecedor_id: contaSelecionada.fornecedor_id,
-        pedido_id: contaSelecionada.pedido_id,
-        roca_id: contaSelecionada.roca_id,
-        forma_pagamento: contaSelecionada.forma_pagamento,
-        data_pagamento: contaSelecionada.data_pagamento,
-        observacoes: contaSelecionada.observacoes,
-      });
+    if (
+      !contaSelecionada ||
+      !editDialogOpen ||
+      selectedContaId == null ||
+      contaSelecionada.id !== selectedContaId
+    ) {
+      return;
     }
-  }, [contaSelecionada, editDialogOpen]);
+    setEditConta(mapContaApiParaEdicao(contaSelecionada));
+  }, [contaSelecionada, editDialogOpen, selectedContaId]);
+
+  const handleEditDialogOpenChange = (open: boolean) => {
+    setEditDialogOpen(open);
+    if (!open) {
+      setSelectedContaId(null);
+      setEditConta(null);
+    }
+  };
 
   const handleUpdate = () => {
     if (!selectedContaId || !editConta) return;
@@ -1562,10 +1648,13 @@ const Financeiro = () => {
                             <Eye className="w-4 h-4 mr-2" />
                             Visualizar
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => {
-                            setSelectedContaId(transacao.contaId);
-                            setEditDialogOpen(true);
-                          }}>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditConta(null);
+                              setSelectedContaId(transacao.contaId);
+                              setEditDialogOpen(true);
+                            }}
+                          >
                             <Edit className="w-4 h-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
@@ -1822,7 +1911,7 @@ const Financeiro = () => {
         </Dialog>
 
         {/* Dialog de Edição - mesmo design do Editar Cliente */}
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <Dialog open={editDialogOpen} onOpenChange={handleEditDialogOpenChange}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between">
@@ -1841,19 +1930,7 @@ const Financeiro = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        setEditConta({
-                          tipo: contaSelecionada.tipo,
-                          descricao: contaSelecionada.descricao,
-                          valor_original: contaSelecionada.valor_original,
-                          data_emissao: contaSelecionada.data_emissao,
-                          data_vencimento: contaSelecionada.data_vencimento,
-                          cliente_id: contaSelecionada.cliente_id,
-                          fornecedor_id: contaSelecionada.fornecedor_id,
-                          pedido_id: contaSelecionada.pedido_id,
-                          forma_pagamento: contaSelecionada.forma_pagamento,
-                          data_pagamento: contaSelecionada.data_pagamento,
-                          observacoes: contaSelecionada.observacoes,
-                        });
+                        setEditConta(mapContaApiParaEdicao(contaSelecionada));
                       }}
                     >
                       <RotateCcw className="w-4 h-4 mr-2" />

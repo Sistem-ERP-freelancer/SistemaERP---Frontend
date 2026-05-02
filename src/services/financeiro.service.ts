@@ -334,8 +334,9 @@ class FinanceiroService {
       return value !== undefined && value !== null && value !== '';
     };
     
-    // Adicionar apenas campos definidos e válidos
-    if (shouldInclude(data.tipo)) payload.tipo = data.tipo;
+    // Não enviar `tipo` no PATCH: o backend não permite alterar o tipo da conta; enviar PAGAR
+    // junto com um subconjunto de campos dispara a validação de “origem obrigatória” do DTO
+    // como se fosse criação parcial e falha (ex.: sem roca_id no JSON mesmo com roça no formulário).
     if (shouldInclude(data.descricao)) payload.descricao = typeof data.descricao === 'string' ? data.descricao.trim() : data.descricao;
     if (shouldInclude(data.valor_original)) payload.valor_original = Number(data.valor_original);
     if (data.valor_pago !== undefined && data.valor_pago !== null && !Number.isNaN(Number(data.valor_pago))) {
@@ -361,6 +362,17 @@ class FinanceiroService {
     if (shouldInclude(data.cliente_id)) payload.cliente_id = Number(data.cliente_id);
     if (shouldInclude(data.fornecedor_id)) payload.fornecedor_id = Number(data.fornecedor_id);
     if (shouldInclude(data.pedido_id)) payload.pedido_id = Number(data.pedido_id);
+    /** Obrigatório para validação PAGAR (fornecedor | roça | pedido); antes era omitido e o PATCH falhava. */
+    if (data.roca_id !== undefined) {
+      if (data.roca_id === null) {
+        payload.roca_id = null;
+      } else {
+        const rid = Number(data.roca_id);
+        if (Number.isFinite(rid) && rid > 0) {
+          payload.roca_id = rid;
+        }
+      }
+    }
     if (shouldInclude(data.observacoes)) payload.observacoes = typeof data.observacoes === 'string' ? data.observacoes.trim() : data.observacoes;
 
     // Log detalhado em desenvolvimento
