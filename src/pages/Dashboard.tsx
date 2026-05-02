@@ -598,7 +598,7 @@ const Dashboard = () => {
       totalVendas > 0 ? Math.round((valor / totalVendas) * 100) : 0;
 
     return [
-      { descricao: "Vendas Primos", valor: totalVendas, percentual: 100 },
+      { descricao: "Vendas", valor: totalVendas, percentual: 100 },
       {
         descricao: "Fornecedores",
         valor: dreDadosReais?.totalFornecedores ?? 0,
