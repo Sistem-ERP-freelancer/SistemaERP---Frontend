@@ -70,6 +70,33 @@ function filtrosToApi(
   return out;
 }
 
+/** Mesmo payload de GET /centro-custo/despesas e /resumo (listagem + exportação). */
+export function buildDespesasApiFiltros(
+  f: DespesasFiltro,
+  busca: string,
+):
+  | {
+      dataInicial?: string;
+      dataFinal?: string;
+      tipoId?: number;
+      rocaId?: number;
+      busca?: string;
+      status?: DespesasStatusFiltro;
+    }
+  | undefined {
+  const apiF = filtrosToApi(f);
+  const b = busca.trim();
+  const payload = { ...apiF, ...(b ? { busca: b } : {}) };
+  const hasAny =
+    (payload.dataInicial != null && payload.dataInicial !== '') ||
+    (payload.dataFinal != null && payload.dataFinal !== '') ||
+    (payload.tipoId != null && payload.tipoId > 0) ||
+    (payload.rocaId != null && payload.rocaId > 0) ||
+    payload.status != null ||
+    (payload.busca != null && payload.busca !== '');
+  return hasAny ? payload : undefined;
+}
+
 const qkDespesasPagina = (page: number, f: DespesasFiltro, busca: string) =>
   [
     'centro-custo',
@@ -241,24 +268,8 @@ export function CentroCustosProvider({ children }: { children: ReactNode }) {
     enabled: podeSincronizar,
     staleTime: 15_000,
     queryFn: async () => {
-      const apiF = filtrosToApi(despesasFiltro);
-      const b = despesasBusca.trim();
-      const payload: {
-        dataInicial?: string;
-        dataFinal?: string;
-        tipoId?: number;
-        rocaId?: number;
-        busca?: string;
-        status?: DespesasStatusFiltro;
-      } = { ...apiF, ...(b ? { busca: b } : {}) };
-      const hasAny =
-        (payload.dataInicial != null && payload.dataInicial !== '') ||
-        (payload.dataFinal != null && payload.dataFinal !== '') ||
-        (payload.tipoId != null && payload.tipoId > 0) ||
-        (payload.rocaId != null && payload.rocaId > 0) ||
-        payload.status != null ||
-        (payload.busca != null && payload.busca !== '');
-      return centroCustoService.resumoModulo(hasAny ? payload : undefined);
+      const payload = buildDespesasApiFiltros(despesasFiltro, despesasBusca);
+      return centroCustoService.resumoModulo(payload);
     },
   });
 
@@ -300,27 +311,11 @@ export function CentroCustosProvider({ children }: { children: ReactNode }) {
     staleTime: 15_000,
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      const apiF = filtrosToApi(despesasFiltro);
-      const b = despesasBusca.trim();
-      const payload: {
-        dataInicial?: string;
-        dataFinal?: string;
-        tipoId?: number;
-        rocaId?: number;
-        busca?: string;
-        status?: DespesasStatusFiltro;
-      } = { ...apiF, ...(b ? { busca: b } : {}) };
-      const hasAny =
-        (payload.dataInicial != null && payload.dataInicial !== '') ||
-        (payload.dataFinal != null && payload.dataFinal !== '') ||
-        (payload.tipoId != null && payload.tipoId > 0) ||
-        (payload.rocaId != null && payload.rocaId > 0) ||
-        payload.status != null ||
-        (payload.busca != null && payload.busca !== '');
+      const payload = buildDespesasApiFiltros(despesasFiltro, despesasBusca);
       const res = await centroCustoService.listarDespesas(
         despesasPage,
         CENTRO_CUSTO_PAGE_SIZE,
-        hasAny ? payload : undefined,
+        payload,
       );
       return {
         items: res.items.map(mapDespesa),

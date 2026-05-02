@@ -74,6 +74,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  buildDespesasApiFiltros,
   CENTRO_CUSTO_PAGE_SIZE,
   isDespesasFiltroVazio,
   useCentroCustos,
@@ -86,7 +87,10 @@ import {
 } from '@/contexts/CentroCustosContext';
 import { formatValorMonetarioBr, parseValorMonetarioEntrada } from '@/lib/parse-valor-monetario';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
-import { centroCustoService } from '@/services/centro-custo.service';
+import {
+  centroCustoService,
+  type ApiCentroCustoDespesa,
+} from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
 import type { Roca } from '@/types/roca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -100,6 +104,7 @@ import {
   Eye,
   Filter,
   Landmark,
+  Loader2,
   MoreHorizontal,
   Pencil,
   PiggyBank,
@@ -407,32 +412,131 @@ function FiltroPeriodoDateInput({
   id,
   value,
   onChange,
+  compact,
 }: {
   id: string;
   value: string;
   onChange: (v: string) => void;
+  /** Layout menor (ex.: modal de relatório). */
+  compact?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const baseInput =
+    'w-full border-2 bg-muted/40 [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden [&::-moz-calendar-picker-indicator]:hidden';
   return (
     <div className="relative">
       <Input
         ref={inputRef}
         id={id}
         type="date"
-        className="h-10 w-full rounded-xl border-2 bg-muted/40 pl-3 pr-10 [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden [&::-moz-calendar-picker-indicator]:hidden"
+        className={cn(
+          baseInput,
+          compact
+            ? 'h-9 rounded-lg pl-2.5 pr-9 text-sm'
+            : 'h-10 rounded-xl pl-3 pr-10',
+        )}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
       <button
         type="button"
         onClick={() => abrirSeletorDataNativo(inputRef.current)}
-        className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          'absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring',
+          compact ? 'h-7 w-7' : 'h-8 w-8',
+        )}
         aria-label="Abrir calendário"
       >
-        <Calendar className="h-4 w-4 shrink-0" />
+        <Calendar className={cn('shrink-0', compact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
       </button>
     </div>
   );
+}
+
+const RELATORIO_PAGE = 100;
+
+type RelatorioDespesaId = 'analitico' | 'resumo_periodo' | 'por_tipo';
+
+const RELATORIOS_DESPESA: { id: RelatorioDespesaId; label: string }[] = [
+  { id: 'analitico', label: 'Relatório analítico de despesas' },
+  { id: 'resumo_periodo', label: 'Resumo por período' },
+  { id: 'por_tipo', label: 'Consolidado por tipo de despesa' },
+];
+
+const RELATORIO_DESPESA_META: Record<
+  RelatorioDespesaId,
+  { titulo: string; descricao: string }
+> = {
+  analitico: {
+    titulo: 'Relatório analítico de despesas',
+    descricao: 'Listagem detalhada por período, tipo, roça e status de pagamento.',
+  },
+  resumo_periodo: {
+    titulo: 'Resumo por período',
+    descricao: 'Totais agrupados por mês de competência (data da despesa).',
+  },
+  por_tipo: {
+    titulo: 'Consolidado por tipo de despesa',
+    descricao: 'Quantidade e valor somados por tipo de custo.',
+  },
+};
+
+function statusLinhaRelatorio(d: ApiCentroCustoDespesa): string {
+  const pago = (d.pagamentos ?? []).reduce((s, p) => s + Number(p.valor || 0), 0);
+  const total = Number(d.valor) || 0;
+  if (pago <= 0) return 'Aberto';
+  if (pago >= total - 0.005) return 'Quitado';
+  return 'Parcial';
+}
+
+async function fetchTodasDespesasParaRelatorio(
+  filtros: ReturnType<typeof buildDespesasApiFiltros>,
+): Promise<ApiCentroCustoDespesa[]> {
+  const acc: ApiCentroCustoDespesa[] = [];
+  let page = 1;
+  for (;;) {
+    const res = await centroCustoService.listarDespesas(page, RELATORIO_PAGE, filtros);
+    acc.push(...res.items);
+    if (res.items.length === 0 || acc.length >= res.total) break;
+    page += 1;
+    if (page > 500) break;
+  }
+  return acc;
+}
+
+function agregarDespesasPorMes(rows: ApiCentroCustoDespesa[]) {
+  const map = new Map<string, { qtd: number; total: number }>();
+  for (const d of rows) {
+    const raw = typeof d.data === 'string' ? d.data : '';
+    const ym = raw.length >= 7 ? raw.slice(0, 7) : '';
+    if (!ym) continue;
+    const cur = map.get(ym) ?? { qtd: 0, total: 0 };
+    cur.qtd += 1;
+    cur.total += Number(d.valor) || 0;
+    map.set(ym, cur);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([periodo, v]) => ({ periodo, ...v }));
+}
+
+function formatarMesReferencia(ym: string): string {
+  if (ym.length < 7) return ym;
+  return `${ym.slice(5, 7)}/${ym.slice(0, 4)}`;
+}
+
+function agregarDespesasPorTipo(rows: ApiCentroCustoDespesa[]) {
+  const map = new Map<string, { qtd: number; total: number }>();
+  for (const d of rows) {
+    const nome = d.tipoNome?.trim() || `Tipo #${d.tipoId}`;
+    const cur = map.get(nome) ?? { qtd: 0, total: 0 };
+    cur.qtd += 1;
+    cur.total += Number(d.valor) || 0;
+    map.set(nome, cur);
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([tipo, v]) => ({ tipo, ...v }));
 }
 
 function DespesasFiltrosBar({
@@ -457,6 +561,84 @@ function DespesasFiltrosBar({
   const [rocaFiltro, setRocaFiltro] = useState<number | null>(null);
   const [statusFiltro, setStatusFiltro] = useState<'' | DespesasStatusFiltro>('');
   const [qLocal, setQLocal] = useState(despesasBusca);
+
+  const [relatorioOpen, setRelatorioOpen] = useState(false);
+  const [relatorioKind, setRelatorioKind] = useState<RelatorioDespesaId | null>(null);
+  const [relatorioGerando, setRelatorioGerando] = useState(false);
+  const [relatorioRows, setRelatorioRows] = useState<ApiCentroCustoDespesa[] | null>(null);
+  const [rDataIni, setRDataIni] = useState('');
+  const [rDataFim, setRDataFim] = useState('');
+  const [rTipoFiltro, setRTipoFiltro] = useState('');
+  const [rRocaFiltro, setRRocaFiltro] = useState<number | null>(null);
+  const [rStatusFiltro, setRStatusFiltro] = useState<'' | DespesasStatusFiltro>('');
+
+  const abrirRelatorio = useCallback(
+    (kind: RelatorioDespesaId) => {
+      setRelatorioKind(kind);
+      setRelatorioRows(null);
+      setRDataIni(despesasFiltro.dataInicial ?? '');
+      setRDataFim(despesasFiltro.dataFinal ?? '');
+      setRTipoFiltro(despesasFiltro.tipoId ?? '');
+      setRRocaFiltro(
+        despesasFiltro.rocaId != null && despesasFiltro.rocaId > 0
+          ? despesasFiltro.rocaId
+          : null,
+      );
+      setRStatusFiltro(
+        despesasFiltro.status === 'ABERTO' ||
+          despesasFiltro.status === 'PARCIAL' ||
+          despesasFiltro.status === 'QUITADO'
+          ? despesasFiltro.status
+          : '',
+      );
+      setRelatorioOpen(true);
+    },
+    [despesasFiltro],
+  );
+
+  const fecharRelatorioDialog = (open: boolean) => {
+    setRelatorioOpen(open);
+    if (!open) {
+      setRelatorioKind(null);
+      setRelatorioRows(null);
+    }
+  };
+
+  const handleGerarRelatorio = async () => {
+    const a = rDataIni.trim();
+    const b = rDataFim.trim();
+    if (a && b && a > b) {
+      toast.error('A data inicial não pode ser maior que a data final.');
+      return;
+    }
+    const f: DespesasFiltro = {};
+    if (a) f.dataInicial = a.slice(0, 10);
+    if (b) f.dataFinal = b.slice(0, 10);
+    if (rTipoFiltro) f.tipoId = rTipoFiltro;
+    if (rRocaFiltro != null && rRocaFiltro > 0) f.rocaId = rRocaFiltro;
+    if (rStatusFiltro) f.status = rStatusFiltro;
+    const payload = buildDespesasApiFiltros(f, '');
+    setRelatorioGerando(true);
+    try {
+      const rows = await fetchTodasDespesasParaRelatorio(payload);
+      setRelatorioRows(rows);
+      toast.success(
+        rows.length === 0
+          ? 'Nenhum lançamento encontrado com esses filtros.'
+          : `Relatório gerado com ${rows.length} lançamento(s).`,
+      );
+    } catch (e) {
+      toast.error(msgErro(e, 'Não foi possível gerar o relatório.'));
+    } finally {
+      setRelatorioGerando(false);
+    }
+  };
+
+  const relatorioMeta = relatorioKind ? RELATORIO_DESPESA_META[relatorioKind] : null;
+  const totalRelatorioValor =
+    relatorioRows?.reduce((s, d) => s + (Number(d.valor) || 0), 0) ?? 0;
+  const porMes = relatorioRows ? agregarDespesasPorMes(relatorioRows) : [];
+  const porTipoAgg = relatorioRows ? agregarDespesasPorTipo(relatorioRows) : [];
 
   useEffect(() => {
     setDataIni(despesasFiltro.dataInicial ?? '');
@@ -496,6 +678,7 @@ function DespesasFiltrosBar({
       toast.error('A data inicial não pode ser maior que a data final.');
       return;
     }
+    /** Substitui só o que o sheet controla; preserva consistência com estado local já sincronizado. */
     const f: DespesasFiltro = {};
     if (a) f.dataInicial = a.slice(0, 10);
     if (b) f.dataFinal = b.slice(0, 10);
@@ -525,6 +708,7 @@ function DespesasFiltrosBar({
     (despesasFiltro.status ? 1 : 0);
 
   return (
+    <>
     <div className="bg-card rounded-xl border border-border p-4 mb-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-stretch sm:gap-4">
         <div className="order-1 flex w-full min-w-0 sm:w-auto sm:shrink-0">
@@ -747,21 +931,345 @@ function DespesasFiltrosBar({
                 Relatórios
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="min-w-[17rem]">
               <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  toast.info('Em breve: exportação e relatórios de centro de custo.');
-                }}
-              >
-                Resumo por período (em breve)
-              </DropdownMenuItem>
+              {RELATORIOS_DESPESA.map((r) => (
+                <DropdownMenuItem key={r.id} onSelect={() => abrirRelatorio(r.id)}>
+                  {r.label}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
     </div>
+
+    <Dialog open={relatorioOpen} onOpenChange={fecharRelatorioDialog}>
+      <DialogContent
+        className={cn(
+          'gap-0 p-0 max-h-[min(92vh,900px)] overflow-hidden flex flex-col sm:max-w-[min(100vw-2rem,28rem)]',
+          relatorioRows !== null && 'sm:max-w-[min(100vw-2rem,56rem)]',
+        )}
+      >
+        <DialogHeader className="space-y-1 border-b border-border/60 px-5 pb-4 pt-5 text-left">
+          <DialogTitle className="text-lg font-semibold leading-tight text-foreground pr-8">
+            {relatorioMeta?.titulo ?? 'Relatório'}
+          </DialogTitle>
+          <DialogDescription className="text-xs leading-snug text-muted-foreground">
+            {relatorioMeta?.descricao ??
+              'Escolha um relatório no menu. Os campos abaixo repetem os filtros avançados da lista.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="overflow-y-auto px-5 py-4">
+          <div className="rounded-xl border border-border/80 bg-muted/25 px-3 py-3.5 sm:px-4">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-x-3 sm:gap-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cc-rel-tipo" className="text-xs font-medium text-foreground">
+                  Tipo de despesa
+                </Label>
+                <Select
+                  value={rTipoFiltro || 'todos'}
+                  onValueChange={(v) => setRTipoFiltro(v === 'todos' ? '' : v)}
+                >
+                  <SelectTrigger
+                    id="cc-rel-tipo"
+                    className="h-9 w-full rounded-lg border-2 border-primary/35 bg-background shadow-none"
+                  >
+                    <SelectValue placeholder="Todos os tipos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os tipos</SelectItem>
+                    {tiposOpcoes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cc-rel-roca" className="text-xs font-medium text-foreground">
+                  Roça
+                </Label>
+                <Select
+                  value={rRocaFiltro != null && rRocaFiltro > 0 ? String(rRocaFiltro) : 'todas'}
+                  onValueChange={(v) => {
+                    if (v === 'todas') {
+                      setRRocaFiltro(null);
+                      return;
+                    }
+                    const n = parseInt(v, 10);
+                    setRRocaFiltro(Number.isFinite(n) && n > 0 ? n : null);
+                  }}
+                  disabled={loadingRocas}
+                >
+                  <SelectTrigger
+                    id="cc-rel-roca"
+                    className="h-9 w-full rounded-lg border-2 border-primary/35 bg-background shadow-none"
+                  >
+                    <SelectValue placeholder="Todas as roças" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas as roças</SelectItem>
+                    {rocasAtivas.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.nome}
+                        {r.codigo ? ` (${r.codigo})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label className="text-xs font-medium text-foreground">Período</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label
+                      className="text-[11px] font-normal text-muted-foreground"
+                      htmlFor="cc-relatorio-data-ini"
+                    >
+                      Data inicial
+                    </Label>
+                    <FiltroPeriodoDateInput
+                      id="cc-relatorio-data-ini"
+                      value={rDataIni}
+                      onChange={setRDataIni}
+                      compact
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label
+                      className="text-[11px] font-normal text-muted-foreground"
+                      htmlFor="cc-relatorio-data-fim"
+                    >
+                      Data final
+                    </Label>
+                    <FiltroPeriodoDateInput
+                      id="cc-relatorio-data-fim"
+                      value={rDataFim}
+                      onChange={setRDataFim}
+                      compact
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-medium text-foreground">Status</Label>
+                <RadioGroup
+                  value={rStatusFiltro || 'todos'}
+                  onValueChange={(v) => {
+                    setRStatusFiltro(
+                      v === 'todos' || v === '' ? '' : (v as DespesasStatusFiltro),
+                    );
+                  }}
+                  className="grid gap-0.5"
+                >
+                  <label
+                    htmlFor="cc-relatorio-status-todos"
+                    className="flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 hover:bg-muted/50"
+                  >
+                    <RadioGroupItem value="todos" id="cc-relatorio-status-todos" className="shrink-0" />
+                    <Circle className="h-2.5 w-2.5 shrink-0 text-primary" />
+                    <span className="text-sm">Todos</span>
+                  </label>
+                  <label
+                    htmlFor="cc-relatorio-status-aberto"
+                    className="flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 hover:bg-muted/50"
+                  >
+                    <RadioGroupItem value="ABERTO" id="cc-relatorio-status-aberto" className="shrink-0" />
+                    <Circle className="h-2.5 w-2.5 shrink-0 text-amber-500" />
+                    <span className="text-sm">Aberto</span>
+                  </label>
+                  <label
+                    htmlFor="cc-relatorio-status-parcial"
+                    className="flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 hover:bg-muted/50"
+                  >
+                    <RadioGroupItem value="PARCIAL" id="cc-relatorio-status-parcial" className="shrink-0" />
+                    <Circle className="h-2.5 w-2.5 shrink-0 text-sky-500" />
+                    <span className="text-sm">Parcial</span>
+                  </label>
+                  <label
+                    htmlFor="cc-relatorio-status-quitado"
+                    className="flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 hover:bg-muted/50"
+                  >
+                    <RadioGroupItem value="QUITADO" id="cc-relatorio-status-quitado" className="shrink-0" />
+                    <Circle className="h-2.5 w-2.5 shrink-0 text-emerald-500" />
+                    <span className="text-sm">Quitado</span>
+                  </label>
+                </RadioGroup>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {relatorioRows !== null && relatorioKind ? (
+          <div className="border-t border-border/60 px-5 py-3">
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Resultado
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {relatorioRows.length} lançamento(s) ·{' '}
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {formatCurrency(totalRelatorioValor)}
+                  </span>
+                </p>
+              </div>
+
+              {relatorioKind === 'analitico' ? (
+                <div className="max-h-[min(42vh,320px)] overflow-auto rounded-lg border border-border/80 text-sm">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="whitespace-nowrap">Data</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Roça</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-muted-foreground">
+                            Nenhum registro.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        relatorioRows.map((d) => (
+                          <TableRow key={d.id}>
+                            <TableCell className="whitespace-nowrap tabular-nums">
+                              {typeof d.data === 'string' ? formatDate(d.data) : '—'}
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={d.descricao}>
+                              {d.descricao}
+                            </TableCell>
+                            <TableCell className="max-w-[140px] truncate">
+                              {d.tipoNome ?? '—'}
+                            </TableCell>
+                            <TableCell className="max-w-[120px] truncate">
+                              {d.rocaNome ?? '—'}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatCurrency(Number(d.valor) || 0)}
+                            </TableCell>
+                            <TableCell>{statusLinhaRelatorio(d)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+
+              {relatorioKind === 'resumo_periodo' ? (
+                <div className="max-h-[min(42vh,320px)] overflow-auto rounded-lg border border-border/80 text-sm">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mês (competência)</TableHead>
+                        <TableHead className="text-right">Quantidade</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {porMes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground">
+                            Nenhum registro.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        porMes.map((row) => (
+                          <TableRow key={row.periodo}>
+                            <TableCell>{formatarMesReferencia(row.periodo)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{row.qtd}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatCurrency(row.total)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+
+              {relatorioKind === 'por_tipo' ? (
+                <div className="max-h-[min(42vh,320px)] overflow-auto rounded-lg border border-border/80 text-sm">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo de despesa</TableHead>
+                        <TableHead className="text-right">Quantidade</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {porTipoAgg.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground">
+                            Nenhum registro.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        porTipoAgg.map((row) => (
+                          <TableRow key={row.tipo}>
+                            <TableCell>{row.tipo}</TableCell>
+                            <TableCell className="text-right tabular-nums">{row.qtd}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatCurrency(row.total)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <DialogFooter className="w-full gap-2 border-t border-border/60 px-5 py-3.5 sm:flex-row sm:gap-2 sm:space-x-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-full rounded-lg sm:flex-1"
+            onClick={() => fecharRelatorioDialog(false)}
+            disabled={relatorioGerando}
+          >
+            Fechar
+          </Button>
+          <Button
+            type="button"
+            className="h-9 w-full rounded-lg sm:flex-1"
+            onClick={handleGerarRelatorio}
+            disabled={relatorioGerando}
+          >
+            {relatorioGerando ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Gerando…
+              </>
+            ) : (
+              <>
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Gerar relatório
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

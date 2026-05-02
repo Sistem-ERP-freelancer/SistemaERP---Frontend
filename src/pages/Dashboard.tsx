@@ -556,9 +556,26 @@ const Dashboard = () => {
       let totalMeeiros = 0;
       let totalInvestimentos = 0;
 
+      /** Soma por tipo de custo (centro de despesa) — espelha o que vira contas a pagar do CC. */
+      const fornecedoresPorTipoMap = new Map<
+        number,
+        { nome: string; valor: number }
+      >();
+
       for (const despesa of despesas) {
         const nomeTipo = normalizarTexto(despesa.tipoNome || "");
         const valor = parseValorDashboard(despesa.valor);
+        const tipoId = Number((despesa as ApiCentroCustoDespesa).tipoId) || 0;
+        const nomeTipoExibicao = (
+          (despesa as ApiCentroCustoDespesa).tipoNome ||
+          (tipoId > 0 ? `Tipo #${tipoId}` : "Sem tipo")
+        ).trim();
+
+        if (tipoId > 0) {
+          const cur = fornecedoresPorTipoMap.get(tipoId);
+          if (cur) cur.valor += valor;
+          else fornecedoresPorTipoMap.set(tipoId, { nome: nomeTipoExibicao, valor });
+        }
 
         if (nomeTipo.includes("meeiro")) {
           totalMeeiros += valor;
@@ -579,9 +596,31 @@ const Dashboard = () => {
         totalDespesasVariaveis += valor;
       }
 
+      const somaCentroDespesaNoPeriodo = [...fornecedoresPorTipoMap.values()].reduce(
+        (s, x) => s + x.valor,
+        0,
+      );
+      /** Compras (contas a pagar no período) que não batem com o agregado do centro de despesa no mesmo recorte. */
+      const fornecedoresDemaisCompras = Math.max(
+        0,
+        Number((totalFornecedores - somaCentroDespesaNoPeriodo).toFixed(2)),
+      );
+
+      const fornecedoresPorTipo = [...fornecedoresPorTipoMap.entries()]
+        .sort((a, b) =>
+          a[1].nome.localeCompare(b[1].nome, "pt-BR", { sensitivity: "base" }),
+        )
+        .map(([tipoId, { nome, valor }]) => ({
+          tipoId,
+          nome,
+          valor: Number(valor.toFixed(2)),
+        }));
+
       return {
         totalVendasEfetivas,
         totalFornecedores,
+        fornecedoresPorTipo,
+        fornecedoresDemaisCompras,
         totalGastosFixos,
         totalDespesasVariaveis,
         totalMeeiros,
@@ -592,47 +631,98 @@ const Dashboard = () => {
     retry: false,
   });
 
-  const dreLinhas = useMemo(() => {
+  type DreLinha = {
+    key: string;
+    descricao: string;
+    valor: number;
+    percentual: number | null;
+    indent?: boolean;
+    /** Só para exibição analítica — já compõe o total de compras; não somar de novo no resultado. */
+    somenteAnalitico?: boolean;
+  };
+
+  const dreLinhas = useMemo((): DreLinha[] => {
     const totalVendas = dreDadosReais?.totalVendasEfetivas ?? 0;
     const calcPct = (valor: number): number =>
       totalVendas > 0 ? Math.round((valor / totalVendas) * 100) : 0;
 
-    return [
-      { descricao: "Vendas", valor: totalVendas, percentual: 100 },
-      {
+    const porTipo = dreDadosReais?.fornecedoresPorTipo ?? [];
+    const demais = dreDadosReais?.fornecedoresDemaisCompras ?? 0;
+
+    const linhasFornecedores: DreLinha[] = porTipo.map((t) => ({
+      key: `forn-cc-${t.tipoId}`,
+      descricao: `Fornecedores — ${t.nome}`,
+      valor: t.valor,
+      percentual: calcPct(t.valor),
+      indent: true,
+    }));
+
+    if (demais > 0.005) {
+      linhasFornecedores.push({
+        key: "forn-demais",
+        descricao: "Fornecedores — demais (fornecedores diretos / fora do centro de despesa)",
+        valor: demais,
+        percentual: calcPct(demais),
+        indent: true,
+      });
+    }
+
+    /** Nenhum lançamento de centro de despesa no período: mantém uma linha única como antes. */
+    if (porTipo.length === 0 && demais <= 0.005) {
+      const tf = dreDadosReais?.totalFornecedores ?? 0;
+      linhasFornecedores.push({
+        key: "forn-total",
         descricao: "Fornecedores",
-        valor: dreDadosReais?.totalFornecedores ?? 0,
-        percentual: calcPct(dreDadosReais?.totalFornecedores ?? 0),
-      },
+        valor: tf,
+        percentual: calcPct(tf),
+      });
+    }
+
+    return [
+      { key: "vendas", descricao: "Vendas", valor: totalVendas, percentual: 100 },
+      ...linhasFornecedores,
       {
-        descricao: "Gastos Fixos",
+        key: "gastos-fixos",
+        descricao: "Gastos Fixos (analítico)",
         valor: dreDadosReais?.totalGastosFixos ?? 0,
         percentual: calcPct(dreDadosReais?.totalGastosFixos ?? 0),
+        somenteAnalitico: true,
       },
       {
-        descricao: "Despesas Variáveis",
+        key: "desp-var",
+        descricao: "Despesas Variáveis (analítico)",
         valor: dreDadosReais?.totalDespesasVariaveis ?? 0,
         percentual: calcPct(dreDadosReais?.totalDespesasVariaveis ?? 0),
+        somenteAnalitico: true,
       },
       {
-        descricao: "Meeiros",
+        key: "meeiros",
+        descricao: "Meeiros (analítico)",
         valor: dreDadosReais?.totalMeeiros ?? 0,
         percentual: calcPct(dreDadosReais?.totalMeeiros ?? 0),
+        somenteAnalitico: true,
       },
       {
-        descricao: "Investimentos",
+        key: "invest",
+        descricao: "Investimentos (analítico)",
         valor: dreDadosReais?.totalInvestimentos ?? 0,
         percentual: null,
+        somenteAnalitico: true,
       },
     ];
   }, [dreDadosReais]);
 
+  /**
+   * Mesma base do painel «Lançamentos no mês» (competência): saldo = vendas − compras.
+   * Não somar todas as linhas da tabela — fornecedores por tipo + demais recompõem compras;
+   * linhas «analítico» classificam o mesmo universo sem entrar outra vez no total.
+   */
   const dreTotais = useMemo(() => {
-    const totalVendasEfetivas = dreLinhas[0]?.valor ?? 0;
-    const totalDespesasEfetivas = dreLinhas
-      .slice(1)
-      .reduce((sum, linha) => sum + linha.valor, 0);
-    const resultadoEfetivoMes = totalVendasEfetivas - totalDespesasEfetivas;
+    const totalVendasEfetivas = dreDadosReais?.totalVendasEfetivas ?? 0;
+    const totalDespesasEfetivas = dreDadosReais?.totalFornecedores ?? 0;
+    const resultadoEfetivoMes = Number(
+      (totalVendasEfetivas - totalDespesasEfetivas).toFixed(2),
+    );
     const margemResultado =
       totalVendasEfetivas > 0
         ? Number(((resultadoEfetivoMes / totalVendasEfetivas) * 100).toFixed(0))
@@ -644,7 +734,7 @@ const Dashboard = () => {
       resultadoEfetivoMes,
       margemResultado,
     };
-  }, [dreLinhas]);
+  }, [dreDadosReais]);
 
   return (
     <AppLayout>
@@ -849,7 +939,12 @@ const Dashboard = () => {
                     DRE - Demonstrativo de Resultados no Exercício
                   </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Resumo consolidado de receitas, despesas e resultado efetivo do período.
+                    Fornecedores por tipo de centro de despesa recompõem as{' '}
+                    <strong className="font-medium text-foreground">compras do mês</strong> (competência).
+                    Linhas marcadas como analítico classificam por nome do tipo e{' '}
+                    <strong className="font-medium text-foreground">não somam de novo</strong> no total à
+                    direita — o resultado é <strong className="font-medium text-foreground">vendas − compras</strong>
+                    , igual ao saldo da 1.ª faixa.
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
@@ -916,8 +1011,21 @@ const Dashboard = () => {
                   </TableHeader>
                   <TableBody>
                     {dreLinhas.map((linha) => (
-                      <TableRow key={linha.descricao}>
-                        <TableCell className="font-medium">{linha.descricao}</TableCell>
+                      <TableRow
+                        key={linha.key}
+                        className={linha.somenteAnalitico ? "bg-muted/25" : undefined}
+                      >
+                        <TableCell
+                          className={
+                            linha.somenteAnalitico
+                              ? "pl-3 text-sm italic text-muted-foreground"
+                              : linha.indent
+                                ? "pl-6 font-medium text-muted-foreground"
+                                : "font-medium"
+                          }
+                        >
+                          {linha.descricao}
+                        </TableCell>
                         <TableCell className="text-right whitespace-nowrap tabular-nums">
                           {loadingDre ? "..." : formatCurrency(linha.valor)}
                         </TableCell>
