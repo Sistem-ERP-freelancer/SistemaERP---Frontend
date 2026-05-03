@@ -560,6 +560,8 @@ class FinanceiroService {
     tipo?: string;
     cliente_id?: number;
     fornecedor_id?: number;
+    /** Filtra competência e centro de custo pela roça (contas e despesas do centro). */
+    roca_id?: number;
     /** Quando true, o backend retorna `linha_totais_periodo` acumulado (histórico), não só o intervalo. */
     painel_totais_gerais?: boolean;
     /**
@@ -574,6 +576,9 @@ class FinanceiroService {
     if (params?.tipo) q.append('tipo', params.tipo);
     if (params?.cliente_id != null) q.append('cliente_id', params.cliente_id.toString());
     if (params?.fornecedor_id != null) q.append('fornecedor_id', params.fornecedor_id.toString());
+    if (params?.roca_id != null && params.roca_id > 0) {
+      q.append('roca_id', params.roca_id.toString());
+    }
     if (params?.painel_totais_gerais) q.append('painel_totais_gerais', '1');
     if (
       params?.painel_totais_gerais &&

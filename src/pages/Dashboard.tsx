@@ -329,6 +329,7 @@ const Dashboard = () => {
           data_inicial,
           data_final,
           painel_totais_gerais: true,
+          ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
         }),
         centroCustoService.listarDespesas(1, limit, {
           dataInicial: data_inicial,
@@ -406,9 +407,20 @@ const Dashboard = () => {
           valor: Number(valor.toFixed(2)),
         }));
 
+      /** Alinha os cards à tabela: com filtro por roça a API pode zerar compras (conta sem `roca_id`), mas o centro de custo tem valores. */
+      const totalDespesasEfetivasDre =
+        fornecedoresPorTipo.length === 0 && fornecedoresDemaisCompras <= 0.005
+          ? totalFornecedores
+          : Number(
+              (somaCentroDespesaNoPeriodo + fornecedoresDemaisCompras).toFixed(
+                2,
+              ),
+            );
+
       return {
         totalVendasEfetivas,
         totalFornecedores,
+        totalDespesasEfetivasDre,
         fornecedoresPorTipo,
         fornecedoresDemaisCompras,
       };
@@ -468,10 +480,13 @@ const Dashboard = () => {
     ];
   }, [dreDadosReais]);
 
-  /** Mesma base do painel «Lançamentos no mês» (competência): resultado = vendas − compras. */
+  /** Mesma base do painel «Lançamentos no mês» (competência): resultado = vendas − despesas (despesas espelham a tabela do DRE). */
   const dreTotais = useMemo(() => {
     const totalVendasEfetivas = dreDadosReais?.totalVendasEfetivas ?? 0;
-    const totalDespesasEfetivas = dreDadosReais?.totalFornecedores ?? 0;
+    const totalDespesasEfetivas =
+      dreDadosReais?.totalDespesasEfetivasDre ??
+      dreDadosReais?.totalFornecedores ??
+      0;
     const resultadoEfetivoMes = Number(
       (totalVendasEfetivas - totalDespesasEfetivas).toFixed(2),
     );
