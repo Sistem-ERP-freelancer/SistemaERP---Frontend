@@ -41,6 +41,57 @@ function LoginBrandLogos({
   );
 }
 
+function LoginPatrocinadoresBlock({ variant }: { variant: "onDark" | "onLight" }) {
+  const eyebrowClass =
+    variant === "onDark"
+      ? cn(
+          "text-right font-[Manrope,system-ui,sans-serif]",
+          "text-[0.625rem] sm:text-[0.6875rem] font-semibold uppercase tracking-[0.32em]",
+          "text-cyan/90 mb-2 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]",
+        )
+      : cn(
+          "text-right font-[Manrope,system-ui,sans-serif]",
+          "text-[0.625rem] sm:text-[0.6875rem] font-semibold uppercase tracking-[0.32em]",
+          "text-primary/75 mb-2",
+        );
+
+  const mainWrapperClass =
+    variant === "onDark"
+      ? cn(
+          "text-right mb-3 max-w-[20rem] sm:max-w-[22rem]",
+          "font-[Manrope,system-ui,sans-serif] text-[0.875rem] sm:text-base font-semibold leading-snug tracking-tight",
+        )
+      : cn(
+          "text-right mb-3 max-w-[20rem] sm:max-w-[22rem]",
+          "font-[Manrope,system-ui,sans-serif] text-[0.875rem] sm:text-base font-semibold leading-snug tracking-tight",
+        );
+
+  const leadClass =
+    variant === "onDark"
+      ? cn(
+          "text-white/95",
+          "[text-shadow:0_1px_3px_rgba(0,0,0,0.45)]",
+        )
+      : "text-foreground/88";
+
+  const brandClass =
+    variant === "onDark"
+      ? "bg-gradient-to-r from-cyan via-white to-azure/95 bg-clip-text text-transparent font-bold"
+      : "bg-gradient-to-r from-primary to-cyan bg-clip-text text-transparent font-bold";
+
+  return (
+    <div className="flex flex-col items-end gap-0 max-w-full">
+      <p className={eyebrowClass}>Patrocínio</p>
+      <p className={mainWrapperClass}>
+        <span className={leadClass}>As marcas que confiam no </span>
+        <span className={brandClass}>TopERP</span>
+      </p>
+      <div className={cn("h-px w-12 sm:w-16 mb-3 rounded-full", variant === "onDark" ? "bg-gradient-to-l from-cyan/70 to-transparent ml-auto" : "bg-gradient-to-l from-primary/50 to-transparent ml-auto")} aria-hidden />
+      <LoginBrandLogos variant={variant} />
+    </div>
+  );
+}
+
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -129,7 +180,7 @@ const Login = () => {
       <div className="hidden lg:flex lg:w-1/2 hero-gradient relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 z-20 flex justify-end p-6 xl:p-8 pointer-events-none">
           <div className="pointer-events-auto max-w-full">
-            <LoginBrandLogos variant="onDark" />
+            <LoginPatrocinadoresBlock variant="onDark" />
           </div>
         </div>
 
@@ -177,14 +228,14 @@ const Login = () => {
       {/* Right Side - Login Form */}
       <div className="relative w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-card">
         <div className="absolute top-4 right-4 z-10 max-w-[calc(100%-1.5rem)] lg:hidden flex justify-end">
-          <LoginBrandLogos variant="onLight" />
+          <LoginPatrocinadoresBlock variant="onLight" />
         </div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-md max-lg:pt-20"
+          className="w-full max-w-md max-lg:pt-32"
         >
           <Link 
             to="/" 
