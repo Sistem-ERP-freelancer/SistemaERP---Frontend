@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,13 +10,42 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/services/auth.service";
 import { useRedirectAfterLogin } from "@/hooks/useRedirectAfterLogin";
 import { TopERPLogo } from "@/components/TopERPLogo";
+import { cn } from "@/lib/utils";
+
+function LoginBrandLogos({
+  variant,
+  className,
+}: {
+  variant: "onDark" | "onLight";
+  className?: string;
+}) {
+  const sponsor = (
+    <img
+      src="/logo-patrocinador.png"
+      alt="Grupo Legal Embalagens"
+      className="h-9 md:h-10 w-auto max-w-[min(240px,55vw)] object-contain object-left"
+    />
+  );
+
+  return (
+    <div className={cn("flex flex-wrap items-center justify-end gap-4 md:gap-5", className)}>
+      <TopERPLogo variant="landing" showText={false} />
+      {variant === "onDark" ? (
+        <div className="rounded-lg bg-white/95 px-4 py-2.5 shadow-sm ring-1 ring-black/5">
+          {sponsor}
+        </div>
+      ) : (
+        sponsor
+      )}
+    </div>
+  );
+}
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
   const { login, isAuthenticated, isLoading: authLoading, user } = useAuth();
   
   // Hook para redirecionamento automático
@@ -98,6 +127,12 @@ const Login = () => {
     <div className="min-h-screen flex">
       {/* Left Side - Decorative */}
       <div className="hidden lg:flex lg:w-1/2 hero-gradient relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 z-20 flex justify-end p-6 xl:p-8 pointer-events-none">
+          <div className="pointer-events-auto max-w-full">
+            <LoginBrandLogos variant="onDark" />
+          </div>
+        </div>
+
         {/* Decorative circles */}
         <div className="absolute inset-0">
           <div className="absolute top-10 left-10 w-40 h-40 border-2 border-cyan/30 rounded-full" />
@@ -127,10 +162,6 @@ const Login = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="mb-8">
-              <TopERPLogo variant="landing" showText={false} />
-            </div>
-
             <h1 className="text-4xl xl:text-5xl font-bold text-primary-foreground mb-4 leading-tight">
               Olá,<br />
               <span className="text-cyan">bem-vindo!</span>
@@ -144,18 +175,17 @@ const Login = () => {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-card">
+      <div className="relative w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-card">
+        <div className="absolute top-4 right-4 z-10 max-w-[calc(100%-1.5rem)] lg:hidden flex justify-end">
+          <LoginBrandLogos variant="onLight" />
+        </div>
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-md"
+          className="w-full max-w-md max-lg:pt-20"
         >
-          {/* Mobile logo */}
-          <div className="lg:hidden mb-8">
-            <TopERPLogo variant="landing" showText={false} />
-          </div>
-
           <Link 
             to="/" 
             className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"

@@ -193,12 +193,10 @@ const Landing = () => {
       {/* Stats Section */}
       <section className="py-20 px-6">
         <div className="container mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 gap-8 max-w-2xl mx-auto">
             {[
-              { value: "0", label: "Empresas Ativas" },
-              { value: "0%", label: "Uptime Garantido" },
-              { value: "0/0", label: "Suporte Técnico" },
-              { value: "0x", label: "Mais Produtividade" }
+              { value: "3", label: "Empresas Ativas" },
+              { value: "10x", label: "Mais Produtividade" },
             ].map((stat, index) => (
               <motion.div
                 key={index}

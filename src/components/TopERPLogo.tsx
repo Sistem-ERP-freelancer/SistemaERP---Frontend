@@ -9,7 +9,7 @@ interface TopERPLogoProps {
 
 export const TopERPLogo = ({ className, showText = false, textClassName, variant = "sidebar" }: TopERPLogoProps) => {
   const logoSrc = variant === "sidebar" ? "/logobranca.png" : "/logo.png";
-  const logoSize = variant === "sidebar" ? "h-21" : "h-10";
+  const logoSize = variant === "sidebar" ? "h-21" : "h-16 sm:h-20 md:h-24 lg:h-28";
   
   return (
     <div className={cn("flex items-center gap-2", variant === "sidebar" && "pt-6", className)}>
