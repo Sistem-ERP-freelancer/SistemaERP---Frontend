@@ -19,24 +19,32 @@ function LoginBrandLogos({
   variant: "onDark" | "onLight";
   className?: string;
 }) {
-  const sponsor = (
-    <img
-      src="/logo-patrocinador.png"
-      alt="Grupo Legal Embalagens"
-      className="h-9 md:h-10 w-auto max-w-[min(240px,55vw)] object-contain object-left"
-    />
-  );
+  const sponsorCardClass =
+    variant === "onDark"
+      ? "rounded-lg bg-white/95 px-3 py-2 shadow-sm ring-1 ring-black/5"
+      : "rounded-lg bg-muted/40 px-3 py-2 ring-1 ring-border/60";
+
+  const sponsors = [
+    {
+      src: "/logo-patrocinador.png",
+      alt: "Grupo Legal Embalagens",
+      className: "h-9 md:h-10 w-auto max-w-[min(240px,55vw)] object-contain object-left",
+    },
+    {
+      src: "/agromais_logo.jpg.jpeg",
+      alt: "Agromais Alimentos",
+      className: "h-14 sm:h-16 md:h-[4.5rem] w-auto max-w-[min(5.5rem,22vw)] object-contain object-center",
+    },
+  ];
 
   return (
-    <div className={cn("flex flex-wrap items-center justify-end gap-4 md:gap-5", className)}>
+    <div className={cn("flex flex-wrap items-center justify-end gap-3 md:gap-4", className)}>
       <TopERPLogo variant="landing" showText={false} />
-      {variant === "onDark" ? (
-        <div className="rounded-lg bg-white/95 px-4 py-2.5 shadow-sm ring-1 ring-black/5">
-          {sponsor}
+      {sponsors.map((sponsor) => (
+        <div key={sponsor.src} className={sponsorCardClass}>
+          <img src={sponsor.src} alt={sponsor.alt} className={sponsor.className} />
         </div>
-      ) : (
-        sponsor
-      )}
+      ))}
     </div>
   );
 }
@@ -46,13 +54,14 @@ function LoginPatrocinadoresBlock({ variant }: { variant: "onDark" | "onLight" }
     variant === "onDark"
       ? cn(
           "text-right font-[Manrope,system-ui,sans-serif]",
-          "text-[0.625rem] sm:text-[0.6875rem] font-semibold uppercase tracking-[0.32em]",
-          "text-cyan/90 mb-2 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]",
+          "text-[0.6875rem] sm:text-xs font-bold uppercase tracking-[0.28em]",
+          "text-cyan mb-2.5",
+          "[text-shadow:0_0_20px_hsl(var(--cyan)/0.55),0_1px_3px_rgba(0,0,0,0.5)]",
         )
       : cn(
           "text-right font-[Manrope,system-ui,sans-serif]",
-          "text-[0.625rem] sm:text-[0.6875rem] font-semibold uppercase tracking-[0.32em]",
-          "text-primary/75 mb-2",
+          "text-[0.6875rem] sm:text-xs font-bold uppercase tracking-[0.28em]",
+          "text-primary mb-2.5",
         );
 
   const mainWrapperClass =
