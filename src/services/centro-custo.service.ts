@@ -170,6 +170,7 @@ class CentroCustoService {
     valor: number;
     data: string;
     observacoes?: string;
+    fornecedorId?: number;
   }): Promise<ApiCentroCustoDespesa> {
     return apiClient.post<ApiCentroCustoDespesa>(`${BASE}/despesas`, data);
   }

@@ -48,6 +48,10 @@ import { cn, formatDate } from "@/lib/utils";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { controleRocaService } from "@/services/controle-roca.service";
 import {
+  centroCustoService,
+  type ApiCentroCustoTipo,
+} from "@/services/centro-custo.service";
+import {
   type ContaFinanceira,
   CreateContaFinanceiraDto,
   financeiroService,
@@ -173,11 +177,14 @@ const Financeiro = () => {
   const [activeTab, setActiveTab] = useState("Todos");
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [salvandoNovaTransacao, setSalvandoNovaTransacao] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
-  const [newTransacao, setNewTransacao] = useState<CreateContaFinanceiraDto & { 
+  const [newTransacao, setNewTransacao] = useState<CreateContaFinanceiraDto & {
     data_emissao: string;
+    /** Tipo de despesa cadastrado em Centro de Custos (tb_centro_custo_tipo). */
+    centro_custo_tipo_id?: number;
   }>({
     tipo: "RECEBER",
     descricao: "",
@@ -185,6 +192,7 @@ const Financeiro = () => {
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: "",
     roca_id: undefined,
+    centro_custo_tipo_id: undefined,
   });
 
   const [page, setPage] = useState(1);
@@ -283,6 +291,17 @@ const Financeiro = () => {
       (fornecedoresData as any)?.fornecedores ||
       (fornecedoresData as any)?.items ||
       [];
+
+  const { data: tiposDespesaCc = [] } = useQuery({
+    queryKey: ["centro-custo", "tipos-opcoes", "financeiro-nova-transacao"],
+    queryFn: () => centroCustoService.listarTiposOpcoes(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const tiposDespesaLista: ApiCentroCustoTipo[] = Array.isArray(tiposDespesaCc)
+    ? tiposDespesaCc
+    : [];
 
   const { data: rocasData } = useQuery({
     queryKey: ["financeiro", "rocas-ativas"],
@@ -645,14 +664,8 @@ const Financeiro = () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
       toast.success("Transação registrada com sucesso!");
-      setNewTransacao({
-        tipo: "RECEBER",
-        descricao: "",
-        valor_original: 0,
-        data_emissao: new Date().toISOString().split('T')[0],
-        data_vencimento: "",
-        roca_id: undefined,
-      });
+      setDialogOpen(false);
+      resetNovaTransacao();
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Erro ao registrar transação");
@@ -817,9 +830,59 @@ const Financeiro = () => {
     });
   }, [filteredTransacoes, secaoTipoFilter]);
 
-  const handleCreate = () => {
+  const resetNovaTransacao = () => {
+    setNewTransacao({
+      tipo: "RECEBER",
+      descricao: "",
+      valor_original: 0,
+      data_emissao: new Date().toISOString().split("T")[0],
+      data_vencimento: "",
+      roca_id: undefined,
+      centro_custo_tipo_id: undefined,
+    });
+  };
+
+  const handleCreate = async () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
       toast.error("Preencha os campos obrigatórios (Descrição, Valor e Data de Vencimento)");
+      return;
+    }
+
+    const ehDespesaCentroCusto =
+      newTransacao.tipo === "PAGAR" && newTransacao.centro_custo_tipo_id != null;
+
+    if (ehDespesaCentroCusto) {
+      if (!newTransacao.roca_id) {
+        toast.error("Selecione a roça (centro de custo) para esta despesa");
+        return;
+      }
+      setSalvandoNovaTransacao(true);
+      try {
+        await centroCustoService.criarDespesa({
+          tipoId: newTransacao.centro_custo_tipo_id!,
+          rocaId: newTransacao.roca_id,
+          descricao: newTransacao.descricao.trim(),
+          valor: Number(newTransacao.valor_original),
+          data: newTransacao.data_emissao,
+          observacoes: newTransacao.observacoes?.trim() || undefined,
+          fornecedorId: newTransacao.fornecedor_id || undefined,
+        });
+        queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+        queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
+        toast.success("Despesa de centro de custo registrada com sucesso!");
+        setDialogOpen(false);
+        resetNovaTransacao();
+      } catch (error: unknown) {
+        const msg =
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Erro ao registrar despesa de centro de custo";
+        toast.error(msg);
+      } finally {
+        setSalvandoNovaTransacao(false);
+      }
       return;
     }
 
@@ -911,7 +974,13 @@ const Financeiro = () => {
               Nova Transação
             </Button>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetNovaTransacao();
+            }}
+          >
             <DialogContent
               className="max-w-4xl max-h-[90vh] overflow-y-auto"
               onPointerDownOutside={(e) => e.preventDefault()}
@@ -943,8 +1012,15 @@ const Financeiro = () => {
                       <Label>Tipo *</Label>
                       <Select
                         value={newTransacao.tipo}
-                        onValueChange={(value: "RECEBER" | "PAGAR") => 
-                          setNewTransacao({...newTransacao, tipo: value})
+                        onValueChange={(value: "RECEBER" | "PAGAR") =>
+                          setNewTransacao({
+                            ...newTransacao,
+                            tipo: value,
+                            centro_custo_tipo_id:
+                              value === "PAGAR"
+                                ? newTransacao.centro_custo_tipo_id
+                                : undefined,
+                          })
                         }
                       >
                         <SelectTrigger>
@@ -975,6 +1051,57 @@ const Financeiro = () => {
                     <ShoppingCart className="w-4 h-4 text-blue-500" />
                     Relacionamentos
                   </h3>
+                  {newTransacao.tipo === "PAGAR" ? (
+                    <motion.div className="rounded-lg border border-border/70 bg-muted/30 p-4 space-y-4">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Para despesa vinculada ao{" "}
+                        <strong className="font-medium text-foreground">centro de custo</strong>,
+                        selecione o tipo de despesa cadastrado e a roça. O lançamento aparece em
+                        Centro de Custos e em Contas a pagar.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>
+                            Tipo de despesa (cadastrado)
+                            {newTransacao.centro_custo_tipo_id != null ? " *" : ""}
+                          </Label>
+                          <Select
+                            value={
+                              newTransacao.centro_custo_tipo_id != null
+                                ? String(newTransacao.centro_custo_tipo_id)
+                                : "none"
+                            }
+                            onValueChange={(value) =>
+                              setNewTransacao({
+                                ...newTransacao,
+                                centro_custo_tipo_id:
+                                  value && value !== "none"
+                                    ? Number(value)
+                                    : undefined,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo de despesa" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Nenhum (conta avulsa)</SelectItem>
+                              {tiposDespesaLista.map((tipo) => (
+                                <SelectItem key={tipo.id} value={String(tipo.id)}>
+                                  {tipo.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {tiposDespesaLista.length === 0 ? (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              Nenhum tipo cadastrado. Cadastre em Centro de Custos → Tipos.
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : null}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label>Cliente</Label>
@@ -1069,7 +1196,15 @@ const Financeiro = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Roça</Label>
+                      <Label>
+                        {newTransacao.tipo === "PAGAR"
+                          ? "Roça (centro de custo)"
+                          : "Roça"}
+                        {newTransacao.tipo === "PAGAR" &&
+                        newTransacao.centro_custo_tipo_id != null
+                          ? " *"
+                          : ""}
+                      </Label>
                       <Select
                         value={
                           newTransacao.roca_id != null
@@ -1087,7 +1222,13 @@ const Financeiro = () => {
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma roça" />
+                          <SelectValue
+                            placeholder={
+                              newTransacao.tipo === "PAGAR"
+                                ? "Selecione a roça (centro de custo)"
+                                : "Selecione uma roça"
+                            }
+                          />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
@@ -1194,9 +1335,9 @@ const Financeiro = () => {
                   onClick={handleCreate} 
                   className="w-full" 
                   variant="gradient"
-                  disabled={createContaMutation.isPending}
+                  disabled={createContaMutation.isPending || salvandoNovaTransacao}
                 >
-                  {createContaMutation.isPending ? (
+                  {createContaMutation.isPending || salvandoNovaTransacao ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Registrando...

@@ -205,15 +205,22 @@ const Dashboard = () => {
       (p.linha_totais_periodo as Record<string, unknown>) ??
       (p.linhaTotaisPeriodo as Record<string, unknown>);
     if (!linhaReg || !linhaCaixa || !linhaTot) return undefined;
-    const regCompras = numPainel(linhaReg.compras);
+    const regComprasRaw = numPainel(linhaReg.compras);
     const regVendas = numPainel(linhaReg.vendas);
     const regDespesas = numPainel(linhaReg.despesas);
-    const caixaCompras = numPainel(linhaCaixa.compras);
+    const caixaComprasRaw = numPainel(linhaCaixa.compras);
     const caixaVendas = numPainel(linhaCaixa.vendas);
     const caixaDespesas = numPainel(linhaCaixa.despesas);
     const totCompras = numPainel(linhaTot.compras);
     const totVendas = numPainel(linhaTot.vendas);
     const totDespesas = numPainel(linhaTot.despesas);
+    /** Com roça: despesas do centro de custo entram em "compras" (mesma lógica do DRE). */
+    const regCompras = rocaIdFiltro
+      ? Number(Math.max(regComprasRaw, regDespesas).toFixed(2))
+      : regComprasRaw;
+    const caixaCompras = rocaIdFiltro
+      ? Number(Math.max(caixaComprasRaw, caixaDespesas).toFixed(2))
+      : caixaComprasRaw;
     /** Mantém o saldo visual coerente com os cards exibidos: vendas - compras. */
     const saldoRegCalculado = Number((regVendas - regCompras).toFixed(2));
     const saldoCaixaCalculado = Number((caixaVendas - caixaCompras).toFixed(2));
@@ -239,7 +246,7 @@ const Dashboard = () => {
         saldo: saldoTotCalculado,
       },
     };
-  }, [dashboardUnificado]);
+  }, [dashboardUnificado, rocaIdFiltro]);
 
   const painelBlocos = useMemo(() => {
     if (!painelFinanceiro) return null;
