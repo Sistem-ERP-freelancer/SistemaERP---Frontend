@@ -115,12 +115,19 @@ const Dashboard = () => {
   const [totaisGeraisModo, setTotaisGeraisModo] =
     useState<PainelTotaisGeraisModo>("pagos");
   const [dreMesAnoFiltro, setDreMesAnoFiltro] = useState<string>("");
-  const [dreRocaFiltro, setDreRocaFiltro] = useState<string>("all");
+  /** Filtro de roça compartilhado: painel financeiro (3 faixas) e DRE. */
+  const [rocaFiltro, setRocaFiltro] = useState<string>("all");
 
   const refMesYyyyMm = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
     return mesEscolhido || mesAnoAtualLocal();
   }, [mesAnoFiltro]);
+  const rocaIdFiltro = useMemo(() => {
+    if (rocaFiltro === "all" || !Number.isFinite(Number(rocaFiltro))) return undefined;
+    const id = Number(rocaFiltro);
+    return id > 0 ? id : undefined;
+  }, [rocaFiltro]);
+
   const parametrosDashboardFinanceiro = useMemo(() => {
     const mesEscolhido = mesAnoFiltro?.trim();
     const chave = mesEscolhido || mesAnoAtualLocal();
@@ -136,8 +143,9 @@ const Dashboard = () => {
       ...(totaisGeraisModo !== "emissao"
         ? { painel_totais_gerais_modo: totaisGeraisModo }
         : {}),
+      ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
     };
-  }, [mesAnoFiltro, totaisGeraisModo]);
+  }, [mesAnoFiltro, totaisGeraisModo, rocaIdFiltro]);
 
   const parametrosDre = useMemo(() => {
     const anoReferencia = Number(refMesYyyyMm.split("-")[0]) || new Date().getFullYear();
@@ -165,14 +173,15 @@ const Dashboard = () => {
       "unificado",
       parametrosDashboardFinanceiro,
       totaisGeraisModo,
+      rocaFiltro,
     ],
     queryFn: () => financeiroService.getDashboardUnificado(parametrosDashboardFinanceiro),
     refetchInterval: 30000,
     retry: false,
   });
 
-  const { data: rocasDre = [] } = useQuery({
-    queryKey: ["dashboard", "dre-rocas-opcoes"],
+  const { data: rocasOpcoes = [] } = useQuery({
+    queryKey: ["dashboard", "rocas-opcoes"],
     queryFn: () => controleRocaService.listarRocas(undefined, false),
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -315,14 +324,10 @@ const Dashboard = () => {
   }, [painelFinanceiro, mesAnoFiltro, totaisGeraisModo]);
 
   const { data: dreDadosReais, isLoading: loadingDre } = useQuery({
-    queryKey: ["dashboard", "dre-real", parametrosDre, dreRocaFiltro],
+    queryKey: ["dashboard", "dre-real", parametrosDre, rocaFiltro],
     queryFn: async () => {
       const { data_inicial, data_final } = parametrosDre;
       const limit = 200;
-      const rocaIdFiltro =
-        dreRocaFiltro !== "all" && Number.isFinite(Number(dreRocaFiltro))
-          ? Number(dreRocaFiltro)
-          : undefined;
 
       const [resumoFinanceiroMes, despesasPagina1] = await Promise.all([
         financeiroService.getDashboardUnificado({
@@ -573,7 +578,8 @@ const Dashboard = () => {
                         </h3>
                       </div>
                       {bloco.etapa === 1 ? (
-                        <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
+                        <motion.div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end" layout={false}>
+                        <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:min-w-[16rem] dark:bg-background/50">
                           <Label
                             htmlFor="dashboard-mes-ano"
                             className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
@@ -600,6 +606,30 @@ const Dashboard = () => {
                             ) : null}
                           </div>
                         </div>
+                          <motion.div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:min-w-[16rem] dark:bg-background/50">
+                            <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                              <ListFilter className="h-3.5 w-3.5 opacity-70" />
+                              Roça
+                            </Label>
+                            <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
+                              <SelectTrigger
+                                id="dashboard-painel-roca"
+                                className="h-10"
+                                aria-label="Filtrar painel por roça"
+                              >
+                                <SelectValue placeholder="Todas as roças" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Todas as roças</SelectItem>
+                                {rocasOpcoes.map((roca) => (
+                                  <SelectItem key={roca.id} value={String(roca.id)}>
+                                    {roca.nome}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </motion.div>
+                        </motion.div>
                       ) : null}
                       {String(bloco.etapa) === "3" ? (
                         <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[18rem] dark:bg-background/50">
@@ -745,13 +775,13 @@ const Dashboard = () => {
                       <ListFilter className="h-3.5 w-3.5 opacity-70" />
                       Roça
                     </Label>
-                    <Select value={dreRocaFiltro} onValueChange={setDreRocaFiltro}>
+                    <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
                       <SelectTrigger className="h-10">
                         <SelectValue placeholder="Todas as roças" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas as roças</SelectItem>
-                        {rocasDre.map((roca) => (
+                        {rocasOpcoes.map((roca) => (
                           <SelectItem key={roca.id} value={String(roca.id)}>
                             {roca.nome}
                           </SelectItem>
