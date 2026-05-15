@@ -26,14 +26,22 @@ function LoginBrandLogos({
 
   const sponsors = [
     {
+      id: "grupo-legal",
       src: "/logo-patrocinador.png",
       alt: "Grupo Legal Embalagens",
       className: "h-9 md:h-10 w-auto max-w-[min(240px,55vw)] object-contain object-left",
     },
     {
+      id: "agromais",
       src: "/agromais_logo.jpg.jpeg",
       alt: "Agromais Alimentos",
       className: "h-14 sm:h-16 md:h-[4.5rem] w-auto max-w-[min(5.5rem,22vw)] object-contain object-center",
+    },
+    {
+      id: "clinica-pet",
+      src: encodeURI("/clínica pet.jpg"),
+      alt: "Pronto Socorro Pet - Clínica Veterinária",
+      className: "h-12 sm:h-14 md:h-16 w-auto max-w-[min(4.5rem,20vw)] object-contain object-center",
     },
   ];
 
@@ -41,7 +49,7 @@ function LoginBrandLogos({
     <div className={cn("flex flex-wrap items-center justify-end gap-3 md:gap-4", className)}>
       <TopERPLogo variant="landing" showText={false} />
       {sponsors.map((sponsor) => (
-        <div key={sponsor.src} className={sponsorCardClass}>
+        <div key={sponsor.id} className={sponsorCardClass}>
           <img src={sponsor.src} alt={sponsor.alt} className={sponsor.className} />
         </div>
       ))}
