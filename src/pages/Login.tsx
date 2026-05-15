@@ -12,6 +12,20 @@ import { useRedirectAfterLogin } from "@/hooks/useRedirectAfterLogin";
 import { TopERPLogo } from "@/components/TopERPLogo";
 import { cn } from "@/lib/utils";
 
+type SponsorCardStyle = "light" | "dark" | "plain";
+
+function sponsorCardClassName(variant: "onDark" | "onLight", card: SponsorCardStyle): string | null {
+  if (card === "plain") return null;
+  if (card === "dark") {
+    return variant === "onDark"
+      ? "rounded-lg bg-black/90 px-3 py-2 shadow-sm ring-1 ring-white/10"
+      : "rounded-lg bg-zinc-900 px-3 py-2 shadow-sm ring-1 ring-border/60";
+  }
+  return variant === "onDark"
+    ? "rounded-lg bg-white/95 px-3 py-2 shadow-sm ring-1 ring-black/5"
+    : "rounded-lg bg-muted/40 px-3 py-2 ring-1 ring-border/60";
+}
+
 function LoginBrandLogos({
   variant,
   className,
@@ -19,12 +33,13 @@ function LoginBrandLogos({
   variant: "onDark" | "onLight";
   className?: string;
 }) {
-  const sponsorCardClass =
-    variant === "onDark"
-      ? "rounded-lg bg-white/95 px-3 py-2 shadow-sm ring-1 ring-black/5"
-      : "rounded-lg bg-muted/40 px-3 py-2 ring-1 ring-border/60";
-
-  const sponsors = [
+  const sponsors: {
+    id: string;
+    src: string;
+    alt: string;
+    className: string;
+    card?: SponsorCardStyle;
+  }[] = [
     {
       id: "grupo-legal",
       src: "/logo-patrocinador.png",
@@ -43,16 +58,41 @@ function LoginBrandLogos({
       alt: "Pronto Socorro Pet - Clínica Veterinária",
       className: "h-12 sm:h-14 md:h-16 w-auto max-w-[min(4.5rem,20vw)] object-contain object-center",
     },
+    {
+      id: "suburbio",
+      src: encodeURI("/Captura de tela 2026-05-15 171326.png"),
+      alt: "Subúrbio",
+      className: "h-10 sm:h-11 md:h-12 w-auto max-w-[min(9rem,38vw)] object-contain object-center",
+      card: "dark",
+    },
+    {
+      id: "rota-quimica",
+      src: "/DOC-20260515-WA0266..jpg",
+      alt: "Rota Química Transportes e Logística",
+      className: "h-10 sm:h-11 md:h-12 w-auto max-w-[min(10rem,42vw)] object-contain object-center",
+    },
   ];
 
   return (
-    <div className={cn("flex flex-wrap items-center justify-end gap-3 md:gap-4", className)}>
+    <div className={cn("flex flex-wrap items-center justify-end gap-2.5 md:gap-3", className)}>
       <TopERPLogo variant="landing" showText={false} />
-      {sponsors.map((sponsor) => (
-        <div key={sponsor.id} className={sponsorCardClass}>
-          <img src={sponsor.src} alt={sponsor.alt} className={sponsor.className} />
-        </div>
-      ))}
+      {sponsors.map((sponsor) => {
+        const cardStyle = sponsor.card ?? "light";
+        const cardClass = sponsorCardClassName(variant, cardStyle);
+        const img = <img src={sponsor.src} alt={sponsor.alt} className={sponsor.className} />;
+        if (!cardClass) {
+          return (
+            <div key={sponsor.id} className="shrink-0 px-0.5">
+              {img}
+            </div>
+          );
+        }
+        return (
+          <div key={sponsor.id} className={cardClass}>
+            {img}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -252,7 +292,7 @@ const Login = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-md max-lg:pt-32"
+          className="w-full max-w-md max-lg:pt-40"
         >
           <Link 
             to="/" 
