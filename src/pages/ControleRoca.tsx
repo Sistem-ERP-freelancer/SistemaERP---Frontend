@@ -4330,7 +4330,7 @@ className={
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table className="w-full min-w-[60rem] table-fixed text-xs sm:text-sm">
+                  <Table className="w-full min-w-[68rem] table-fixed text-xs sm:text-sm">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10 min-w-10 max-w-10 px-1 sticky left-0 z-40 bg-card border-r border-border shadow-[1px_0_0_0_hsl(var(--border))]">
@@ -4343,15 +4343,21 @@ className={
                           aria-label="Selecionar todos"
                         />
                       </TableHead>
-                      <TableHead className="min-w-[5.25rem] w-[9%] whitespace-nowrap">Data</TableHead>
-                      <TableHead className="min-w-[6rem] w-[11%] whitespace-nowrap">Roça</TableHead>
-                      <TableHead className="min-w-[8rem] w-[20%] whitespace-nowrap">Produtos</TableHead>
-                      <TableHead className="min-w-[3rem] w-[6%] whitespace-nowrap">Qtde</TableHead>
-                      <TableHead className="min-w-[5rem] w-[9%] whitespace-nowrap text-right">Valor Unit.</TableHead>
-                      <TableHead className="min-w-[6.5rem] w-[11%] whitespace-nowrap">Meeiro</TableHead>
-                      <TableHead className="min-w-[2.5rem] w-[3%] text-right py-2 px-1">%</TableHead>
-                      <TableHead className="min-w-[6rem] w-[9%] text-right whitespace-nowrap">Valor do meeiro</TableHead>
-                      <TableHead className="min-w-[5.5rem] w-[9%] text-right whitespace-nowrap">Valor total</TableHead>
+                      <TableHead className="min-w-[5.25rem] w-[8%] whitespace-nowrap px-2">Data</TableHead>
+                      <TableHead className="min-w-[5.5rem] w-[10%] whitespace-nowrap px-2">Roça</TableHead>
+                      <TableHead className="min-w-[6rem] w-[14%] whitespace-nowrap px-2">Produtos</TableHead>
+                      <TableHead className="min-w-[3rem] w-[5%] whitespace-nowrap px-1 text-center">Qtde</TableHead>
+                      <TableHead className="min-w-[5rem] w-[8%] whitespace-nowrap text-right px-2">Valor Unit.</TableHead>
+                      <TableHead className="min-w-[7rem] w-[14%] whitespace-nowrap px-2 text-center">Meeiro</TableHead>
+                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">%</TableHead>
+                      <TableHead className="min-w-[7.5rem] w-[11%] text-right whitespace-nowrap px-2 sm:px-3">
+                        <span className="lg:hidden">V. meeiro</span>
+                        <span className="hidden lg:inline">Valor do meeiro</span>
+                      </TableHead>
+                      <TableHead className="min-w-[6.5rem] w-[10%] text-right whitespace-nowrap px-2 sm:px-3">
+                        <span className="lg:hidden">V. total</span>
+                        <span className="hidden lg:inline">Valor total</span>
+                      </TableHead>
                       <TableHead className="w-[72px] min-w-[72px] max-w-[72px] text-right pl-2 pr-3 sticky right-0 z-20 bg-card border-l border-border">
                         Ações
                       </TableHead>
@@ -4381,10 +4387,10 @@ className={
                             </TableCell>
                             <TableCell className="whitespace-nowrap tabular-nums">{formatDate(l.data)}</TableCell>
                             <TableCell
-                              className="max-w-0 overflow-hidden xl:max-w-none xl:overflow-visible"
+                              className="max-w-0 min-w-0 overflow-hidden px-2 max-lg:overflow-hidden lg:max-w-none lg:overflow-visible"
                               title={roca?.nome ?? l.rocaNome?.trim() ?? String(l.rocaId)}
                             >
-                              <span className="block truncate xl:whitespace-normal xl:text-clip">
+                              <span className="block max-lg:truncate lg:whitespace-normal">
                                 {roca?.nome ?? l.rocaNome?.trim() ?? l.rocaId}
                               </span>
                             </TableCell>
@@ -4397,26 +4403,29 @@ className={
                                 '—'
                               )}
                             </TableCell>
-                            <TableCell className="text-sm">
+                            <TableCell className="text-sm text-center tabular-nums">
                               {item != null ? item.quantidade : '—'}
                             </TableCell>
                             <TableCell className="text-right text-sm">
                               {item != null ? formatCurrency(item.preco_unitario ?? 0) : '—'}
                             </TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-w-0 xl:max-w-none xl:overflow-visible">
+                            <TableCell className="max-w-0 min-w-0 overflow-hidden px-2 text-center">
                               {meeirosDoItem.length === 0
                                 ? '—'
                                 : (
                                     <>
-                                      {meeirosDoItem.map((m, i) => (
-                                        <div key={i} className="truncate xl:whitespace-normal xl:text-clip" title={meeirosDoItem.map((x) => x.meeiroNome ?? `ID ${x.meeiroId}`).join(', ')}>
-                                          {m.meeiroNome ?? `ID ${m.meeiroId}`}
-                                        </div>
-                                      ))}
+                                      {meeirosDoItem.map((m, i) => {
+                                        const nomeMeeiro = m.meeiroNome ?? `ID ${m.meeiroId}`;
+                                        return (
+                                          <div key={i} className="truncate text-center" title={nomeMeeiro}>
+                                            {nomeMeeiro}
+                                          </div>
+                                        );
+                                      })}
                                     </>
                                   )}
                             </TableCell>
-                            <TableCell className="text-right py-2 px-1">
+                            <TableCell className="text-center whitespace-nowrap py-2 px-2 tabular-nums">
                               {meeirosDoItem.length === 0
                                 ? '—'
                                 : meeirosDoItem.map((m, i) => {
@@ -4427,14 +4436,20 @@ className={
                                     return <div key={i}>{pct}%</div>;
                                   })}
                             </TableCell>
-                            <TableCell className="text-right whitespace-nowrap">
+                            <TableCell className="text-right whitespace-nowrap px-2 sm:px-3 tabular-nums">
                               {meeirosDoItem.length === 0
                                 ? '—'
                                 : meeirosDoItem.map((m, i) => (
-                                    <div key={i}>{formatCurrency(m.valor_parte ?? 0)}</div>
+                                    <div
+                                      key={i}
+                                      className="truncate"
+                                      title={formatCurrency(m.valor_parte ?? 0)}
+                                    >
+                                      {formatCurrency(m.valor_parte ?? 0)}
+                                    </div>
                                   ))}
                             </TableCell>
-                            <TableCell className="text-right whitespace-nowrap">
+                            <TableCell className="text-right whitespace-nowrap px-2 sm:px-3 tabular-nums font-medium">
                               {item != null ? formatCurrency(valorTotalItem) : formatCurrency(Number(l.total_geral))}
                             </TableCell>
                             <TableCell className="w-[72px] min-w-[72px] max-w-[72px] text-right p-2 sticky right-0 z-10 bg-card group-hover/lanc:bg-muted/50 align-middle border-l border-border">
@@ -6513,7 +6528,7 @@ className={
                           <TableHead className="min-w-0 w-[18%]">Meeiro</TableHead>
                           <TableHead className="min-w-0 w-[16%]">Chave PIX</TableHead>
                           <TableHead className="min-w-0 w-[12%] text-right">Valor a receber</TableHead>
-                          <TableHead className="min-w-0 w-[14%] text-center">Empréstimos em aberto</TableHead>
+                          <TableHead className="min-w-0 w-[14%] text-center">Emprést aberto</TableHead>
                           <TableHead className="min-w-0 w-[10%] text-right">Desc emprést.</TableHead>
                           <TableHead className="min-w-0 w-[18%] text-right whitespace-nowrap">
                             Valor final a pagar
@@ -9681,7 +9696,7 @@ className={
                           <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalReceber)}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Empréstimos em aberto</Label>
+                          <Label className="text-muted-foreground">Emprést aberto</Label>
                           <p className="font-semibold text-base">{formatCurrency(detailMeeiro.resumoFinanceiro.totalEmprestimosAbertos)}</p>
                         </div>
                         <div>
@@ -10294,7 +10309,7 @@ className={
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 py-4 border-b border-border/40 items-start sm:items-center">
-                    <span className="text-muted-foreground">Empréstimos em aberto</span>
+                    <span className="text-muted-foreground">Emprést aberto</span>
                     <span className="text-foreground font-medium tabular-nums text-left sm:text-right">
                       {formatCurrency(meeiroParaPagar.totalEmprestimosAbertos)}
                     </span>
@@ -10595,7 +10610,7 @@ className={
                             <span className="tabular-nums">{formatCurrency(valesGrade)}</span>
                           </li>
                           <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
-                            <span>Empréstimos em aberto</span>
+                            <span>Emprést aberto</span>
                             <span className="tabular-nums">{formatCurrency(empAbertoGrade)}</span>
                           </li>
                           <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
