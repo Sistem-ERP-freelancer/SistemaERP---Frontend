@@ -459,7 +459,7 @@ const Dashboard = () => {
 
     const linhasFornecedores: DreLinha[] = porTipo.map((t) => ({
       key: `forn-cc-${t.tipoId}`,
-      descricao: `Fornecedores — ${t.nome}`,
+      descricao: t.nome,
       valor: t.valor,
       percentual: calcPct(t.valor),
       indent: true,
@@ -468,7 +468,7 @@ const Dashboard = () => {
     if (demais > 0.005) {
       linhasFornecedores.push({
         key: "forn-demais",
-        descricao: "Fornecedores — demais (fornecedores diretos / fora do centro de despesa)",
+        descricao: "Demais (fornecedores diretos / fora do centro de despesa)",
         valor: demais,
         percentual: calcPct(demais),
         indent: true,
