@@ -101,6 +101,7 @@ import {
   Check,
   ChevronsUpDown,
   Circle,
+  Construction,
   Eye,
   Filter,
   Landmark,
@@ -562,6 +563,8 @@ function DespesasFiltrosBar({
   const [statusFiltro, setStatusFiltro] = useState<'' | DespesasStatusFiltro>('');
   const [qLocal, setQLocal] = useState(despesasBusca);
 
+  const [relatoriosEmDesenvolvimentoAberto, setRelatoriosEmDesenvolvimentoAberto] =
+    useState(false);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [relatorioKind, setRelatorioKind] = useState<RelatorioDespesaId | null>(null);
   const [relatorioGerando, setRelatorioGerando] = useState(false);
@@ -920,27 +923,15 @@ function DespesasFiltrosBar({
         </div>
 
         <div className="order-3 flex w-full min-w-0 sm:w-auto sm:shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2 w-full sm:w-auto"
-              >
-                <BarChart3 className="w-4 h-4" />
-                Relatórios
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[17rem]">
-              <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {RELATORIOS_DESPESA.map((r) => (
-                <DropdownMenuItem key={r.id} onSelect={() => abrirRelatorio(r.id)}>
-                  {r.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 w-full sm:w-auto"
+            onClick={() => setRelatoriosEmDesenvolvimentoAberto(true)}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Relatórios
+          </Button>
         </div>
       </div>
     </div>
@@ -1265,6 +1256,33 @@ function DespesasFiltrosBar({
                 Gerar relatório
               </>
             )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      open={relatoriosEmDesenvolvimentoAberto}
+      onOpenChange={setRelatoriosEmDesenvolvimentoAberto}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Construction className="h-6 w-6" />
+          </div>
+          <DialogTitle className="text-center">Relatórios</DialogTitle>
+          <DialogDescription className="text-center">
+            Esta funcionalidade está sendo desenvolvida e estará disponível em
+            breve. Agradecemos a sua paciência.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="sm:justify-center">
+          <Button
+            type="button"
+            className="w-full sm:w-auto min-w-[8rem]"
+            onClick={() => setRelatoriosEmDesenvolvimentoAberto(false)}
+          >
+            Entendi
           </Button>
         </DialogFooter>
       </DialogContent>

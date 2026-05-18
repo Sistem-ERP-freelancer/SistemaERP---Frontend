@@ -1,5 +1,14 @@
 import { Notifications } from "@/components/Notifications";
 import { TopERPLogo } from "@/components/TopERPLogo";
+import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
     Boxes,
     ChevronDown,
+    Construction,
     DollarSign,
     FileText,
     Landmark,
@@ -48,7 +58,12 @@ const getMenuItems = (isSuperAdmin: boolean) => {
     { icon: Boxes, label: "Movimentações", href: "/estoque" },
     { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
     { icon: Sprout, label: "Controle de Roça", href: "/controle-roca" },
-    { icon: Settings, label: "Configurações", href: "/settings" },
+    {
+      icon: Settings,
+      label: "Configurações",
+      href: "/settings",
+      emDesenvolvimento: true,
+    },
   ];
 
   if (isSuperAdmin) {
@@ -69,6 +84,8 @@ const LARGURA_MENU_COMPLETO_PX = 1024; // a partir de 1024px (notebook 15", etc.
 
 const AppLayout = ({ children }: AppLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [configEmDesenvolvimentoAberto, setConfigEmDesenvolvimentoAberto] =
+    useState(false);
 
   useEffect(() => {
     const updateSidebar = () => {
@@ -171,6 +188,41 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         <nav className="flex-1 py-3 sm:py-4 px-2 sm:px-3 space-y-0.5 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-none overscroll-y-contain">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.href;
+            const itemClasses = `flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 active:opacity-90 w-full text-left ${
+              isActive && !item.emDesenvolvimento
+                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }`;
+
+            if (item.emDesenvolvimento) {
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    setConfigEmDesenvolvimentoAberto(true);
+                    if (
+                      typeof window !== "undefined" &&
+                      window.innerWidth < LARGURA_MENU_COMPLETO_PX
+                    ) {
+                      setSidebarOpen(false);
+                    }
+                  }}
+                  className={itemClasses}
+                >
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  {sidebarOpen && (
+                    <span
+                      className="font-medium min-w-0 max-w-full whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:overflow-visible min-[1920px]:text-clip"
+                      title={item.label}
+                    >
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.label}
@@ -180,11 +232,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     setSidebarOpen(false);
                   }
                 }}
-                className={`flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 active:opacity-90 ${
-                  isActive 
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow" 
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                }`}
+                className={itemClasses}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
                 {sidebarOpen && (
@@ -308,6 +356,33 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           {children}
         </div>
       </main>
+
+      <Dialog
+        open={configEmDesenvolvimentoAberto}
+        onOpenChange={setConfigEmDesenvolvimentoAberto}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Construction className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-center">Configurações</DialogTitle>
+            <DialogDescription className="text-center">
+              Esta funcionalidade está sendo desenvolvida e estará disponível em
+              breve. Agradecemos a sua paciência.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-center">
+            <Button
+              type="button"
+              className="w-full sm:w-auto min-w-[8rem]"
+              onClick={() => setConfigEmDesenvolvimentoAberto(false)}
+            >
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
