@@ -188,6 +188,17 @@
     background: var(--gradient-hero);
   }
 
+  .login-page-bg {
+    background:
+      linear-gradient(
+        165deg,
+        hsl(222 85% 7%) 0%,
+        hsl(var(--navy)) 32%,
+        hsl(var(--royal)) 68%,
+        hsl(205 70% 32%) 100%
+      );
+  }
+
   .accent-gradient {
     background: var(--gradient-accent);
   }

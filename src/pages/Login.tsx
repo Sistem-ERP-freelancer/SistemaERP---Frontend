@@ -4,148 +4,117 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Zap, Eye, EyeOff, LogIn, ArrowLeft } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Eye,
+  EyeOff,
+  Heart,
+  Lock,
+  LogIn,
+  Mail,
+  Shield,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/services/auth.service";
 import { useRedirectAfterLogin } from "@/hooks/useRedirectAfterLogin";
-import { TopERPLogo } from "@/components/TopERPLogo";
 import { cn } from "@/lib/utils";
+import { LoginBackground } from "@/components/login/LoginBackground";
 
-type SponsorCardStyle = "light" | "dark" | "plain";
+type SponsorTileTone = "light" | "dark";
 
-function sponsorCardClassName(variant: "onDark" | "onLight", card: SponsorCardStyle): string | null {
-  if (card === "plain") return null;
-  if (card === "dark") {
-    return variant === "onDark"
-      ? "rounded-lg bg-black/90 px-3 py-2 shadow-sm ring-1 ring-white/10"
-      : "rounded-lg bg-zinc-900 px-3 py-2 shadow-sm ring-1 ring-border/60";
-  }
-  return variant === "onDark"
-    ? "rounded-lg bg-white/95 px-3 py-2 shadow-sm ring-1 ring-black/5"
-    : "rounded-lg bg-muted/40 px-3 py-2 ring-1 ring-border/60";
+const LOGIN_SPONSORS: { id: string; src: string; alt: string; tone?: SponsorTileTone }[] = [
+  { id: "grupo-legal", src: "/logo-patrocinador.png", alt: "Grupo Legal Embalagens" },
+  { id: "agromais", src: "/agromais_logo.jpg.jpeg", alt: "Agromais Alimentos" },
+  {
+    id: "clinica-pet",
+    src: encodeURI("/clínica pet.jpg"),
+    alt: "Pronto Socorro Pet - Clínica Veterinária",
+  },
+  {
+    id: "suburbio",
+    src: encodeURI("/Captura de tela 2026-05-15 171326.png"),
+    alt: "Subúrbio",
+    tone: "dark",
+  },
+  {
+    id: "rota-quimica",
+    src: "/DOC-20260515-WA0266..jpg",
+    alt: "Rota Química Transportes e Logística",
+  },
+];
+
+const HIGHLIGHTS = [
+  {
+    icon: Shield,
+    title: "Segurança de ponta",
+    description: "Dados protegidos com controle de acesso por perfil.",
+  },
+  {
+    icon: BarChart3,
+    title: "Gestão integrada",
+    description: "Financeiro, estoque e operações em um só lugar.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Resultados reais",
+    description: "Indicadores claros para decisões mais assertivas.",
+  },
+] as const;
+
+function sponsorTileClass(tone: SponsorTileTone): string {
+  return tone === "dark"
+    ? "bg-zinc-950 ring-zinc-800"
+    : "bg-slate-50 ring-slate-200/80";
 }
 
-function LoginBrandLogos({
-  variant,
-  className,
-}: {
-  variant: "onDark" | "onLight";
-  className?: string;
-}) {
-  const sponsors: {
-    id: string;
-    src: string;
-    alt: string;
-    className: string;
-    card?: SponsorCardStyle;
-  }[] = [
-    {
-      id: "grupo-legal",
-      src: "/logo-patrocinador.png",
-      alt: "Grupo Legal Embalagens",
-      className: "h-9 md:h-10 w-auto max-w-[min(240px,55vw)] object-contain object-left",
-    },
-    {
-      id: "agromais",
-      src: "/agromais_logo.jpg.jpeg",
-      alt: "Agromais Alimentos",
-      className: "h-14 sm:h-16 md:h-[4.5rem] w-auto max-w-[min(5.5rem,22vw)] object-contain object-center",
-    },
-    {
-      id: "clinica-pet",
-      src: encodeURI("/clínica pet.jpg"),
-      alt: "Pronto Socorro Pet - Clínica Veterinária",
-      className: "h-12 sm:h-14 md:h-16 w-auto max-w-[min(4.5rem,20vw)] object-contain object-center",
-    },
-    {
-      id: "suburbio",
-      src: encodeURI("/Captura de tela 2026-05-15 171326.png"),
-      alt: "Subúrbio",
-      className: "h-10 sm:h-11 md:h-12 w-auto max-w-[min(9rem,38vw)] object-contain object-center",
-      card: "dark",
-    },
-    {
-      id: "rota-quimica",
-      src: "/DOC-20260515-WA0266..jpg",
-      alt: "Rota Química Transportes e Logística",
-      className: "h-10 sm:h-11 md:h-12 w-auto max-w-[min(10rem,42vw)] object-contain object-center",
-    },
-  ];
-
+function LoginSponsorsFooter() {
   return (
-    <div className={cn("flex flex-wrap items-center justify-end gap-2.5 md:gap-3", className)}>
-      <TopERPLogo variant="landing" showText={false} />
-      {sponsors.map((sponsor) => {
-        const cardStyle = sponsor.card ?? "light";
-        const cardClass = sponsorCardClassName(variant, cardStyle);
-        const img = <img src={sponsor.src} alt={sponsor.alt} className={sponsor.className} />;
-        if (!cardClass) {
-          return (
-            <div key={sponsor.id} className="shrink-0 px-0.5">
-              {img}
-            </div>
-          );
-        }
-        return (
-          <div key={sponsor.id} className={cardClass}>
-            {img}
+    <footer className="relative z-20 shrink-0 px-4 pb-3 pt-1 sm:px-6 sm:pb-4 lg:px-8 lg:pb-5">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.4 }}
+        className="mx-auto flex max-w-6xl flex-col gap-3 rounded-2xl bg-white px-5 py-3 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.35)] ring-1 ring-slate-200/80 sm:flex-row sm:items-center sm:gap-5 sm:px-7 sm:py-4"
+      >
+        <motion.div className="flex min-w-0 items-center gap-2.5 sm:max-w-[14rem] sm:shrink-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Heart className="h-4 w-4" aria-hidden />
           </div>
-        );
-      })}
-    </div>
-  );
-}
+          <p className="text-xs font-medium leading-snug text-slate-700 sm:text-sm">
+            Patrocinadores que acreditam no nosso propósito
+          </p>
+        </motion.div>
 
-function LoginPatrocinadoresBlock({ variant }: { variant: "onDark" | "onLight" }) {
-  const eyebrowClass =
-    variant === "onDark"
-      ? cn(
-          "text-right font-[Manrope,system-ui,sans-serif]",
-          "text-[0.6875rem] sm:text-xs font-bold uppercase tracking-[0.28em]",
-          "text-cyan mb-2.5",
-          "[text-shadow:0_0_20px_hsl(var(--cyan)/0.55),0_1px_3px_rgba(0,0,0,0.5)]",
-        )
-      : cn(
-          "text-right font-[Manrope,system-ui,sans-serif]",
-          "text-[0.6875rem] sm:text-xs font-bold uppercase tracking-[0.28em]",
-          "text-primary mb-2.5",
-        );
-
-  const mainWrapperClass =
-    variant === "onDark"
-      ? cn(
-          "text-right mb-3 max-w-[20rem] sm:max-w-[22rem]",
-          "font-[Manrope,system-ui,sans-serif] text-[0.875rem] sm:text-base font-semibold leading-snug tracking-tight",
-        )
-      : cn(
-          "text-right mb-3 max-w-[20rem] sm:max-w-[22rem]",
-          "font-[Manrope,system-ui,sans-serif] text-[0.875rem] sm:text-base font-semibold leading-snug tracking-tight",
-        );
-
-  const leadClass =
-    variant === "onDark"
-      ? cn(
-          "text-white/95",
-          "[text-shadow:0_1px_3px_rgba(0,0,0,0.45)]",
-        )
-      : "text-foreground/88";
-
-  const brandClass =
-    variant === "onDark"
-      ? "bg-gradient-to-r from-cyan via-white to-azure/95 bg-clip-text text-transparent font-bold"
-      : "bg-gradient-to-r from-primary to-cyan bg-clip-text text-transparent font-bold";
-
-  return (
-    <div className="flex flex-col items-end gap-0 max-w-full">
-      <p className={eyebrowClass}>Patrocínio</p>
-      <p className={mainWrapperClass}>
-        <span className={leadClass}>As marcas que confiam no </span>
-        <span className={brandClass}>TopERP</span>
-      </p>
-      <div className={cn("h-px w-12 sm:w-16 mb-3 rounded-full", variant === "onDark" ? "bg-gradient-to-l from-cyan/70 to-transparent ml-auto" : "bg-gradient-to-l from-primary/50 to-transparent ml-auto")} aria-hidden />
-      <LoginBrandLogos variant={variant} />
-    </div>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-2 sm:justify-end sm:gap-2.5">
+          {LOGIN_SPONSORS.map((sponsor, index) => {
+            const tone = sponsor.tone ?? "light";
+            return (
+              <motion.div
+                key={sponsor.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.35, delay: 0.5 + index * 0.05 }}
+                className={cn(
+                  "flex h-12 w-[5.5rem] items-center justify-center rounded-lg p-1.5 ring-1 sm:h-14 sm:w-24",
+                  sponsorTileClass(tone),
+                )}
+              >
+                <img
+                  src={sponsor.src}
+                  alt={sponsor.alt}
+                  className="max-h-full max-w-full object-contain"
+                  loading="lazy"
+                />
+              </motion.div>
+            );
+          })}
+        </div>
+      </motion.div>
+    </footer>
   );
 }
 
@@ -154,20 +123,19 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { login, isAuthenticated, isLoading: authLoading, user } = useAuth();
-  
-  // Hook para redirecionamento automático
+  const { login, isLoading: authLoading } = useAuth();
+
   useRedirectAfterLogin();
 
-  // Mostra loading enquanto verifica autenticação
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-xl primary-gradient flex items-center justify-center">
-            <Zap className="w-7 h-7 text-primary-foreground animate-pulse" />
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[hsl(var(--navy))]">
+        <LoginBackground />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+            <Zap className="h-7 w-7 animate-pulse text-cyan" />
           </div>
-          <p className="text-muted-foreground">Carregando...</p>
+          <p className="text-sm text-white/70">Carregando...</p>
         </div>
       </div>
     );
@@ -175,7 +143,7 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error("Preencha todos os campos");
       return;
@@ -188,43 +156,25 @@ const Login = () => {
         email: email.trim(),
         senha: password,
       });
-      
-      // Aguarda um momento para garantir que o contexto foi atualizado
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Verifica o role de múltiplas formas (sem expor token)
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       const userFromResponse = response?.user || response?.usuario;
       const userFromStorage = authService.getCurrentUser();
       const roleFromResponse = userFromResponse?.role?.toUpperCase()?.trim();
       const roleFromStorage = userFromStorage?.role?.toUpperCase()?.trim();
-      
       const finalRole = roleFromResponse || roleFromStorage;
-      
-      // Log seguro apenas em desenvolvimento
-      if (import.meta.env.DEV) {
-        console.log('🔍 Role detectado:', finalRole);
-        console.log('🔍 É SUPER_ADMIN?', finalRole === 'SUPER_ADMIN');
-      }
-      
-      // Força o redirecionamento usando window.location para garantir
-      if (finalRole === 'SUPER_ADMIN') {
-        if (import.meta.env.DEV) {
-          console.log('🚀 Redirecionando para /admin');
-        }
-        // Usa replace para não voltar para login
+
+      if (finalRole === "SUPER_ADMIN") {
         setTimeout(() => {
-          window.location.href = '/admin';
+          window.location.href = "/admin";
         }, 100);
       } else {
-        if (import.meta.env.DEV) {
-          console.log('🚀 Redirecionando para /dashboard');
-        }
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          window.location.href = "/dashboard";
         }, 100);
       }
     } catch (error) {
-      // O erro já foi tratado no contexto de autenticação
       console.error("Erro no login:", error);
     } finally {
       setIsLoading(false);
@@ -232,159 +182,165 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Decorative */}
-      <div className="hidden lg:flex lg:w-1/2 hero-gradient relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 z-20 flex justify-end p-6 xl:p-8 pointer-events-none">
-          <div className="pointer-events-auto max-w-full">
-            <LoginPatrocinadoresBlock variant="onDark" />
-          </div>
-        </div>
+    <div className="relative flex min-h-screen min-h-[100dvh] flex-col overflow-x-hidden bg-[hsl(var(--navy))]">
+      <LoginBackground />
 
-        {/* Decorative circles */}
-        <div className="absolute inset-0">
-          <div className="absolute top-10 left-10 w-40 h-40 border-2 border-cyan/30 rounded-full" />
-          <div className="absolute top-20 left-20 w-60 h-60 border-2 border-azure/20 rounded-full" />
-          <div className="absolute bottom-20 right-10 w-48 h-48 border-2 border-cyan/30 rounded-full" />
-          <div className="absolute bottom-40 right-20 w-32 h-32 bg-cyan/10 rounded-full blur-xl" />
-          <div className="absolute top-1/2 left-1/4 w-20 h-20 border border-cyan/40 rounded-full animate-float" />
-          <div className="absolute top-1/3 right-1/4 w-16 h-16 border border-azure/40 rounded-full animate-float-delayed" />
-          
-          {/* Zigzag decorations */}
-          <svg className="absolute bottom-20 left-10 w-24 h-12 text-cyan/30" viewBox="0 0 100 50">
-            <path d="M0 25 L20 0 L40 25 L60 0 L80 25 L100 0" stroke="currentColor" strokeWidth="2" fill="none" />
-          </svg>
-          
-          {/* Dots pattern */}
-          <div className="absolute top-1/4 right-10 grid grid-cols-4 gap-2">
-            {[...Array(16)].map((_, i) => (
-              <div key={i} className="w-2 h-2 bg-cyan/30 rounded-full" />
-            ))}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
+      {/* Área principal: split */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-4 sm:px-6 sm:py-5 lg:flex-row lg:items-center lg:justify-center lg:gap-6 xl:gap-8 lg:px-8 xl:px-12 lg:py-4">
+        {/* Painel esquerdo — proposta de valor */}
+        <section className="relative flex w-full max-w-xl flex-col justify-center lg:max-w-lg lg:flex-1 lg:items-end xl:max-w-xl">
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -24 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.55 }}
+            className="w-full lg:max-w-xl"
           >
-            <h1 className="text-4xl xl:text-5xl font-bold text-primary-foreground mb-4 leading-tight">
-              Olá,<br />
-              <span className="text-cyan">bem-vindo!</span>
+            <Link to="/" className="mb-3 inline-flex items-center gap-3 sm:mb-4">
+              <img
+                src="/logobranca.png"
+                alt="TopERP"
+                className="h-14 w-auto object-contain sm:h-16 md:h-20 lg:h-24"
+              />
+            </Link>
+
+            <h1 className="font-[Manrope,system-ui,sans-serif] text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl xl:text-[2.25rem] xl:leading-[1.15]">
+              Gestão inteligente para quem{" "}
+              <span className="text-cyan">faz</span> acontecer.
             </h1>
 
-            <p className="text-primary-foreground/70 text-lg max-w-md">
-              Acesse sua conta para gerenciar seu negócio de forma inteligente e eficiente.
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-white/75 sm:text-base">
+              O TopERP conecta finanças, estoque, vendas e operações em uma plataforma
+              segura e intuitiva para o seu negócio crescer.
             </p>
-          </motion.div>
-        </div>
-      </div>
 
-      {/* Right Side - Login Form */}
-      <div className="relative w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-card">
-        <div className="absolute top-4 right-4 z-10 max-w-[calc(100%-1.5rem)] lg:hidden flex justify-end">
-          <LoginPatrocinadoresBlock variant="onLight" />
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-md max-lg:pt-40"
-        >
-          <Link 
-            to="/" 
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar ao início
-          </Link>
-
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            Acessar conta
-          </h2>
-          <p className="text-muted-foreground mb-8">
-            Digite suas credenciais para continuar
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground font-medium">
-                E-mail
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-12"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-foreground font-medium">
-                Senha
-              </Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-12 pr-12"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+              {HIGHLIGHTS.map((item, index) => (
+                <motion.div
+                  key={item.title}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.2 + index * 0.08 }}
+                  className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
+                  <item.icon className="mb-1.5 h-5 w-5 text-cyan" aria-hidden />
+                  <p className="text-sm font-semibold text-white">{item.title}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-white/60">
+                    {item.description}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </section>
+
+        {/* Painel direito — login */}
+        <section className="flex w-full max-w-lg shrink-0 flex-col justify-center sm:max-w-xl lg:w-auto lg:max-w-xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="w-full"
+          >
+            <motion.div className="rounded-2xl border border-white/40 bg-white/5 p-6 shadow-[0_8px_40px_rgba(0,0,0,0.25)] backdrop-blur-xl backdrop-saturate-150 sm:p-7">
+              <h2 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                Bem-vindo(a)!
+              </h2>
+              <p className="mt-1 text-sm text-white/70">
+                Faça login para acessar sua conta
+              </p>
+
+              <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-sm text-white/90">
+                    E-mail
+                  </Label>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-11 border border-white/40 bg-white/5 pl-10 text-sm text-white backdrop-blur-md placeholder:text-white/50 focus-visible:border-white/70 focus-visible:ring-white/30"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="password" className="text-sm text-white/90">
+                    Senha
+                  </Label>
+                  <div className="relative">
+                    <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" />
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-11 border border-white/40 bg-white/5 pl-10 pr-10 text-sm text-white backdrop-blur-md placeholder:text-white/50 focus-visible:border-white/70 focus-visible:ring-white/30"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/60 hover:text-white"
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-cyan hover:text-cyan/80"
+                  >
+                    Esqueceu sua senha?
+                  </button>
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="gradient"
+                  size="lg"
+                  className="h-12 w-full gap-2 border border-white/30 text-base font-semibold shadow-lg shadow-primary/20"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
                   ) : (
-                    <Eye className="w-5 h-5" />
+                    <>
+                      Entrar
+                      <ArrowRight className="h-4 w-4" />
+                    </>
                   )}
-                </button>
-              </div>
-            </div>
+                </Button>
+              </form>
 
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                className="text-sm text-primary hover:text-primary/80 transition-colors"
-              >
-                Esqueceu a senha?
-              </button>
-            </div>
+              <p className="mt-5 text-center text-xs text-white/60">
+                © {new Date().getFullYear()} TopERP. Todos os direitos reservados.
+              </p>
+            </motion.div>
 
-            <Button
-              type="submit"
-              variant="gradient"
-              size="lg"
-              className="w-full h-12"
-              disabled={isLoading}
+            <Link
+              to="/"
+              className="mt-4 flex items-center justify-center gap-1.5 text-sm text-white/50 transition-colors hover:text-white lg:hidden"
             >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-              ) : (
-                <>
-                  <LogIn className="w-5 h-5" />
-                  Entrar
-                </>
-              )}
-            </Button>
-          </form>
-
-          <p className="text-center text-muted-foreground text-sm mt-8">
-            © 2025 TopERP. Todos os direitos reservados.
-          </p>
-        </motion.div>
+              Voltar ao início
+            </Link>
+          </motion.div>
+        </section>
       </div>
+
+      <LoginSponsorsFooter />
     </div>
   );
 };
