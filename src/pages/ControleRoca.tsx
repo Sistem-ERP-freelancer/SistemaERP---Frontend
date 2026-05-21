@@ -102,20 +102,20 @@ import type {
     UpdateRocaDto
 } from '@/types/roca';
 import {
-    PORCENTAGEM_EMBALAGEM_PADRAO,
+    VALOR_DE_EMBA_PADRAO,
     calcValorParteMeeiroLiquido,
 } from '@/types/roca';
 
-function porcentagemEmbalagemPadraoDeMeeiro(
-  m: Pick<MeeiroRoca, 'porcentagem_embalagem_padrao' | 'porcentagemEmbalagemPadrao'> | {
-    porcentagem_embalagem_padrao?: number;
-    porcentagemEmbalagemPadrao?: number;
+function valorDeEmbaPadraoDeMeeiro(
+  m: Pick<MeeiroRoca, 'valor_de_emba_padrao' | 'valorDeEmbaPadrao'> | {
+    valor_de_emba_padrao?: number;
+    valorDeEmbaPadrao?: number;
   },
 ): number {
-  const v = m.porcentagem_embalagem_padrao ?? m.porcentagemEmbalagemPadrao;
+  const v = m.valor_de_emba_padrao ?? m.valorDeEmbaPadrao;
   return v != null && Number.isFinite(Number(v))
     ? Number(v)
-    : PORCENTAGEM_EMBALAGEM_PADRAO;
+    : VALOR_DE_EMBA_PADRAO;
 }
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -204,7 +204,7 @@ function maxAbaterEmprestimoResumoMeeiro(m: ResumoPagamentoMeeiro): number {
   const totalReceber = Number(m.totalReceber ?? 0);
   const valesEmb = Number(m.valesEmbalagem ?? 0);
   const totalEmp = Number(m.totalEmprestimosAbertos ?? 0);
-  const disponivel = Math.max(0, totalReceber - valesEmb);
+  const disponivel = totalReceber;
   return Math.min(Math.max(0, totalEmp), disponivel);
 }
 
@@ -232,12 +232,12 @@ function parsePagamentoMeeiroResumoForm(
   const totalReceber = Number(m.totalReceber ?? 0);
   const valesEmb = Number(m.valesEmbalagem ?? 0);
   const totalEmp = Number(m.totalEmprestimosAbertos ?? 0);
-  const disponivel = Math.max(0, totalReceber - valesEmb);
+  const disponivel = totalReceber;
   const maxAbater = Math.min(Math.max(0, totalEmp), disponivel);
   const vRaw = form.valorAbaterEmprestimo;
   const v = vRaw === '' ? 0 : Number(vRaw);
   const vSafe = Number.isFinite(v) ? Math.max(0, Math.min(v, maxAbater)) : 0;
-  const liquido = Math.max(0, totalReceber - valesEmb - vSafe);
+  const liquido = Math.max(0, totalReceber - vSafe);
   return {
     totalReceber,
     valesEmb,
@@ -675,7 +675,7 @@ export default function ControleRoca() {
     pixChave: '',
     endereco: '',
     porcentagem_padrao: 40,
-    porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
+    valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
     produtorId: 0,
   });
   const createMeeiro = useMutation({
@@ -694,7 +694,7 @@ export default function ControleRoca() {
         pixChave: '',
         endereco: '',
         porcentagem_padrao: 40,
-        porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
+        valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
         produtorId: 0,
       });
     },
@@ -716,7 +716,7 @@ export default function ControleRoca() {
       nome: string;
       produtorId: number;
       porcentagem_padrao: number;
-      porcentagem_embalagem_padrao: number;
+      valor_de_emba_padrao: number;
       pixChave?: string;
     }
   >({
@@ -728,7 +728,7 @@ export default function ControleRoca() {
     pixChave: '',
     endereco: '',
     porcentagem_padrao: 40,
-    porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
+    valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
     produtorId: 0,
   });
   const [openEmprestimo, setOpenEmprestimo] = useState(false);
@@ -1114,7 +1114,7 @@ export default function ControleRoca() {
         meeiroId: number;
         nome?: string;
         porcentagem: number;
-        porcentagem_embalagem: number;
+        valor_de_emba: number;
       }[];
     }[]
   >([]);
@@ -1151,10 +1151,10 @@ export default function ControleRoca() {
           meeiroId: m.meeiroId,
           nome: m.meeiroNome,
           porcentagem: m.porcentagem,
-          porcentagem_embalagem: Number(
-            m.porcentagem_embalagem ??
-              m.porcentagemEmbalagem ??
-              PORCENTAGEM_EMBALAGEM_PADRAO,
+          valor_de_emba: Number(
+            m.valor_de_emba ??
+              m.valorDeEmba ??
+              VALOR_DE_EMBA_PADRAO,
           ),
         })),
       }))
@@ -1211,7 +1211,7 @@ export default function ControleRoca() {
       meeiroId: number;
       nome?: string;
       porcentagem_padrao: number;
-      porcentagem_embalagem_padrao: number;
+      valor_de_emba_padrao: number;
     }[]
   >([]);
   const [lancMeeiroSelecionado, setLancMeeiroSelecionado] = useState('');
@@ -1227,7 +1227,7 @@ export default function ControleRoca() {
         meeiroId: number;
         nome?: string;
         porcentagem: number;
-        porcentagem_embalagem: number;
+        valor_de_emba: number;
       }[];
     }[]
   >([]);
@@ -1520,12 +1520,12 @@ export default function ControleRoca() {
       toast.error('Meeiro já adicionado');
       return;
     }
-    const pctEmb = porcentagemEmbalagemPadraoDeMeeiro(m);
+    const pctEmb = valorDeEmbaPadraoDeMeeiro(m);
     const novo = {
       meeiroId: Number(m.id),
       nome: m.nome,
       porcentagem_padrao: Number(m.porcentagem_padrao ?? 0),
-      porcentagem_embalagem_padrao: pctEmb,
+      valor_de_emba_padrao: pctEmb,
     };
     setLancMeeiros((prev) => [...prev, novo]);
     setLancProdutos((prev) =>
@@ -1537,7 +1537,7 @@ export default function ControleRoca() {
             meeiroId: novo.meeiroId,
             nome: novo.nome,
             porcentagem: novo.porcentagem_padrao,
-            porcentagem_embalagem: pctEmb,
+            valor_de_emba: pctEmb,
           },
         ],
       }))
@@ -1567,7 +1567,7 @@ export default function ControleRoca() {
       meeiroId: m.meeiroId,
       nome: m.nome,
       porcentagem: m.porcentagem_padrao,
-      porcentagem_embalagem: m.porcentagem_embalagem_padrao,
+      valor_de_emba: m.valor_de_emba_padrao,
     }));
     setLancProdutos((prev) => [
       ...prev,
@@ -1611,8 +1611,8 @@ export default function ControleRoca() {
         meeiros: p.meeiros.map((m) => ({
           meeiroId: m.meeiroId,
           porcentagem: Number(m.porcentagem ?? 0),
-          porcentagem_embalagem: Number(
-            m.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+          valor_de_emba: Number(
+            m.valor_de_emba ?? VALOR_DE_EMBA_PADRAO,
           ),
         })),
       })),
@@ -3636,7 +3636,7 @@ export default function ControleRoca() {
                       <TableHead>CPF</TableHead>
                       <TableHead>Telefone</TableHead>
                       <TableHead>% padrão</TableHead>
-                      <TableHead>% emb.</TableHead>
+                      <TableHead>Valor emba</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -3665,7 +3665,7 @@ export default function ControleRoca() {
                           <TableCell>{m.telefone || '—'}</TableCell>
                           <TableCell>{m.porcentagem_padrao}%</TableCell>
                           <TableCell>
-                            {porcentagemEmbalagemPadraoDeMeeiro(m)}%
+                            {formatCurrency(valorDeEmbaPadraoDeMeeiro(m))}
                           </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
@@ -3705,8 +3705,8 @@ export default function ControleRoca() {
                                       pixChave: m.pixChave ?? '',
                                       endereco: m.endereco ?? '',
                                       porcentagem_padrao: m.porcentagem_padrao,
-                                      porcentagem_embalagem_padrao:
-                                        porcentagemEmbalagemPadraoDeMeeiro(m),
+                                      valor_de_emba_padrao:
+                                        valorDeEmbaPadraoDeMeeiro(m),
                                       produtorId: m.produtorId,
                                     });
                                     setOpenEditMeeiro(true);
@@ -4415,7 +4415,7 @@ className={
                       <TableHead className="min-w-[5rem] w-[8%] whitespace-nowrap text-right px-2">Valor Unit.</TableHead>
                       <TableHead className="min-w-[7rem] w-[14%] whitespace-nowrap px-2 text-center">Meeiro</TableHead>
                       <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">% meeiro</TableHead>
-                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">% emb.</TableHead>
+                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">R$ emba</TableHead>
                       <TableHead className="min-w-[7.5rem] w-[11%] text-right whitespace-nowrap px-2 sm:px-3">
                         <span className="lg:hidden">V. meeiro</span>
                         <span className="hidden lg:inline">Valor do meeiro</span>
@@ -4503,12 +4503,13 @@ className={
                                 ? '—'
                                 : meeirosDoItem.map((m, i) => (
                                     <div key={i}>
-                                      {Number(
-                                        m.porcentagem_embalagem ??
-                                          m.porcentagemEmbalagem ??
-                                          PORCENTAGEM_EMBALAGEM_PADRAO,
+                                      {formatCurrency(
+                                        Number(
+                                          m.valor_de_emba ??
+                                            m.valorDeEmba ??
+                                            VALOR_DE_EMBA_PADRAO,
+                                        ),
                                       )}
-                                      %
                                     </div>
                                   ))}
                             </TableCell>
@@ -4768,7 +4769,7 @@ className={
                                             <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-6 gap-y-1 text-sm text-muted-foreground items-baseline">
                                               <span className="font-medium text-foreground/80">Meeiro</span>
                                               <span className="font-medium text-foreground/80 text-right">% meeiro</span>
-                                              <span className="font-medium text-foreground/80 text-right">% emb.</span>
+                                              <span className="font-medium text-foreground/80 text-right">R$ emba</span>
                                               <span className="font-medium text-foreground/80 text-right">Valor</span>
                                               {(item.meeiros ?? []).length === 0 ? (
                                                 <span className="col-span-4 text-muted-foreground">—</span>
@@ -4779,12 +4780,13 @@ className={
                                                       <span>{m.meeiroNome ?? m.meeiroId}</span>
                                                       <span className="text-right">{m.porcentagem}%</span>
                                                       <span className="text-right">
-                                                        {Number(
-                                                          m.porcentagem_embalagem ??
-                                                            m.porcentagemEmbalagem ??
-                                                            PORCENTAGEM_EMBALAGEM_PADRAO,
+                                                        {formatCurrency(
+                                                          Number(
+                                                            m.valor_de_emba ??
+                                                              m.valorDeEmba ??
+                                                              VALOR_DE_EMBA_PADRAO,
+                                                          ),
                                                         )}
-                                                        %
                                                       </span>
                                                       <span className="text-right">{formatCurrency(m.valor_parte)}</span>
                                                     </React.Fragment>
@@ -4984,7 +4986,7 @@ className={
                                   const id = Number(editLancMeeiroSelecionado);
                                   const m = meeirosParaEdit.find((x) => Number(x.id) === id);
                                   if (!m) return;
-                                  const pctEmb = porcentagemEmbalagemPadraoDeMeeiro(m);
+                                  const pctEmb = valorDeEmbaPadraoDeMeeiro(m);
                                   setEditLancMeeiros((prev) => [
                                     ...prev,
                                     {
@@ -5002,7 +5004,7 @@ className={
                                           meeiroId: m.id,
                                           nome: m.nome,
                                           porcentagem: m.porcentagem_padrao,
-                                          porcentagem_embalagem: pctEmb,
+                                          valor_de_emba: pctEmb,
                                         },
                                       ],
                                     }))
@@ -5100,17 +5102,18 @@ className={
                                   {(item.meeiros ?? []).length > 0 && (
                                     <div className="rounded-lg bg-muted/30 p-3 space-y-2">
                                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                        Porcentagem e embalagem por meeiro
+                                        Porcentagem e valor de emba por meeiro
                                       </p>
                                       <div className="flex flex-col gap-3">
                                         {(item.meeiros ?? []).map((mm) => {
-                                          const pctEmb = Number(
-                                            mm.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+                                          const valorEmb = Number(
+                                            mm.valor_de_emba ?? VALOR_DE_EMBA_PADRAO,
                                           );
                                           const valorParte = calcValorParteMeeiroLiquido(
                                             valorItem,
                                             Number(mm.porcentagem ?? 0),
-                                            pctEmb,
+                                            item.quantidade,
+                                            valorEmb,
                                           );
                                           return (
                                             <div
@@ -5150,20 +5153,19 @@ className={
                                               <Input
                                                 type="number"
                                                 min={0}
-                                                max={100}
-                                                step="0.1"
-                                                placeholder="1.8"
-                                                className="w-20 h-9 text-center tabular-nums"
+                                                step="0.01"
+                                                placeholder="1.20"
+                                                className="w-24 h-9 text-center tabular-nums"
                                                 value={
-                                                  mm.porcentagem_embalagem !== undefined &&
-                                                  mm.porcentagem_embalagem !== null
-                                                    ? String(mm.porcentagem_embalagem)
+                                                  mm.valor_de_emba !== undefined &&
+                                                  mm.valor_de_emba !== null
+                                                    ? String(mm.valor_de_emba)
                                                     : ''
                                                 }
                                                 onChange={(e) => {
                                                   const v =
                                                     e.target.value === ''
-                                                      ? PORCENTAGEM_EMBALAGEM_PADRAO
+                                                      ? VALOR_DE_EMBA_PADRAO
                                                       : Number(e.target.value);
                                                   setEditLancProdutos((prev) =>
                                                     prev.map((p, i) =>
@@ -5173,7 +5175,7 @@ className={
                                                             ...p,
                                                             meeiros: (p.meeiros ?? []).map((mmm) =>
                                                               mmm.meeiroId === mm.meeiroId
-                                                                ? { ...mmm, porcentagem_embalagem: v }
+                                                                ? { ...mmm, valor_de_emba: v }
                                                                 : mmm
                                                             ),
                                                           }
@@ -5181,7 +5183,7 @@ className={
                                                   );
                                                 }}
                                               />
-                                              <span className="text-muted-foreground">% emb.</span>
+                                              <span className="text-muted-foreground">R$ emba/un</span>
                                               <span className="text-muted-foreground tabular-nums">
                                                 = {formatCurrency(valorParte)}
                                               </span>
@@ -5210,9 +5212,9 @@ className={
                                     meeiroId: m.meeiroId,
                                     nome: m.nome,
                                     porcentagem: Number(m.porcentagem ?? 0),
-                                    porcentagem_embalagem: meeiroRef
-                                      ? porcentagemEmbalagemPadraoDeMeeiro(meeiroRef)
-                                      : PORCENTAGEM_EMBALAGEM_PADRAO,
+                                    valor_de_emba: meeiroRef
+                                      ? valorDeEmbaPadraoDeMeeiro(meeiroRef)
+                                      : VALOR_DE_EMBA_PADRAO,
                                   };
                                 });
                                 setEditLancProdutos((prev) => [
@@ -5291,8 +5293,8 @@ className={
                                     meeiros: (p.meeiros ?? []).map((m) => ({
                                       meeiroId: m.meeiroId,
                                       porcentagem: Number(m.porcentagem ?? 0),
-                                      porcentagem_embalagem: Number(
-                                        m.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+                                      valor_de_emba: Number(
+                                        m.valor_de_emba ?? VALOR_DE_EMBA_PADRAO,
                                       ),
                                     })),
                                   })),
@@ -9509,7 +9511,7 @@ className={
               pixChave: '',
               endereco: '',
               porcentagem_padrao: 40,
-              porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
+              valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
               produtorId: 0,
             });
           }
@@ -9667,24 +9669,23 @@ className={
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <ClipboardList className="w-4 h-4 text-muted-foreground" />
-                      Porcentagem da embalagem (%)
+                      Valor de emba (R$)
                     </Label>
                     <Input
                       type="number"
                       min={0}
-                      max={100}
-                      step="0.1"
-                      placeholder="1.8"
+                      step="0.01"
+                      placeholder="1.20"
                       value={
-                        formMeeiro.porcentagem_embalagem_padrao === 0
+                        formMeeiro.valor_de_emba_padrao === 0
                           ? ''
-                          : formMeeiro.porcentagem_embalagem_padrao
+                          : formMeeiro.valor_de_emba_padrao
                       }
                       onChange={(e) => {
                         const val = e.target.value;
                         setFormMeeiro((p) => ({
                           ...p,
-                          porcentagem_embalagem_padrao:
+                          valor_de_emba_padrao:
                             val === '' ? 0 : Number(val),
                         }));
                       }}
@@ -9834,9 +9835,9 @@ className={
                       <p className="font-medium text-base">{detailMeeiro.porcentagem_padrao ?? 0}%</p>
                     </div>
                     <div className="space-y-3">
-                      <Label className="text-sm text-muted-foreground">Porcentagem da embalagem (%)</Label>
+                      <Label className="text-sm text-muted-foreground">Valor de emba (R$)</Label>
                       <p className="font-medium text-base">
-                        {porcentagemEmbalagemPadraoDeMeeiro(detailMeeiro)}%
+                        {formatCurrency(valorDeEmbaPadraoDeMeeiro(detailMeeiro))}
                       </p>
                     </div>
                     <div className="space-y-3">
@@ -10041,8 +10042,8 @@ className={
                         pixChave: detailMeeiro.pixChave ?? '',
                         endereco: detailMeeiro.endereco ?? '',
                         porcentagem_padrao: detailMeeiro.porcentagem_padrao,
-                        porcentagem_embalagem_padrao:
-                          porcentagemEmbalagemPadraoDeMeeiro(detailMeeiro),
+                        valor_de_emba_padrao:
+                          valorDeEmbaPadraoDeMeeiro(detailMeeiro),
                         produtorId: detailMeeiro.produtorId,
                       });
                       setOpenEditMeeiro(true);
@@ -10347,24 +10348,23 @@ className={
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <ClipboardList className="w-4 h-4 text-muted-foreground" />
-                        Porcentagem da embalagem (%)
+                        Valor de emba (R$)
                       </Label>
                       <Input
                         type="number"
                         min={0}
-                        max={100}
-                        step="0.1"
-                        placeholder="1.8"
+                        step="0.01"
+                        placeholder="1.20"
                         value={
-                          formEditMeeiro.porcentagem_embalagem_padrao === 0
+                          formEditMeeiro.valor_de_emba_padrao === 0
                             ? ''
-                            : formEditMeeiro.porcentagem_embalagem_padrao ?? ''
+                            : formEditMeeiro.valor_de_emba_padrao ?? ''
                         }
                         onChange={(e) => {
                           const val = e.target.value;
                           setFormEditMeeiro((p) => ({
                             ...p,
-                            porcentagem_embalagem_padrao: val === '' ? 0 : Number(val),
+                            valor_de_emba_padrao: val === '' ? 0 : Number(val),
                           }));
                         }}
                       />
@@ -10447,9 +10447,9 @@ className={
                       endereco: formEditMeeiro.endereco || undefined,
                       porcentagem_padrao:
                         formEditMeeiro.porcentagem_padrao ?? editMeeiro.porcentagem_padrao,
-                      porcentagem_embalagem_padrao:
-                        formEditMeeiro.porcentagem_embalagem_padrao ??
-                        porcentagemEmbalagemPadraoDeMeeiro(editMeeiro),
+                      valor_de_emba_padrao:
+                        formEditMeeiro.valor_de_emba_padrao ??
+                        valorDeEmbaPadraoDeMeeiro(editMeeiro),
                       produtorId: formEditMeeiro.produtorId || editMeeiro.produtorId,
                     },
                   });
@@ -10677,7 +10677,7 @@ className={
                         const totalReceberRel = Number(meeiroParaPagar.totalReceber ?? 0);
                         const valesEmbRel = Number(meeiroParaPagar.valesEmbalagem ?? 0);
                         const totalEmpRel = Number(meeiroParaPagar.totalEmprestimosAbertos ?? 0);
-                        const disponivelRel = Math.max(0, totalReceberRel - valesEmbRel);
+                        const disponivelRel = totalReceberRel;
                         const maxAbaterRel = Math.min(Math.max(0, totalEmpRel), disponivelRel);
                         const vRawRel = formPagamento.valorAbaterEmprestimo;
                         const vRel = vRawRel === '' ? 0 : Number(vRawRel);
@@ -10798,7 +10798,7 @@ className={
                   const abatUltimo = Number(m.ultimoPagamentoValorAbatidoEmprestimo ?? 0);
 
                   /** Mesma regra do backend para o último pagamento: remanescente atual − embalagem − abatido no registro. */
-                  const maxDescEmprest = Math.max(0, trGrade - valesGrade - abatUltimo);
+                  const maxDescEmprest = Math.max(0, trGrade - abatUltimo);
 
                   return (
                     <>
@@ -10953,7 +10953,6 @@ className={
                   const maxDescEmprest = Math.max(
                     0,
                     Number(m.totalReceber ?? 0) -
-                      Number(m.valesEmbalagem ?? 0) -
                       Number(m.ultimoPagamentoValorAbatidoEmprestimo ?? 0),
                   );
                   const rawDesc = formEditarPagamento.descEmprest.trim();
@@ -11405,16 +11404,17 @@ className={
                         {item.meeiros.length > 0 && (
                           <div className="space-y-2 pt-3 border-t border-border/40">
                             <p className="text-xs font-medium text-muted-foreground">
-                              Porcentagem do meeiro e da embalagem (sobre o valor deste produto)
+                              Porcentagem do meeiro e valor de emba por unidade (sobre este produto)
                             </p>
                             {item.meeiros.map((m) => {
-                              const pctEmb = Number(
-                                m.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+                              const valorEmb = Number(
+                                m.valor_de_emba ?? VALOR_DE_EMBA_PADRAO,
                               );
                               const valorParte = calcValorParteMeeiroLiquido(
                                 valorItem,
                                 Number(m.porcentagem ?? 0),
-                                pctEmb,
+                                item.quantidade,
+                                valorEmb,
                               );
                               return (
                                 <div
@@ -11456,20 +11456,19 @@ className={
                                     <Input
                                       type="number"
                                       min={0}
-                                      max={100}
-                                      step="0.1"
-                                      placeholder="1.8"
-                                      className="w-20 h-9 text-center tabular-nums"
+                                      step="0.01"
+                                      placeholder="1.20"
+                                      className="w-24 h-9 text-center tabular-nums"
                                       value={
-                                        m.porcentagem_embalagem !== undefined &&
-                                        m.porcentagem_embalagem !== null
-                                          ? String(m.porcentagem_embalagem)
+                                        m.valor_de_emba !== undefined &&
+                                        m.valor_de_emba !== null
+                                          ? String(m.valor_de_emba)
                                           : ''
                                       }
                                       onChange={(e) => {
                                         const v =
                                           e.target.value === ''
-                                            ? PORCENTAGEM_EMBALAGEM_PADRAO
+                                            ? VALOR_DE_EMBA_PADRAO
                                             : Number(e.target.value);
                                         setLancProdutos((prev) =>
                                           prev.map((p, i) =>
@@ -11479,7 +11478,7 @@ className={
                                                   ...p,
                                                   meeiros: p.meeiros.map((mm) =>
                                                     mm.meeiroId === m.meeiroId
-                                                      ? { ...mm, porcentagem_embalagem: v }
+                                                      ? { ...mm, valor_de_emba: v }
                                                       : mm
                                                   ),
                                                 }
@@ -11487,7 +11486,7 @@ className={
                                         );
                                       }}
                                     />
-                                    <span className="text-muted-foreground text-xs">% emb.</span>
+                                    <span className="text-muted-foreground text-xs">R$ emba/un</span>
                                   </div>
                                   <span className="text-muted-foreground tabular-nums whitespace-nowrap">
                                     = {formatCurrency(valorParte)}

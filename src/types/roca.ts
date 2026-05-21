@@ -2,17 +2,19 @@
  * Tipos do módulo Controle de Roça (produtor, roça, meeiro, produto, lançamento).
  */
 
-/** Porcentagem padrão da embalagem (desconto sobre a parte bruta do meeiro). */
-export const PORCENTAGEM_EMBALAGEM_PADRAO = 1.8;
+/** Valor de emba por unidade (R$) quando o meeiro não define outro. */
+export const VALOR_DE_EMBA_PADRAO = 1.2;
 
-/** Valor líquido do meeiro: bruto (valor × % meeiro) menos % embalagem sobre o bruto. */
+/** Valor líquido do meeiro: bruto (valor × % meeiro) menos (valor de emba × quantidade). */
 export function calcValorParteMeeiroLiquido(
   valorItem: number,
   pctMeeiro: number,
-  pctEmbalagem: number,
+  quantidade: number,
+  valorDeEmba: number,
 ): number {
   const bruto = (valorItem * pctMeeiro) / 100;
-  return Math.round(bruto * (1 - pctEmbalagem / 100) * 100) / 100;
+  const descontoEmba = quantidade * valorDeEmba;
+  return Math.round((bruto - descontoEmba) * 100) / 100;
 }
 
 export interface ProdutorRoca {
@@ -116,9 +118,9 @@ export interface MeeiroRoca {
   endereco?: string;
   inscricaoEstadual?: string | null;
   porcentagem_padrao: number;
-  /** Padrão de % embalagem (snake_case API ou camelCase). */
-  porcentagem_embalagem_padrao?: number;
-  porcentagemEmbalagemPadrao?: number;
+  /** Valor de emba por unidade (R$) no cadastro do meeiro. */
+  valor_de_emba_padrao?: number;
+  valorDeEmbaPadrao?: number;
   produtorId: number;
   criadoEm?: string;
   atualizadoEm?: string;
@@ -159,8 +161,8 @@ export interface CreateMeeiroRocaDto {
   endereco?: string;
   inscricaoEstadual?: string;
   porcentagem_padrao: number;
-  /** Se omitido, o backend usa 1,8%. */
-  porcentagem_embalagem_padrao?: number;
+  /** Se omitido, o backend usa R$ 1,20 por unidade. */
+  valor_de_emba_padrao?: number;
   produtorId: number;
 }
 
@@ -174,7 +176,7 @@ export interface UpdateMeeiroRocaDto {
   endereco?: string;
   inscricaoEstadual?: string | null;
   porcentagem_padrao?: number;
-  porcentagem_embalagem_padrao?: number;
+  valor_de_emba_padrao?: number;
   produtorId?: number;
 }
 
@@ -382,7 +384,7 @@ export interface CreateProdutoRocaDto {
 export interface LancamentoProducaoRocaMeeiroDto {
   meeiroId: number;
   porcentagem?: number;
-  porcentagem_embalagem?: number;
+  valor_de_emba?: number;
 }
 
 export interface LancamentoProducaoRocaProdutoDto {
@@ -440,8 +442,8 @@ export interface LancamentoMeeiroRoca {
   meeiroId: number;
   meeiroNome?: string;
   porcentagem: number;
-  porcentagem_embalagem?: number;
-  porcentagemEmbalagem?: number;
+  valor_de_emba?: number;
+  valorDeEmba?: number;
   valor_parte: number;
 }
 
@@ -466,8 +468,8 @@ export interface LinhaRelatorioMeeiro {
   valor_total: number;
   /** Porcentagem do meeiro sobre o valor deste item (vindo da API) */
   porcentagem?: number;
-  porcentagemEmbalagem?: number;
-  porcentagem_embalagem?: number;
+  valorDeEmba?: number;
+  valor_de_emba?: number;
   /** Valor que o meeiro recebe neste item (camelCase ou valor_parte em snake_case) */
   valorParte?: number;
   valor_parte?: number;
