@@ -101,6 +101,22 @@ import type {
     UpdateProdutorRocaDto,
     UpdateRocaDto
 } from '@/types/roca';
+import {
+    PORCENTAGEM_EMBALAGEM_PADRAO,
+    calcValorParteMeeiroLiquido,
+} from '@/types/roca';
+
+function porcentagemEmbalagemPadraoDeMeeiro(
+  m: Pick<MeeiroRoca, 'porcentagem_embalagem_padrao' | 'porcentagemEmbalagemPadrao'> | {
+    porcentagem_embalagem_padrao?: number;
+    porcentagemEmbalagemPadrao?: number;
+  },
+): number {
+  const v = m.porcentagem_embalagem_padrao ?? m.porcentagemEmbalagemPadrao;
+  return v != null && Number.isFinite(Number(v))
+    ? Number(v)
+    : PORCENTAGEM_EMBALAGEM_PADRAO;
+}
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle,
@@ -659,6 +675,7 @@ export default function ControleRoca() {
     pixChave: '',
     endereco: '',
     porcentagem_padrao: 40,
+    porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
     produtorId: 0,
   });
   const createMeeiro = useMutation({
@@ -677,6 +694,7 @@ export default function ControleRoca() {
         pixChave: '',
         endereco: '',
         porcentagem_padrao: 40,
+        porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
         produtorId: 0,
       });
     },
@@ -694,7 +712,13 @@ export default function ControleRoca() {
   const [editMeeiro, setEditMeeiro] = useState<MeeiroRoca | null>(null);
   const [openEditMeeiro, setOpenEditMeeiro] = useState(false);
   const [formEditMeeiro, setFormEditMeeiro] = useState<
-    UpdateMeeiroRocaDto & { nome: string; produtorId: number; porcentagem_padrao: number; pixChave?: string }
+    UpdateMeeiroRocaDto & {
+      nome: string;
+      produtorId: number;
+      porcentagem_padrao: number;
+      porcentagem_embalagem_padrao: number;
+      pixChave?: string;
+    }
   >({
     codigo: '',
     nome: '',
@@ -704,6 +728,7 @@ export default function ControleRoca() {
     pixChave: '',
     endereco: '',
     porcentagem_padrao: 40,
+    porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
     produtorId: 0,
   });
   const [openEmprestimo, setOpenEmprestimo] = useState(false);
@@ -1085,7 +1110,12 @@ export default function ControleRoca() {
       quantidade: number;
       preco_unitario: number;
       nome?: string;
-      meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
+      meeiros: {
+        meeiroId: number;
+        nome?: string;
+        porcentagem: number;
+        porcentagem_embalagem: number;
+      }[];
     }[]
   >([]);
   useEffect(() => {
@@ -1121,6 +1151,11 @@ export default function ControleRoca() {
           meeiroId: m.meeiroId,
           nome: m.meeiroNome,
           porcentagem: m.porcentagem,
+          porcentagem_embalagem: Number(
+            m.porcentagem_embalagem ??
+              m.porcentagemEmbalagem ??
+              PORCENTAGEM_EMBALAGEM_PADRAO,
+          ),
         })),
       }))
     );
@@ -1172,7 +1207,12 @@ export default function ControleRoca() {
   const [lancData, setLancData] = useState('');
   const [lancRocaId, setLancRocaId] = useState<number | ''>('');
   const [lancMeeiros, setLancMeeiros] = useState<
-    { meeiroId: number; nome?: string; porcentagem_padrao: number }[]
+    {
+      meeiroId: number;
+      nome?: string;
+      porcentagem_padrao: number;
+      porcentagem_embalagem_padrao: number;
+    }[]
   >([]);
   const [lancMeeiroSelecionado, setLancMeeiroSelecionado] = useState('');
   const [lancMeeiroPopoverOpen, setLancMeeiroPopoverOpen] = useState(false);
@@ -1183,7 +1223,12 @@ export default function ControleRoca() {
       quantidade: number;
       preco_unitario: number;
       nome?: string;
-      meeiros: { meeiroId: number; nome?: string; porcentagem: number }[];
+      meeiros: {
+        meeiroId: number;
+        nome?: string;
+        porcentagem: number;
+        porcentagem_embalagem: number;
+      }[];
     }[]
   >([]);
   // Lista unificada: todos os produtos do sistema (roça + módulo Produtos) para usar no lançamento
@@ -1475,16 +1520,26 @@ export default function ControleRoca() {
       toast.error('Meeiro já adicionado');
       return;
     }
+    const pctEmb = porcentagemEmbalagemPadraoDeMeeiro(m);
     const novo = {
       meeiroId: Number(m.id),
       nome: m.nome,
       porcentagem_padrao: Number(m.porcentagem_padrao ?? 0),
+      porcentagem_embalagem_padrao: pctEmb,
     };
     setLancMeeiros((prev) => [...prev, novo]);
     setLancProdutos((prev) =>
       prev.map((p) => ({
         ...p,
-        meeiros: [...p.meeiros, { meeiroId: novo.meeiroId, nome: novo.nome, porcentagem: novo.porcentagem_padrao }],
+        meeiros: [
+          ...p.meeiros,
+          {
+            meeiroId: novo.meeiroId,
+            nome: novo.nome,
+            porcentagem: novo.porcentagem_padrao,
+            porcentagem_embalagem: pctEmb,
+          },
+        ],
       }))
     );
     setLancMeeiroSelecionado('');
@@ -1512,6 +1567,7 @@ export default function ControleRoca() {
       meeiroId: m.meeiroId,
       nome: m.nome,
       porcentagem: m.porcentagem_padrao,
+      porcentagem_embalagem: m.porcentagem_embalagem_padrao,
     }));
     setLancProdutos((prev) => [
       ...prev,
@@ -1555,6 +1611,9 @@ export default function ControleRoca() {
         meeiros: p.meeiros.map((m) => ({
           meeiroId: m.meeiroId,
           porcentagem: Number(m.porcentagem ?? 0),
+          porcentagem_embalagem: Number(
+            m.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+          ),
         })),
       })),
     });
@@ -3577,13 +3636,14 @@ export default function ControleRoca() {
                       <TableHead>CPF</TableHead>
                       <TableHead>Telefone</TableHead>
                       <TableHead>% padrão</TableHead>
+                      <TableHead>% emb.</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {meeirosOrdenados.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           Nenhum meeiro cadastrado
                         </TableCell>
                       </TableRow>
@@ -3604,6 +3664,9 @@ export default function ControleRoca() {
                           <TableCell>{m.cpf || '—'}</TableCell>
                           <TableCell>{m.telefone || '—'}</TableCell>
                           <TableCell>{m.porcentagem_padrao}%</TableCell>
+                          <TableCell>
+                            {porcentagemEmbalagemPadraoDeMeeiro(m)}%
+                          </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -3642,6 +3705,8 @@ export default function ControleRoca() {
                                       pixChave: m.pixChave ?? '',
                                       endereco: m.endereco ?? '',
                                       porcentagem_padrao: m.porcentagem_padrao,
+                                      porcentagem_embalagem_padrao:
+                                        porcentagemEmbalagemPadraoDeMeeiro(m),
                                       produtorId: m.produtorId,
                                     });
                                     setOpenEditMeeiro(true);
@@ -4349,7 +4414,8 @@ className={
                       <TableHead className="min-w-[3rem] w-[5%] whitespace-nowrap px-1 text-center">Qtde</TableHead>
                       <TableHead className="min-w-[5rem] w-[8%] whitespace-nowrap text-right px-2">Valor Unit.</TableHead>
                       <TableHead className="min-w-[7rem] w-[14%] whitespace-nowrap px-2 text-center">Meeiro</TableHead>
-                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">%</TableHead>
+                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">% meeiro</TableHead>
+                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">% emb.</TableHead>
                       <TableHead className="min-w-[7.5rem] w-[11%] text-right whitespace-nowrap px-2 sm:px-3">
                         <span className="lg:hidden">V. meeiro</span>
                         <span className="hidden lg:inline">Valor do meeiro</span>
@@ -4428,13 +4494,23 @@ className={
                             <TableCell className="text-center whitespace-nowrap py-2 px-2 tabular-nums">
                               {meeirosDoItem.length === 0
                                 ? '—'
-                                : meeirosDoItem.map((m, i) => {
-                                    const pct =
-                                      valorTotalItem > 0 && (m.valor_parte != null)
-                                        ? Math.round((Number(m.valor_parte) / valorTotalItem) * 100)
-                                        : 0;
-                                    return <div key={i}>{pct}%</div>;
-                                  })}
+                                : meeirosDoItem.map((m, i) => (
+                                    <div key={i}>{m.porcentagem ?? 0}%</div>
+                                  ))}
+                            </TableCell>
+                            <TableCell className="text-center whitespace-nowrap py-2 px-2 tabular-nums">
+                              {meeirosDoItem.length === 0
+                                ? '—'
+                                : meeirosDoItem.map((m, i) => (
+                                    <div key={i}>
+                                      {Number(
+                                        m.porcentagem_embalagem ??
+                                          m.porcentagemEmbalagem ??
+                                          PORCENTAGEM_EMBALAGEM_PADRAO,
+                                      )}
+                                      %
+                                    </div>
+                                  ))}
                             </TableCell>
                             <TableCell className="text-right whitespace-nowrap px-2 sm:px-3 tabular-nums">
                               {meeirosDoItem.length === 0
@@ -4689,18 +4765,27 @@ className={
                                       <TableRow>
                                         <TableCell colSpan={6} className="bg-muted/30 p-0">
                                           <div className="px-4 py-3 border-t border-border/50">
-                                            <div className="grid grid-cols-[auto_1fr_1fr] gap-x-6 gap-y-1 text-sm text-muted-foreground items-baseline">
+                                            <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-6 gap-y-1 text-sm text-muted-foreground items-baseline">
                                               <span className="font-medium text-foreground/80">Meeiro</span>
-                                              <span className="font-medium text-foreground/80 text-right">Porcentagem</span>
+                                              <span className="font-medium text-foreground/80 text-right">% meeiro</span>
+                                              <span className="font-medium text-foreground/80 text-right">% emb.</span>
                                               <span className="font-medium text-foreground/80 text-right">Valor</span>
                                               {(item.meeiros ?? []).length === 0 ? (
-                                                <span className="col-span-3 text-muted-foreground">—</span>
+                                                <span className="col-span-4 text-muted-foreground">—</span>
                                               ) : (
                                                 <>
                                                   {(item.meeiros ?? []).map((m, j) => (
                                                     <React.Fragment key={j}>
                                                       <span>{m.meeiroNome ?? m.meeiroId}</span>
                                                       <span className="text-right">{m.porcentagem}%</span>
+                                                      <span className="text-right">
+                                                        {Number(
+                                                          m.porcentagem_embalagem ??
+                                                            m.porcentagemEmbalagem ??
+                                                            PORCENTAGEM_EMBALAGEM_PADRAO,
+                                                        )}
+                                                        %
+                                                      </span>
                                                       <span className="text-right">{formatCurrency(m.valor_parte)}</span>
                                                     </React.Fragment>
                                                   ))}
@@ -4899,6 +4984,7 @@ className={
                                   const id = Number(editLancMeeiroSelecionado);
                                   const m = meeirosParaEdit.find((x) => Number(x.id) === id);
                                   if (!m) return;
+                                  const pctEmb = porcentagemEmbalagemPadraoDeMeeiro(m);
                                   setEditLancMeeiros((prev) => [
                                     ...prev,
                                     {
@@ -4916,6 +5002,7 @@ className={
                                           meeiroId: m.id,
                                           nome: m.nome,
                                           porcentagem: m.porcentagem_padrao,
+                                          porcentagem_embalagem: pctEmb,
                                         },
                                       ],
                                     }))
@@ -5012,14 +5099,23 @@ className={
                                   </div>
                                   {(item.meeiros ?? []).length > 0 && (
                                     <div className="rounded-lg bg-muted/30 p-3 space-y-2">
-                                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Porcentagem por meeiro</p>
-                                      <div className="flex flex-wrap gap-4">
+                                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                        Porcentagem e embalagem por meeiro
+                                      </p>
+                                      <div className="flex flex-col gap-3">
                                         {(item.meeiros ?? []).map((mm) => {
-                                          const valorParte = (valorItem * (mm.porcentagem ?? 0)) / 100;
+                                          const pctEmb = Number(
+                                            mm.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+                                          );
+                                          const valorParte = calcValorParteMeeiroLiquido(
+                                            valorItem,
+                                            Number(mm.porcentagem ?? 0),
+                                            pctEmb,
+                                          );
                                           return (
                                             <div
                                               key={mm.meeiroId}
-                                              className="flex items-center gap-2 text-sm"
+                                              className="flex flex-wrap items-center gap-2 text-sm"
                                             >
                                               <span className="text-muted-foreground min-w-[70px]">
                                                 {mm.nome ?? mm.meeiroId}:
@@ -5050,7 +5146,45 @@ className={
                                                   );
                                                 }}
                                               />
-                                              <span className="text-muted-foreground">% = {formatCurrency(valorParte)}</span>
+                                              <span className="text-muted-foreground">% meeiro</span>
+                                              <Input
+                                                type="number"
+                                                min={0}
+                                                max={100}
+                                                step="0.1"
+                                                placeholder="1.8"
+                                                className="w-20 h-9 text-center tabular-nums"
+                                                value={
+                                                  mm.porcentagem_embalagem !== undefined &&
+                                                  mm.porcentagem_embalagem !== null
+                                                    ? String(mm.porcentagem_embalagem)
+                                                    : ''
+                                                }
+                                                onChange={(e) => {
+                                                  const v =
+                                                    e.target.value === ''
+                                                      ? PORCENTAGEM_EMBALAGEM_PADRAO
+                                                      : Number(e.target.value);
+                                                  setEditLancProdutos((prev) =>
+                                                    prev.map((p, i) =>
+                                                      i !== idx
+                                                        ? p
+                                                        : {
+                                                            ...p,
+                                                            meeiros: (p.meeiros ?? []).map((mmm) =>
+                                                              mmm.meeiroId === mm.meeiroId
+                                                                ? { ...mmm, porcentagem_embalagem: v }
+                                                                : mmm
+                                                            ),
+                                                          }
+                                                    )
+                                                  );
+                                                }}
+                                              />
+                                              <span className="text-muted-foreground">% emb.</span>
+                                              <span className="text-muted-foreground tabular-nums">
+                                                = {formatCurrency(valorParte)}
+                                              </span>
                                             </div>
                                           );
                                         })}
@@ -5068,11 +5202,19 @@ className={
                                 const p = produtosDisponiveisEdit.find(
                                   (x) => Number(x.id) === Number(produtoId)
                                 ) as { id: number; nome?: string } | undefined;
-                                const meeirosDoProduto = editLancMeeiros.map((m) => ({
-                                  meeiroId: m.meeiroId,
-                                  nome: m.nome,
-                                  porcentagem: Number(m.porcentagem ?? 0),
-                                }));
+                                const meeirosDoProduto = editLancMeeiros.map((m) => {
+                                  const meeiroRef = meeirosParaEdit.find(
+                                    (x) => Number(x.id) === Number(m.meeiroId),
+                                  );
+                                  return {
+                                    meeiroId: m.meeiroId,
+                                    nome: m.nome,
+                                    porcentagem: Number(m.porcentagem ?? 0),
+                                    porcentagem_embalagem: meeiroRef
+                                      ? porcentagemEmbalagemPadraoDeMeeiro(meeiroRef)
+                                      : PORCENTAGEM_EMBALAGEM_PADRAO,
+                                  };
+                                });
                                 setEditLancProdutos((prev) => [
                                   ...prev,
                                   {
@@ -5149,6 +5291,9 @@ className={
                                     meeiros: (p.meeiros ?? []).map((m) => ({
                                       meeiroId: m.meeiroId,
                                       porcentagem: Number(m.porcentagem ?? 0),
+                                      porcentagem_embalagem: Number(
+                                        m.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+                                      ),
                                     })),
                                   })),
                                 },
@@ -9364,6 +9509,7 @@ className={
               pixChave: '',
               endereco: '',
               porcentagem_padrao: 40,
+              porcentagem_embalagem_padrao: PORCENTAGEM_EMBALAGEM_PADRAO,
               produtorId: 0,
             });
           }
@@ -9467,8 +9613,8 @@ className={
                   />
                 </div>
 
-                {/* CPF e porcentagem */}
-                <div className="grid grid-cols-2 gap-7">
+                {/* CPF e porcentagens */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-7">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-muted-foreground" />
@@ -9514,6 +9660,32 @@ className={
                         setFormMeeiro((p) => ({
                           ...p,
                           porcentagem_padrao: val === '' ? 0 : Number(val),
+                        }));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                      Porcentagem da embalagem (%)
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.1"
+                      placeholder="1.8"
+                      value={
+                        formMeeiro.porcentagem_embalagem_padrao === 0
+                          ? ''
+                          : formMeeiro.porcentagem_embalagem_padrao
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormMeeiro((p) => ({
+                          ...p,
+                          porcentagem_embalagem_padrao:
+                            val === '' ? 0 : Number(val),
                         }));
                       }}
                     />
@@ -9660,6 +9832,12 @@ className={
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Porcentagem padrão (%)</Label>
                       <p className="font-medium text-base">{detailMeeiro.porcentagem_padrao ?? 0}%</p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Porcentagem da embalagem (%)</Label>
+                      <p className="font-medium text-base">
+                        {porcentagemEmbalagemPadraoDeMeeiro(detailMeeiro)}%
+                      </p>
                     </div>
                     <div className="space-y-3">
                       <Label className="text-sm text-muted-foreground">Telefone</Label>
@@ -9863,6 +10041,8 @@ className={
                         pixChave: detailMeeiro.pixChave ?? '',
                         endereco: detailMeeiro.endereco ?? '',
                         porcentagem_padrao: detailMeeiro.porcentagem_padrao,
+                        porcentagem_embalagem_padrao:
+                          porcentagemEmbalagemPadraoDeMeeiro(detailMeeiro),
                         produtorId: detailMeeiro.produtorId,
                       });
                       setOpenEditMeeiro(true);
@@ -10112,7 +10292,7 @@ className={
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-7">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-7">
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Hash className="w-4 h-4 text-muted-foreground" />
@@ -10160,6 +10340,31 @@ className={
                           setFormEditMeeiro((p) => ({
                             ...p,
                             porcentagem_padrao: val === '' ? 0 : Number(val),
+                          }));
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-muted-foreground" />
+                        Porcentagem da embalagem (%)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.1"
+                        placeholder="1.8"
+                        value={
+                          formEditMeeiro.porcentagem_embalagem_padrao === 0
+                            ? ''
+                            : formEditMeeiro.porcentagem_embalagem_padrao ?? ''
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormEditMeeiro((p) => ({
+                            ...p,
+                            porcentagem_embalagem_padrao: val === '' ? 0 : Number(val),
                           }));
                         }}
                       />
@@ -10242,6 +10447,9 @@ className={
                       endereco: formEditMeeiro.endereco || undefined,
                       porcentagem_padrao:
                         formEditMeeiro.porcentagem_padrao ?? editMeeiro.porcentagem_padrao,
+                      porcentagem_embalagem_padrao:
+                        formEditMeeiro.porcentagem_embalagem_padrao ??
+                        porcentagemEmbalagemPadraoDeMeeiro(editMeeiro),
                       produtorId: formEditMeeiro.produtorId || editMeeiro.produtorId,
                     },
                   });
@@ -11196,14 +11404,22 @@ className={
                         </div>
                         {item.meeiros.length > 0 && (
                           <div className="space-y-2 pt-3 border-t border-border/40">
-                            <p className="text-xs font-medium text-muted-foreground">Porcentagem por meeiro (sobre o valor deste produto)</p>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Porcentagem do meeiro e da embalagem (sobre o valor deste produto)
+                            </p>
                             {item.meeiros.map((m) => {
-                              const pct = Number(m.porcentagem ?? 0);
-                              const valorParte = (valorItem * pct) / 100;
+                              const pctEmb = Number(
+                                m.porcentagem_embalagem ?? PORCENTAGEM_EMBALAGEM_PADRAO,
+                              );
+                              const valorParte = calcValorParteMeeiroLiquido(
+                                valorItem,
+                                Number(m.porcentagem ?? 0),
+                                pctEmb,
+                              );
                               return (
                                 <div
                                   key={m.meeiroId}
-                                  className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+                                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
                                 >
                                   <span className="font-medium text-foreground w-24 shrink-0">
                                     {m.nome ?? `Meeiro ${m.meeiroId}`}:
@@ -11234,7 +11450,44 @@ className={
                                         );
                                       }}
                                     />
-                                    <span className="text-muted-foreground w-4">%</span>
+                                    <span className="text-muted-foreground text-xs">% meeiro</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step="0.1"
+                                      placeholder="1.8"
+                                      className="w-20 h-9 text-center tabular-nums"
+                                      value={
+                                        m.porcentagem_embalagem !== undefined &&
+                                        m.porcentagem_embalagem !== null
+                                          ? String(m.porcentagem_embalagem)
+                                          : ''
+                                      }
+                                      onChange={(e) => {
+                                        const v =
+                                          e.target.value === ''
+                                            ? PORCENTAGEM_EMBALAGEM_PADRAO
+                                            : Number(e.target.value);
+                                        setLancProdutos((prev) =>
+                                          prev.map((p, i) =>
+                                            i !== idx
+                                              ? p
+                                              : {
+                                                  ...p,
+                                                  meeiros: p.meeiros.map((mm) =>
+                                                    mm.meeiroId === m.meeiroId
+                                                      ? { ...mm, porcentagem_embalagem: v }
+                                                      : mm
+                                                  ),
+                                                }
+                                          )
+                                        );
+                                      }}
+                                    />
+                                    <span className="text-muted-foreground text-xs">% emb.</span>
                                   </div>
                                   <span className="text-muted-foreground tabular-nums whitespace-nowrap">
                                     = {formatCurrency(valorParte)}
