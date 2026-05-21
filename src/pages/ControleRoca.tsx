@@ -4395,7 +4395,7 @@ className={
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table className="w-full min-w-[68rem] table-fixed text-xs sm:text-sm">
+                  <Table className="w-full min-w-[76rem] table-fixed text-xs sm:text-sm">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10 min-w-10 max-w-10 px-1 sticky left-0 z-40 bg-card border-r border-border shadow-[1px_0_0_0_hsl(var(--border))]">
@@ -4408,21 +4408,26 @@ className={
                           aria-label="Selecionar todos"
                         />
                       </TableHead>
-                      <TableHead className="min-w-[5.25rem] w-[8%] whitespace-nowrap px-2">Data</TableHead>
-                      <TableHead className="min-w-[5.5rem] w-[10%] whitespace-nowrap px-2">Roça</TableHead>
-                      <TableHead className="min-w-[6rem] w-[14%] whitespace-nowrap px-2">Produtos</TableHead>
+                      <TableHead className="min-w-[5.25rem] w-[7%] whitespace-nowrap px-2">Data</TableHead>
+                      <TableHead className="min-w-[7rem] w-[11%] whitespace-nowrap px-2">Roça</TableHead>
+                      <TableHead className="min-w-[6rem] w-[12%] whitespace-nowrap px-2">Produtos</TableHead>
                       <TableHead className="min-w-[3rem] w-[5%] whitespace-nowrap px-1 text-center">Qtde</TableHead>
                       <TableHead className="min-w-[5rem] w-[8%] whitespace-nowrap text-right px-2">Valor Unit.</TableHead>
-                      <TableHead className="min-w-[7rem] w-[14%] whitespace-nowrap px-2 text-center">Meeiro</TableHead>
-                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">% meeiro</TableHead>
-                      <TableHead className="min-w-[2.75rem] w-[4%] text-center whitespace-nowrap py-2 px-2">R$ emba</TableHead>
-                      <TableHead className="min-w-[7.5rem] w-[11%] text-right whitespace-nowrap px-2 sm:px-3">
-                        <span className="lg:hidden">V. meeiro</span>
-                        <span className="hidden lg:inline">Valor do meeiro</span>
+                      <TableHead className="min-w-[6.5rem] w-[12%] whitespace-nowrap px-2 text-center">Meeiro</TableHead>
+                      <TableHead className="min-w-[4.75rem] w-[6%] text-center whitespace-nowrap py-2 px-2">
+                        % meeiro
+                      </TableHead>
+                      <TableHead className="min-w-[4.75rem] w-[6%] text-center whitespace-nowrap py-2 px-2">
+                        R$ emba
+                      </TableHead>
+                      <TableHead
+                        className="min-w-[8rem] w-[11%] text-right whitespace-nowrap px-2 sm:px-3"
+                        title="Valor do meeiro"
+                      >
+                        Valor meeiro
                       </TableHead>
                       <TableHead className="min-w-[6.5rem] w-[10%] text-right whitespace-nowrap px-2 sm:px-3">
-                        <span className="lg:hidden">V. total</span>
-                        <span className="hidden lg:inline">Valor total</span>
+                        Valor total
                       </TableHead>
                       <TableHead className="w-[72px] min-w-[72px] max-w-[72px] text-right pl-2 pr-3 sticky right-0 z-20 bg-card border-l border-border">
                         Ações
@@ -4432,7 +4437,7 @@ className={
                   <TableBody>
                     {lancamentosPagina.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                           Nenhum lançamento no período
                         </TableCell>
                       </TableRow>
@@ -4442,6 +4447,8 @@ className={
                         const isPrimeiraLinhaDoLancamento = itemIndex === 0;
                         const valorTotalItem = item ? (Number(item.valor_total) || 0) : 0;
                         const meeirosDoItem = item?.meeiros ?? [];
+                        const nomeRoca =
+                          roca?.nome ?? l.rocaNome?.trim() ?? String(l.rocaId);
                         return (
                           <TableRow key={rowKey} className="group/lanc">
                             <TableCell className="w-10 min-w-10 max-w-10 px-1 sticky left-0 z-30 bg-card group-hover/lanc:bg-muted/50 border-r border-border align-middle shadow-[1px_0_0_0_hsl(var(--border))]">
@@ -4452,17 +4459,20 @@ className={
                               />
                             </TableCell>
                             <TableCell className="whitespace-nowrap tabular-nums">{formatDate(l.data)}</TableCell>
-                            <TableCell
-                              className="max-w-0 min-w-0 overflow-hidden px-2 max-lg:overflow-hidden lg:max-w-none lg:overflow-visible"
-                              title={roca?.nome ?? l.rocaNome?.trim() ?? String(l.rocaId)}
-                            >
-                              <span className="block max-lg:truncate lg:whitespace-normal">
-                                {roca?.nome ?? l.rocaNome?.trim() ?? l.rocaId}
+                            <TableCell className="max-w-0 min-w-0 overflow-hidden px-2">
+                              <span
+                                className="block truncate whitespace-nowrap"
+                                title={nomeRoca}
+                              >
+                                {nomeRoca}
                               </span>
                             </TableCell>
-                            <TableCell className="max-w-0 overflow-hidden min-w-0 xl:max-w-none xl:overflow-visible">
+                            <TableCell className="max-w-0 min-w-0 overflow-hidden px-2">
                               {item ? (
-                                <span className="block truncate whitespace-nowrap xl:whitespace-normal xl:text-clip" title={item.produto}>
+                                <span
+                                  className="block truncate whitespace-nowrap"
+                                  title={item.produto}
+                                >
                                   {item.produto}
                                 </span>
                               ) : (
