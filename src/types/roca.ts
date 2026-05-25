@@ -5,15 +5,35 @@
 /** Valor de emba por unidade (R$) quando o meeiro não define outro. */
 export const VALOR_DE_EMBA_PADRAO = 1.2;
 
-/** Valor líquido do meeiro: bruto (valor × % meeiro) menos (valor de emba × quantidade). */
+/** Repasse bruto do meeiro: valor do item × % meeiro. */
+export function calcRepasseBrutoMeeiro(valorItem: number, pctMeeiro: number): number {
+  return Math.round(((valorItem * pctMeeiro) / 100) * 100) / 100;
+}
+
+/** Custo de embalagem da linha: quantidade × R$ emba do lançamento. */
+export function calcCustoEmbalagemLinha(quantidade: number, valorDeEmba: number): number {
+  return Math.round(quantidade * valorDeEmba * 100) / 100;
+}
+
+/** Desconto de embalagem do meeiro: (quantidade × R$ emba) × (% meeiro / 100). */
+export function calcDescontoEmbalagemMeeiro(
+  quantidade: number,
+  pctMeeiro: number,
+  valorDeEmba: number,
+): number {
+  const custoLinha = calcCustoEmbalagemLinha(quantidade, valorDeEmba);
+  return Math.round(((custoLinha * pctMeeiro) / 100) * 100) / 100;
+}
+
+/** Valor líquido do meeiro: bruto − embalagem proporcional. */
 export function calcValorParteMeeiroLiquido(
   valorItem: number,
   pctMeeiro: number,
   quantidade: number,
   valorDeEmba: number,
 ): number {
-  const bruto = (valorItem * pctMeeiro) / 100;
-  const descontoEmba = quantidade * valorDeEmba;
+  const bruto = calcRepasseBrutoMeeiro(valorItem, pctMeeiro);
+  const descontoEmba = calcDescontoEmbalagemMeeiro(quantidade, pctMeeiro, valorDeEmba);
   return Math.round((bruto - descontoEmba) * 100) / 100;
 }
 

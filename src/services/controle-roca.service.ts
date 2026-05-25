@@ -267,6 +267,15 @@ class ControleRocaService {
     );
   }
 
+  async definirDescontoEmprestimoMeeiro(
+    meeiroId: number,
+    descEmprest: number,
+  ): Promise<{ meeiroId: number; descEmprest: number; modo?: 'previsto' }> {
+    return apiClient.patch(`${BASE}/pagamentos-meeiros/meeiro/${meeiroId}/desconto-emprestimo`, {
+      descEmprest,
+    });
+  },
+
   async atualizarPagamentoMeeiro(
     pagamentoId: number,
     data: AtualizarPagamentoMeeiroDto

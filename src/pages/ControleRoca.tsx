@@ -1744,6 +1744,8 @@ export default function ControleRoca() {
   /** Snapshot do item de histórico usado para o resumo financeiro (valores congelados do pagamento). */
   const [editPagamentoHistoricoRow, setEditPagamentoHistoricoRow] =
     useState<HistoricoPagamentoMeeiroItem | null>(null);
+  /** Sem pagamento registrado: salva só o desconto previsto (coluna Desc emprést.). */
+  const [editPagamentoApenasPrevisto, setEditPagamentoApenasPrevisto] = useState(false);
   const [relResult, setRelResult] = useState<RelatorioMeeiroResponse | null>(null);
   const [relLoading, setRelLoading] = useState(false);
   const [relPdfDialogOpen, setRelPdfDialogOpen] = useState(false);
@@ -1991,6 +1993,8 @@ export default function ControleRoca() {
         let rocas: number[] | undefined;
         if (overrides?.rocas !== undefined) {
           rocas = overrides.rocas.length ? overrides.rocas : undefined;
+        } else if (pagamentoFiltrosAplicados.rocaIds.length > 0) {
+          rocas = pagamentoFiltrosAplicados.rocaIds;
         } else {
           rocas = relPagRocaFiltroId === '' ? undefined : [Number(relPagRocaFiltroId)];
         }
@@ -2051,6 +2055,7 @@ export default function ControleRoca() {
       relPagRocaFiltroId,
       pagamentoFiltrosAplicados.dataInicial,
       pagamentoFiltrosAplicados.dataFinal,
+      pagamentoFiltrosAplicados.rocaIds,
       queryClient,
     ],
   );
@@ -2097,6 +2102,7 @@ export default function ControleRoca() {
       setOpenEditarPagamentoModal(false);
       setMeeiroEditarPagamento(null);
       setEditarPagamentoId(null);
+      setEditPagamentoApenasPrevisto(false);
     },
     onError: (err: any) => {
       toast.error(
@@ -2105,14 +2111,46 @@ export default function ControleRoca() {
     },
   });
 
+  const definirDescontoEmprestimoMut = useMutation({
+    mutationFn: async (vars: { meeiroId: number; descEmprest: number }) =>
+      controleRocaService.definirDescontoEmprestimoMeeiro(vars.meeiroId, vars.descEmprest),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Desconto de empréstimo salvo.');
+      setOpenEditarPagamentoModal(false);
+      setMeeiroEditarPagamento(null);
+      setEditarPagamentoId(null);
+      setEditPagamentoApenasPrevisto(false);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Erro ao salvar desconto de empréstimo',
+      );
+    },
+  });
+
   const abrirEditarPagamento = useCallback(async (m: ResumoPagamentoMeeiro) => {
     const pid = m.ultimoPagamentoId;
-    if (pid == null || Number.isNaN(Number(pid))) {
-      toast.error('Não há pagamento registrado para editar.');
-      return;
-    }
     setEditPagamentoLoadingMeeiroId(m.meeiroId);
     try {
+      if (pid == null || Number.isNaN(Number(pid))) {
+        setMeeiroEditarPagamento(m);
+        setEditarPagamentoId(null);
+        setEditPagamentoHistoricoRow(null);
+        setEditPagamentoApenasPrevisto(true);
+        setFormEditarPagamento({
+          dataPagamento: getDataHojeLocal(),
+          formaPagamento: 'PIX',
+          contaCaixa: '',
+          observacao: '',
+          descEmprest:
+            m.descEmprest != null && !Number.isNaN(Number(m.descEmprest)) && Number(m.descEmprest) > 0
+              ? String(m.descEmprest)
+              : '',
+        });
+        setOpenEditarPagamentoModal(true);
+        return;
+      }
       const hist = await controleRocaService.listarHistoricoPagamentosMeeiros({
         meeiroId: m.meeiroId,
         statusHistorico: 'concluido',
@@ -2128,6 +2166,7 @@ export default function ControleRoca() {
       const dataStr = String(row.dataPagamento ?? '').split('T')[0];
       setMeeiroEditarPagamento(m);
       setEditarPagamentoId(Number(pid));
+      setEditPagamentoApenasPrevisto(false);
       setFormEditarPagamento({
         dataPagamento: dataStr || getDataHojeLocal(),
         formaPagamento: row.formaPagamento ?? 'PIX',
@@ -6767,11 +6806,15 @@ className={
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="min-w-[170px]">
                                           <DropdownMenuItem
-                                            disabled={!(m.jaPago && m.ultimoPagamentoId != null)}
+                                            disabled={!podeRegistrarPagamentoMeeiro(m)}
+                                            title={
+                                              !podeRegistrarPagamentoMeeiro(m)
+                                                ? 'É necessário valor de produção ou empréstimo em aberto para definir o desconto.'
+                                                : undefined
+                                            }
                                             onClick={() => {
-                                              if (m.jaPago && m.ultimoPagamentoId != null) {
-                                                void abrirEditarPagamento(m);
-                                              }
+                                              if (!podeRegistrarPagamentoMeeiro(m)) return;
+                                              void abrirEditarPagamento(m);
                                             }}
                                           >
                                             {editPagamentoLoadingMeeiroId === m.meeiroId ? (
@@ -10771,6 +10814,7 @@ className={
               setMeeiroEditarPagamento(null);
               setEditarPagamentoId(null);
               setEditPagamentoHistoricoRow(null);
+              setEditPagamentoApenasPrevisto(false);
             }
           }}
         >
@@ -10779,11 +10823,15 @@ className={
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="space-y-2">
                   <DialogTitle className="text-2xl sm:text-3xl font-semibold tracking-tight">
-                    Editar pagamento
+                    {editPagamentoApenasPrevisto
+                      ? 'Definir desconto de empréstimo'
+                      : 'Editar pagamento'}
                   </DialogTitle>
                   <DialogDescription className="text-base sm:text-lg leading-relaxed text-muted-foreground">
                     {meeiroEditarPagamento
-                      ? `Pagamento para ${meeiroEditarPagamento.nome}`
+                      ? editPagamentoApenasPrevisto
+                        ? `Quanto descontar do empréstimo de ${meeiroEditarPagamento.nome} (coluna Desc emprést. na grade, antes de pagar).`
+                        : `Pagamento para ${meeiroEditarPagamento.nome}`
                       : 'Confirme os dados do pagamento.'}
                   </DialogDescription>
                 </div>
@@ -10795,7 +10843,9 @@ className={
               </div>
             </DialogHeader>
 
-            {meeiroEditarPagamento && editPagamentoHistoricoRow && editarPagamentoId != null && (
+            {meeiroEditarPagamento &&
+              (editPagamentoApenasPrevisto ||
+                (editPagamentoHistoricoRow != null && editarPagamentoId != null)) && (
               <div className="space-y-10 pt-1">
                 {(() => {
                   const m = meeiroEditarPagamento;
@@ -10832,7 +10882,11 @@ className={
                             <span className="tabular-nums">{formatCurrency(empAbertoGrade)}</span>
                           </li>
                           <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
-                            <span>Desc emprést. (último pagamento)</span>
+                            <span>
+                              {editPagamentoApenasPrevisto
+                                ? 'Desc emprést. (na grade)'
+                                : 'Desc emprést. (último pagamento)'}
+                            </span>
                             <span className="tabular-nums">{formatCurrency(descGrade)}</span>
                           </li>
                           <li className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
@@ -10868,13 +10922,16 @@ className={
                           }
                         />
                         <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                          Não altera o abatimento já registrado nesse pagamento.
+                          {editPagamentoApenasPrevisto
+                            ? 'O valor aparece na coluna Desc emprést. e é sugerido ao registrar o pagamento.'
+                            : 'Não altera o abatimento já registrado nesse pagamento.'}
                         </p>
                       </div>
                     </>
                   );
                 })()}
 
+                {!editPagamentoApenasPrevisto && (
                 <div className="space-y-4">
                   <p className="text-sm font-medium text-foreground">Dados do pagamento</p>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -10933,6 +10990,7 @@ className={
                     />
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -10950,16 +11008,16 @@ className={
                 variant="gradient"
                 className="w-full sm:w-auto"
                 disabled={
+                  definirDescontoEmprestimoMut.isPending ||
                   atualizarPagamentoMeeiroMut.isPending ||
-                  editarPagamentoId == null ||
-                  !formEditarPagamento.dataPagamento ||
-                  !editPagamentoHistoricoRow
+                  (!editPagamentoApenasPrevisto &&
+                    (editarPagamentoId == null ||
+                      !formEditarPagamento.dataPagamento ||
+                      !editPagamentoHistoricoRow))
                 }
                 onClick={() => {
-                  if (editarPagamentoId == null || !formEditarPagamento.dataPagamento) return;
-                  const h = editPagamentoHistoricoRow;
                   const m = meeiroEditarPagamento;
-                  if (!h || !m) return;
+                  if (!m) return;
                   const maxDescEmprest = Math.max(
                     0,
                     Number(m.totalReceber ?? 0) -
@@ -10977,6 +11035,16 @@ className={
                     );
                     return;
                   }
+                  if (editPagamentoApenasPrevisto) {
+                    definirDescontoEmprestimoMut.mutate({
+                      meeiroId: m.meeiroId,
+                      descEmprest: descNum,
+                    });
+                    return;
+                  }
+                  if (editarPagamentoId == null || !formEditarPagamento.dataPagamento) return;
+                  const h = editPagamentoHistoricoRow;
+                  if (!h) return;
                   const payload: AtualizarPagamentoMeeiroDto = {
                     dataPagamento: formEditarPagamento.dataPagamento,
                     formaPagamento: formEditarPagamento.formaPagamento,
@@ -10987,7 +11055,8 @@ className={
                   atualizarPagamentoMeeiroMut.mutate({ id: editarPagamentoId, data: payload });
                 }}
               >
-                {atualizarPagamentoMeeiroMut.isPending && (
+                {(definirDescontoEmprestimoMut.isPending ||
+                  atualizarPagamentoMeeiroMut.isPending) && (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 )}
                 Salvar alterações
