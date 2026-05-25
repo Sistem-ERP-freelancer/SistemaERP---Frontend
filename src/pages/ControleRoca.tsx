@@ -1677,6 +1677,12 @@ export default function ControleRoca() {
   const [historicoFiltroStatus, setHistoricoFiltroStatus] = useState<'todos' | 'pendente' | 'concluido'>('todos');
   const [historicoFiltroDataInicial, setHistoricoFiltroDataInicial] = useState('');
   const [historicoFiltroDataFinal, setHistoricoFiltroDataFinal] = useState('');
+  const [historicoExcluirItem, setHistoricoExcluirItem] = useState<{
+    origem: 'pagamento' | 'relatorio_pendente';
+    id: number;
+    meeiroNome: string;
+  } | null>(null);
+  const [historicoLimparPeriodoOpen, setHistoricoLimparPeriodoOpen] = useState(false);
   const [relatorioSemPagamentoLoading, setRelatorioSemPagamentoLoading] = useState(false);
   const [pdfPagMeeiroId, setPdfPagMeeiroId] = useState<number | ''>('');
   const [pdfPagDataInicial, setPdfPagDataInicial] = useState('');
@@ -1907,6 +1913,58 @@ export default function ControleRoca() {
         limit: 200,
       }),
     enabled: tab === 'pagamento-meeiros' && historicoPagamentosOpen,
+  });
+
+  const historicoFiltrosParams = useMemo(
+    () => ({
+      produtorId:
+        pagamentoFiltrosAplicados.produtorId === ''
+          ? undefined
+          : Number(pagamentoFiltrosAplicados.produtorId),
+      meeiroId: historicoFiltroMeeiroId === '' ? undefined : Number(historicoFiltroMeeiroId),
+      dataPagamentoInicial: historicoFiltroDataInicial.trim() || undefined,
+      dataPagamentoFinal: historicoFiltroDataFinal.trim() || undefined,
+      statusHistorico:
+        historicoFiltroStatus === 'todos' ? undefined : historicoFiltroStatus,
+    }),
+    [
+      pagamentoFiltrosAplicados.produtorId,
+      historicoFiltroMeeiroId,
+      historicoFiltroDataInicial,
+      historicoFiltroDataFinal,
+      historicoFiltroStatus,
+    ],
+  );
+
+  const excluirHistoricoItemMut = useMutation({
+    mutationFn: (vars: { origem: 'pagamento' | 'relatorio_pendente'; id: number }) =>
+      controleRocaService.excluirItemHistoricoPagamentoMeeiro(vars.origem, vars.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success('Registro removido do histórico.');
+      setHistoricoExcluirItem(null);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Erro ao excluir registro do histórico',
+      );
+    },
+  });
+
+  const limparHistoricoPeriodoMut = useMutation({
+    mutationFn: () => controleRocaService.limparHistoricoPagamentosMeeiros(historicoFiltrosParams),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
+      toast.success(
+        `${res.totalExcluidos} registro(s) removido(s) do histórico (${res.pagamentosExcluidos} pagamento(s), ${res.relatoriosExcluidos} relatório(s) pendente(s)).`,
+      );
+      setHistoricoLimparPeriodoOpen(false);
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Erro ao limpar histórico do período',
+      );
+    },
   });
 
   const {
@@ -6180,6 +6238,22 @@ className={
                         />
                       </div>
                     </div>
+                    <div className="sm:col-span-2 flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                        disabled={
+                          limparHistoricoPeriodoMut.isPending ||
+                          (historicoPagamentosData?.total ?? 0) === 0
+                        }
+                        onClick={() => setHistoricoLimparPeriodoOpen(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Limpar histórico do período
+                      </Button>
+                    </div>
                   </div>
                 </SheetHeader>
                 <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
@@ -6203,8 +6277,9 @@ className={
                           key={rowKey}
                           className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/50 p-4"
                         >
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <div className="min-w-0 space-y-1 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0 flex-1">
                               <span
                                 className={cn(
                                   'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded shrink-0',
@@ -6224,6 +6299,24 @@ className={
                               <span className="font-medium leading-snug break-words min-w-0" title={row.meeiroNome}>
                                 {row.meeiroNome}
                               </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                              title="Excluir este registro do histórico"
+                              disabled={excluirHistoricoItemMut.isPending}
+                              onClick={() =>
+                                setHistoricoExcluirItem({
+                                  origem: isPendente ? 'relatorio_pendente' : 'pagamento',
+                                  id: row.id,
+                                  meeiroNome: row.meeiroNome,
+                                })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                             </div>
                             <p className="text-xs text-muted-foreground leading-relaxed">
                               {isPendente
@@ -6403,6 +6496,115 @@ className={
                 </div>
               </SheetContent>
             </Sheet>
+
+            <AlertDialog
+              open={historicoExcluirItem != null}
+              onOpenChange={(open) => {
+                if (!open) setHistoricoExcluirItem(null);
+              }}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir registro do histórico?</AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-2">
+                    <span className="block">
+                      Será removido o registro de{' '}
+                      <strong className="text-foreground">{historicoExcluirItem?.meeiroNome}</strong>.
+                    </span>
+                    {historicoExcluirItem?.origem === 'pagamento' ? (
+                      <span className="block text-amber-800 dark:text-amber-200">
+                        Pagamentos excluídos podem reabrir empréstimo se havia abatimento de dívida neste
+                        registro. A produção voltará a aparecer como pendente conforme as regras do sistema.
+                      </span>
+                    ) : null}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={excluirHistoricoItemMut.isPending}>
+                    Cancelar
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={excluirHistoricoItemMut.isPending}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (!historicoExcluirItem) return;
+                      excluirHistoricoItemMut.mutate({
+                        origem: historicoExcluirItem.origem,
+                        id: historicoExcluirItem.id,
+                      });
+                    }}
+                  >
+                    {excluirHistoricoItemMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    Excluir
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog
+              open={historicoLimparPeriodoOpen}
+              onOpenChange={setHistoricoLimparPeriodoOpen}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Limpar histórico do período?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <p>
+                        Serão excluídos todos os registros que correspondem aos filtros atuais
+                        {historicoFiltroDataInicial || historicoFiltroDataFinal ? (
+                          <>
+                            {' '}
+                            (datas
+                            {historicoFiltroDataInicial
+                              ? ` de ${historicoFiltroDataInicial}`
+                              : ''}
+                            {historicoFiltroDataFinal ? ` até ${historicoFiltroDataFinal}` : ''})
+                          </>
+                        ) : (
+                          ' (sem filtro de data — todos os registros listados)'
+                        )}
+                        .
+                      </p>
+                      {historicoPagamentosData?.resumo ? (
+                        <p className="font-medium text-foreground">
+                          Até{' '}
+                          {(historicoPagamentosData.resumo.registrosPagamentoNoPeriodo ?? 0) +
+                            (historicoPagamentosData.resumo.registrosRelatorioPendenteNoPeriodo ??
+                              0)}{' '}
+                          registro(s) no resumo do período.
+                        </p>
+                      ) : null}
+                      <p className="text-amber-800 dark:text-amber-200">
+                        Pagamentos removidos podem reabrir empréstimos abatidos e fazer a produção voltar
+                        a constar em aberto. Esta ação não pode ser desfeita.
+                      </p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={limparHistoricoPeriodoMut.isPending}>
+                    Cancelar
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={limparHistoricoPeriodoMut.isPending}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      limparHistoricoPeriodoMut.mutate();
+                    }}
+                  >
+                    {limparHistoricoPeriodoMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    Limpar histórico
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             <Dialog
               open={pagamentoPdfMeeiroDialogOpen}

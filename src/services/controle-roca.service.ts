@@ -318,6 +318,35 @@ class ControleRocaService {
     );
   }
 
+  async excluirItemHistoricoPagamentoMeeiro(
+    origem: 'pagamento' | 'relatorio_pendente',
+    id: number,
+  ): Promise<{ excluido: boolean; origem: string; id: number }> {
+    const pathOrigem = origem === 'relatorio_pendente' ? 'relatorio-pendente' : 'pagamento';
+    return apiClient.delete(`${BASE}/pagamentos-meeiros/historico/${pathOrigem}/${id}`);
+  }
+
+  async limparHistoricoPagamentosMeeiros(params?: {
+    produtorId?: number;
+    meeiroId?: number;
+    dataPagamentoInicial?: string;
+    dataPagamentoFinal?: string;
+    statusHistorico?: 'pendente' | 'concluido';
+  }): Promise<{
+    pagamentosExcluidos: number;
+    relatoriosExcluidos: number;
+    totalExcluidos: number;
+  }> {
+    const search = new URLSearchParams();
+    if (params?.produtorId != null) search.set('produtorId', String(params.produtorId));
+    if (params?.meeiroId != null) search.set('meeiroId', String(params.meeiroId));
+    if (params?.dataPagamentoInicial) search.set('dataPagamentoInicial', params.dataPagamentoInicial);
+    if (params?.dataPagamentoFinal) search.set('dataPagamentoFinal', params.dataPagamentoFinal);
+    if (params?.statusHistorico) search.set('statusHistorico', params.statusHistorico);
+    const q = search.toString() ? `?${search.toString()}` : '';
+    return apiClient.delete(`${BASE}/pagamentos-meeiros/historico${q}`);
+  }
+
   async registrarRelatorioMeeiroPendente(
     data: RegistrarRelatorioMeeiroPendenteDto
   ): Promise<{ id: number; createdAt: string }> {
