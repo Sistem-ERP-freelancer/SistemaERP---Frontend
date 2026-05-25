@@ -274,7 +274,7 @@ class ControleRocaService {
     return apiClient.patch(`${BASE}/pagamentos-meeiros/meeiro/${meeiroId}/desconto-emprestimo`, {
       descEmprest,
     });
-  },
+  }
 
   async atualizarPagamentoMeeiro(
     pagamentoId: number,
