@@ -45,6 +45,16 @@ const LOGIN_SPONSORS: { id: string; src: string; alt: string; tone?: SponsorTile
     src: "/DOC-20260515-WA0266..jpg",
     alt: "Rota Química Transportes e Logística",
   },
+  {
+    id: "rboscardin",
+    src: "/patrocinador-rboscardin.jpeg",
+    alt: "RBOSCARDIN - Arquitetura, Engenharia e Construção Civil",
+  },
+  {
+    id: "hotel-lanchonete",
+    src: "/patrocinador-hotel-lanchonete.png",
+    alt: "Hotel, Restaurante e Lanchonete",
+  },
 ];
 
 const HIGHLIGHTS = [
