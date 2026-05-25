@@ -1951,18 +1951,30 @@ export default function ControleRoca() {
     },
   });
 
+  const historicoPendentesNoPeriodo =
+    historicoPagamentosData?.resumo?.registrosRelatorioPendenteNoPeriodo ?? 0;
+
   const limparHistoricoPeriodoMut = useMutation({
-    mutationFn: () => controleRocaService.limparHistoricoPagamentosMeeiros(historicoFiltrosParams),
+    mutationFn: () =>
+      controleRocaService.limparHistoricoPagamentosMeeiros({
+        ...historicoFiltrosParams,
+        statusHistorico:
+          historicoFiltrosParams.statusHistorico === 'concluido'
+            ? 'concluido'
+            : 'pendente',
+      }),
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
       toast.success(
-        `${res.totalExcluidos} registro(s) removido(s) do histórico (${res.pagamentosExcluidos} pagamento(s), ${res.relatoriosExcluidos} relatório(s) pendente(s)).`,
+        res.relatoriosExcluidos > 0
+          ? `${res.relatoriosExcluidos} relatório(s) pendente(s) removido(s) do histórico.`
+          : 'Nenhum relatório pendente encontrado para os filtros informados.',
       );
       setHistoricoLimparPeriodoOpen(false);
     },
     onError: (err: any) => {
       toast.error(
-        err?.response?.data?.message || err?.message || 'Erro ao limpar histórico do período',
+        err?.response?.data?.message || err?.message || 'Erro ao limpar relatórios pendentes',
       );
     },
   });
@@ -6246,12 +6258,20 @@ className={
                         className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
                         disabled={
                           limparHistoricoPeriodoMut.isPending ||
-                          (historicoPagamentosData?.total ?? 0) === 0
+                          historicoFiltroStatus === 'concluido' ||
+                          historicoPendentesNoPeriodo === 0
+                        }
+                        title={
+                          historicoFiltroStatus === 'concluido'
+                            ? 'Pagamentos concluídos não podem ser excluídos.'
+                            : historicoPendentesNoPeriodo === 0
+                              ? 'Não há relatórios pendentes no período.'
+                              : 'Remove apenas relatórios gerados sem pagamento.'
                         }
                         onClick={() => setHistoricoLimparPeriodoOpen(true)}
                       >
                         <Trash2 className="h-4 w-4" />
-                        Limpar histórico do período
+                        Limpar pendentes do período
                       </Button>
                     </div>
                   </div>
@@ -6300,23 +6320,25 @@ className={
                                 {row.meeiroNome}
                               </span>
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                              title="Excluir este registro do histórico"
-                              disabled={excluirHistoricoItemMut.isPending}
-                              onClick={() =>
-                                setHistoricoExcluirItem({
-                                  origem: isPendente ? 'relatorio_pendente' : 'pagamento',
-                                  id: row.id,
-                                  meeiroNome: row.meeiroNome,
-                                })
-                              }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {isPendente ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                title="Excluir relatório pendente"
+                                disabled={excluirHistoricoItemMut.isPending}
+                                onClick={() =>
+                                  setHistoricoExcluirItem({
+                                    origem: 'relatorio_pendente',
+                                    id: row.id,
+                                    meeiroNome: row.meeiroNome,
+                                  })
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
                             </div>
                             <p className="text-xs text-muted-foreground leading-relaxed">
                               {isPendente
@@ -6505,18 +6527,13 @@ className={
             >
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir registro do histórico?</AlertDialogTitle>
+                  <AlertDialogTitle>Excluir relatório pendente?</AlertDialogTitle>
                   <AlertDialogDescription className="space-y-2">
                     <span className="block">
-                      Será removido o registro de{' '}
+                      Será removido o relatório gerado sem pagamento de{' '}
                       <strong className="text-foreground">{historicoExcluirItem?.meeiroNome}</strong>.
+                      Pagamentos concluídos não podem ser excluídos.
                     </span>
-                    {historicoExcluirItem?.origem === 'pagamento' ? (
-                      <span className="block text-amber-800 dark:text-amber-200">
-                        Pagamentos excluídos podem reabrir empréstimo se havia abatimento de dívida neste
-                        registro. A produção voltará a aparecer como pendente conforme as regras do sistema.
-                      </span>
-                    ) : null}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -6550,11 +6567,13 @@ className={
             >
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Limpar histórico do período?</AlertDialogTitle>
+                  <AlertDialogTitle>Limpar relatórios pendentes do período?</AlertDialogTitle>
                   <AlertDialogDescription asChild>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <p>
-                        Serão excluídos todos os registros que correspondem aos filtros atuais
+                        Serão excluídos apenas os relatórios{' '}
+                        <strong className="text-foreground">gerados sem pagamento</strong> que correspondem
+                        aos filtros atuais
                         {historicoFiltroDataInicial || historicoFiltroDataFinal ? (
                           <>
                             {' '}
@@ -6565,22 +6584,17 @@ className={
                             {historicoFiltroDataFinal ? ` até ${historicoFiltroDataFinal}` : ''})
                           </>
                         ) : (
-                          ' (sem filtro de data — todos os registros listados)'
+                          ' (sem filtro de data)'
                         )}
-                        .
+                        . Pagamentos concluídos permanecem no histórico.
                       </p>
                       {historicoPagamentosData?.resumo ? (
                         <p className="font-medium text-foreground">
-                          Até{' '}
-                          {(historicoPagamentosData.resumo.registrosPagamentoNoPeriodo ?? 0) +
-                            (historicoPagamentosData.resumo.registrosRelatorioPendenteNoPeriodo ??
-                              0)}{' '}
-                          registro(s) no resumo do período.
+                          Até {historicoPendentesNoPeriodo} relatório(s) pendente(s) no período.
                         </p>
                       ) : null}
                       <p className="text-amber-800 dark:text-amber-200">
-                        Pagamentos removidos podem reabrir empréstimos abatidos e fazer a produção voltar
-                        a constar em aberto. Esta ação não pode ser desfeita.
+                        Esta ação não pode ser desfeita.
                       </p>
                     </div>
                   </AlertDialogDescription>
@@ -6600,7 +6614,7 @@ className={
                     {limparHistoricoPeriodoMut.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : null}
-                    Limpar histórico
+                    Limpar pendentes
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
