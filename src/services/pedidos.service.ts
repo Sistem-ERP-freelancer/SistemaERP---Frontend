@@ -572,6 +572,12 @@ class PedidosService {
         queryParams.append('cliente_id', clienteIdNum.toString());
       }
     }
+    if (params?.roca_id !== undefined && params.roca_id !== null) {
+      const rocaIdNum = Number(params.roca_id);
+      if (!isNaN(rocaIdNum) && rocaIdNum > 0) {
+        queryParams.append('roca_id', rocaIdNum.toString());
+      }
+    }
     
     // Valores monetários devem ser números válidos e >= 0
     if (params?.valor_inicial !== undefined && params.valor_inicial !== null) {
@@ -671,6 +677,12 @@ class PedidosService {
       const fornecedorIdNum = Number(params.fornecedor_id);
       if (!isNaN(fornecedorIdNum) && fornecedorIdNum > 0) {
         queryParams.append('fornecedor_id', fornecedorIdNum.toString());
+      }
+    }
+    if (params?.roca_id !== undefined && params.roca_id !== null) {
+      const rocaIdNum = Number(params.roca_id);
+      if (!isNaN(rocaIdNum) && rocaIdNum > 0) {
+        queryParams.append('roca_id', rocaIdNum.toString());
       }
     }
     

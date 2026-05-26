@@ -100,6 +100,8 @@ const ContasAReceber = () => {
   const [searchTerm, setSearchTerm] = useState("");
   /** Filtro por cliente: null = todos; number = ID do cliente */
   const [clienteFilterId, setClienteFilterId] = useState<number | null>(null);
+  /** Filtro por roça: null = todas */
+  const [rocaFilterId, setRocaFilterId] = useState<number | null>(null);
   /** Filtro por status do pedido: '' = todos; ABERTO | PARCIAL | QUITADO | VENCIDO */
   const [statusFilter, setStatusFilter] = useState<string>("");
   /** Filtro por período: data_inicial e data_final (YYYY-MM-DD) */
@@ -320,12 +322,15 @@ const ContasAReceber = () => {
 
   // Usar endpoint /pedidos/contas-receber (cada linha = 1 pedido) — filtro por cliente e card é enviado à API / client-side
   const { data: pedidosContasReceber, isLoading: isLoadingPedidosContasReceber } = useQuery({
-    queryKey: ["pedidos", "contas-receber", clienteFilterId, statusFilter, dataInicialFilter, dataFinalFilter],
+    queryKey: ["pedidos", "contas-receber", clienteFilterId, rocaFilterId, statusFilter, dataInicialFilter, dataFinalFilter],
     queryFn: async () => {
       try {
         const params: import('@/types/contas-financeiras.types').FiltrosContasReceber = {};
         if (clienteFilterId != null && clienteFilterId > 0) {
           params.cliente_id = clienteFilterId;
+        }
+        if (rocaFilterId != null && rocaFilterId > 0) {
+          params.roca_id = rocaFilterId;
         }
         if (dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)) {
           params.data_inicial = dataInicialFilter;
@@ -335,6 +340,7 @@ const ContasAReceber = () => {
         }
         const hasFilters =
           (params.cliente_id != null && params.cliente_id > 0) ||
+          (params.roca_id != null && params.roca_id > 0) ||
           !!params.data_inicial ||
           !!params.data_final;
         return await pedidosService.listarContasReceber(hasFilters ? params : undefined);
@@ -396,6 +402,7 @@ const ContasAReceber = () => {
       activeCardFilter,
       currentPage,
       clienteFilterId,
+      rocaFilterId,
       statusFilter,
       dataInicialFilter,
       dataFinalFilter,
@@ -442,6 +449,10 @@ const ContasAReceber = () => {
           cliente_id:
             clienteFilterId != null && clienteFilterId > 0
               ? clienteFilterId
+              : undefined,
+          roca_id:
+            rocaFilterId != null && rocaFilterId > 0
+              ? rocaFilterId
               : undefined,
           data_inicial:
             dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
@@ -498,16 +509,18 @@ const ContasAReceber = () => {
   // Resetar página quando filtro ou busca mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeCardFilter, searchTerm, clienteFilterId, statusFilter, dataInicialFilter, dataFinalFilter]);
+  }, [activeCardFilter, searchTerm, clienteFilterId, rocaFilterId, statusFilter, dataInicialFilter, dataFinalFilter]);
 
   const temFiltrosAtivos =
     (clienteFilterId != null && clienteFilterId > 0) ||
+    (rocaFilterId != null && rocaFilterId > 0) ||
     !!statusFilter ||
     !!dataInicialFilter ||
     !!dataFinalFilter;
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     setClienteFilterId(null);
+    setRocaFilterId(null);
     setStatusFilter("");
     setDataInicialFilter("");
     setDataFinalFilter("");
@@ -1115,6 +1128,7 @@ const ContasAReceber = () => {
         return (
           p.numero_pedido?.toLowerCase().includes(term) ||
           p.cliente_nome?.toLowerCase().includes(term) ||
+          p.roca_nome?.toLowerCase().includes(term) ||
           p.pedido_id?.toString().includes(term)
         );
       });
@@ -1194,11 +1208,17 @@ const ContasAReceber = () => {
 
     if (!searchTerm.trim()) return result;
     const term = searchTerm.toLowerCase();
-    return result.filter(
-      (g) =>
+    return result.filter((g) => {
+      const rocaNomes = g.parcelas
+        .map((p) => p.roca_nome)
+        .filter((n): n is string => !!n?.trim());
+      const rocaTxt = rocaNomes.join(" ").toLowerCase();
+      return (
         g.descricaoBase.toLowerCase().includes(term) ||
-        g.cliente_nome.toLowerCase().includes(term)
-    );
+        g.cliente_nome.toLowerCase().includes(term) ||
+        rocaTxt.includes(term)
+      );
+    });
   }, [contas, clientes, searchTerm]);
 
   // Filtrar linhas e grupos pelo card clicado e pela folha de filtros (status)
@@ -1423,10 +1443,12 @@ const ContasAReceber = () => {
     // Filtrar por termo de busca
     if (searchTerm.trim()) {
       filtered = filtered.filter(t => {
+      const rocaNome = (t as { roca_nome?: string | null }).roca_nome ?? "";
       const matchesSearch = 
         t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
         t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.cliente.toLowerCase().includes(searchTerm.toLowerCase());
+        t.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rocaNome.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
     }
@@ -1798,6 +1820,7 @@ const ContasAReceber = () => {
               {temFiltrosAtivos && (
                 <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
                   {(clienteFilterId != null && clienteFilterId > 0 ? 1 : 0) +
+                    (rocaFilterId != null && rocaFilterId > 0 ? 1 : 0) +
                     (statusFilter ? 1 : 0) +
                     (dataInicialFilter ? 1 : 0) +
                     (dataFinalFilter ? 1 : 0)}
@@ -1837,6 +1860,33 @@ const ContasAReceber = () => {
                         {clientes.map((c) => (
                           <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Roça */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Select
+                      value={rocaFilterId == null ? "todos" : String(rocaFilterId)}
+                      onValueChange={(v) =>
+                        setRocaFilterId(v === "todos" ? null : parseInt(v, 10))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todas as roças</SelectItem>
+                        {rocasLista
+                          .filter((r) => r.ativo !== false)
+                          .map((roca) => (
+                            <SelectItem key={roca.id} value={String(roca.id)}>
+                              {roca.nome}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1931,7 +1981,7 @@ const ContasAReceber = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número do pedido, cliente..."
+                placeholder="Buscar por número do pedido, cliente, roça..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}

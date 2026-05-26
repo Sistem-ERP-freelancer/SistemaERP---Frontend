@@ -68,6 +68,7 @@ export interface FiltrosContasReceber {
   situacao?: 'todos' | 'em_aberto' | 'em_atraso' | 'concluido';
   data_inicial?: string; // YYYY-MM-DD
   data_final?: string; // YYYY-MM-DD
+  roca_id?: number;
 }
 
 export interface FiltrosContasPagar {
@@ -80,4 +81,5 @@ export interface FiltrosContasPagar {
   situacao?: 'em_aberto' | 'em_atraso' | 'concluido';
   data_inicial?: string; // YYYY-MM-DD
   data_final?: string; // YYYY-MM-DD
+  roca_id?: number;
 }

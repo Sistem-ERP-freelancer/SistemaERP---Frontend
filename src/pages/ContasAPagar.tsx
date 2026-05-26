@@ -189,6 +189,7 @@ function ContasAPagar() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15);
   const [fornecedorFilterId, setFornecedorFilterId] = useState<number | null>(null);
+  const [rocaFilterId, setRocaFilterId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
   const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
@@ -399,6 +400,7 @@ function ContasAPagar() {
       currentPage,
       pageSize,
       fornecedorFilterId,
+      rocaFilterId,
       statusFilter,
       dataInicialFilter,
       dataFinalFilter,
@@ -431,6 +433,8 @@ function ContasAPagar() {
           fornecedorFilterId != null && fornecedorFilterId > 0
             ? fornecedorFilterId
             : undefined;
+        const rocaArg =
+          rocaFilterId != null && rocaFilterId > 0 ? rocaFilterId : undefined;
         const dataInicialArg =
           dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
             ? dataInicialFilter
@@ -452,6 +456,7 @@ function ContasAPagar() {
                 tipo: "PAGAR",
                 status: "PAGO_TOTAL",
                 fornecedor_id: fornecedorArg,
+                roca_id: rocaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -459,6 +464,7 @@ function ContasAPagar() {
                 tipo: "PAGAR",
                 status: "PAGO_PARCIAL",
                 fornecedor_id: fornecedorArg,
+                roca_id: rocaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -479,6 +485,7 @@ function ContasAPagar() {
                 tipo: "PAGAR",
                 status: "PENDENTE",
                 fornecedor_id: fornecedorArg,
+                roca_id: rocaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -486,6 +493,7 @@ function ContasAPagar() {
                 tipo: "PAGAR",
                 status: "VENCIDO",
                 fornecedor_id: fornecedorArg,
+                roca_id: rocaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -493,6 +501,7 @@ function ContasAPagar() {
                 tipo: "PAGAR",
                 status: "PAGO_PARCIAL",
                 fornecedor_id: fornecedorArg,
+                roca_id: rocaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -525,6 +534,7 @@ function ContasAPagar() {
             | "VENCE_HOJE"
             | undefined,
           fornecedor_id: fornecedorArg,
+          roca_id: rocaArg,
           data_inicial: dataInicialArg,
           data_final: dataFinalArg,
         });
@@ -578,12 +588,14 @@ function ContasAPagar() {
 
   const temFiltrosAtivos =
     (fornecedorFilterId != null && fornecedorFilterId > 0) ||
+    (rocaFilterId != null && rocaFilterId > 0) ||
     !!statusFilter ||
     !!dataInicialFilter ||
     !!dataFinalFilter;
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     setFornecedorFilterId(null);
+    setRocaFilterId(null);
     setStatusFilter("");
     setDataInicialFilter("");
     setDataFinalFilter("");
@@ -593,7 +605,7 @@ function ContasAPagar() {
   // Resetar página quando tab, busca ou filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm, fornecedorFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeCardFilter]);
+  }, [activeTab, searchTerm, fornecedorFilterId, rocaFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeCardFilter]);
 
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
@@ -1342,10 +1354,12 @@ function ContasAPagar() {
           : o === "COMPRA"
             ? "compra pedido"
             : "";
+      const rocaNome = (t as { roca_nome?: string | null }).roca_nome ?? "";
       const matchesSearch =
         t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.fornecedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rocaNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
         origemTxt.includes(searchTerm.toLowerCase());
       return matchesSearch;
     });
@@ -1688,6 +1702,7 @@ function ContasAPagar() {
               {temFiltrosAtivos && (
                 <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
                   {(fornecedorFilterId != null && fornecedorFilterId > 0 ? 1 : 0) +
+                    (rocaFilterId != null && rocaFilterId > 0 ? 1 : 0) +
                     (statusFilter ? 1 : 0) +
                     (dataInicialFilter ? 1 : 0) +
                     (dataFinalFilter ? 1 : 0)}
@@ -1729,6 +1744,33 @@ function ContasAPagar() {
                             {f.nome_fantasia || f.nome_razao}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Roça */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Select
+                      value={rocaFilterId == null ? "todos" : String(rocaFilterId)}
+                      onValueChange={(v) =>
+                        setRocaFilterId(v === "todos" ? null : parseInt(v, 10))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todas as roças</SelectItem>
+                        {rocasLista
+                          .filter((r) => r.ativo !== false)
+                          .map((roca) => (
+                            <SelectItem key={roca.id} value={String(roca.id)}>
+                              {roca.nome}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1847,7 +1889,7 @@ function ContasAPagar() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número da conta, descrição, fornecedor..."
+                placeholder="Buscar por número da conta, descrição, fornecedor, roça..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
