@@ -503,6 +503,27 @@ const ContasAReceber = () => {
   });
 
   const contas = contasResponse?.data || [];
+  const contasExibir = useMemo(() => {
+    if (rocaFilterId == null || rocaFilterId <= 0) return contas;
+    const nomeRoca = rocasLista
+      .find((r) => r.id === rocaFilterId)
+      ?.nome?.trim()
+      .toLowerCase();
+    const pedidoIdsRoca = new Set(
+      (pedidosContasReceber ?? []).map((p) => p.pedido_id).filter((id) => id != null),
+    );
+    return contas.filter((c) => {
+      if (Number(c.roca_id) === rocaFilterId) return true;
+      if (
+        nomeRoca &&
+        (c.roca_nome ?? "").trim().toLowerCase() === nomeRoca
+      ) {
+        return true;
+      }
+      if (c.pedido_id != null && pedidoIdsRoca.has(c.pedido_id)) return true;
+      return false;
+    });
+  }, [contas, rocaFilterId, rocasLista, pedidosContasReceber]);
   const totalContas = contasResponse?.total || 0;
   const totalPages = Math.ceil(totalContas / pageSize);
 
@@ -1008,7 +1029,7 @@ const ContasAReceber = () => {
 
   // Mapear contas financeiras para o formato de exibição
   const transacoesDisplay = useMemo(() => {
-    return contas.map((conta) => {
+    return contasExibir.map((conta) => {
       let nomeCliente = "N/A";
       let categoria = "N/A";
       
@@ -1095,7 +1116,7 @@ const ContasAReceber = () => {
         roca_nome: conta.roca_nome ?? null,
       };
     });
-  }, [contas, clientes]);
+  }, [contasExibir, clientes]);
 
   // Query para buscar conta por ID quando o termo de busca for numérico (apenas no fallback de contas financeiras)
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
@@ -1156,7 +1177,7 @@ const ContasAReceber = () => {
   const gruposContas = useMemo(() => {
     const gruposMap = new Map<string, ContaFinanceira[]>();
 
-    contas.forEach((conta) => {
+    contasExibir.forEach((conta) => {
       const key = conta.pedido_id != null ? `pedido-${conta.pedido_id}` : `avulso-${conta.id}`;
       const list = gruposMap.get(key) || [];
       list.push(conta);
@@ -1219,7 +1240,7 @@ const ContasAReceber = () => {
         rocaTxt.includes(term)
       );
     });
-  }, [contas, clientes, searchTerm]);
+  }, [contasExibir, clientes, searchTerm]);
 
   // Filtrar linhas e grupos pelo card clicado e pela folha de filtros (status)
   const filteredLinhasPedidos = useMemo(() => {
@@ -1373,14 +1394,14 @@ const ContasAReceber = () => {
     if (activeCardFilter === "vencidas") {
       // Filtrar apenas contas vencidas (por status ou por data)
       filtered = filtered.filter(t => {
-        const conta = contas.find(c => c.id === t.contaId);
+        const conta = contasExibir.find(c => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencida(conta);
       });
     } else if (activeCardFilter === "vencendo_hoje") {
       // Filtrar apenas contas vencendo hoje
       filtered = filtered.filter(t => {
-        const conta = contas.find(c => c.id === t.contaId);
+        const conta = contasExibir.find(c => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencendoHoje(conta);
       });

@@ -586,6 +586,24 @@ function ContasAPagar() {
     [contasResponse],
   );
 
+  const contasExibir = useMemo(() => {
+    if (rocaFilterId == null || rocaFilterId <= 0) return contasFallback;
+    const nomeRoca = rocasLista
+      .find((r) => r.id === rocaFilterId)
+      ?.nome?.trim()
+      .toLowerCase();
+    return contasFallback.filter((c) => {
+      if (Number(c.roca_id) === rocaFilterId) return true;
+      if (
+        nomeRoca &&
+        (c.roca_nome ?? "").trim().toLowerCase() === nomeRoca
+      ) {
+        return true;
+      }
+      return false;
+    });
+  }, [contasFallback, rocaFilterId, rocasLista]);
+
   const temFiltrosAtivos =
     (fornecedorFilterId != null && fornecedorFilterId > 0) ||
     (rocaFilterId != null && rocaFilterId > 0) ||
@@ -1088,7 +1106,7 @@ function ContasAPagar() {
 
   // Uma linha por conta em tb_conta_financeira (PAGAR): alinhado ao dashboard e ao centro de custo.
   const transacoesDisplay = useMemo(() => {
-    return contasFallback.map((conta) => {
+    return contasExibir.map((conta) => {
       let nomeFornecedor = "N/A";
       const temPedido = !!(conta as any).pedido_id;
       let categoria = temPedido ? "Compras" : "Centro de custo";
@@ -1211,7 +1229,7 @@ function ContasAPagar() {
         roca_nome: (conta as { roca_nome?: string | null }).roca_nome ?? null,
       };
     });
-  }, [contasFallback, fornecedores]);
+  }, [contasExibir, fornecedores]);
 
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
   const searchId = isNumericSearch ? Number(searchTerm) : null;
@@ -1269,13 +1287,13 @@ function ContasAPagar() {
     // Filtrar por tab ativa (especialmente para Vencidas e Vencendo Hoje)
     if (activeTab === "VENCIDO") {
       filtered = filtered.filter(t => {
-        const conta = contasFallback.find((c) => c.id === t.contaId);
+        const conta = contasExibir.find((c) => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencida(conta);
       });
     } else if (activeTab === "VENCE_HOJE") {
       filtered = filtered.filter(t => {
-        const conta = contasFallback.find((c) => c.id === t.contaId);
+        const conta = contasExibir.find((c) => c.id === t.contaId);
         if (!conta) return false;
         return isContaVencendoHoje(conta);
       });
@@ -1366,7 +1384,7 @@ function ContasAPagar() {
     }
 
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contasFallback, fornecedores, activeTab, activeCardFilter]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contasExibir, fornecedores, activeTab, activeCardFilter]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
