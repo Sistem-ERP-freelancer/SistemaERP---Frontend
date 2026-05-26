@@ -52,8 +52,10 @@ import {
 import { formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
+import { controleRocaService } from "@/services/controle-roca.service";
 import { ContaFinanceira, CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
+import type { Roca } from "@/types/roca";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import type { ContaReceber } from "@/types/contas-financeiras.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -137,10 +139,20 @@ const ContasAReceber = () => {
     valor_original: 0,
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: "",
+    roca_id: undefined,
   });
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const { data: rocasData } = useQuery({
+    queryKey: ["contas-receber", "rocas-ativas"],
+    queryFn: () => controleRocaService.listarRocas(undefined, false),
+    retry: false,
+  });
+  const rocasLista: Roca[] = Array.isArray(rocasData)
+    ? rocasData
+    : (rocasData as { rocas?: Roca[] })?.rocas ?? [];
 
   // Helpers de data para períodos rápidos (usados apenas no relatório em aberto)
   const toYMD = (d: Date) => d.toISOString().slice(0, 10);
@@ -694,6 +706,7 @@ const ContasAReceber = () => {
         valor_original: 0,
         data_emissao: new Date().toISOString().split('T')[0],
         data_vencimento: "",
+        roca_id: undefined,
       });
     },
     onError: (error: any) => {
@@ -869,6 +882,7 @@ const ContasAReceber = () => {
         cliente_id: contaSelecionada.cliente_id,
         fornecedor_id: contaSelecionada.fornecedor_id,
         pedido_id: contaSelecionada.pedido_id,
+        roca_id: contaSelecionada.roca_id ?? undefined,
         forma_pagamento: contaSelecionada.forma_pagamento,
         data_pagamento: contaSelecionada.data_pagamento ? converterDataParaISO(contaSelecionada.data_pagamento) : undefined,
         observacoes: contaSelecionada.observacoes,
@@ -933,6 +947,8 @@ const ContasAReceber = () => {
     if (editConta.pedido_id !== undefined && editConta.pedido_id !== null) {
       dadosAtualizacao.pedido_id = editConta.pedido_id;
     }
+    dadosAtualizacao.roca_id =
+      editConta.roca_id != null && editConta.roca_id > 0 ? editConta.roca_id : null;
     if (editConta.forma_pagamento) {
       dadosAtualizacao.forma_pagamento = editConta.forma_pagamento;
     }
@@ -1439,6 +1455,7 @@ const ContasAReceber = () => {
       data_vencimento: newTransacao.data_vencimento,
       cliente_id: newTransacao.cliente_id || undefined,
       pedido_id: newTransacao.pedido_id || undefined,
+      roca_id: newTransacao.roca_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
       observacoes: newTransacao.observacoes || undefined,
@@ -1546,6 +1563,39 @@ const ContasAReceber = () => {
                               {pedido.numero_pedido || `PED-${pedido.pedido_id}`}
                             </SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Roça (opcional)</Label>
+                      <Select
+                        value={
+                          newTransacao.roca_id != null
+                            ? String(newTransacao.roca_id)
+                            : "none"
+                        }
+                        onValueChange={(value) =>
+                          setNewTransacao({
+                            ...newTransacao,
+                            roca_id:
+                              value && value !== "none"
+                                ? Number(value)
+                                : undefined,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma roça" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {rocasLista
+                            .filter((r) => r.ativo !== false)
+                            .map((roca) => (
+                              <SelectItem key={roca.id} value={String(roca.id)}>
+                                {roca.nome}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -2658,6 +2708,38 @@ const ContasAReceber = () => {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Roça (opcional)</Label>
+                  <Select
+                    value={
+                      editConta.roca_id != null && editConta.roca_id > 0
+                        ? String(editConta.roca_id)
+                        : "none"
+                    }
+                    onValueChange={(value) =>
+                      setEditConta({
+                        ...editConta,
+                        roca_id:
+                          value && value !== "none" ? Number(value) : undefined,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma roça" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {rocasLista
+                        .filter((r) => r.ativo !== false)
+                        .map((roca) => (
+                          <SelectItem key={roca.id} value={String(roca.id)}>
+                            {roca.nome}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">

@@ -27,6 +27,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
+import { controleRocaService } from '@/services/controle-roca.service';
 import { Fornecedor } from '@/services/fornecedores.service';
 import { Produto, produtosService } from '@/services/produtos.service';
 import { CondicaoPagamento } from '@/shared/types/condicao-pagamento.types';
@@ -37,6 +38,7 @@ import {
     Pedido,
     TipoPedido,
 } from '@/types/pedido';
+import type { Roca } from '@/types/roca';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, FileDown, Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -97,6 +99,7 @@ export function OrderForm({
   const [clienteId, setClienteId] = useState<number | undefined>(undefined);
   const [fornecedorId, setFornecedorId] = useState<number | undefined>(undefined);
   const [transportadoraId, setTransportadoraId] = useState<number | undefined>(undefined);
+  const [rocaId, setRocaId] = useState<number | undefined>(undefined);
   const [dataPedido, setDataPedido] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -147,6 +150,16 @@ export function OrderForm({
     queryFn: () => clientesService.buscarLimiteCredito(clienteId!),
     enabled: !!clienteId && tipo === 'VENDA' && isOpen,
   });
+
+  const { data: rocasData } = useQuery({
+    queryKey: ['pedidos', 'rocas-ativas'],
+    queryFn: () => controleRocaService.listarRocas(undefined, false),
+    enabled: isOpen,
+    retry: false,
+  });
+  const rocasLista: Roca[] = Array.isArray(rocasData)
+    ? rocasData
+    : (rocasData as { rocas?: Roca[] })?.rocas ?? [];
 
   // Conforme GUIA_PRODUTOS_PEDIDO_COMPRA.md: vínculo fornecedor no produto é apenas informativo.
   // Mostrar TODOS os produtos no pedido de compra - NÃO filtrar pelo fornecedor selecionado.
@@ -274,6 +287,7 @@ export function OrderForm({
     setClienteId(undefined);
     setFornecedorId(undefined);
     setTransportadoraId(undefined);
+    setRocaId(undefined);
     setDataPedido(new Date().toISOString().split('T')[0]);
     setFormaPagamento(undefined);
     setFormaPagamentoEstrutural(undefined);
@@ -315,6 +329,8 @@ export function OrderForm({
         setClienteId(order.cliente_id);
         setFornecedorId(order.fornecedor_id);
         setTransportadoraId(order.transportadora_id);
+        const rocaPedido = order.roca_id ?? (order as { rocaId?: number }).rocaId;
+        setRocaId(rocaPedido != null && rocaPedido > 0 ? Number(rocaPedido) : undefined);
 
         const dataPedidoOnly = order.data_pedido.split('T')[0].split(' ')[0];
         const dataVencimentoOnly = order.data_vencimento_base?.split('T')[0].split(' ')[0] || '';
@@ -567,6 +583,7 @@ export function OrderForm({
       cliente_id: tipo === 'VENDA' ? clienteId : undefined,
       fornecedor_id: tipo === 'COMPRA' ? fornecedorId : undefined,
       transportadora_id: transportadoraId,
+      roca_id: rocaId,
       forma_pagamento: formaPagamentoPayload ?? formaPagamento,
       forma_pagamento_estrutural: formaEstrutural,
       data_vencimento: dataVencimento || (formaPagamentoEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) || undefined,
@@ -764,14 +781,39 @@ export function OrderForm({
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label>Data do Pedido</Label>
-                <Input
-                  type="date"
-                  value={dataPedido}
-                  onChange={(e) => setDataPedido(e.target.value)}
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Roça (opcional)</Label>
+                  <Select
+                    value={rocaId != null ? String(rocaId) : 'none'}
+                    onValueChange={(value) =>
+                      setRocaId(value && value !== 'none' ? Number(value) : undefined)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma roça" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {rocasLista
+                        .filter((r) => r.ativo !== false)
+                        .map((roca) => (
+                          <SelectItem key={roca.id} value={String(roca.id)}>
+                            {roca.nome}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Data do Pedido</Label>
+                  <Input
+                    type="date"
+                    value={dataPedido}
+                    onChange={(e) => setDataPedido(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
             </div>
           </div>

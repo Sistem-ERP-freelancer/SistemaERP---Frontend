@@ -64,7 +64,9 @@ import {
   CreateContaFinanceiraDto,
   financeiroService,
 } from "@/services/financeiro.service";
+import { controleRocaService } from "@/services/controle-roca.service";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
+import type { Roca } from "@/types/roca";
 import { pedidosService } from "@/services/pedidos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -214,10 +216,20 @@ function ContasAPagar() {
     valor_original: 0,
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: "",
+    roca_id: undefined,
   });
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const { data: rocasData } = useQuery({
+    queryKey: ["contas-pagar", "rocas-ativas"],
+    queryFn: () => controleRocaService.listarRocas(undefined, false),
+    retry: false,
+  });
+  const rocasLista: Roca[] = Array.isArray(rocasData)
+    ? rocasData
+    : (rocasData as { rocas?: Roca[] })?.rocas ?? [];
 
   // Buscar fornecedores
   const { data: fornecedoresData } = useQuery({
@@ -747,6 +759,7 @@ function ContasAPagar() {
         valor_original: 0,
         data_emissao: new Date().toISOString().split('T')[0],
         data_vencimento: "",
+        roca_id: undefined,
       });
     },
     onError: (error: any) => {
@@ -887,6 +900,7 @@ function ContasAPagar() {
         cliente_id: contaSelecionada.cliente_id,
         fornecedor_id: contaSelecionada.fornecedor_id,
         pedido_id: contaSelecionada.pedido_id,
+        roca_id: contaSelecionada.roca_id ?? undefined,
         forma_pagamento: contaSelecionada.forma_pagamento,
         data_pagamento: contaSelecionada.data_pagamento ? converterDataParaISO(contaSelecionada.data_pagamento) : undefined,
         observacoes: contaSelecionada.observacoes,
@@ -951,6 +965,8 @@ function ContasAPagar() {
     if (editConta.pedido_id !== undefined && editConta.pedido_id !== null) {
       dadosAtualizacao.pedido_id = editConta.pedido_id;
     }
+    dadosAtualizacao.roca_id =
+      editConta.roca_id != null && editConta.roca_id > 0 ? editConta.roca_id : null;
     if (editConta.forma_pagamento) {
       dadosAtualizacao.forma_pagamento = editConta.forma_pagamento;
     }
@@ -1352,6 +1368,7 @@ function ContasAPagar() {
       data_vencimento: newTransacao.data_vencimento,
       fornecedor_id: newTransacao.fornecedor_id || undefined,
       pedido_id: newTransacao.pedido_id || undefined,
+      roca_id: newTransacao.roca_id || undefined,
       forma_pagamento: newTransacao.forma_pagamento || undefined,
       data_pagamento: newTransacao.data_pagamento || undefined,
       observacoes: newTransacao.observacoes || undefined,
@@ -1457,6 +1474,39 @@ function ContasAPagar() {
                             .map((pedido) => (
                               <SelectItem key={pedido.pedido_id} value={String(pedido.pedido_id)}>
                                 {pedido.numero_pedido || `PED-${pedido.pedido_id}`}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Roça (opcional)</Label>
+                      <Select
+                        value={
+                          newTransacao.roca_id != null
+                            ? String(newTransacao.roca_id)
+                            : "none"
+                        }
+                        onValueChange={(value) =>
+                          setNewTransacao({
+                            ...newTransacao,
+                            roca_id:
+                              value && value !== "none"
+                                ? Number(value)
+                                : undefined,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma roça" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {rocasLista
+                            .filter((r) => r.ativo !== false)
+                            .map((roca) => (
+                              <SelectItem key={roca.id} value={String(roca.id)}>
+                                {roca.nome}
                               </SelectItem>
                             ))}
                         </SelectContent>
@@ -2132,6 +2182,38 @@ function ContasAPagar() {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Roça (opcional)</Label>
+                  <Select
+                    value={
+                      editConta.roca_id != null && editConta.roca_id > 0
+                        ? String(editConta.roca_id)
+                        : "none"
+                    }
+                    onValueChange={(value) =>
+                      setEditConta({
+                        ...editConta,
+                        roca_id:
+                          value && value !== "none" ? Number(value) : undefined,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma roça" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {rocasLista
+                        .filter((r) => r.ativo !== false)
+                        .map((roca) => (
+                          <SelectItem key={roca.id} value={String(roca.id)}>
+                            {roca.nome}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">

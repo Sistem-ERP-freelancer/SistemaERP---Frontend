@@ -64,6 +64,10 @@ export interface Pedido {
     nome: string;
     cnpj?: string;
   };
+  /** Roça vinculada (opcional) — usada em contas financeiras e relatórios. */
+  roca_id?: number | null;
+  roca?: { id: number; nome: string } | null;
+  roca_nome?: string | null;
   usuario_criacao_id?: string;
   usuario_atualizacao_id?: string;
   data_pedido: string;
@@ -95,6 +99,8 @@ export interface CreatePedidoDto {
   cliente_id?: number;
   fornecedor_id?: number;
   transportadora_id?: number;
+  /** Roça vinculada (opcional). */
+  roca_id?: number;
   data_pedido: string;
   data_entrega_prevista?: string;
   condicao_pagamento?: string;

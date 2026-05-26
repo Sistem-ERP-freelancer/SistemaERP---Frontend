@@ -37,6 +37,8 @@ export interface ContaReceber {
   data_pedido: string; // ISO date: "2026-02-10"
   /** Data de vencimento (única por pedido no modelo sem parcelas) */
   data_vencimento?: string | null;
+  roca_id?: number | null;
+  roca_nome?: string | null;
 }
 
 export interface ContaPagar {
@@ -51,6 +53,8 @@ export interface ContaPagar {
   status: string; // ABERTO | PARCIAL | QUITADO | VENCIDO | CANCELADO
   data_pedido: string; // ISO date: "2026-02-10"
   data_vencimento?: string | null; // data de vencimento (retornada pela API)
+  roca_id?: number | null;
+  roca_nome?: string | null;
 }
 
 export interface FiltrosContasReceber {
