@@ -141,7 +141,10 @@ export function useOrders() {
         const matchFornecedor =
           order.fornecedor?.nome_fantasia?.toLowerCase().includes(termo) ||
           order.fornecedor?.nome_razao?.toLowerCase().includes(termo);
-        return !!(matchNumero || matchCliente || matchFornecedor);
+        const matchRoca =
+          order.roca_nome?.toLowerCase().includes(termo) ||
+          order.roca?.nome?.toLowerCase().includes(termo);
+        return !!(matchNumero || matchCliente || matchFornecedor || matchRoca);
       });
     }
     

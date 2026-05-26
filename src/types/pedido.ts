@@ -140,8 +140,11 @@ export interface AtualizarCondicaoPagamentoPayload {
 export interface FiltrosPedidos {
   id?: number;
   numero_pedido?: string;
-  /** Busca por número do pedido, cliente ou fornecedor (enviado como param único no backend) */
+  /** Busca por número do pedido, cliente, fornecedor ou roça (enviado como param único no backend) */
   busca?: string;
+  roca_id?: number;
+  /** Apenas pedidos com roça vinculada */
+  somente_com_roca?: boolean;
   tipo?: TipoPedido;
   status?: StatusPedido;
   cliente_id?: number;

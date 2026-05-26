@@ -258,6 +258,13 @@ export function OrderViewDialog({
                     </div>
                   )}
                 </>
+              ) : order.roca_nome || order.roca?.nome || order.roca_id ? (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Roça</Label>
+                  <div className="text-sm font-medium">
+                    {order.roca_nome || order.roca?.nome || `Roça #${order.roca_id}`}
+                  </div>
+                </div>
               ) : (
                 <div className="text-sm text-muted-foreground">--</div>
               )}

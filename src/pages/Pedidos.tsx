@@ -34,9 +34,11 @@ import {
 import { useOrders } from '@/hooks/useOrders';
 import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
+import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Calendar, Circle, Download, FileText, Filter, Loader2, Plus, Printer, Search, XCircle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -151,7 +153,19 @@ export default function Pedidos() {
     }
   };
 
-  const temFiltrosAtivos = !!(filters.data_inicial || filters.data_final || filters.tipo || filters.status);
+  const { data: rocasFiltro = [] } = useQuery({
+    queryKey: ['pedidos', 'rocas-filtro'],
+    queryFn: () => controleRocaService.listarRocas(undefined, false, { limit: 500 }),
+  });
+
+  const temFiltrosAtivos = !!(
+    filters.data_inicial ||
+    filters.data_final ||
+    filters.tipo ||
+    filters.status ||
+    filters.roca_id ||
+    filters.somente_com_roca
+  );
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     updateFilters({
@@ -159,6 +173,8 @@ export default function Pedidos() {
       data_final: undefined,
       tipo: undefined,
       status: undefined,
+      roca_id: undefined,
+      somente_com_roca: undefined,
     });
     setFiltrosDialogOpen(false);
   };
@@ -457,7 +473,14 @@ export default function Pedidos() {
               Filtros
               {temFiltrosAtivos && (
                 <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
-                  {[filters.data_inicial, filters.data_final, filters.tipo, filters.status].filter(Boolean).length}
+                  {[
+                    filters.data_inicial,
+                    filters.data_final,
+                    filters.tipo,
+                    filters.status,
+                    filters.roca_id,
+                    filters.somente_com_roca,
+                  ].filter(Boolean).length}
                 </span>
               )}
             </Button>
@@ -530,6 +553,51 @@ export default function Pedidos() {
                   <Separator />
 
                   <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Select
+                      value={
+                        filters.roca_id != null && filters.roca_id > 0
+                          ? String(filters.roca_id)
+                          : 'all'
+                      }
+                      onValueChange={(value) =>
+                        updateFilters({
+                          roca_id:
+                            value === 'all' ? undefined : Number(value),
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas as roças</SelectItem>
+                        {rocasFiltro.map((roca) => (
+                          <SelectItem key={roca.id} value={String(roca.id)}>
+                            {roca.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input"
+                        checked={!!filters.somente_com_roca}
+                        onChange={(e) =>
+                          updateFilters({
+                            somente_com_roca: e.target.checked || undefined,
+                            ...(e.target.checked ? {} : {}),
+                          })
+                        }
+                      />
+                      Somente pedidos com roça vinculada
+                    </label>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
                     <Label className="text-sm font-semibold">Status</Label>
                     <RadioGroup
                       value={filters.status || 'all'}
@@ -595,7 +663,7 @@ export default function Pedidos() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número, cliente ou fornecedor..."
+                placeholder="Buscar por número, cliente, fornecedor ou roça..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => handleSearch(e.target.value)}

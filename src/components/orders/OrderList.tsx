@@ -107,11 +107,23 @@ export function OrderList({
               <TableCell>
                 <span className="text-sm">
                   {order.tipo === 'VENDA'
-                    ? order.cliente?.nome || 
-                      (order.cliente_id ? `Cliente #${order.cliente_id}` : '--')
-                    : order.fornecedor?.nome_fantasia || 
-                      order.fornecedor?.nome_razao || 
-                      (order.fornecedor_id ? `Fornecedor #${order.fornecedor_id}` : '--')}
+                    ? order.cliente?.nome ||
+                      order.roca_nome ||
+                      order.roca?.nome ||
+                      (order.cliente_id
+                        ? `Cliente #${order.cliente_id}`
+                        : order.roca_id
+                          ? `Roça #${order.roca_id}`
+                          : '--')
+                    : order.fornecedor?.nome_fantasia ||
+                      order.fornecedor?.nome_razao ||
+                      order.roca_nome ||
+                      order.roca?.nome ||
+                      (order.fornecedor_id
+                        ? `Fornecedor #${order.fornecedor_id}`
+                        : order.roca_id
+                          ? `Roça #${order.roca_id}`
+                          : '--')}
                 </span>
               </TableCell>
               <TableCell>

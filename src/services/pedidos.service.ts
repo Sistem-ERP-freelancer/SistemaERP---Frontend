@@ -115,6 +115,12 @@ class PedidosService {
     if (params?.cliente_nome) queryParams.append('cliente_nome', params.cliente_nome);
     if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
     if (params?.fornecedor_nome) queryParams.append('fornecedor_nome', params.fornecedor_nome);
+    if (params?.roca_id != null && params.roca_id > 0) {
+      queryParams.append('roca_id', params.roca_id.toString());
+    }
+    if (params?.somente_com_roca) {
+      queryParams.append('somente_com_roca', 'true');
+    }
     if (params?.data_inicial) {
       // Enviar em snake_case (padrão da API)
       queryParams.append('data_inicial', params.data_inicial);

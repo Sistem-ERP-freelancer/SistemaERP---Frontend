@@ -308,8 +308,14 @@ class ApiClient {
             break;
           
           case 500:
-            // Internal Server Error
-            errorMessage = 'Erro interno do servidor. Tente novamente mais tarde.';
+            // Internal Server Error — manter mensagem do backend se for específica
+            if (
+              !errorMessage ||
+              errorMessage === 'Internal server error' ||
+              errorMessage === 'Internal Server Error'
+            ) {
+              errorMessage = 'Erro interno do servidor. Tente novamente mais tarde.';
+            }
             break;
           
           case 502:
