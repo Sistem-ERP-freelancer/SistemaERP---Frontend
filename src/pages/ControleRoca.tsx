@@ -3748,6 +3748,7 @@ export default function ControleRoca() {
                       <TableHead>Nome fantasia</TableHead>
                       <TableHead>CPF</TableHead>
                       <TableHead>Telefone</TableHead>
+                      <TableHead className="text-center whitespace-nowrap">Mudas plantadas</TableHead>
                       <TableHead>% padrão</TableHead>
                       <TableHead>Valor emba</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
@@ -3756,7 +3757,7 @@ export default function ControleRoca() {
                   <TableBody>
                     {meeirosOrdenados.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           Nenhum meeiro cadastrado
                         </TableCell>
                       </TableRow>
@@ -3776,6 +3777,11 @@ export default function ControleRoca() {
                           </TableCell>
                           <TableCell>{m.cpf || '—'}</TableCell>
                           <TableCell>{m.telefone || '—'}</TableCell>
+                          <TableCell className="text-center tabular-nums">
+                            {m.quantidadeMudasPlantadas != null
+                              ? String(m.quantidadeMudasPlantadas)
+                              : '—'}
+                          </TableCell>
                           <TableCell>{m.porcentagem_padrao}%</TableCell>
                           <TableCell>
                             {formatCurrency(valorDeEmbaPadraoDeMeeiro(m))}
