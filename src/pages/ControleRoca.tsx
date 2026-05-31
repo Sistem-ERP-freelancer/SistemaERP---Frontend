@@ -3734,7 +3734,7 @@ export default function ControleRoca() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
+            <div className="bg-card border rounded-xl overflow-x-auto min-w-0">
               {loadingMeeiros ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -3745,10 +3745,10 @@ export default function ControleRoca() {
                     <TableRow>
                       <TableHead>Código</TableHead>
                       <TableHead>Nome</TableHead>
+                      <TableHead className="text-center whitespace-nowrap min-w-[7rem]">Mudas plantadas</TableHead>
                       <TableHead>Nome fantasia</TableHead>
                       <TableHead>CPF</TableHead>
                       <TableHead>Telefone</TableHead>
-                      <TableHead className="text-center whitespace-nowrap">Mudas plantadas</TableHead>
                       <TableHead>% padrão</TableHead>
                       <TableHead>Valor emba</TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
@@ -3770,6 +3770,11 @@ export default function ControleRoca() {
                               {m.nome}
                             </span>
                           </TableCell>
+                          <TableCell className="text-center tabular-nums font-medium">
+                            {m.quantidadeMudasPlantadas != null
+                              ? String(m.quantidadeMudasPlantadas)
+                              : '—'}
+                          </TableCell>
                           <TableCell className="max-w-[min(280px,45vw)]">
                             <span className="block truncate" title={m.nomeFantasia || '—'}>
                               {m.nomeFantasia || '—'}
@@ -3777,11 +3782,6 @@ export default function ControleRoca() {
                           </TableCell>
                           <TableCell>{m.cpf || '—'}</TableCell>
                           <TableCell>{m.telefone || '—'}</TableCell>
-                          <TableCell className="text-center tabular-nums">
-                            {m.quantidadeMudasPlantadas != null
-                              ? String(m.quantidadeMudasPlantadas)
-                              : '—'}
-                          </TableCell>
                           <TableCell>{m.porcentagem_padrao}%</TableCell>
                           <TableCell>
                             {formatCurrency(valorDeEmbaPadraoDeMeeiro(m))}
