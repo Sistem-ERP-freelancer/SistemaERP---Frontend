@@ -12027,8 +12027,8 @@ className={
                   <div className="min-w-0 space-y-1 pr-8">
                     <SheetTitle className="text-xl leading-tight">Relatórios de lançamento</SheetTitle>
                     <SheetDescription>
-                      Filtros: período, produtor, roça, produto (opcionais). Os dois relatórios usam os mesmos filtros.
-                      Exporte em PDF ou imprima.
+                      Filtros: período, produtor, roça, produto (opcionais). Todos os relatórios abaixo usam os mesmos
+                      filtros. Exporte em PDF ou imprima.
                     </SheetDescription>
                   </div>
                 </div>
@@ -12043,8 +12043,7 @@ className={
                     <h3 className="text-sm font-semibold text-foreground">Notas de lançamento</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Nome do produto, quantidade, preço unitário (média ponderada) e valor total. Os filtros
-                      abaixo são os mesmos do relatório geral (bloco seguinte) — alterar em qualquer seção atualiza os
-                      dois.
+                      abaixo são compartilhados com os demais relatórios deste painel.
                     </p>
                   </div>
                 </div>
@@ -12175,11 +12174,66 @@ className={
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-foreground">Colheita por meeiro</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Meeiro, qtde colhida, mudas plantadas e valor total colhido. Mesmos filtros da seção acima.
+                      Nome do meeiro, quantidade colhida, mudas plantadas e valor total colhido. Layout em PDF
+                      semelhante ao repasse ao parceiro.
                     </p>
                   </div>
                 </div>
-                <div className="p-4">
+                <div className="p-4 space-y-4">
+                  <div className="rounded-lg border bg-muted/25 p-3">
+                    <p className="text-xs font-medium text-foreground mb-2">Filtros</p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Produtor</Label>
+                        <RelatorioTabComboProdutor
+                          value={relatorioSheetProdutorId}
+                          onChange={(id) => {
+                            setRelatorioSheetProdutorId(id);
+                            setRelatorioEstoqueRocaId('');
+                            setRelatorioSheetProdutoId('');
+                          }}
+                          produtores={produtoresRelatorioOrdenados}
+                        />
+                      </div>
+                      <div className="space-y-1.5 min-w-[160px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Roça</Label>
+                        <RelatorioTabComboRoca
+                          value={relatorioEstoqueRocaId}
+                          onChange={(id) => {
+                            setRelatorioEstoqueRocaId(id);
+                            setRelatorioSheetProdutoId('');
+                          }}
+                          rocas={rocasRelatorioFiltros}
+                        />
+                      </div>
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Produto</Label>
+                        <RelatorioTabComboProduto
+                          value={relatorioSheetProdutoId}
+                          onChange={setRelatorioSheetProdutoId}
+                          produtos={produtosRelatorioFiltrosOrdenados}
+                        />
+                      </div>
+                      <div className="space-y-1.5 w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Data inicial</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={relatorioEstoqueDataInicio}
+                          onChange={(e) => setRelatorioEstoqueDataInicio(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5 w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Data final</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={relatorioEstoqueDataFim}
+                          onChange={(e) => setRelatorioEstoqueDataFim(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="gradient"
