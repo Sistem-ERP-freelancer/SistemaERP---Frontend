@@ -1013,6 +1013,57 @@ class ControleRocaService {
       throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
     }
   }
+
+  async downloadRelatorioColheitaMeeirosPdf(
+    dataInicial?: string,
+    dataFinal?: string,
+    rocaId?: number,
+    produtorId?: number,
+    produtoId?: number,
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
+    if (rocaId != null) q.set('rocaId', String(rocaId));
+    if (produtorId != null) q.set('produtorId', String(produtorId));
+    if (produtoId != null) q.set('produtoId', String(produtoId));
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorio/colheita-meeiros/pdf${query ? `?${query}` : ''}`,
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-colheita-meeiros-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async printRelatorioColheitaMeeirosPdf(
+    dataInicial?: string,
+    dataFinal?: string,
+    rocaId?: number,
+    produtorId?: number,
+    produtoId?: number,
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
+    if (dataFinal?.trim()) q.set('data_final', dataFinal.trim());
+    if (rocaId != null) q.set('rocaId', String(rocaId));
+    if (produtorId != null) q.set('produtorId', String(produtorId));
+    if (produtoId != null) q.set('produtoId', String(produtoId));
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `${BASE}/relatorio/colheita-meeiros/pdf${query ? `?${query}` : ''}`,
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
 }
 
 export interface RelatorioLancamentoProdutosLinha {

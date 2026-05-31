@@ -1174,6 +1174,9 @@ export default function ControleRoca() {
   const [relatorioProdutoOrigemLoading, setRelatorioProdutoOrigemLoading] = useState<'download' | 'print' | null>(
     null
   );
+  const [relatorioColheitaMeeiroLoading, setRelatorioColheitaMeeiroLoading] = useState<
+    'download' | 'print' | null
+  >(null);
   /** Painel com todos os relatórios voltados a lançamentos (produtos e meeiros). */
   const [relLancamentosSheetOpen, setRelLancamentosSheetOpen] = useState(false);
   const { data: rocasRelatorioFiltros = [] } = useQuery({
@@ -7417,6 +7420,91 @@ className={
               </div>
             </div>
 
+            <div id="rel-colheita-meeiros" className="bg-card border rounded-xl p-4 sm:p-5 scroll-mt-24">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Sprout className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold leading-tight">Relatório de colheita por meeiro</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Nome do meeiro, quantidade colhida, mudas plantadas e valor total colhido (PDF). Usa os mesmos
+                    filtros de produtor, roça, produto e período acima.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[160px]"
+                    disabled={
+                      relatorioColheitaMeeiroLoading !== null ||
+                      relatorioProdutoOrigemLoading !== null ||
+                      relatorioEstoqueLoading !== null
+                    }
+                    onClick={async () => {
+                      try {
+                        setRelatorioColheitaMeeiroLoading('download');
+                        await controleRocaService.downloadRelatorioColheitaMeeirosPdf(
+                          relatorioEstoqueDataInicio || undefined,
+                          relatorioEstoqueDataFim || undefined,
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                          relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                          relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                        );
+                        toast.success('PDF baixado');
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao gerar PDF');
+                      } finally {
+                        setRelatorioColheitaMeeiroLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioColheitaMeeiroLoading === 'download' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 h-9 min-w-[120px]"
+                    disabled={
+                      relatorioColheitaMeeiroLoading !== null ||
+                      relatorioProdutoOrigemLoading !== null ||
+                      relatorioEstoqueLoading !== null
+                    }
+                    onClick={async () => {
+                      try {
+                        setRelatorioColheitaMeeiroLoading('print');
+                        await controleRocaService.printRelatorioColheitaMeeirosPdf(
+                          relatorioEstoqueDataInicio || undefined,
+                          relatorioEstoqueDataFim || undefined,
+                          relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                          relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                          relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                        );
+                      } catch (err: any) {
+                        toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
+                      } finally {
+                        setRelatorioColheitaMeeiroLoading(null);
+                      }
+                    }}
+                  >
+                    {relatorioColheitaMeeiroLoading === 'print' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div id="rel-lancamento-produtos" className="bg-card border rounded-xl p-4 sm:p-5 scroll-mt-24">
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -12081,6 +12169,90 @@ className={
                 </div>
               </section>
 
+              <section className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/30 flex items-start gap-3">
+                  <Sprout className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground">Colheita por meeiro</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Meeiro, qtde colhida, mudas plantadas e valor total colhido. Mesmos filtros da seção acima.
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="gradient"
+                      size="sm"
+                      className="gap-2"
+                      disabled={
+                        relatorioColheitaMeeiroLoading !== null ||
+                        relatorioProdutoOrigemLoading !== null ||
+                        relatorioEstoqueLoading !== null
+                      }
+                      onClick={async () => {
+                        try {
+                          setRelatorioColheitaMeeiroLoading('download');
+                          await controleRocaService.downloadRelatorioColheitaMeeirosPdf(
+                            relatorioEstoqueDataInicio || undefined,
+                            relatorioEstoqueDataFim || undefined,
+                            relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                            relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                            relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                          );
+                          toast.success('Relatório baixado.');
+                          setRelLancamentosSheetOpen(false);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Erro ao gerar PDF.');
+                        } finally {
+                          setRelatorioColheitaMeeiroLoading(null);
+                        }
+                      }}
+                    >
+                      {relatorioColheitaMeeiroLoading === 'download' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Baixar PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={
+                        relatorioColheitaMeeiroLoading !== null ||
+                        relatorioProdutoOrigemLoading !== null ||
+                        relatorioEstoqueLoading !== null
+                      }
+                      onClick={async () => {
+                        try {
+                          setRelatorioColheitaMeeiroLoading('print');
+                          await controleRocaService.printRelatorioColheitaMeeirosPdf(
+                            relatorioEstoqueDataInicio || undefined,
+                            relatorioEstoqueDataFim || undefined,
+                            relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
+                            relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
+                            relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                          );
+                          setRelLancamentosSheetOpen(false);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Erro ao abrir PDF.');
+                        } finally {
+                          setRelatorioColheitaMeeiroLoading(null);
+                        }
+                      }}
+                    >
+                      {relatorioColheitaMeeiroLoading === 'print' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Printer className="w-4 h-4" />
+                      )}
+                      Imprimir
+                    </Button>
+                  </div>
+                </div>
+              </section>
 
               <section className="rounded-xl border bg-card shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b bg-muted/30 flex items-start gap-3">
