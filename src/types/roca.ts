@@ -137,6 +137,8 @@ export interface MeeiroRoca {
   pixChave?: string;
   endereco?: string;
   inscricaoEstadual?: string | null;
+  /** Mudas plantadas (cadastro do meeiro). */
+  quantidadeMudasPlantadas?: number | null;
   porcentagem_padrao: number;
   /** Valor de emba por unidade (R$) no cadastro do meeiro. */
   valor_de_emba_padrao?: number;
@@ -180,6 +182,7 @@ export interface CreateMeeiroRocaDto {
   pixChave?: string;
   endereco?: string;
   inscricaoEstadual?: string;
+  quantidadeMudasPlantadas?: number;
   porcentagem_padrao: number;
   /** Se omitido, o backend usa R$ 1,20 por unidade. */
   valor_de_emba_padrao?: number;
@@ -195,6 +198,7 @@ export interface UpdateMeeiroRocaDto {
   pixChave?: string;
   endereco?: string;
   inscricaoEstadual?: string | null;
+  quantidadeMudasPlantadas?: number | null;
   porcentagem_padrao?: number;
   valor_de_emba_padrao?: number;
   produtorId?: number;

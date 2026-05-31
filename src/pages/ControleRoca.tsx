@@ -674,6 +674,7 @@ export default function ControleRoca() {
     telefone: '',
     pixChave: '',
     endereco: '',
+    quantidadeMudasPlantadas: undefined,
     porcentagem_padrao: 40,
     valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
     produtorId: 0,
@@ -693,6 +694,7 @@ export default function ControleRoca() {
         telefone: '',
         pixChave: '',
         endereco: '',
+        quantidadeMudasPlantadas: undefined,
         porcentagem_padrao: 40,
         valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
         produtorId: 0,
@@ -718,6 +720,7 @@ export default function ControleRoca() {
       porcentagem_padrao: number;
       valor_de_emba_padrao: number;
       pixChave?: string;
+      quantidadeMudasPlantadas?: number | null;
     }
   >({
     codigo: '',
@@ -727,6 +730,7 @@ export default function ControleRoca() {
     telefone: '',
     pixChave: '',
     endereco: '',
+    quantidadeMudasPlantadas: null,
     porcentagem_padrao: 40,
     valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
     produtorId: 0,
@@ -3813,6 +3817,7 @@ export default function ControleRoca() {
                                       telefone: m.telefone ?? '',
                                       pixChave: m.pixChave ?? '',
                                       endereco: m.endereco ?? '',
+                                      quantidadeMudasPlantadas: m.quantidadeMudasPlantadas ?? null,
                                       porcentagem_padrao: m.porcentagem_padrao,
                                       valor_de_emba_padrao:
                                         valorDeEmbaPadraoDeMeeiro(m),
@@ -9779,6 +9784,7 @@ className={
               telefone: '',
               pixChave: '',
               endereco: '',
+              quantidadeMudasPlantadas: undefined,
               porcentagem_padrao: 40,
               valor_de_emba_padrao: VALOR_DE_EMBA_PADRAO,
               produtorId: 0,
@@ -9962,6 +9968,33 @@ className={
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Sprout className="w-4 h-4 text-muted-foreground" />
+                    Quantidade de mudas plantadas
+                    <span className="text-xs text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="Ex: 5000"
+                    value={
+                      formMeeiro.quantidadeMudasPlantadas != null
+                        ? String(formMeeiro.quantidadeMudasPlantadas)
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFormMeeiro((p) => ({
+                        ...p,
+                        quantidadeMudasPlantadas:
+                          v === '' ? undefined : Math.max(0, Math.floor(Number(v)) || 0),
+                      }));
+                    }}
+                  />
+                </div>
+
                 {/* Telefone */}
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
@@ -10032,6 +10065,9 @@ className={
                     codigo: formMeeiro.codigo?.toString().trim() || undefined,
                     nomeFantasia: formMeeiro.nomeFantasia?.trim() || undefined,
                     pixChave: formMeeiro.pixChave?.trim() || undefined,
+                    ...(formMeeiro.quantidadeMudasPlantadas != null
+                      ? { quantidadeMudasPlantadas: formMeeiro.quantidadeMudasPlantadas }
+                      : {}),
                   });
                 }}
                 disabled={createMeeiro.isPending}
@@ -10107,6 +10143,14 @@ className={
                       <Label className="text-sm text-muted-foreground">Valor de emba (R$)</Label>
                       <p className="font-medium text-base">
                         {formatCurrency(valorDeEmbaPadraoDeMeeiro(detailMeeiro))}
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-sm text-muted-foreground">Quantidade de mudas plantadas</Label>
+                      <p className="font-medium text-base">
+                        {detailMeeiro.quantidadeMudasPlantadas != null
+                          ? String(detailMeeiro.quantidadeMudasPlantadas)
+                          : '—'}
                       </p>
                     </div>
                     <div className="space-y-3">
@@ -10310,6 +10354,7 @@ className={
                         telefone: detailMeeiro.telefone ?? '',
                         pixChave: detailMeeiro.pixChave ?? '',
                         endereco: detailMeeiro.endereco ?? '',
+                        quantidadeMudasPlantadas: detailMeeiro.quantidadeMudasPlantadas ?? null,
                         porcentagem_padrao: detailMeeiro.porcentagem_padrao,
                         valor_de_emba_padrao:
                           valorDeEmbaPadraoDeMeeiro(detailMeeiro),
@@ -10642,6 +10687,33 @@ className={
 
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
+                      <Sprout className="w-4 h-4 text-muted-foreground" />
+                      Quantidade de mudas plantadas
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Ex: 5000"
+                      value={
+                        formEditMeeiro.quantidadeMudasPlantadas != null
+                          ? String(formEditMeeiro.quantidadeMudasPlantadas)
+                          : ''
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setFormEditMeeiro((p) => ({
+                          ...p,
+                          quantidadeMudasPlantadas:
+                            v === '' ? null : Math.max(0, Math.floor(Number(v)) || 0),
+                        }));
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
                       <Phone className="w-4 h-4 text-muted-foreground" />
                       Telefone
                       <span className="text-xs text-muted-foreground">(opcional)</span>
@@ -10720,6 +10792,10 @@ className={
                         formEditMeeiro.valor_de_emba_padrao ??
                         valorDeEmbaPadraoDeMeeiro(editMeeiro),
                       produtorId: formEditMeeiro.produtorId || editMeeiro.produtorId,
+                      quantidadeMudasPlantadas:
+                        formEditMeeiro.quantidadeMudasPlantadas == null
+                          ? null
+                          : Number(formEditMeeiro.quantidadeMudasPlantadas),
                     },
                   });
                 }}
