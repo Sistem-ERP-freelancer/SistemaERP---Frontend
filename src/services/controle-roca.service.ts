@@ -1020,6 +1020,7 @@ class ControleRocaService {
     rocaId?: number,
     produtorId?: number,
     produtoId?: number,
+    meeiroId?: number,
   ): Promise<void> {
     const q = new URLSearchParams();
     if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
@@ -1027,6 +1028,7 @@ class ControleRocaService {
     if (rocaId != null) q.set('rocaId', String(rocaId));
     if (produtorId != null) q.set('produtorId', String(produtorId));
     if (produtoId != null) q.set('produtoId', String(produtoId));
+    if (meeiroId != null) q.set('meeiroId', String(meeiroId));
     const query = q.toString();
     const blob = await apiClient.getBlob(
       `${BASE}/relatorio/colheita-meeiros/pdf${query ? `?${query}` : ''}`,
@@ -1047,6 +1049,7 @@ class ControleRocaService {
     rocaId?: number,
     produtorId?: number,
     produtoId?: number,
+    meeiroId?: number,
   ): Promise<void> {
     const q = new URLSearchParams();
     if (dataInicial?.trim()) q.set('data_inicial', dataInicial.trim());
@@ -1054,6 +1057,7 @@ class ControleRocaService {
     if (rocaId != null) q.set('rocaId', String(rocaId));
     if (produtorId != null) q.set('produtorId', String(produtorId));
     if (produtoId != null) q.set('produtoId', String(produtoId));
+    if (meeiroId != null) q.set('meeiroId', String(meeiroId));
     const query = q.toString();
     const blob = await apiClient.getBlob(
       `${BASE}/relatorio/colheita-meeiros/pdf${query ? `?${query}` : ''}`,

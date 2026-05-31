@@ -1177,6 +1177,7 @@ export default function ControleRoca() {
   const [relatorioColheitaMeeiroLoading, setRelatorioColheitaMeeiroLoading] = useState<
     'download' | 'print' | null
   >(null);
+  const [relColheitaMeeiroId, setRelColheitaMeeiroId] = useState<number | ''>('');
   /** Painel com todos os relatórios voltados a lançamentos (produtos e meeiros). */
   const [relLancamentosSheetOpen, setRelLancamentosSheetOpen] = useState(false);
   const { data: rocasRelatorioFiltros = [] } = useQuery({
@@ -1207,6 +1208,28 @@ export default function ControleRoca() {
       ),
     [produtosRelatorioFiltros],
   );
+  const meeirosColheitaRelatorio = useMemo(() => {
+    let list = [...meeirosParaRelatorio];
+    if (relatorioSheetProdutorId !== '') {
+      list = list.filter(
+        (m) => Number(m.produtorId) === Number(relatorioSheetProdutorId),
+      );
+    }
+    return list.sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' }),
+    );
+  }, [meeirosParaRelatorio, relatorioSheetProdutorId]);
+  useEffect(() => {
+    if (relColheitaMeeiroId === '') return;
+    const m = meeirosParaRelatorio.find((x) => Number(x.id) === Number(relColheitaMeeiroId));
+    if (
+      relatorioSheetProdutorId !== '' &&
+      m != null &&
+      Number(m.produtorId) !== Number(relatorioSheetProdutorId)
+    ) {
+      setRelColheitaMeeiroId('');
+    }
+  }, [relatorioSheetProdutorId, relColheitaMeeiroId, meeirosParaRelatorio]);
   const [produtoPreselecionadoLancamento, setProdutoPreselecionadoLancamento] = useState<{
     id: number;
     nome: string;
@@ -7434,7 +7457,17 @@ className={
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4">
+              <div className="rounded-lg border border-border/70 bg-muted/30 p-3 sm:p-4 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Meeiro</Label>
+                    <RelatorioTabComboMeeiro
+                      value={relColheitaMeeiroId}
+                      onChange={setRelColheitaMeeiroId}
+                      meeiros={meeirosColheitaRelatorio}
+                    />
+                  </div>
+                </div>
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     variant="outline"
@@ -7453,6 +7486,7 @@ className={
                           relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
                           relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
                           relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                          relColheitaMeeiroId === '' ? undefined : relColheitaMeeiroId,
                         );
                         toast.success('PDF baixado');
                       } catch (err: any) {
@@ -7486,6 +7520,7 @@ className={
                           relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
                           relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
                           relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                          relColheitaMeeiroId === '' ? undefined : relColheitaMeeiroId,
                         );
                       } catch (err: any) {
                         toast.error(err?.response?.data?.message || err?.message || 'Erro ao abrir PDF');
@@ -12175,7 +12210,7 @@ className={
                     <h3 className="text-sm font-semibold text-foreground">Colheita por meeiro</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Nome do meeiro, quantidade colhida, mudas plantadas e valor total colhido. Layout em PDF
-                      semelhante ao repasse ao parceiro.
+                      semelhante ao repasse ao parceiro. Filtre por meeiro ou deixe em &quot;Todos os meeiros&quot;.
                     </p>
                   </div>
                 </div>
@@ -12191,8 +12226,17 @@ className={
                             setRelatorioSheetProdutorId(id);
                             setRelatorioEstoqueRocaId('');
                             setRelatorioSheetProdutoId('');
+                            setRelColheitaMeeiroId('');
                           }}
                           produtores={produtoresRelatorioOrdenados}
+                        />
+                      </div>
+                      <div className="space-y-1.5 min-w-[180px] flex-1">
+                        <Label className="text-xs text-muted-foreground">Meeiro</Label>
+                        <RelatorioTabComboMeeiro
+                          value={relColheitaMeeiroId}
+                          onChange={setRelColheitaMeeiroId}
+                          meeiros={meeirosColheitaRelatorio}
                         />
                       </div>
                       <div className="space-y-1.5 min-w-[160px] flex-1">
@@ -12253,6 +12297,7 @@ className={
                             relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
                             relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
                             relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                            relColheitaMeeiroId === '' ? undefined : relColheitaMeeiroId,
                           );
                           toast.success('Relatório baixado.');
                           setRelLancamentosSheetOpen(false);
@@ -12288,6 +12333,7 @@ className={
                             relatorioEstoqueRocaId === '' ? undefined : relatorioEstoqueRocaId,
                             relatorioSheetProdutorId === '' ? undefined : relatorioSheetProdutorId,
                             relatorioSheetProdutoId === '' ? undefined : relatorioSheetProdutoId,
+                            relColheitaMeeiroId === '' ? undefined : relColheitaMeeiroId,
                           );
                           setRelLancamentosSheetOpen(false);
                         } catch (e) {
@@ -12449,6 +12495,7 @@ className={
 type RelTabProdutorOpt = { id: number; codigo?: string | null; nome_razao?: string | null };
 type RelTabRocaOpt = { id: number; nome?: string | null };
 type RelTabProdutoOpt = { id: number; codigo?: string | null; nome?: string | null };
+type RelTabMeeiroOpt = { id: number; codigo?: string | null; nome?: string | null };
 
 function RelatorioTabComboProdutor({
   value,
@@ -12695,6 +12742,92 @@ function RelatorioTabComboProduto({
                 >
                   <Check className={cn('mr-2 h-4 w-4', value === p.id ? 'opacity-100' : 'opacity-0')} />
                   {p.codigo ? `${p.codigo} – ${p.nome}` : (p.nome ?? String(p.id))}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function RelatorioTabComboMeeiro({
+  value,
+  onChange,
+  meeiros,
+}: {
+  value: number | '';
+  onChange: (id: number | '') => void;
+  meeiros: RelTabMeeiroOpt[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return meeiros;
+    return meeiros.filter((m) => {
+      const label = `${m.codigo ?? ''} ${m.nome ?? ''}`.toLowerCase();
+      return label.includes(t);
+    });
+  }, [meeiros, q]);
+  const label =
+    value === ''
+      ? 'Todos os meeiros'
+      : (() => {
+          const m = meeiros.find((x) => x.id === value);
+          if (!m) return 'Todos os meeiros';
+          return m.codigo ? `${m.codigo} – ${m.nome}` : (m.nome ?? String(m.id));
+        })();
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQ('');
+      }}
+      modal
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 w-full justify-between font-normal"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Buscar meeiro..." value={q} onValueChange={setQ} className="h-10" />
+          <CommandList className="max-h-[260px]" onWheel={(e) => e.stopPropagation()}>
+            <CommandEmpty>Nenhum meeiro encontrado.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__todos-meeiros"
+                onSelect={() => {
+                  onChange('');
+                  setOpen(false);
+                  setQ('');
+                }}
+              >
+                <Check className={cn('mr-2 h-4 w-4', value === '' ? 'opacity-100' : 'opacity-0')} />
+                Todos os meeiros
+              </CommandItem>
+              {filtered.map((m) => (
+                <CommandItem
+                  key={m.id}
+                  value={`meeiro-${m.id}`}
+                  onSelect={() => {
+                    onChange(m.id);
+                    setOpen(false);
+                    setQ('');
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === m.id ? 'opacity-100' : 'opacity-0')} />
+                  {m.codigo ? `${m.codigo} – ${m.nome}` : (m.nome ?? String(m.id))}
                 </CommandItem>
               ))}
             </CommandGroup>
