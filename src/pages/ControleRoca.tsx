@@ -9890,6 +9890,33 @@ className={
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Sprout className="w-4 h-4 text-muted-foreground" />
+                    Quantidade de mudas plantadas
+                    <span className="text-xs text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="Ex: 5000"
+                    value={
+                      formMeeiro.quantidadeMudasPlantadas != null
+                        ? String(formMeeiro.quantidadeMudasPlantadas)
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFormMeeiro((p) => ({
+                        ...p,
+                        quantidadeMudasPlantadas:
+                          v === '' ? undefined : Math.max(0, Math.floor(Number(v)) || 0),
+                      }));
+                    }}
+                  />
+                </div>
+
                 {/* CPF e porcentagens */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-7">
                   <div className="space-y-2">
@@ -9966,33 +9993,6 @@ className={
                       }}
                     />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Sprout className="w-4 h-4 text-muted-foreground" />
-                    Quantidade de mudas plantadas
-                    <span className="text-xs text-muted-foreground">(opcional)</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={1}
-                    placeholder="Ex: 5000"
-                    value={
-                      formMeeiro.quantidadeMudasPlantadas != null
-                        ? String(formMeeiro.quantidadeMudasPlantadas)
-                        : ''
-                    }
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setFormMeeiro((p) => ({
-                        ...p,
-                        quantidadeMudasPlantadas:
-                          v === '' ? undefined : Math.max(0, Math.floor(Number(v)) || 0),
-                      }));
-                    }}
-                  />
                 </div>
 
                 {/* Telefone */}
@@ -10607,6 +10607,33 @@ className={
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Sprout className="w-4 h-4 text-muted-foreground" />
+                      Quantidade de mudas plantadas
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Ex: 5000"
+                      value={
+                        formEditMeeiro.quantidadeMudasPlantadas != null
+                          ? String(formEditMeeiro.quantidadeMudasPlantadas)
+                          : ''
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setFormEditMeeiro((p) => ({
+                          ...p,
+                          quantidadeMudasPlantadas:
+                            v === '' ? null : Math.max(0, Math.floor(Number(v)) || 0),
+                        }));
+                      }}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-7">
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
@@ -10683,33 +10710,6 @@ className={
                         }}
                       />
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Sprout className="w-4 h-4 text-muted-foreground" />
-                      Quantidade de mudas plantadas
-                      <span className="text-xs text-muted-foreground">(opcional)</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={1}
-                      placeholder="Ex: 5000"
-                      value={
-                        formEditMeeiro.quantidadeMudasPlantadas != null
-                          ? String(formEditMeeiro.quantidadeMudasPlantadas)
-                          : ''
-                      }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setFormEditMeeiro((p) => ({
-                          ...p,
-                          quantidadeMudasPlantadas:
-                            v === '' ? null : Math.max(0, Math.floor(Number(v)) || 0),
-                        }));
-                      }}
-                    />
                   </div>
 
                   <div className="space-y-2">
