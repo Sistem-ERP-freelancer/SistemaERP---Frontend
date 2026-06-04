@@ -78,8 +78,6 @@ export default function Pedidos() {
     closeForm,
     closeViewDialog,
     closeCancelDialog,
-    clientes,
-    fornecedores,
   } = useOrders();
 
   const { downloadRelatorio, loading: loadingRelatorio } = useRelatorioPedidos();
