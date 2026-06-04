@@ -78,6 +78,8 @@ export default function Pedidos() {
     closeForm,
     closeViewDialog,
     closeCancelDialog,
+    clientes,
+    fornecedores,
   } = useOrders();
 
   const { downloadRelatorio, loading: loadingRelatorio } = useRelatorioPedidos();
@@ -94,6 +96,16 @@ export default function Pedidos() {
   const [margemDialogOpen, setMargemDialogOpen] = useState(false);
   const [margemLoadingAction, setMargemLoadingAction] = useState<'download' | 'print' | null>(null);
   const [reportingOrderId, setReportingOrderId] = useState<number | null>(null);
+  const [relatorioPedidosDialogOpen, setRelatorioPedidosDialogOpen] = useState(false);
+  const [dataInicialRelPed, setDataInicialRelPed] = useState('');
+  const [dataFinalRelPed, setDataFinalRelPed] = useState('');
+  const [periodoRapidoRelPed, setPeriodoRapidoRelPed] = useState<
+    'custom' | 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior'
+  >('mes_atual');
+  const [clienteRelPed, setClienteRelPed] = useState<string>('all');
+  const [fornecedorRelPed, setFornecedorRelPed] = useState<string>('all');
+  const [rocaRelPed, setRocaRelPed] = useState<string>('all');
+  const [relPedLoadingAction, setRelPedLoadingAction] = useState<'download' | 'print' | null>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromFiltersRef = useRef(false);
 
@@ -104,6 +116,55 @@ export default function Pedidos() {
   const mesAtualInicio = (() => { const d = new Date(); d.setDate(1); return toYMD(d); })();
   const mesAnteriorInicio = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); return toYMD(d); })();
   const mesAnteriorFim = (() => { const d = new Date(); d.setDate(0); return toYMD(d); })();
+
+  const aplicarPeriodoRapidoRelPed = (
+    tipo: 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior',
+  ) => {
+    let inicial: string;
+    let final: string;
+    switch (tipo) {
+      case 'hoje':
+        inicial = hoje;
+        final = hoje;
+        break;
+      case 'ontem':
+        inicial = ontem;
+        final = ontem;
+        break;
+      case '7d':
+        inicial = ultimos7;
+        final = hoje;
+        break;
+      case 'mes_atual':
+        inicial = mesAtualInicio;
+        final = hoje;
+        break;
+      case 'mes_anterior':
+        inicial = mesAnteriorInicio;
+        final = mesAnteriorFim;
+        break;
+    }
+    setDataInicialRelPed(inicial);
+    setDataFinalRelPed(final);
+    setPeriodoRapidoRelPed(tipo);
+  };
+
+  const montarFiltrosRelatorioPedidos = () => ({
+    data_inicial: dataInicialRelPed?.trim() || undefined,
+    data_final: dataFinalRelPed?.trim() || undefined,
+    cliente_id:
+      clienteRelPed !== 'all' ? Number(clienteRelPed) : undefined,
+    fornecedor_id:
+      fornecedorRelPed !== 'all' ? Number(fornecedorRelPed) : undefined,
+    roca_id: rocaRelPed !== 'all' ? Number(rocaRelPed) : undefined,
+  });
+
+  const abrirDialogRelatorioPedidos = () => {
+    if (!dataInicialRelPed && !dataFinalRelPed) {
+      aplicarPeriodoRapidoRelPed('mes_atual');
+    }
+    setRelatorioPedidosDialogOpen(true);
+  };
 
   const aplicarPeriodoRapido = (tipo: 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior') => {
     let inicial: string;
@@ -278,22 +339,13 @@ export default function Pedidos() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button 
-              onClick={downloadRelatorio} 
+            <Button
+              onClick={abrirDialogRelatorioPedidos}
               variant="outline"
-              disabled={loadingRelatorio}
+              className="gap-2"
             >
-              {loadingRelatorio ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Gerando PDF...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4 mr-2" />
-                  Baixar Relatório PDF
-                </>
-              )}
+              <Filter className="w-4 h-4" />
+              Relatório de pedidos
             </Button>
             <Button onClick={openCreateForm} variant="gradient">
               <Plus className="w-4 h-4 mr-2" />
@@ -304,6 +356,27 @@ export default function Pedidos() {
 
         {/* Estatísticas */}
         <OrderStats tipoFiltro={filters.tipo} />
+
+        {/* Relatório consolidado de pedidos */}
+        <div className="bg-card rounded-xl border border-border p-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Relatório de Pedidos</h2>
+            </div>
+            <Button
+              variant="outline"
+              className="gap-2 shrink-0 w-fit"
+              onClick={abrirDialogRelatorioPedidos}
+            >
+              <Download className="w-4 h-4" />
+              Gerar relatório
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            PDF com pedidos e itens. Filtre por cliente, fornecedor, roça e período antes de baixar ou imprimir.
+          </p>
+        </div>
 
         {/* Relatório de Margem de Contribuição */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
@@ -473,6 +546,181 @@ export default function Pedidos() {
             </DialogContent>
           </Dialog>
         </div>
+
+        <Dialog open={relatorioPedidosDialogOpen} onOpenChange={setRelatorioPedidosDialogOpen}>
+          <DialogContent className="max-w-lg p-0 overflow-hidden">
+            <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
+              <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                <Filter className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <DialogTitle className="text-base font-semibold text-foreground">
+                  Relatório de Pedidos
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Filtre por cliente, fornecedor, roça e período. Pedidos cancelados não entram no PDF.
+                </DialogDescription>
+              </div>
+            </DialogHeader>
+
+            <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Período</Label>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Data inicial</span>
+                    <Input
+                      type="date"
+                      className="w-[140px]"
+                      value={dataInicialRelPed}
+                      onChange={(e) => {
+                        setDataInicialRelPed(e.target.value);
+                        setPeriodoRapidoRelPed('custom');
+                      }}
+                    />
+                  </div>
+                  <span className="text-muted-foreground pb-2">até</span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Data final</span>
+                    <Input
+                      type="date"
+                      className="w-[140px]"
+                      value={dataFinalRelPed}
+                      onChange={(e) => {
+                        setDataFinalRelPed(e.target.value);
+                        setPeriodoRapidoRelPed('custom');
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ['hoje', 'Hoje'],
+                      ['ontem', 'Ontem'],
+                      ['7d', 'Últimos 7 dias'],
+                      ['mes_atual', 'Mês atual'],
+                      ['mes_anterior', 'Mês anterior'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <Button
+                      key={key}
+                      type="button"
+                      variant={periodoRapidoRelPed === key ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => aplicarPeriodoRapidoRelPed(key)}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Cliente</Label>
+                <Select value={clienteRelPed} onValueChange={setClienteRelPed}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os clientes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os clientes</SelectItem>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Fornecedor</Label>
+                <Select value={fornecedorRelPed} onValueChange={setFornecedorRelPed}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os fornecedores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os fornecedores</SelectItem>
+                    {fornecedores.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        {f.nome_fantasia || f.nome_razao || `Fornecedor #${f.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Roça</Label>
+                <Select value={rocaRelPed} onValueChange={setRocaRelPed}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as roças" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as roças</SelectItem>
+                    {rocasFiltro.map((roca) => (
+                      <SelectItem key={roca.id} value={String(roca.id)}>
+                        {roca.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-start gap-2 bg-background"
+                    disabled={relPedLoadingAction !== null || loadingRelatorio}
+                    onClick={async () => {
+                      try {
+                        setRelPedLoadingAction('download');
+                        await downloadRelatorio(montarFiltrosRelatorioPedidos());
+                        setRelatorioPedidosDialogOpen(false);
+                      } finally {
+                        setRelPedLoadingAction(null);
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4" />
+                    {relPedLoadingAction === 'download' || loadingRelatorio
+                      ? 'Baixando...'
+                      : 'Baixar PDF'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-start gap-2 bg-background"
+                    disabled={relPedLoadingAction !== null}
+                    onClick={async () => {
+                      try {
+                        setRelPedLoadingAction('print');
+                        await pedidosService.printRelatorioPDF(
+                          montarFiltrosRelatorioPedidos(),
+                        );
+                        setRelatorioPedidosDialogOpen(false);
+                      } catch (e) {
+                        toast.error(
+                          e instanceof Error ? e.message : 'Erro ao abrir relatório.',
+                        );
+                      } finally {
+                        setRelPedLoadingAction(null);
+                      }
+                    }}
+                  >
+                    <Printer className="w-4 h-4" />
+                    {relPedLoadingAction === 'print' ? 'Abrindo...' : 'Imprimir'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Search and Filters (mesmo design da página Fornecedores) */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">

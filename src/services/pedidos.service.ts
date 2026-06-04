@@ -486,78 +486,60 @@ class PedidosService {
   }
 
   /**
-   * Baixa o relatório de pedidos em PDF
-   * @returns Promise que resolve quando o download é concluído
+   * Baixa o relatório consolidado de pedidos em PDF (com filtros opcionais).
+   * GET /pedidos/relatorio/pdf
    */
-  async downloadRelatorioPDF(): Promise<void> {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
-
-    // Obter a URL base da API
-    const getApiBaseUrl = () => {
-      if (import.meta.env.VITE_API_URL) {
-        return import.meta.env.VITE_API_URL;
-      }
-      return 'https://sistemaerp-3.onrender.com/api/v1';
-    };
-
-    const apiBaseUrl = getApiBaseUrl();
-    const url = `${apiBaseUrl}/pedidos/relatorio/pdf`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    // Verificar se a resposta é um PDF
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/pdf')) {
-      // Tentar parsear como JSON (erro da API)
-      try {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erro ao gerar relatório');
-      } catch {
-        throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
-    }
-
-    const blob = await response.blob();
-
-    // Verificar se o blob não está vazio
-    if (blob.size === 0) {
-      throw new Error('O PDF gerado está vazio');
-    }
-
-    // Extrair nome do arquivo do header Content-Disposition
-    const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = `relatorio-pedidos-${new Date().toISOString().split('T')[0]}.pdf`;
-    
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-      if (filenameMatch) {
-        filename = filenameMatch[1];
-      }
-    }
-
-    // Criar URL temporária e fazer download
+  async downloadRelatorioPDF(params?: {
+    cliente_id?: number;
+    fornecedor_id?: number;
+    roca_id?: number;
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<void> {
+    const q = new URLSearchParams();
+    if (params?.cliente_id) q.append('cliente_id', String(params.cliente_id));
+    if (params?.fornecedor_id) q.append('fornecedor_id', String(params.fornecedor_id));
+    if (params?.roca_id) q.append('roca_id', String(params.roca_id));
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `/pedidos/relatorio/pdf${query ? `?${query}` : ''}`,
+    );
     const urlBlob = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = urlBlob;
-    link.download = filename;
+    link.download = `relatorio-pedidos-${new Date().toISOString().split('T')[0]}.pdf`;
     document.body.appendChild(link);
     link.click();
-
-    // Limpar
     document.body.removeChild(link);
     window.URL.revokeObjectURL(urlBlob);
+  }
+
+  async printRelatorioPDF(params?: {
+    cliente_id?: number;
+    fornecedor_id?: number;
+    roca_id?: number;
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<void> {
+    const q = new URLSearchParams();
+    if (params?.cliente_id) q.append('cliente_id', String(params.cliente_id));
+    if (params?.fornecedor_id) q.append('fornecedor_id', String(params.fornecedor_id));
+    if (params?.roca_id) q.append('roca_id', String(params.roca_id));
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `/pedidos/relatorio/pdf${query ? `?${query}` : ''}`,
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error(
+        'Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.',
+      );
+    }
   }
 
   /**
