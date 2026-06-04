@@ -143,6 +143,12 @@ class TenantsService {
       updated_at: response.updated_at || response.updatedAt || response.data_atualizacao,
     } as Tenant;
   }
+
+  async excluir(id: string): Promise<{ message: string; schema_name: string; id: string }> {
+    return apiClient.delete<{ message: string; schema_name: string; id: string }>(
+      `/tenants/${id}`,
+    );
+  }
 }
 
 export const tenantsService = new TenantsService();

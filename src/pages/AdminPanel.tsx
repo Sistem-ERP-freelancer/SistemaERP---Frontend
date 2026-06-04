@@ -24,6 +24,16 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import AdminLayout from "@/components/layout/AdminLayout";
 import {
   Dialog,
@@ -42,6 +52,7 @@ const AdminPanel = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [cnpjError, setCnpjError] = useState<string>("");
   const [formData, setFormData] = useState<CreateTenantDto & { telefone?: string }>({
@@ -186,6 +197,30 @@ const AdminPanel = () => {
     },
     onError: (error: Error) => {
       toast.error(error.message || "Erro ao desativar empresa");
+    },
+  });
+
+  const excluirMutation = useMutation({
+    mutationFn: (id: string) => tenantsService.excluir(id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      if (selectedTenantId === tenantToDelete?.id) {
+        setViewDialogOpen(false);
+        setSelectedTenantId(null);
+      }
+      setTenantToDelete(null);
+      toast.success(
+        result?.message ||
+          `Empresa e schema ${result?.schema_name || ""} excluídos permanentemente.`,
+      );
+    },
+    onError: (error: any) => {
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Erro ao excluir empresa";
+      toast.error(errorMessage);
     },
   });
 
@@ -684,6 +719,16 @@ const AdminPanel = () => {
                               <Power className="w-4 h-4 text-cyan" />
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setTenantToDelete(tenant)}
+                            disabled={excluirMutation.isPending}
+                            className="h-8 w-8 p-0 hover:bg-destructive/10"
+                            title="Excluir empresa e schema"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -693,6 +738,57 @@ const AdminPanel = () => {
             </table>
           </div>
         </motion.div>
+
+        {/* Confirmação de exclusão */}
+        <AlertDialog
+          open={!!tenantToDelete}
+          onOpenChange={(open) => {
+            if (!open && !excluirMutation.isPending) {
+              setTenantToDelete(null);
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir empresa permanentemente?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta ação não pode ser desfeita. Serão removidos o cadastro da empresa{" "}
+                <strong>{tenantToDelete?.nome}</strong>
+                {tenantToDelete?.schema_name && (
+                  <>
+                    {" "}
+                    e o schema <strong>{tenantToDelete.schema_name}</strong>
+                  </>
+                )}
+                , incluindo todos os dados (usuários, pedidos, estoque, financeiro, etc.).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={excluirMutation.isPending}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={excluirMutation.isPending || !tenantToDelete}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (tenantToDelete) {
+                    excluirMutation.mutate(tenantToDelete.id);
+                  }
+                }}
+              >
+                {excluirMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Excluindo...
+                  </>
+                ) : (
+                  "Excluir permanentemente"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Dialog de Visualização */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
@@ -831,8 +927,21 @@ const AdminPanel = () => {
                   </div>
                 )}
 
-                {/* Botão de Fechar */}
-                <div className="flex justify-end pt-4 border-t">
+                {/* Ações do dialog */}
+                <div className="flex justify-between pt-4 border-t">
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      if (selectedTenant) {
+                        setTenantToDelete(selectedTenant);
+                      }
+                    }}
+                    disabled={excluirMutation.isPending}
+                    className="gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Excluir empresa
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => {
