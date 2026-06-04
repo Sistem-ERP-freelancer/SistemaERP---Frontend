@@ -454,6 +454,38 @@ class PedidosService {
   }
 
   /**
+   * Baixa o PDF de um pedido específico.
+   * GET /pedidos/:id/relatorio/pdf
+   */
+  async downloadRelatorioPedidoPdf(pedidoId: number, numeroPedido?: string): Promise<void> {
+    const blob = await apiClient.getBlob(`/pedidos/${pedidoId}/relatorio/pdf`);
+    const safeNumero =
+      numeroPedido?.replace(/[^\w-]+/g, '_') || String(pedidoId);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pedido-${safeNumero}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Abre o PDF de um pedido em nova aba para impressão.
+   */
+  async printRelatorioPedidoPdf(pedidoId: number): Promise<void> {
+    const blob = await apiClient.getBlob(`/pedidos/${pedidoId}/relatorio/pdf`);
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error(
+        'Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.',
+      );
+    }
+  }
+
+  /**
    * Baixa o relatório de pedidos em PDF
    * @returns Promise que resolve quando o download é concluído
    */

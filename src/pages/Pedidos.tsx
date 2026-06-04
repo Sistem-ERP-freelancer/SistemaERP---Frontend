@@ -93,6 +93,7 @@ export default function Pedidos() {
   const [loadingMargemPdf, setLoadingMargemPdf] = useState(false);
   const [margemDialogOpen, setMargemDialogOpen] = useState(false);
   const [margemLoadingAction, setMargemLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [reportingOrderId, setReportingOrderId] = useState<number | null>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromFiltersRef = useRef(false);
 
@@ -238,6 +239,23 @@ export default function Pedidos() {
   const handleOpenDeleteDialog = (order: any) => {
     openCancelDialog(order);
     setIsDeleteDialogOpen(true);
+  };
+
+  const handleDownloadRelatorioPedido = async (order: (typeof orders)[number]) => {
+    setReportingOrderId(order.id);
+    try {
+      await pedidosService.downloadRelatorioPedidoPdf(
+        order.id,
+        order.numero_pedido,
+      );
+      toast.success(`Relatório do pedido ${order.numero_pedido} baixado.`);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Erro ao gerar relatório do pedido';
+      toast.error(message);
+    } finally {
+      setReportingOrderId(null);
+    }
   };
 
   const handleOrderSubmit = (data: CreatePedidoDto) => {
@@ -680,6 +698,8 @@ export default function Pedidos() {
             onView={openViewDialog}
             onEdit={openEditForm}
             onCancel={handleOpenDeleteDialog}
+            onReport={handleDownloadRelatorioPedido}
+            reportingOrderId={reportingOrderId}
             onStatusChange={handleStatusChange}
             updatingStatusId={updatingStatusId}
           />

@@ -18,7 +18,7 @@ import { normalizeCurrency } from '@/lib/utils';
 import { Pedido, StatusPedido } from '@/types/pedido';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Edit, Eye, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
+import { Edit, Eye, FileText, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 
@@ -28,6 +28,8 @@ interface OrderListProps {
   onView: (order: Pedido) => void;
   onEdit: (order: Pedido) => void;
   onCancel: (order: Pedido) => void;
+  onReport?: (order: Pedido) => void;
+  reportingOrderId?: number | null;
   onStatusChange?: (id: number, status: StatusPedido) => void;
   updatingStatusId?: number | null;
 }
@@ -38,6 +40,8 @@ export function OrderList({
   onView, 
   onEdit, 
   onCancel,
+  onReport,
+  reportingOrderId = null,
   onStatusChange,
   updatingStatusId = null,
 }: OrderListProps) {
@@ -92,7 +96,7 @@ export function OrderList({
             <TableHead>Status</TableHead>
             <TableHead>Total</TableHead>
             <TableHead>Data</TableHead>
-            <TableHead className="w-[120px]">Ações</TableHead>
+            <TableHead className="w-[150px]">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -215,6 +219,22 @@ export function OrderList({
                   >
                     <Eye className="w-4 h-4 text-muted-foreground" />
                   </Button>
+                  {onReport && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onReport(order)}
+                      disabled={reportingOrderId === order.id}
+                      title="Gerar relatório PDF"
+                    >
+                      {reportingOrderId === order.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-primary" />
+                      )}
+                    </Button>
+                  )}
                   {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
                     <>
                       <Button
