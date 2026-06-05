@@ -32,28 +32,18 @@ export const ROCA_ENDERECO_CONTATO_VAZIO: RocaEnderecoContatoData = {
 export function RocaEnderecoContatoFields({
   value,
   onChange,
+  embedded = false,
 }: {
   value: RocaEnderecoContatoData;
   onChange: (next: RocaEnderecoContatoData) => void;
+  /** Dentro do card "Informações da roça" — sem borda extra */
+  embedded?: boolean;
 }) {
   const set = (field: keyof RocaEnderecoContatoData, raw: string) => {
     onChange({ ...value, [field]: raw });
   };
 
-  return (
-    <div className="bg-card border rounded-xl p-6 space-y-6">
-      <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg bg-blue-500/10">
-          <MapPin className="w-4 h-4 text-blue-600" />
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold">Endereço e contato</h3>
-          <p className="text-xs text-muted-foreground">
-            Usado nos relatórios de pedidos vinculados à roça (todos os campos são opcionais).
-          </p>
-        </div>
-      </div>
-
+  const fields = (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>CEP</Label>
@@ -143,6 +133,40 @@ export function RocaEnderecoContatoFields({
           />
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-4 pt-2 border-t border-border/60">
+        <div>
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-primary" />
+            Endereço e contato
+            <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+          </h4>
+          <p className="text-xs text-muted-foreground mt-1">
+            CEP, logradouro, cidade, telefone e e-mail — usados nos relatórios de pedidos.
+          </p>
+        </div>
+        {fields}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card border rounded-xl p-6 space-y-6">
+      <div className="flex items-center gap-2">
+        <div className="p-2 rounded-lg bg-blue-500/10">
+          <MapPin className="w-4 h-4 text-blue-600" />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold">Endereço e contato</h3>
+          <p className="text-xs text-muted-foreground">
+            Usado nos relatórios de pedidos vinculados à roça (todos os campos são opcionais).
+          </p>
+        </div>
+      </div>
+      {fields}
     </div>
   );
 }

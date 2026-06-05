@@ -196,7 +196,7 @@ export function RelatorioResumoFiltrosPreview({
   return (
     <section className="rounded-xl border border-border/80 bg-muted/25 p-4 space-y-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Como aparecerá no PDF
+        Critérios de busca
       </p>
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
         {linhas.map(({ label, valor }) => (
@@ -216,11 +216,11 @@ export function RelatorioResumoFiltrosPreview({
       </dl>
       {notaEndereco ? (
         <p className="text-xs text-muted-foreground leading-relaxed border-t border-border/60 pt-3">
-          Cada pedido no relatório traz o endereço da{' '}
-          <span className="font-medium text-foreground">roça</span>, do{' '}
-          <span className="font-medium text-foreground">cliente</span> ou do{' '}
-          <span className="font-medium text-foreground">fornecedor</span>, conforme
-          vinculação do pedido.
+          Os filtros acima definem quais pedidos entram no PDF. Cada pedido é
+          impresso no layout individual, com endereço da{' '}
+          <span className="font-medium text-foreground">roça</span>,{' '}
+          <span className="font-medium text-foreground">cliente</span> ou{' '}
+          <span className="font-medium text-foreground">fornecedor</span>.
         </p>
       ) : null}
     </section>

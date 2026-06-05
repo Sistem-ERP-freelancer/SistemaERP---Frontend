@@ -914,7 +914,7 @@ export default function Pedidos() {
               <RelatorioHubCard
                 icon={Filter}
                 title="Relatório de pedidos"
-                description="PDF premium com itens, totais e endereço da roça, cliente ou fornecedor. Filtros não escolhidos aparecem como Não informado."
+                description="PDF premium — um pedido por página, com itens, totais e endereço da roça, cliente ou fornecedor."
                 onClick={() => {
                   setRelatoriosDialogOpen(false);
                   abrirDialogRelatorioPedidos();
@@ -990,7 +990,7 @@ export default function Pedidos() {
           <RelatorioModalShell
             icon={Filter}
             title="Relatório de pedidos"
-            description="Gere o PDF consolidado com layout premium. Apenas os filtros selecionados restringem a busca; os demais aparecem como Não informado no cabeçalho."
+            description="Gere o PDF consolidado com o mesmo layout do relatório individual — um pedido por página, com itens, totais e endereço."
             footer={
               <RelatorioAcoesFooter
                 downloading={relPedLoadingAction === 'download' || loadingRelatorio}

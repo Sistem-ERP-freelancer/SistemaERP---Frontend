@@ -9170,7 +9170,7 @@ className={
                   <div>
                     <h3 className="text-sm font-semibold">Informações da roça</h3>
                     <p className="text-xs text-muted-foreground">
-                      Identificação, datas de plantio/colheita e mudas; a produtividade por pé vem dos lançamentos.
+                      Identificação, endereço, contato, datas de plantio/colheita e mudas.
                     </p>
                   </div>
                 </div>
@@ -9241,6 +9241,13 @@ className={
                     rows={2}
                   />
                 </div>
+
+                <RocaEnderecoContatoFields
+                  embedded
+                  value={formRoca}
+                  onChange={(next) => setFormRoca((p) => ({ ...p, ...next }))}
+                />
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
@@ -9306,11 +9313,6 @@ className={
                   </div>
                 </div>
               </div>
-
-              <RocaEnderecoContatoFields
-                value={formRoca}
-                onChange={(next) => setFormRoca((p) => ({ ...p, ...next }))}
-              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenRoca(false)}>
@@ -9645,6 +9647,13 @@ className={
                       rows={2}
                     />
                   </div>
+
+                  <RocaEnderecoContatoFields
+                    embedded
+                    value={formEditRoca}
+                    onChange={(next) => setFormEditRoca((p) => ({ ...p, ...next }))}
+                  />
+
                   <div className="flex items-center justify-between rounded-lg border p-4">
                     <div>
                       <Label className="text-base">Roça ativa</Label>
@@ -9712,11 +9721,6 @@ className={
                     </div>
                   </div>
                 </div>
-
-                <RocaEnderecoContatoFields
-                  value={formEditRoca}
-                  onChange={(next) => setFormEditRoca((p) => ({ ...p, ...next }))}
-                />
               </div>
             )}
             <DialogFooter>
