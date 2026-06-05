@@ -3,25 +3,101 @@ import { pedidosService } from '@/services/pedidos.service';
 import { TipoPedido } from '@/types/pedido';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { CheckCircle, DollarSign, FileText, Loader2, Package, ShoppingCart, XCircle } from 'lucide-react';
+import {
+  CheckCircle,
+  DollarSign,
+  FileText,
+  Loader2,
+  Package,
+  ShoppingCart,
+  XCircle,
+} from 'lucide-react';
 
 interface OrderStatsProps {
   tipoFiltro?: TipoPedido | 'all' | undefined;
+  /** hero = 4 cards no topo (layout mockup); full = seções detalhadas */
+  variant?: 'hero' | 'full';
 }
 
-export function OrderStats({ tipoFiltro }: OrderStatsProps = {}) {
+export function OrderStats({ tipoFiltro, variant = 'full' }: OrderStatsProps = {}) {
   const { data: dashboard, isLoading } = useQuery({
     queryKey: ['pedidos', 'dashboard'],
     queryFn: () => pedidosService.obterDashboard(),
-    refetchInterval: 30000, // Atualiza a cada 30 segundos
-    staleTime: 30000, // Cache por 30 segundos para melhor performance
+    refetchInterval: 30000,
+    staleTime: 30000,
   });
 
-  const formatCurrencyValue = (value: number | undefined) => {
-    return formatCurrency(normalizeCurrency(value, false));
-  };
+  const formatCurrencyValue = (value: number | undefined) =>
+    formatCurrency(normalizeCurrency(value, false));
 
-  // BLOCO 1 — Financeiro VENDA (valores)
+  if (variant === 'hero') {
+    const heroCards = [
+      {
+        label: 'Faturamento (Vendas)',
+        value: formatCurrencyValue(dashboard?.faturamento_confirmado_venda?.valor),
+        subtitle: `${dashboard?.faturamento_confirmado_venda?.quantidade || 0} pedidos`,
+        icon: ShoppingCart,
+        iconColor: 'text-emerald-600',
+        iconBg: 'bg-emerald-50',
+      },
+      {
+        label: 'Valor em Aberto',
+        value: formatCurrencyValue(dashboard?.valor_em_aberto_venda?.valor),
+        subtitle: `${dashboard?.valor_em_aberto_venda?.quantidade || 0} pedidos`,
+        icon: FileText,
+        iconColor: 'text-blue-600',
+        iconBg: 'bg-blue-50',
+      },
+      {
+        label: 'Pedidos em Andamento',
+        value: String(dashboard?.pedidos_em_andamento?.quantidade || 0),
+        subtitle: 'pedidos',
+        icon: Package,
+        iconColor: 'text-violet-600',
+        iconBg: 'bg-violet-50',
+      },
+      {
+        label: 'Pedidos Cancelados',
+        value: String(dashboard?.pedidos_cancelados?.quantidade || 0),
+        subtitle: 'pedidos',
+        icon: XCircle,
+        iconColor: 'text-red-600',
+        iconBg: 'bg-red-50',
+      },
+    ];
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        {heroCards.map((stat, index) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05, duration: 0.25 }}
+            className="bg-card rounded-xl border border-border/80 p-5 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                {isLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mb-2" />
+                ) : (
+                  <p className="text-2xl font-bold text-foreground tracking-tight truncate">
+                    {stat.value}
+                  </p>
+                )}
+                <p className="text-sm font-medium text-foreground mt-1">{stat.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{stat.subtitle}</p>
+              </div>
+              <div className={`p-2.5 rounded-xl shrink-0 ${stat.iconBg}`}>
+                <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    );
+  }
+
   const vendasCards = [
     {
       label: 'Faturamento Confirmado (Vendas)',
@@ -43,7 +119,6 @@ export function OrderStats({ tipoFiltro }: OrderStatsProps = {}) {
     },
   ];
 
-  // BLOCO 1 — Financeiro COMPRA (valores)
   const comprasCards = [
     {
       label: 'Compras Confirmadas',
@@ -65,7 +140,6 @@ export function OrderStats({ tipoFiltro }: OrderStatsProps = {}) {
     },
   ];
 
-  // BLOCO 2 — Operacional (quantidade)
   const operacionalCards = [
     {
       label: 'Pedidos em Andamento',
@@ -96,184 +170,95 @@ export function OrderStats({ tipoFiltro }: OrderStatsProps = {}) {
     },
   ];
 
-  // Determinar quais seções mostrar baseado no filtro
-  // Se não há filtro ou é 'all', mostra tudo (vendas, compras e operacional)
-  // Se há filtro específico (VENDA ou COMPRA), mostra apenas o tipo filtrado (sem operacional)
   const temFiltroEspecifico = tipoFiltro && tipoFiltro !== 'all';
   const mostrarVendas = !tipoFiltro || tipoFiltro === 'all' || tipoFiltro === 'VENDA';
   const mostrarCompras = !tipoFiltro || tipoFiltro === 'all' || tipoFiltro === 'COMPRA';
-  const mostrarOperacional = !temFiltroEspecifico; // Só mostra operacional se não houver filtro específico
+  const mostrarOperacional = !temFiltroEspecifico;
 
-  // Calcular delay global para garantir que vendas e compras apareçam na mesma velocidade
-  // Quando ambos estão visíveis, eles aparecem simultaneamente (mesmo delay base)
-  // Quando apenas um está visível, ele começa do índice 0
   const getGlobalIndex = (section: 'vendas' | 'compras' | 'operacional', index: number) => {
-    // Se ambos estão visíveis, vendas e compras começam juntos (mesmo delay)
     if (mostrarVendas && mostrarCompras) {
       if (section === 'vendas') return index;
-      if (section === 'compras') return index; // Mesmo delay que vendas
+      if (section === 'compras') return index;
       return vendasCards.length + comprasCards.length + index;
     }
-    // Se apenas vendas está visível
     if (mostrarVendas && !mostrarCompras) {
       if (section === 'vendas') return index;
       if (section === 'operacional') return vendasCards.length + index;
       return 0;
     }
-    // Se apenas compras está visível
     if (!mostrarVendas && mostrarCompras) {
       if (section === 'compras') return index;
       if (section === 'operacional') return comprasCards.length + index;
       return 0;
     }
-    // Fallback
     return index;
   };
 
+  const renderCard = (
+    stat: (typeof vendasCards)[0],
+    globalIndex: number,
+  ) => (
+    <motion.div
+      key={stat.label}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: globalIndex * 0.05, duration: 0.3 }}
+      className="bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex-1">
+          <p className="text-xl font-bold text-foreground mb-1">
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            ) : (
+              stat.value
+            )}
+          </p>
+          <p className="text-sm font-medium text-foreground mb-1">{stat.label}</p>
+          <p className="text-xs text-muted-foreground">{stat.subtitle}</p>
+          <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
+        </div>
+        <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+          <stat.icon className={`w-5 h-5 ${stat.color}`} />
+        </div>
+      </div>
+    </motion.div>
+  );
+
   return (
     <div className="space-y-4 mb-6">
-      {/* Cards de Vendas */}
       {mostrarVendas && (
         <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-            Vendas
-          </h3>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3">Vendas</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {vendasCards.map((stat, index) => {
-              const globalIndex = getGlobalIndex('vendas', index);
-              return (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: globalIndex * 0.05, duration: 0.3 }}
-                  className="bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <p className="text-xl font-bold text-foreground mb-1">
-                        {isLoading ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        ) : (
-                          stat.value
-                        )}
-                      </p>
-                      <p className="text-sm font-medium text-foreground mb-1">
-                        {stat.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {stat.subtitle}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {stat.description}
-                      </p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                      <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+            {vendasCards.map((stat, index) =>
+              renderCard(stat, getGlobalIndex('vendas', index)),
+            )}
           </div>
         </div>
       )}
-
-      {/* Cards de Compras */}
       {mostrarCompras && (
         <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-            Compras
-          </h3>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3">Compras</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {comprasCards.map((stat, index) => {
-              const globalIndex = getGlobalIndex('compras', index);
-              return (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: globalIndex * 0.05, duration: 0.3 }}
-                  className="bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <p className="text-xl font-bold text-foreground mb-1">
-                        {isLoading ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        ) : (
-                          stat.value
-                        )}
-                      </p>
-                      <p className="text-sm font-medium text-foreground mb-1">
-                        {stat.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {stat.subtitle}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {stat.description}
-                      </p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                      <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+            {comprasCards.map((stat, index) =>
+              renderCard(stat, getGlobalIndex('compras', index)),
+            )}
           </div>
         </div>
       )}
-
-      {/* BLOCO 2 — Operacional (quantidade) */}
       {mostrarOperacional && (
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-            🔹 Operacional (quantidade)
+            Operacional (quantidade)
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {operacionalCards.map((stat, index) => {
-              const globalIndex = getGlobalIndex('operacional', index);
-              return (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: globalIndex * 0.05, duration: 0.3 }}
-                  className="bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <p className="text-xl font-bold text-foreground mb-1">
-                        {isLoading ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        ) : (
-                          stat.value
-                        )}
-                      </p>
-                      <p className="text-sm font-medium text-foreground mb-1">
-                        {stat.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {stat.subtitle}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {stat.description}
-                      </p>
-                    </div>
-                    <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                      <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+            {operacionalCards.map((stat, index) =>
+              renderCard(stat, getGlobalIndex('operacional', index)),
+            )}
           </div>
         </div>
       )}
     </div>
   );
 }
-
-

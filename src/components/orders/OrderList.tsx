@@ -86,17 +86,19 @@ export function OrderList({
   };
 
   return (
-    <div className="rounded-md border overflow-hidden">
+    <div className="overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead>Número</TableHead>
-            <TableHead>Tipo</TableHead>
-            <TableHead>Cliente/Fornecedor</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Total</TableHead>
-            <TableHead>Data</TableHead>
-            <TableHead className="w-[150px]">Ações</TableHead>
+          <TableRow className="bg-muted/50 hover:bg-muted/50 border-b">
+            <TableHead className="font-semibold text-foreground">Número</TableHead>
+            <TableHead className="font-semibold text-foreground">Tipo</TableHead>
+            <TableHead className="font-semibold text-foreground">Cliente/Fornecedor</TableHead>
+            <TableHead className="font-semibold text-foreground">Status</TableHead>
+            <TableHead className="font-semibold text-foreground">Total</TableHead>
+            <TableHead className="font-semibold text-foreground">Data</TableHead>
+            <TableHead className="w-[160px] font-semibold text-foreground text-right">
+              Ações
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -208,8 +210,8 @@ export function OrderList({
               <TableCell>
                 <span className="text-sm text-muted-foreground">{formatDate(order.data_pedido)}</span>
               </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-1">
                   <Button
                     variant="ghost"
                     size="icon"

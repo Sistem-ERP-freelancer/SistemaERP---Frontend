@@ -37,7 +37,19 @@ import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
-import { Calendar, Circle, Download, FileText, Filter, Loader2, Plus, Printer, Search, XCircle } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Calendar,
+  Circle,
+  Download,
+  FileText,
+  Filter,
+  Loader2,
+  Plus,
+  Printer,
+  Search,
+  XCircle,
+} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -104,6 +116,11 @@ export default function Pedidos() {
   const [fornecedorRelPed, setFornecedorRelPed] = useState<string>('all');
   const [rocaRelPed, setRocaRelPed] = useState<string>('all');
   const [relPedLoadingAction, setRelPedLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [relatoriosDialogOpen, setRelatoriosDialogOpen] = useState(false);
+  const [filtroParceiro, setFiltroParceiro] = useState<string>('all');
+  const [periodoRapidoLista, setPeriodoRapidoLista] = useState<
+    'all' | 'hoje' | '7d' | 'mes_atual' | 'custom'
+  >('all');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromFiltersRef = useRef(false);
 
@@ -235,9 +252,71 @@ export default function Pedidos() {
       status: undefined,
       roca_id: undefined,
       somente_com_roca: undefined,
+      cliente_id: undefined,
+      fornecedor_id: undefined,
+      busca: undefined,
+      numero_pedido: undefined,
+      cliente_nome: undefined,
     });
+    setSearchTerm('');
+    setFiltroParceiro('all');
+    setPeriodoRapidoLista('all');
     setFiltrosDialogOpen(false);
   };
+
+  const aplicarPeriodoLista = (
+    tipo: 'all' | 'hoje' | '7d' | 'mes_atual' | 'custom',
+  ) => {
+    setPeriodoRapidoLista(tipo);
+    if (tipo === 'all') {
+      updateFilters({ data_inicial: undefined, data_final: undefined });
+      return;
+    }
+    if (tipo === 'hoje') {
+      updateFilters({ data_inicial: hoje, data_final: hoje });
+      return;
+    }
+    if (tipo === '7d') {
+      updateFilters({ data_inicial: ultimos7, data_final: hoje });
+      return;
+    }
+    if (tipo === 'mes_atual') {
+      updateFilters({ data_inicial: mesAtualInicio, data_final: hoje });
+    }
+  };
+
+  const handleFiltroParceiro = (value: string) => {
+    setFiltroParceiro(value);
+    if (value === 'all') {
+      updateFilters({ cliente_id: undefined, fornecedor_id: undefined });
+    } else if (value.startsWith('c-')) {
+      updateFilters({
+        cliente_id: Number(value.slice(2)),
+        fornecedor_id: undefined,
+      });
+    } else if (value.startsWith('f-')) {
+      updateFilters({
+        fornecedor_id: Number(value.slice(2)),
+        cliente_id: undefined,
+      });
+    }
+  };
+
+  const tabTipo =
+    filters.tipo === 'VENDA'
+      ? 'venda'
+      : filters.tipo === 'COMPRA'
+        ? 'compra'
+        : 'todos';
+
+  const handleTabTipo = (tab: string) => {
+    if (tab === 'todos') updateFilters({ tipo: undefined });
+    else if (tab === 'venda') updateFilters({ tipo: 'VENDA' as TipoPedido });
+    else updateFilters({ tipo: 'COMPRA' as TipoPedido });
+  };
+
+  const inicioItem = totalOrders === 0 ? 0 : (currentPage - 1) * 15 + 1;
+  const fimItem = Math.min(currentPage * 15, totalOrders);
 
   // Sincronizar searchTerm com os filtros quando os filtros mudarem externamente
   useEffect(() => {
@@ -327,76 +406,457 @@ export default function Pedidos() {
 
   return (
     <AppLayout>
-      <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Pedidos</h1>
-            <p className="text-muted-foreground">
-              Gestão completa de vendas e compras
-            </p>
+      <div className="p-4 sm:p-6 min-w-0 max-w-[1600px] mx-auto">
+        {/* Cabeçalho */}
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+          <div className="space-y-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+                Pedidos
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Gestão completa de vendas e compras
+              </p>
+            </div>
+            <Tabs value={tabTipo} onValueChange={handleTabTipo}>
+              <TabsList className="bg-muted/60 h-9">
+                <TabsTrigger value="todos" className="text-xs sm:text-sm px-4">
+                  Todos
+                </TabsTrigger>
+                <TabsTrigger value="venda" className="text-xs sm:text-sm px-4">
+                  Vendas
+                </TabsTrigger>
+                <TabsTrigger value="compra" className="text-xs sm:text-sm px-4">
+                  Compras
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Button
-              onClick={abrirDialogRelatorioPedidos}
               variant="outline"
-              className="gap-2"
+              className="gap-2 bg-background shadow-sm"
+              onClick={() => setRelatoriosDialogOpen(true)}
             >
-              <Filter className="w-4 h-4" />
-              Relatório de pedidos
+              <FileText className="w-4 h-4" />
+              Relatórios
             </Button>
-            <Button onClick={openCreateForm} variant="gradient">
-              <Plus className="w-4 h-4 mr-2" />
+            <Button onClick={openCreateForm} variant="gradient" className="gap-2 shadow-sm">
+              <Plus className="w-4 h-4" />
               Novo Pedido
             </Button>
           </div>
         </div>
 
-        {/* Estatísticas */}
-        <OrderStats tipoFiltro={filters.tipo} />
+        <OrderStats variant="hero" />
 
-        {/* Relatório consolidado de pedidos */}
-        <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">Relatório de Pedidos</h2>
+        {/* Barra de busca e filtros */}
+        <div className="bg-card rounded-xl border border-border/80 shadow-sm p-4 mb-4">
+          <div className="flex flex-col gap-3">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por número, cliente, fornecedor ou roça..."
+                className="pl-10 h-10 bg-background"
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
             </div>
-            <Button
-              variant="outline"
-              className="gap-2 shrink-0 w-fit"
-              onClick={abrirDialogRelatorioPedidos}
-            >
-              <Download className="w-4 h-4" />
-              Gerar relatório
-            </Button>
+            <div className="flex flex-col lg:flex-row lg:items-center gap-2 flex-wrap">
+              <Select
+                value={filters.status || 'all'}
+                onValueChange={(value) =>
+                  updateFilters({
+                    status: value === 'all' ? undefined : (value as StatusPedido),
+                  })
+                }
+              >
+                <SelectTrigger className="w-full sm:w-[140px] h-9 bg-background">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Status</SelectItem>
+                  <SelectItem value="ABERTO">Pendente</SelectItem>
+                  <SelectItem value="PARCIAL">Aberto</SelectItem>
+                  <SelectItem value="QUITADO">Quitado</SelectItem>
+                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={filtroParceiro} onValueChange={handleFiltroParceiro}>
+                <SelectTrigger className="w-full sm:w-[200px] h-9 bg-background">
+                  <SelectValue placeholder="Cliente / Fornecedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Cliente / Fornecedor</SelectItem>
+                  {clientes.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        Clientes
+                      </div>
+                      {clientes.map((c) => (
+                        <SelectItem key={`c-${c.id}`} value={`c-${c.id}`}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {fornecedores.length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        Fornecedores
+                      </div>
+                      {fornecedores.map((f) => (
+                        <SelectItem key={`f-${f.id}`} value={`f-${f.id}`}>
+                          {f.nome_fantasia || f.nome_razao}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={periodoRapidoLista}
+                onValueChange={(v) =>
+                  aplicarPeriodoLista(v as typeof periodoRapidoLista)
+                }
+              >
+                <SelectTrigger className="w-full sm:w-[150px] h-9 bg-background">
+                  <SelectValue placeholder="Período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Período</SelectItem>
+                  <SelectItem value="hoje">Hoje</SelectItem>
+                  <SelectItem value="7d">Últimos 7 dias</SelectItem>
+                  <SelectItem value="mes_atual">Mês atual</SelectItem>
+                  <SelectItem value="custom">Personalizado…</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {periodoRapidoLista === 'custom' && (
+                <>
+                  <Input
+                    type="date"
+                    className="w-full sm:w-[140px] h-9"
+                    value={filters.data_inicial || ''}
+                    onChange={(e) =>
+                      updateFilters({ data_inicial: e.target.value || undefined })
+                    }
+                  />
+                  <span className="text-muted-foreground text-sm hidden sm:inline">até</span>
+                  <Input
+                    type="date"
+                    className="w-full sm:w-[140px] h-9"
+                    value={filters.data_final || ''}
+                    onChange={(e) =>
+                      updateFilters({ data_final: e.target.value || undefined })
+                    }
+                  />
+                </>
+              )}
+
+              <div className="flex items-center gap-2 ml-auto w-full sm:w-auto">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={handleLimparFiltros}
+                  disabled={!temFiltrosAtivos && !searchTerm && filtroParceiro === 'all'}
+                >
+                  Limpar filtros
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setFiltrosDialogOpen(true)}
+                >
+                  <Filter className="w-4 h-4" />
+                  Filtros
+                  {temFiltrosAtivos && (
+                    <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-[10px] min-w-[18px]">
+                      {[
+                        filters.data_inicial,
+                        filters.data_final,
+                        filters.tipo,
+                        filters.status,
+                        filters.roca_id,
+                        filters.somente_com_roca,
+                        filters.cliente_id,
+                        filters.fornecedor_id,
+                      ].filter(Boolean).length}
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            PDF com pedidos e itens. Filtre por cliente, fornecedor, roça e período antes de baixar ou imprimir.
-          </p>
         </div>
 
-        {/* Relatório de Margem de Contribuição */}
-        <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold text-foreground">Relatório de Margem de Contribuição</h2>
-            </div>
-            <Button
-              variant="outline"
-              className="gap-2 shrink-0 w-fit"
-              onClick={() => setMargemDialogOpen(true)}
-            >
-              <Download className="w-4 h-4" />
-              Gerar relatório
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            Receita, custo e margem por produto (vendas do período, exceto canceladas). Clique em Gerar relatório para escolher o período e baixar ou imprimir.
-          </p>
+        {/* Sheet filtros avançados (roça, etc.) */}
+        <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+          <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+            <SheetHeader className="mb-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Filter className="w-5 h-5 text-primary" />
+                </div>
+                <SheetTitle className="text-xl">Filtros avançados</SheetTitle>
+              </div>
+              <SheetDescription>Roça, tipo e status detalhado</SheetDescription>
+            </SheetHeader>
 
-          <Dialog open={margemDialogOpen} onOpenChange={setMargemDialogOpen}>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Data inicial</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="date"
+                    className="pl-10"
+                    value={filters.data_inicial || ''}
+                    onChange={(e) => {
+                      updateFilters({ data_inicial: e.target.value || undefined });
+                      setPeriodoRapidoLista('custom');
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Data final</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="date"
+                    className="pl-10"
+                    value={filters.data_final || ''}
+                    onChange={(e) => {
+                      updateFilters({ data_final: e.target.value || undefined });
+                      setPeriodoRapidoLista('custom');
+                    }}
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Roça</Label>
+                <Select
+                  value={
+                    filters.roca_id != null && filters.roca_id > 0
+                      ? String(filters.roca_id)
+                      : 'all'
+                  }
+                  onValueChange={(value) =>
+                    updateFilters({
+                      roca_id: value === 'all' ? undefined : Number(value),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as roças" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as roças</SelectItem>
+                    {rocasFiltro.map((roca) => (
+                      <SelectItem key={roca.id} value={String(roca.id)}>
+                        {roca.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-input"
+                    checked={!!filters.somente_com_roca}
+                    onChange={(e) =>
+                      updateFilters({
+                        somente_com_roca: e.target.checked || undefined,
+                      })
+                    }
+                  />
+                  Somente pedidos com roça vinculada
+                </label>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Status</Label>
+                <RadioGroup
+                  value={filters.status || 'all'}
+                  onValueChange={(value) =>
+                    updateFilters({
+                      status: value === 'all' ? undefined : (value as StatusPedido),
+                    })
+                  }
+                  className="space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="all" id="status-all" />
+                    <Label htmlFor="status-all" className="cursor-pointer flex-1">
+                      Todos
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="ABERTO" id="status-aberto" />
+                    <Label htmlFor="status-aberto" className="cursor-pointer flex-1">
+                      Pendente
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="PARCIAL" id="status-parcial" />
+                    <Label htmlFor="status-parcial" className="cursor-pointer flex-1">
+                      Aberto
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="QUITADO" id="status-quitado" />
+                    <Label htmlFor="status-quitado" className="cursor-pointer flex-1">
+                      Quitado
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="CANCELADO" id="status-cancelado" />
+                    <Label htmlFor="status-cancelado" className="cursor-pointer flex-1">
+                      Cancelado
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button onClick={handleAplicarFiltros} className="flex-1">
+                  Aplicar
+                </Button>
+                <Button onClick={handleLimparFiltros} variant="outline" className="flex-1">
+                  Limpar
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Tabela */}
+        <div className="bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
+          <OrderList
+            orders={orders}
+            isLoading={isLoading}
+            onView={openViewDialog}
+            onEdit={openEditForm}
+            onCancel={handleOpenDeleteDialog}
+            onReport={handleDownloadRelatorioPedido}
+            reportingOrderId={reportingOrderId}
+            onStatusChange={handleStatusChange}
+            updatingStatusId={updatingStatusId}
+          />
+
+          <div className="border-t border-border px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/20">
+            <p className="text-sm text-muted-foreground">
+              {totalOrders === 0
+                ? 'Nenhum pedido encontrado'
+                : `Mostrando ${inicioItem} a ${fimItem} de ${totalOrders} pedidos`}
+            </p>
+            {!filters.busca && !filters.numero_pedido && totalPages > 1 && (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      className={
+                        currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+                      }
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let page: number;
+                    if (totalPages <= 5) page = i + 1;
+                    else if (currentPage <= 3) page = i + 1;
+                    else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
+                    else page = currentPage - 2 + i;
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(page)}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      className={
+                        currentPage === totalPages
+                          ? 'pointer-events-none opacity-50'
+                          : 'cursor-pointer'
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
+          </div>
+        </div>
+
+        {/* Dialog central de relatórios */}
+        <Dialog open={relatoriosDialogOpen} onOpenChange={setRelatoriosDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Relatórios</DialogTitle>
+              <DialogDescription>
+                Escolha o tipo de relatório que deseja gerar.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-2">
+              <button
+                type="button"
+                className="flex items-start gap-3 rounded-xl border p-4 text-left hover:bg-muted/50 transition-colors"
+                onClick={() => {
+                  setRelatoriosDialogOpen(false);
+                  abrirDialogRelatorioPedidos();
+                }}
+              >
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Filter className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">Relatório de pedidos</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    PDF com itens — filtre por cliente, fornecedor, roça e período.
+                  </p>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="flex items-start gap-3 rounded-xl border p-4 text-left hover:bg-muted/50 transition-colors"
+                onClick={() => {
+                  setRelatoriosDialogOpen(false);
+                  setMargemDialogOpen(true);
+                }}
+              >
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">Margem de contribuição</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Receita, custo e margem por produto no período.
+                  </p>
+                </div>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={margemDialogOpen} onOpenChange={setMargemDialogOpen}>
             <DialogContent className="max-w-lg p-0 overflow-hidden">
               <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0">
@@ -542,8 +1002,7 @@ export default function Pedidos() {
                 </div>
               </div>
             </DialogContent>
-          </Dialog>
-        </div>
+        </Dialog>
 
         <Dialog open={relatorioPedidosDialogOpen} onOpenChange={setRelatorioPedidosDialogOpen}>
           <DialogContent className="max-w-lg p-0 overflow-hidden">
@@ -719,286 +1178,6 @@ export default function Pedidos() {
             </div>
           </DialogContent>
         </Dialog>
-
-        {/* Search and Filters (mesmo design da página Fornecedores) */}
-        <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex gap-4">
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setFiltrosDialogOpen(true)}
-              style={
-                temFiltrosAtivos
-                  ? { borderColor: 'var(--primary)', borderWidth: '2px' }
-                  : {}
-              }
-            >
-              <Filter className="w-4 h-4" />
-              Filtros
-              {temFiltrosAtivos && (
-                <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
-                  {[
-                    filters.data_inicial,
-                    filters.data_final,
-                    filters.tipo,
-                    filters.status,
-                    filters.roca_id,
-                    filters.somente_com_roca,
-                  ].filter(Boolean).length}
-                </span>
-              )}
-            </Button>
-            <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
-              <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
-                <SheetHeader className="mb-6">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <Filter className="w-5 h-5 text-primary" />
-                    </div>
-                    <SheetTitle className="text-xl">Filtros Avançados</SheetTitle>
-                  </div>
-                  <SheetDescription>Refine sua busca</SheetDescription>
-                </SheetHeader>
-
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Data Inicial</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        type="date"
-                        className="pl-10"
-                        value={filters.data_inicial || ''}
-                        onChange={(e) =>
-                          updateFilters({ data_inicial: e.target.value || undefined })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Data Final</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        type="date"
-                        className="pl-10"
-                        value={filters.data_final || ''}
-                        onChange={(e) =>
-                          updateFilters({ data_final: e.target.value || undefined })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Tipo</Label>
-                    <Select
-                      value={filters.tipo || 'all'}
-                      onValueChange={(value) =>
-                        updateFilters({
-                          tipo: value === 'all' ? undefined : (value as TipoPedido),
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os tipos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os tipos</SelectItem>
-                        <SelectItem value="VENDA">Venda</SelectItem>
-                        <SelectItem value="COMPRA">Compra</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Roça</Label>
-                    <Select
-                      value={
-                        filters.roca_id != null && filters.roca_id > 0
-                          ? String(filters.roca_id)
-                          : 'all'
-                      }
-                      onValueChange={(value) =>
-                        updateFilters({
-                          roca_id:
-                            value === 'all' ? undefined : Number(value),
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas as roças" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas as roças</SelectItem>
-                        {rocasFiltro.map((roca) => (
-                          <SelectItem key={roca.id} value={String(roca.id)}>
-                            {roca.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="rounded border-input"
-                        checked={!!filters.somente_com_roca}
-                        onChange={(e) =>
-                          updateFilters({
-                            somente_com_roca: e.target.checked || undefined,
-                            ...(e.target.checked ? {} : {}),
-                          })
-                        }
-                      />
-                      Somente pedidos com roça vinculada
-                    </label>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Status</Label>
-                    <RadioGroup
-                      value={filters.status || 'all'}
-                      onValueChange={(value) =>
-                        updateFilters({
-                          status: value === 'all' ? undefined : (value as StatusPedido),
-                        })
-                      }
-                      className="space-y-2"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="all" id="status-all" />
-                        <Label htmlFor="status-all" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Circle className="w-3 h-3 text-primary" />
-                          <span>Todos</span>
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="ABERTO" id="status-aberto" />
-                        <Label htmlFor="status-aberto" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Circle className="w-3 h-3 text-amber-500" />
-                          <span>Pendente</span>
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="PARCIAL" id="status-parcial" />
-                        <Label htmlFor="status-parcial" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Circle className="w-3 h-3 text-blue-500" />
-                          <span>Aberto</span>
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="QUITADO" id="status-quitado" />
-                        <Label htmlFor="status-quitado" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Circle className="w-3 h-3 text-green-500" />
-                          <span>Quitado</span>
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="CANCELADO" id="status-cancelado" />
-                        <Label htmlFor="status-cancelado" className="flex items-center gap-2 cursor-pointer flex-1">
-                          <Circle className="w-3 h-3 text-red-500" />
-                          <span>Cancelado</span>
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex gap-2 pt-2">
-                    <Button onClick={handleAplicarFiltros} className="flex-1">
-                      Aplicar Filtros
-                    </Button>
-                    <Button onClick={handleLimparFiltros} variant="outline" className="flex-1">
-                      Limpar Filtros
-                    </Button>
-                  </div>
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por número, cliente, fornecedor ou roça..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Tabela */}
-        <div className="bg-card border rounded-xl p-4">
-          <OrderList
-            orders={orders}
-            isLoading={isLoading}
-            onView={openViewDialog}
-            onEdit={openEditForm}
-            onCancel={handleOpenDeleteDialog}
-            onReport={handleDownloadRelatorioPedido}
-            reportingOrderId={reportingOrderId}
-            onStatusChange={handleStatusChange}
-            updatingStatusId={updatingStatusId}
-          />
-
-          {/* Paginação */}
-          {/* Não mostrar paginação quando há busca (todos os resultados vêm na primeira página) */}
-          {totalPages > 1 && !filters.busca && !filters.numero_pedido && (
-            <div className="border-t border-border p-4 mt-4">
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let page;
-                    if (totalPages <= 5) {
-                      page = i + 1;
-                    } else if (currentPage <= 3) {
-                      page = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      page = totalPages - 4 + i;
-                    } else {
-                      page = currentPage - 2 + i;
-                    }
-
-                    return (
-                      <PaginationItem key={page}>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(page)}
-                          isActive={currentPage === page}
-                          className="cursor-pointer"
-                        >
-                          {page}
-                        </PaginationLink>
-                      </PaginationItem>
-                    );
-                  })}
-
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                      className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          )}
-        </div>
 
         {/* Modal de Formulário */}
         <OrderForm
