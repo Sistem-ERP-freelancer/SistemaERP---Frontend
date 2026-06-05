@@ -3,6 +3,14 @@ import OrderForm from '@/components/orders/OrderForm';
 import { OrderList } from '@/components/orders/OrderList';
 import { OrderStats } from '@/components/orders/OrderStats';
 import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
+import {
+  RelatorioAcoesFooter,
+  RelatorioCampoFiltro,
+  RelatorioFiltrosGrid,
+  RelatorioHubCard,
+  RelatorioModalShell,
+  RelatorioPeriodoSection,
+} from '@/components/orders/RelatorioModalParts';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -22,7 +30,6 @@ import {
     PaginationPrevious,
 } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import {
     Sheet,
     SheetContent,
@@ -37,16 +44,7 @@ import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Download,
-  FileText,
-  Filter,
-  Loader2,
-  Plus,
-  Printer,
-  Search,
-  XCircle,
-} from 'lucide-react';
+import { FileText, Filter, Loader2, Plus, Search, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -839,377 +837,190 @@ export default function Pedidos() {
           </div>
         </div>
 
-        {/* Dialog central de relatórios */}
+        {/* Relatórios */}
         <Dialog open={relatoriosDialogOpen} onOpenChange={setRelatoriosDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Relatórios</DialogTitle>
-              <DialogDescription>
-                Escolha o tipo de relatório que deseja gerar.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3 py-2">
-              <button
-                type="button"
-                className="flex items-start gap-3 rounded-xl border p-4 text-left hover:bg-muted/50 transition-colors"
+          <RelatorioModalShell
+            icon={FileText}
+            title="Relatórios"
+            description="Escolha o tipo de relatório que deseja gerar."
+            maxWidth="md"
+          >
+            <div className="grid gap-3">
+              <RelatorioHubCard
+                icon={Filter}
+                title="Relatório de pedidos"
+                description="PDF com itens — filtre por cliente, fornecedor, roça e período."
                 onClick={() => {
                   setRelatoriosDialogOpen(false);
                   abrirDialogRelatorioPedidos();
                 }}
-              >
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Filter className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">Relatório de pedidos</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    PDF com itens — filtre por cliente, fornecedor, roça e período.
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="flex items-start gap-3 rounded-xl border p-4 text-left hover:bg-muted/50 transition-colors"
+              />
+              <RelatorioHubCard
+                icon={FileText}
+                title="Margem de contribuição"
+                description="Receita, custo e margem por produto no período."
                 onClick={() => {
                   setRelatoriosDialogOpen(false);
                   setMargemDialogOpen(true);
                 }}
-              >
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <FileText className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">Margem de contribuição</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Receita, custo e margem por produto no período.
-                  </p>
-                </div>
-              </button>
+              />
             </div>
-          </DialogContent>
+          </RelatorioModalShell>
         </Dialog>
 
         <Dialog open={margemDialogOpen} onOpenChange={setMargemDialogOpen}>
-            <DialogContent className="max-w-lg p-0 overflow-hidden">
-              <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
-                <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                  <FileText className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 space-y-1.5">
-                  <DialogTitle className="text-base font-semibold text-foreground">
-                    Relatório de Margem de Contribuição
-                  </DialogTitle>
-                  <DialogDescription className="text-xs text-muted-foreground">
-                    Defina o período e escolha baixar PDF ou abrir para impressão.
-                  </DialogDescription>
-                </div>
-              </DialogHeader>
-
-              <div className="px-6 py-5 space-y-5">
-                {/* Filtros de período */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium text-foreground">Período</Label>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Data inicial</span>
-                      <Input
-                        type="date"
-                        className="w-[140px]"
-                        value={dataInicialMargem}
-                        onChange={(e) => {
-                          setDataInicialMargem(e.target.value);
-                          setPeriodoRapidoAtivo('custom');
-                        }}
-                      />
-                    </div>
-                    <span className="text-muted-foreground pb-2">até</span>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Data final</span>
-                      <Input
-                        type="date"
-                        className="w-[140px]"
-                        value={dataFinalMargem}
-                        onChange={(e) => {
-                          setDataFinalMargem(e.target.value);
-                          setPeriodoRapidoAtivo('custom');
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <Button
-                      type="button"
-                      variant={periodoRapidoAtivo === 'hoje' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => aplicarPeriodoRapido('hoje')}
-                    >
-                      Hoje
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={periodoRapidoAtivo === 'ontem' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => aplicarPeriodoRapido('ontem')}
-                    >
-                      Ontem
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={periodoRapidoAtivo === '7d' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => aplicarPeriodoRapido('7d')}
-                    >
-                      Últimos 7 dias
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={periodoRapidoAtivo === 'mes_atual' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => aplicarPeriodoRapido('mes_atual')}
-                    >
-                      Mês atual
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={periodoRapidoAtivo === 'mes_anterior' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => aplicarPeriodoRapido('mes_anterior')}
-                    >
-                      Mês anterior
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Ações: Baixar PDF e Imprimir */}
-                <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
-                  <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="justify-start gap-2 bg-background hover:bg-accent"
-                      disabled={margemLoadingAction !== null}
-                      onClick={async () => {
-                        try {
-                          setMargemLoadingAction('download');
-                          await handleDownloadMargemPdf();
-                          setMargemDialogOpen(false);
-                        } finally {
-                          setMargemLoadingAction(null);
-                        }
-                      }}
-                    >
-                      <Download className="w-4 h-4" />
-                      <span className="text-sm">
-                        {margemLoadingAction === 'download' ? 'Baixando...' : 'Baixar PDF'}
-                      </span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="justify-start gap-2 bg-background hover:bg-accent"
-                      disabled={margemLoadingAction !== null}
-                      onClick={async () => {
-                        try {
-                          setMargemLoadingAction('print');
-                          const dataInicial = dataInicialMargem?.trim() || undefined;
-                          const dataFinal = dataFinalMargem?.trim() || undefined;
-                          await pedidosService.printRelatorioMargemContribuicaoPdf(
-                            dataInicial,
-                            dataFinal,
-                          );
-                          setMargemDialogOpen(false);
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
-                        } finally {
-                          setMargemLoadingAction(null);
-                        }
-                      }}
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span className="text-sm">
-                        {margemLoadingAction === 'print' ? 'Abrindo...' : 'Imprimir'}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
+          <RelatorioModalShell
+            icon={FileText}
+            title="Margem de contribuição"
+            description="Defina o período e gere o PDF com receita, custo e margem por produto."
+            footer={
+              <RelatorioAcoesFooter
+                downloading={margemLoadingAction === 'download'}
+                printing={margemLoadingAction === 'print'}
+                disabled={margemLoadingAction !== null}
+                onDownload={async () => {
+                  try {
+                    setMargemLoadingAction('download');
+                    await handleDownloadMargemPdf();
+                    setMargemDialogOpen(false);
+                  } finally {
+                    setMargemLoadingAction(null);
+                  }
+                }}
+                onPrint={async () => {
+                  try {
+                    setMargemLoadingAction('print');
+                    await pedidosService.printRelatorioMargemContribuicaoPdf(
+                      dataInicialMargem?.trim() || undefined,
+                      dataFinalMargem?.trim() || undefined,
+                    );
+                    setMargemDialogOpen(false);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
+                  } finally {
+                    setMargemLoadingAction(null);
+                  }
+                }}
+              />
+            }
+          >
+            <RelatorioPeriodoSection
+              dataInicial={dataInicialMargem}
+              dataFinal={dataFinalMargem}
+              periodoAtivo={periodoRapidoAtivo}
+              onDataInicial={(v) => {
+                setDataInicialMargem(v);
+                setPeriodoRapidoAtivo('custom');
+              }}
+              onDataFinal={(v) => {
+                setDataFinalMargem(v);
+                setPeriodoRapidoAtivo('custom');
+              }}
+              onPeriodoRapido={(key) => aplicarPeriodoRapido(key)}
+            />
+          </RelatorioModalShell>
         </Dialog>
 
         <Dialog open={relatorioPedidosDialogOpen} onOpenChange={setRelatorioPedidosDialogOpen}>
-          <DialogContent className="max-w-lg p-0 overflow-hidden">
-            <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
-              <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                <Filter className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  Relatório de Pedidos
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  Filtre por cliente, fornecedor, roça e período. Pedidos cancelados não entram no PDF.
-                </DialogDescription>
-              </div>
-            </DialogHeader>
+          <RelatorioModalShell
+            icon={Filter}
+            title="Relatório de pedidos"
+            description="Filtre por cliente, fornecedor, roça e período. Pedidos cancelados não entram no PDF."
+            footer={
+              <RelatorioAcoesFooter
+                downloading={relPedLoadingAction === 'download' || loadingRelatorio}
+                printing={relPedLoadingAction === 'print'}
+                disabled={relPedLoadingAction !== null || loadingRelatorio}
+                onDownload={async () => {
+                  try {
+                    setRelPedLoadingAction('download');
+                    await downloadRelatorio(montarFiltrosRelatorioPedidos());
+                    setRelatorioPedidosDialogOpen(false);
+                  } finally {
+                    setRelPedLoadingAction(null);
+                  }
+                }}
+                onPrint={async () => {
+                  try {
+                    setRelPedLoadingAction('print');
+                    await pedidosService.printRelatorioPDF(montarFiltrosRelatorioPedidos());
+                    setRelatorioPedidosDialogOpen(false);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
+                  } finally {
+                    setRelPedLoadingAction(null);
+                  }
+                }}
+              />
+            }
+          >
+            <div className="space-y-6">
+              <RelatorioPeriodoSection
+                dataInicial={dataInicialRelPed}
+                dataFinal={dataFinalRelPed}
+                periodoAtivo={periodoRapidoRelPed}
+                onDataInicial={(v) => {
+                  setDataInicialRelPed(v);
+                  setPeriodoRapidoRelPed('custom');
+                }}
+                onDataFinal={(v) => {
+                  setDataFinalRelPed(v);
+                  setPeriodoRapidoRelPed('custom');
+                }}
+                onPeriodoRapido={(key) => aplicarPeriodoRapidoRelPed(key)}
+              />
 
-            <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Período</Label>
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Data inicial</span>
-                    <Input
-                      type="date"
-                      className="w-[140px]"
-                      value={dataInicialRelPed}
-                      onChange={(e) => {
-                        setDataInicialRelPed(e.target.value);
-                        setPeriodoRapidoRelPed('custom');
-                      }}
-                    />
-                  </div>
-                  <span className="text-muted-foreground pb-2">até</span>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Data final</span>
-                    <Input
-                      type="date"
-                      className="w-[140px]"
-                      value={dataFinalRelPed}
-                      onChange={(e) => {
-                        setDataFinalRelPed(e.target.value);
-                        setPeriodoRapidoRelPed('custom');
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(
-                    [
-                      ['hoje', 'Hoje'],
-                      ['ontem', 'Ontem'],
-                      ['7d', 'Últimos 7 dias'],
-                      ['mes_atual', 'Mês atual'],
-                      ['mes_anterior', 'Mês anterior'],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <Button
-                      key={key}
-                      type="button"
-                      variant={periodoRapidoRelPed === key ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => aplicarPeriodoRapidoRelPed(key)}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              <RelatorioFiltrosGrid>
+                <RelatorioCampoFiltro label="Cliente">
+                  <Select value={clienteRelPed} onValueChange={setClienteRelPed}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Todos os clientes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os clientes</SelectItem>
+                      {clientes.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </RelatorioCampoFiltro>
 
-              <Separator />
+                <RelatorioCampoFiltro label="Fornecedor">
+                  <Select value={fornecedorRelPed} onValueChange={setFornecedorRelPed}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Todos os fornecedores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os fornecedores</SelectItem>
+                      {fornecedores.map((f) => (
+                        <SelectItem key={f.id} value={String(f.id)}>
+                          {f.nome_fantasia || f.nome_razao || `Fornecedor #${f.id}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </RelatorioCampoFiltro>
 
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Cliente</Label>
-                <Select value={clienteRelPed} onValueChange={setClienteRelPed}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos os clientes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os clientes</SelectItem>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>
-                        {c.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Fornecedor</Label>
-                <Select value={fornecedorRelPed} onValueChange={setFornecedorRelPed}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos os fornecedores" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os fornecedores</SelectItem>
-                    {fornecedores.map((f) => (
-                      <SelectItem key={f.id} value={String(f.id)}>
-                        {f.nome_fantasia || f.nome_razao || `Fornecedor #${f.id}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Roça</Label>
-                <Select value={rocaRelPed} onValueChange={setRocaRelPed}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as roças" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as roças</SelectItem>
-                    {rocasFiltro.map((roca) => (
-                      <SelectItem key={roca.id} value={String(roca.id)}>
-                        {roca.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
-                <div className="flex flex-col gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="justify-start gap-2 bg-background"
-                    disabled={relPedLoadingAction !== null || loadingRelatorio}
-                    onClick={async () => {
-                      try {
-                        setRelPedLoadingAction('download');
-                        await downloadRelatorio(montarFiltrosRelatorioPedidos());
-                        setRelatorioPedidosDialogOpen(false);
-                      } finally {
-                        setRelPedLoadingAction(null);
-                      }
-                    }}
-                  >
-                    <Download className="w-4 h-4" />
-                    {relPedLoadingAction === 'download' || loadingRelatorio
-                      ? 'Baixando...'
-                      : 'Baixar PDF'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="justify-start gap-2 bg-background"
-                    disabled={relPedLoadingAction !== null}
-                    onClick={async () => {
-                      try {
-                        setRelPedLoadingAction('print');
-                        await pedidosService.printRelatorioPDF(
-                          montarFiltrosRelatorioPedidos(),
-                        );
-                        setRelatorioPedidosDialogOpen(false);
-                      } catch (e) {
-                        toast.error(
-                          e instanceof Error ? e.message : 'Erro ao abrir relatório.',
-                        );
-                      } finally {
-                        setRelPedLoadingAction(null);
-                      }
-                    }}
-                  >
-                    <Printer className="w-4 h-4" />
-                    {relPedLoadingAction === 'print' ? 'Abrindo...' : 'Imprimir'}
-                  </Button>
-                </div>
-              </div>
+                <RelatorioCampoFiltro label="Roça" className="sm:col-span-2">
+                  <Select value={rocaRelPed} onValueChange={setRocaRelPed}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Todas as roças" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as roças</SelectItem>
+                      {rocasFiltro.map((roca) => (
+                        <SelectItem key={roca.id} value={String(roca.id)}>
+                          {roca.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </RelatorioCampoFiltro>
+              </RelatorioFiltrosGrid>
             </div>
-          </DialogContent>
+          </RelatorioModalShell>
         </Dialog>
 
         {/* Modal de Formulário */}
