@@ -443,7 +443,7 @@ export default function Pedidos() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col flex-1 basis-0 min-h-0 w-full overflow-hidden p-3 sm:p-4 md:p-6 gap-3 sm:gap-4 md:gap-5">
+      <div className="w-full min-w-0 p-3 sm:p-4 md:p-6 pb-8 gap-3 sm:gap-4 md:gap-5 flex flex-col">
         {/* Cabeçalho */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 shrink-0">
           <div className="space-y-2 sm:space-y-3 min-w-0">
@@ -753,9 +753,9 @@ export default function Pedidos() {
           </SheetContent>
         </Sheet>
 
-        {/* Tabela — ocupa o espaço restante da tela com scroll interno */}
-        <div className="flex flex-col flex-1 min-h-0 h-0 bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-contain">
+        {/* Tabela — rola junto com a página (dashboard não fica fixo) */}
+        <div className="bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
             <OrderList
               orders={orders}
               isLoading={isLoading}
@@ -769,7 +769,7 @@ export default function Pedidos() {
             />
           </div>
 
-          <div className="shrink-0 border-t border-border px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-muted/20">
+          <div className="border-t border-border px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-muted/20">
             <p className="text-sm text-muted-foreground">
               {totalOrders === 0
                 ? 'Nenhum pedido encontrado'

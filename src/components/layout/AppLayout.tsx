@@ -263,7 +263,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
       {/* Main: padding esquerdo = largura da sidebar no desktop (sidebar fora do fluxo) */}
       <main
         className={cn(
-          "h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex flex-col overflow-hidden transition-[padding] duration-300 ease-out",
+          "min-h-[100dvh] min-w-0 flex flex-col transition-[padding] duration-300 ease-out",
           "pr-[max(0px,env(safe-area-inset-right,0px))]",
           sidebarOpen
             ? "lg:pl-[220px] min-[1920px]:lg:pl-60"
@@ -351,8 +351,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </header>
 
-        {/* Content — altura limitada; páginas longas rolam aqui; Pedidos rola só a tabela */}
-        <div className="min-w-0 min-h-0 flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
+        {/* Content */}
+        <div className="min-w-0 flex-1 flex flex-col">
           {children}
         </div>
       </main>
