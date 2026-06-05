@@ -21,7 +21,6 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -39,8 +38,6 @@ import { pedidosService } from '@/services/pedidos.service';
 import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Calendar,
-  Circle,
   Download,
   FileText,
   Filter,
@@ -241,8 +238,59 @@ export default function Pedidos() {
     filters.tipo ||
     filters.status ||
     filters.roca_id ||
-    filters.somente_com_roca
+    filters.somente_com_roca ||
+    filters.cliente_id ||
+    filters.fornecedor_id
   );
+
+  const qtdFiltrosAtivos = [
+    filters.status,
+    filters.cliente_id,
+    filters.fornecedor_id,
+    filters.data_inicial,
+    filters.data_final,
+    filters.roca_id,
+    filters.somente_com_roca,
+  ].filter(Boolean).length;
+
+  const labelStatusFiltro = (s?: StatusPedido) => {
+    if (!s) return null;
+    const map: Record<StatusPedido, string> = {
+      ABERTO: 'Pendente',
+      PARCIAL: 'Aberto',
+      QUITADO: 'Quitado',
+      CANCELADO: 'Cancelado',
+    };
+    return map[s];
+  };
+
+  const labelParceiroFiltro = () => {
+    if (filtroParceiro === 'all') return null;
+    if (filtroParceiro.startsWith('c-')) {
+      const id = Number(filtroParceiro.slice(2));
+      return clientes.find((c) => c.id === id)?.nome ?? `Cliente #${id}`;
+    }
+    const id = Number(filtroParceiro.slice(2));
+    const f = fornecedores.find((x) => x.id === id);
+    return f?.nome_fantasia || f?.nome_razao || `Fornecedor #${id}`;
+  };
+
+  const labelPeriodoFiltro = () => {
+    if (periodoRapidoLista === 'all' && !filters.data_inicial && !filters.data_final) {
+      return null;
+    }
+    if (periodoRapidoLista === 'hoje') return 'Hoje';
+    if (periodoRapidoLista === '7d') return 'Últimos 7 dias';
+    if (periodoRapidoLista === 'mes_atual') return 'Mês atual';
+    if (filters.data_inicial && filters.data_final) {
+      const fmt = (d: string) => {
+        const [y, m, day] = d.split('-');
+        return `${day}/${m}/${y}`;
+      };
+      return `${fmt(filters.data_inicial)} – ${fmt(filters.data_final)}`;
+    }
+    return 'Período personalizado';
+  };
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     updateFilters({
@@ -456,148 +504,74 @@ export default function Pedidos() {
           <OrderStats variant="hero" />
         </div>
 
-        {/* Barra de busca e filtros */}
-        <div className="bg-card rounded-xl border border-border/80 shadow-sm p-3 sm:p-4 shrink-0">
-          <div className="flex flex-col gap-3">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        {/* Barra de busca + filtros (uma linha) */}
+        <div className="bg-card rounded-xl border border-border/80 shadow-sm shrink-0 overflow-hidden">
+          <div className="flex items-stretch w-full min-h-[44px] sm:min-h-[48px]">
+            <div className="relative flex-1 min-w-0 flex items-center">
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
               <Input
                 placeholder="Buscar por número, cliente, fornecedor ou roça..."
-                className="pl-10 h-10 bg-background"
+                className="h-11 sm:h-12 w-full rounded-none border-0 border-r-0 pl-10 sm:pl-11 pr-3 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm sm:text-base"
                 value={searchTerm}
                 onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-row lg:items-center gap-2">
-              <Select
-                value={filters.status || 'all'}
-                onValueChange={(value) =>
-                  updateFilters({
-                    status: value === 'all' ? undefined : (value as StatusPedido),
-                  })
-                }
-              >
-                <SelectTrigger className="w-full sm:w-[140px] h-9 bg-background">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Status</SelectItem>
-                  <SelectItem value="ABERTO">Pendente</SelectItem>
-                  <SelectItem value="PARCIAL">Aberto</SelectItem>
-                  <SelectItem value="QUITADO">Quitado</SelectItem>
-                  <SelectItem value="CANCELADO">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filtroParceiro} onValueChange={handleFiltroParceiro}>
-                <SelectTrigger className="w-full sm:w-[200px] h-9 bg-background">
-                  <SelectValue placeholder="Cliente / Fornecedor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Cliente / Fornecedor</SelectItem>
-                  {clientes.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        Clientes
-                      </div>
-                      {clientes.map((c) => (
-                        <SelectItem key={`c-${c.id}`} value={`c-${c.id}`}>
-                          {c.nome}
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  {fornecedores.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        Fornecedores
-                      </div>
-                      {fornecedores.map((f) => (
-                        <SelectItem key={`f-${f.id}`} value={`f-${f.id}`}>
-                          {f.nome_fantasia || f.nome_razao}
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={periodoRapidoLista}
-                onValueChange={(v) =>
-                  aplicarPeriodoLista(v as typeof periodoRapidoLista)
-                }
-              >
-                <SelectTrigger className="w-full sm:w-[150px] h-9 bg-background">
-                  <SelectValue placeholder="Período" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Período</SelectItem>
-                  <SelectItem value="hoje">Hoje</SelectItem>
-                  <SelectItem value="7d">Últimos 7 dias</SelectItem>
-                  <SelectItem value="mes_atual">Mês atual</SelectItem>
-                  <SelectItem value="custom">Personalizado…</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {periodoRapidoLista === 'custom' && (
-                <>
-                  <Input
-                    type="date"
-                    className="w-full sm:w-[140px] h-9"
-                    value={filters.data_inicial || ''}
-                    onChange={(e) =>
-                      updateFilters({ data_inicial: e.target.value || undefined })
-                    }
-                  />
-                  <span className="text-muted-foreground text-sm hidden sm:inline">até</span>
-                  <Input
-                    type="date"
-                    className="w-full sm:w-[140px] h-9"
-                    value={filters.data_final || ''}
-                    onChange={(e) =>
-                      updateFilters({ data_final: e.target.value || undefined })
-                    }
-                  />
-                </>
+            <div className="w-px bg-border shrink-0 self-stretch my-2" aria-hidden />
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11 sm:h-12 shrink-0 rounded-none px-3 sm:px-5 gap-2 text-foreground hover:bg-muted/80 font-medium"
+              onClick={() => setFiltrosDialogOpen(true)}
+            >
+              <Filter className="w-4 h-4 shrink-0 text-muted-foreground" />
+              <span className="hidden sm:inline">Filtros</span>
+              {qtdFiltrosAtivos > 0 && (
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                  {qtdFiltrosAtivos}
+                </span>
               )}
-
-              <div className="flex items-center gap-2 sm:col-span-2 lg:col-span-1 lg:ml-auto w-full lg:w-auto justify-between sm:justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={handleLimparFiltros}
-                  disabled={!temFiltrosAtivos && !searchTerm && filtroParceiro === 'all'}
-                >
-                  Limpar filtros
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setFiltrosDialogOpen(true)}
-                >
-                  <Filter className="w-4 h-4" />
-                  Filtros
-                  {temFiltrosAtivos && (
-                    <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-[10px] min-w-[18px]">
-                      {[
-                        filters.data_inicial,
-                        filters.data_final,
-                        filters.tipo,
-                        filters.status,
-                        filters.roca_id,
-                        filters.somente_com_roca,
-                        filters.cliente_id,
-                        filters.fornecedor_id,
-                      ].filter(Boolean).length}
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </div>
+            </Button>
           </div>
+
+          {(qtdFiltrosAtivos > 0 || searchTerm) && (
+            <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2.5 border-t border-border/60 bg-muted/20">
+              {filters.status && labelStatusFiltro(filters.status) && (
+                <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  Status: {labelStatusFiltro(filters.status)}
+                </span>
+              )}
+              {labelParceiroFiltro() && (
+                <span className="inline-flex items-center max-w-[200px] truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  {labelParceiroFiltro()}
+                </span>
+              )}
+              {labelPeriodoFiltro() && (
+                <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  {labelPeriodoFiltro()}
+                </span>
+              )}
+              {filters.roca_id != null && filters.roca_id > 0 && (
+                <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  Roça: {rocasFiltro.find((r) => r.id === filters.roca_id)?.nome ?? filters.roca_id}
+                </span>
+              )}
+              {filters.somente_com_roca && (
+                <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  Com roça
+                </span>
+              )}
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs text-primary ml-auto shrink-0"
+                onClick={handleLimparFiltros}
+                disabled={!temFiltrosAtivos && !searchTerm}
+              >
+                Limpar filtros
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Sheet filtros avançados (roça, etc.) */}
@@ -608,42 +582,116 @@ export default function Pedidos() {
                 <div className="p-2 rounded-lg bg-primary/10">
                   <Filter className="w-5 h-5 text-primary" />
                 </div>
-                <SheetTitle className="text-xl">Filtros avançados</SheetTitle>
+                <SheetTitle className="text-xl">Filtros</SheetTitle>
               </div>
-              <SheetDescription>Roça, tipo e status detalhado</SheetDescription>
+              <SheetDescription>
+                Status, cliente, período, roça e demais critérios da listagem.
+              </SheetDescription>
             </SheetHeader>
 
             <div className="space-y-6">
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Data inicial</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="date"
-                    className="pl-10"
-                    value={filters.data_inicial || ''}
-                    onChange={(e) => {
-                      updateFilters({ data_inicial: e.target.value || undefined });
-                      setPeriodoRapidoLista('custom');
-                    }}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Status</Label>
+                <Select
+                  value={filters.status || 'all'}
+                  onValueChange={(value) =>
+                    updateFilters({
+                      status: value === 'all' ? undefined : (value as StatusPedido),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os status</SelectItem>
+                    <SelectItem value="ABERTO">Pendente</SelectItem>
+                    <SelectItem value="PARCIAL">Aberto</SelectItem>
+                    <SelectItem value="QUITADO">Quitado</SelectItem>
+                    <SelectItem value="CANCELADO">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Data final</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    type="date"
-                    className="pl-10"
-                    value={filters.data_final || ''}
-                    onChange={(e) => {
-                      updateFilters({ data_final: e.target.value || undefined });
-                      setPeriodoRapidoLista('custom');
-                    }}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Cliente / Fornecedor</Label>
+                <Select value={filtroParceiro} onValueChange={handleFiltroParceiro}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {clientes.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          Clientes
+                        </div>
+                        {clientes.map((c) => (
+                          <SelectItem key={`c-${c.id}`} value={`c-${c.id}`}>
+                            {c.nome}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {fornecedores.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          Fornecedores
+                        </div>
+                        {fornecedores.map((f) => (
+                          <SelectItem key={`f-${f.id}`} value={`f-${f.id}`}>
+                            {f.nome_fantasia || f.nome_razao}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Período</Label>
+                <Select
+                  value={periodoRapidoLista}
+                  onValueChange={(v) =>
+                    aplicarPeriodoLista(v as typeof periodoRapidoLista)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Qualquer período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Qualquer período</SelectItem>
+                    <SelectItem value="hoje">Hoje</SelectItem>
+                    <SelectItem value="7d">Últimos 7 dias</SelectItem>
+                    <SelectItem value="mes_atual">Mês atual</SelectItem>
+                    <SelectItem value="custom">Personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+                {periodoRapidoLista === 'custom' && (
+                  <div className="flex flex-wrap items-end gap-2 pt-1">
+                    <div className="flex-1 min-w-[120px] space-y-1">
+                      <span className="text-xs text-muted-foreground">De</span>
+                      <Input
+                        type="date"
+                        value={filters.data_inicial || ''}
+                        onChange={(e) =>
+                          updateFilters({ data_inicial: e.target.value || undefined })
+                        }
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[120px] space-y-1">
+                      <span className="text-xs text-muted-foreground">Até</span>
+                      <Input
+                        type="date"
+                        value={filters.data_final || ''}
+                        onChange={(e) =>
+                          updateFilters({ data_final: e.target.value || undefined })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Separator />
@@ -687,52 +735,6 @@ export default function Pedidos() {
                   />
                   Somente pedidos com roça vinculada
                 </label>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Status</Label>
-                <RadioGroup
-                  value={filters.status || 'all'}
-                  onValueChange={(value) =>
-                    updateFilters({
-                      status: value === 'all' ? undefined : (value as StatusPedido),
-                    })
-                  }
-                  className="space-y-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="all" id="status-all" />
-                    <Label htmlFor="status-all" className="cursor-pointer flex-1">
-                      Todos
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="ABERTO" id="status-aberto" />
-                    <Label htmlFor="status-aberto" className="cursor-pointer flex-1">
-                      Pendente
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="PARCIAL" id="status-parcial" />
-                    <Label htmlFor="status-parcial" className="cursor-pointer flex-1">
-                      Aberto
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="QUITADO" id="status-quitado" />
-                    <Label htmlFor="status-quitado" className="cursor-pointer flex-1">
-                      Quitado
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="CANCELADO" id="status-cancelado" />
-                    <Label htmlFor="status-cancelado" className="cursor-pointer flex-1">
-                      Cancelado
-                    </Label>
-                  </div>
-                </RadioGroup>
               </div>
 
               <div className="flex gap-2 pt-2">
