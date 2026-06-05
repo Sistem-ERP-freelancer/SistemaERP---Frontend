@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import { formatCurrency, normalizeCurrency, normalizeQuantity } from '@/lib/utils';
 import { cleanDocument, formatCNPJ, formatCPF } from '@/lib/validators';
-import { Pedido } from '@/types/pedido';
+import { nomeRocaPedido, Pedido, pedidoVinculadoRoca } from '@/types/pedido';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -32,6 +32,7 @@ import {
     Package,
     Printer,
     ShoppingCart,
+    Sprout,
     Truck,
     User,
     XCircle,
@@ -67,6 +68,8 @@ export function OrderViewDialog({
   const [dialogCondicaoAberto, setDialogCondicaoAberto] = useState(false);
 
   if (!order) return null;
+
+  const vinculadoRoca = pedidoVinculadoRoca(order);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '--';
@@ -209,36 +212,47 @@ export function OrderViewDialog({
             </div>
           </div>
 
-          {/* Cliente/Fornecedor */}
+          {/* Cliente / Fornecedor / Roça */}
           <div className="bg-card border rounded-lg p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`p-2 rounded-lg ${
-                order.tipo === 'VENDA' 
-                  ? 'bg-green-100 dark:bg-green-900/20' 
-                  : 'bg-blue-100 dark:bg-blue-900/20'
+                vinculadoRoca
+                  ? 'bg-emerald-100 dark:bg-emerald-900/20'
+                  : order.tipo === 'VENDA'
+                    ? 'bg-green-100 dark:bg-green-900/20'
+                    : 'bg-blue-100 dark:bg-blue-900/20'
               }`}>
-                {order.tipo === 'VENDA' ? (
-                  <User className={`w-5 h-5 ${
-                    order.tipo === 'VENDA'
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-blue-600 dark:text-blue-400'
-                  }`} />
+                {vinculadoRoca ? (
+                  <Sprout className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                ) : order.tipo === 'VENDA' ? (
+                  <User className="w-5 h-5 text-green-600 dark:text-green-400" />
                 ) : (
                   <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 )}
               </div>
               <div>
                 <h3 className="font-semibold text-foreground">
-                  {order.tipo === 'VENDA' ? 'Cliente' : 'Fornecedor'}
+                  {vinculadoRoca
+                    ? 'Roça'
+                    : order.tipo === 'VENDA'
+                      ? 'Cliente'
+                      : 'Fornecedor'}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Informações do {order.tipo === 'VENDA' ? 'cliente' : 'fornecedor'}
+                  {vinculadoRoca
+                    ? 'Pedido vinculado à roça'
+                    : `Informações do ${order.tipo === 'VENDA' ? 'cliente' : 'fornecedor'}`}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {order.tipo === 'VENDA' && order.cliente ? (
+              {vinculadoRoca ? (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Nome</Label>
+                  <div className="text-sm font-medium">{nomeRocaPedido(order) || '—'}</div>
+                </div>
+              ) : order.tipo === 'VENDA' && order.cliente ? (
                 <>
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Nome</Label>
@@ -306,13 +320,6 @@ export function OrderViewDialog({
                     </div>
                   )}
                 </>
-              ) : order.roca_nome || order.roca?.nome || order.roca_id ? (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Roça</Label>
-                  <div className="text-sm font-medium">
-                    {order.roca_nome || order.roca?.nome || `Roça #${order.roca_id}`}
-                  </div>
-                </div>
               ) : (
                 <div className="text-sm text-muted-foreground">--</div>
               )}

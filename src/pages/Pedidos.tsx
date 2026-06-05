@@ -928,7 +928,7 @@ export default function Pedidos() {
               <RelatorioHubCard
                 icon={Filter}
                 title="Relatório de pedidos"
-                description="PDF premium — um pedido por página, com itens, totais e endereço da roça, cliente ou fornecedor."
+                description="PDF premium — um pedido por página, com itens e totais. Endereço e contato só para cliente ou fornecedor."
                 onClick={() => {
                   setRelatoriosDialogOpen(false);
                   abrirDialogRelatorioPedidos();
@@ -1002,7 +1002,7 @@ export default function Pedidos() {
           <RelatorioModalShell
             icon={Filter}
             title="Relatório de pedidos"
-            description="PDF consolidado — um pedido por página."
+            description="PDF consolidado — um pedido por página. Pedidos por roça não incluem endereço nem contato."
             maxWidth="xl"
             footer={
               <RelatorioAcoesFooter
@@ -1099,6 +1099,13 @@ export default function Pedidos() {
                   </Select>
                 </RelatorioCampoFiltro>
               </RelatorioFiltrosGrid>
+
+              {rocaRelPed !== 'all' ? (
+                <p className="rounded-xl border border-primary/20 bg-primary/[0.05] px-4 py-3 text-sm text-muted-foreground">
+                  Relatórios filtrados por roça exibem apenas o nome da roça e os itens do pedido —
+                  sem seção de endereço ou contato.
+                </p>
+              ) : null}
 
               <RelatorioResumoFiltrosPreview
                 linhas={[

@@ -15,7 +15,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { normalizeCurrency } from '@/lib/utils';
-import { Pedido, StatusPedido } from '@/types/pedido';
+import { Pedido, pedidoVinculadoRoca, StatusPedido } from '@/types/pedido';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Edit, Eye, FileText, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
@@ -123,7 +123,11 @@ export function OrderList({
           className="h-8 w-8 shrink-0"
           onClick={() => onReport(order)}
           disabled={reportingOrderId === order.id}
-          title="Relatório PDF com itens e endereço"
+          title={
+            pedidoVinculadoRoca(order)
+              ? 'Relatório PDF com itens (sem endereço/contato da roça)'
+              : 'Relatório PDF com itens e endereço'
+          }
         >
           {reportingOrderId === order.id ? (
             <Loader2 className="w-4 h-4 animate-spin text-primary" />

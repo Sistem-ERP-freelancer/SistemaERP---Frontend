@@ -9170,7 +9170,7 @@ className={
                   <div>
                     <h3 className="text-sm font-semibold">Informações da roça</h3>
                     <p className="text-xs text-muted-foreground">
-                      Identificação, endereço, contato, datas de plantio/colheita e mudas.
+                      Identificação, localização (cadastro interno), datas de plantio/colheita e mudas.
                     </p>
                   </div>
                 </div>

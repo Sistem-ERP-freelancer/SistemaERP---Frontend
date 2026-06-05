@@ -146,7 +146,7 @@ export function RocaEnderecoContatoFields({
             <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
           </h4>
           <p className="text-xs text-muted-foreground mt-1">
-            CEP, logradouro, cidade, telefone e e-mail — usados nos relatórios de pedidos.
+            CEP, logradouro, cidade, telefone e e-mail — cadastro interno da roça (opcional).
           </p>
         </div>
         {fields}
@@ -163,7 +163,7 @@ export function RocaEnderecoContatoFields({
         <div>
           <h3 className="text-sm font-semibold">Endereço e contato</h3>
           <p className="text-xs text-muted-foreground">
-            Usado nos relatórios de pedidos vinculados à roça (todos os campos são opcionais).
+            Dados opcionais de localização e contato da roça (não aparecem no relatório de pedidos).
           </p>
         </div>
       </div>

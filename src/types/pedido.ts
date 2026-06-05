@@ -201,3 +201,19 @@ export interface DashboardPedidos {
   };
 }
 
+/** Pedido vinculado a uma roça (relatório PDF omite endereço e contato). */
+export function pedidoVinculadoRoca(
+  pedido: Pick<Pedido, 'roca_id'>,
+): boolean {
+  return pedido.roca_id != null && Number(pedido.roca_id) > 0;
+}
+
+export function nomeRocaPedido(
+  pedido: Pick<Pedido, 'roca_id' | 'roca_nome' | 'roca'>,
+): string {
+  return (
+    pedido.roca_nome?.trim() ||
+    pedido.roca?.nome?.trim() ||
+    (pedido.roca_id ? `Roça #${pedido.roca_id}` : '')
+  );
+}
