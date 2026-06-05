@@ -1537,6 +1537,7 @@ function ContasAPagar() {
 
     // Filtrar por termo de busca
     if (searchTerm.trim()) {
+      const termo = searchTerm.toLowerCase();
       filtered = filtered.filter(t => {
       const o = (t as { origemConta?: string }).origemConta;
       const origemTxt =
@@ -1547,11 +1548,11 @@ function ContasAPagar() {
             : "";
       const rocaNome = (t as { roca_nome?: string | null }).roca_nome ?? "";
       const matchesSearch =
-        t.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.fornecedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rocaNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        origemTxt.includes(searchTerm.toLowerCase());
+        (t.descricao ?? "").toLowerCase().includes(termo) ||
+        String(t.id ?? "").toLowerCase().includes(termo) ||
+        (t.fornecedor ?? "").toLowerCase().includes(termo) ||
+        rocaNome.toLowerCase().includes(termo) ||
+        origemTxt.includes(termo);
       return matchesSearch;
     });
     }
