@@ -1,3 +1,4 @@
+import { parseDateOnlyLocal } from '@/lib/utils';
 import {
   type ContaFinanceira,
   financeiroService,
@@ -88,4 +89,84 @@ export function contaEstaPaga(c: ContaFinanceira): boolean {
     st === 'QUITADO' ||
     st === 'PARCIAL'
   );
+}
+
+export function saldoAbertoConta(c: ContaFinanceira): number {
+  const st = String(c.status ?? '').toUpperCase();
+  if (st === 'CANCELADO' || st === 'QUITADO' || st === 'PAGO_TOTAL') return 0;
+  const r = c.valor_restante != null ? Number(c.valor_restante) : 0;
+  const em = c.valor_em_aberto != null ? Number(c.valor_em_aberto) : 0;
+  return Math.max(0, r || em);
+}
+
+/** Resumo dos cards de Contas a Receber a partir da listagem filtrada (mesma base da tabela). */
+export function calcularResumoCardsReceber(contas: ContaFinanceira[]): {
+  totalReceber: number;
+  valorRecebido: number;
+  vencidas: number;
+  vencendoHoje: number;
+  vencendoEsteMes: number;
+} {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+
+  let totalReceber = 0;
+  let valorRecebido = 0;
+  let vencidas = 0;
+  let vencendoHoje = 0;
+  let vencendoEsteMes = 0;
+
+  for (const conta of contas) {
+    if (conta.tipo !== 'RECEBER') continue;
+    const st = String(conta.status ?? '').toUpperCase();
+    if (st === 'CANCELADO') continue;
+
+    valorRecebido += Number(conta.valor_pago) || 0;
+
+    if (!contaTemSaldoAberto(conta)) continue;
+
+    totalReceber += saldoAbertoConta(conta);
+
+    const diasAte =
+      conta.dias_ate_vencimento !== undefined && conta.dias_ate_vencimento !== null
+        ? conta.dias_ate_vencimento
+        : (() => {
+            const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+            if (!vencimento) return null;
+            vencimento.setHours(0, 0, 0, 0);
+            return Math.round(
+              (vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+            );
+          })();
+
+    if (st === 'VENCIDO' || (diasAte != null && diasAte < 0)) {
+      vencidas += 1;
+      continue;
+    }
+
+    if (diasAte === 0) {
+      vencendoHoje += 1;
+    }
+
+    if (diasAte != null && diasAte > 0) {
+      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
+      if (
+        vencimento &&
+        vencimento.getMonth() === mesAtual &&
+        vencimento.getFullYear() === anoAtual
+      ) {
+        vencendoEsteMes += 1;
+      }
+    }
+  }
+
+  return {
+    totalReceber: Number(totalReceber.toFixed(2)),
+    valorRecebido: Number(valorRecebido.toFixed(2)),
+    vencidas,
+    vencendoHoje,
+    vencendoEsteMes,
+  };
 }

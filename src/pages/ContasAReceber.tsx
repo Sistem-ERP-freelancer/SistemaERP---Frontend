@@ -56,10 +56,12 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  calcularResumoCardsReceber,
   contaEstaPaga,
   contaTemSaldoAberto,
   fimDoMesYMD,
   listarContasTodasAsPaginas,
+  saldoAbertoConta,
   toYMD,
 } from "@/lib/contas-financeiras-listagem";
 import { formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
@@ -94,15 +96,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-
-/** Saldo em aberto (legado: valor_restante; modelo saldo: valor_em_aberto). */
-const saldoAbertoConta = (p: ContaFinanceira & { valorEmAberto?: number }): number => {
-  if (p.status === "CANCELADO" || p.status === "PAGO_TOTAL") return 0;
-  const r = p.valor_restante != null ? Number(p.valor_restante) : 0;
-  const emRaw = p.valor_em_aberto ?? p.valorEmAberto;
-  const em = emRaw != null ? Number(emRaw) : 0;
-  return Math.max(0, r || em);
-};
 
 const ContasAReceber = () => {
   const [viewMode, setViewMode] = useState<"clientes" | "pedidos">("pedidos");
@@ -631,6 +624,83 @@ const ContasAReceber = () => {
     setFiltrosDialogOpen(false);
   };
 
+  const baseFiltrosContasArgs = useMemo(() => {
+    const clienteArg =
+      clienteFilterId != null && clienteFilterId > 0 ? clienteFilterId : undefined;
+    const rocaArg =
+      rocaFilterId != null && rocaFilterId > 0 ? rocaFilterId : undefined;
+    const dataInicialArg =
+      dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+        ? dataInicialFilter
+        : undefined;
+    const dataFinalArg =
+      dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+        ? dataFinalFilter
+        : undefined;
+
+    let status: string | undefined;
+    let proximidade_vencimento: "VENCIDA" | undefined;
+    if (statusFilter === "VENCIDO") {
+      proximidade_vencimento = "VENCIDA";
+    } else if (statusFilter === "ABERTO") {
+      status = "ABERTO";
+    } else if (statusFilter === "PARCIAL") {
+      status = "PARCIAL";
+    } else if (statusFilter === "QUITADO") {
+      status = "QUITADO";
+    }
+
+    return {
+      tipo: "RECEBER" as const,
+      cliente_id: clienteArg,
+      roca_id: rocaArg,
+      data_inicial: dataInicialArg,
+      data_final: dataFinalArg,
+      status,
+      proximidade_vencimento,
+    };
+  }, [
+    clienteFilterId,
+    rocaFilterId,
+    dataInicialFilter,
+    dataFinalFilter,
+    statusFilter,
+  ]);
+
+  const { data: contasParaCards, isLoading: isLoadingContasParaCards } = useQuery({
+    queryKey: ["contas-financeiras", "receber", "cards", baseFiltrosContasArgs],
+    queryFn: async () => listarContasTodasAsPaginas(baseFiltrosContasArgs),
+    enabled: temFiltrosAtivos,
+    retry: false,
+  });
+
+  const contasFiltradasParaCards = useMemo(() => {
+    if (!contasParaCards?.length) return contasParaCards ?? [];
+    if (rocaFilterId == null || rocaFilterId <= 0) return contasParaCards;
+
+    const nomeRoca = rocasLista
+      .find((r) => r.id === rocaFilterId)
+      ?.nome?.trim()
+      .toLowerCase();
+    const pedidoIdsRoca = new Set(
+      (pedidosContasReceber ?? []).map((p) => p.pedido_id).filter((id) => id != null),
+    );
+
+    return contasParaCards.filter((c) => {
+      if (Number(c.roca_id) === rocaFilterId) return true;
+      if (nomeRoca && (c.roca_nome ?? "").trim().toLowerCase() === nomeRoca) {
+        return true;
+      }
+      if (c.pedido_id != null && pedidoIdsRoca.has(c.pedido_id)) return true;
+      return false;
+    });
+  }, [contasParaCards, rocaFilterId, rocasLista, pedidosContasReceber]);
+
+  const resumoCardsFiltrado = useMemo(() => {
+    if (!temFiltrosAtivos) return null;
+    return calcularResumoCardsReceber(contasFiltradasParaCards);
+  }, [temFiltrosAtivos, contasFiltradasParaCards]);
+
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
     if (!conta || conta.tipo !== "RECEBER") return false;
@@ -729,20 +799,35 @@ const ContasAReceber = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    // Card Total a Receber: preferir soma da lista de clientes (bate com a tabela); senão valor_total_pendente. NUNCA valor_total_receber.
+    // Com filtros ativos, cards refletem a mesma base da tabela (listagem filtrada).
     const totalReceber =
-      viewMode === 'clientes' && totalAReceberFromLista !== null
-        ? totalAReceberFromLista
-        : parseValor(dashboardReceber?.valor_total_pendente) ?? 0;
-    const totalVencidas = Number(dashboardReceber?.vencidas) ?? 0;
-    const totalVencendoHoje = Number(dashboardReceber?.vencendo_hoje) ?? 0;
-    const totalVencendoEsteMes = Number(dashboardReceber?.vencendo_este_mes) ?? 0;
-    // Valor Pago: quando temos lista de pedidos (incl. quitados), somar valor_pago de cada um; senão usar dashboard
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.totalReceber
+        : viewMode === "clientes" && totalAReceberFromLista !== null
+          ? totalAReceberFromLista
+          : parseValor(dashboardReceber?.valor_total_pendente) ?? 0;
+    const totalVencidas =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.vencidas
+        : Number(dashboardReceber?.vencidas) ?? 0;
+    const totalVencendoHoje =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.vencendoHoje
+        : Number(dashboardReceber?.vencendo_hoje) ?? 0;
+    const totalVencendoEsteMes =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.vencendoEsteMes
+        : Number(dashboardReceber?.vencendo_este_mes) ?? 0;
     const valorPagoFromPedidos =
       !usarFallbackContasFinanceiras && pedidos.length > 0
         ? pedidos.reduce((s, p) => s + (Number((p as ContaReceber).valor_pago) || 0), 0)
         : null;
-    const valorPago = valorPagoFromPedidos !== null ? valorPagoFromPedidos : (parseValor(dashboardReceber?.valor_total_recebido) ?? 0);
+    const valorPago =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.valorRecebido
+        : valorPagoFromPedidos !== null
+          ? valorPagoFromPedidos
+          : parseValor(dashboardReceber?.valor_total_recebido) ?? 0;
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
@@ -787,7 +872,14 @@ const ContasAReceber = () => {
         ...statTheme.blue,
       },
     ];
-  }, [dashboardReceber, viewMode, totalAReceberFromLista, usarFallbackContasFinanceiras, pedidos]);
+  }, [
+    dashboardReceber,
+    viewMode,
+    totalAReceberFromLista,
+    usarFallbackContasFinanceiras,
+    pedidos,
+    resumoCardsFiltrado,
+  ]);
 
   const totalReceberTooltip = (
     <TooltipProvider>
@@ -804,7 +896,9 @@ const ContasAReceber = () => {
         <TooltipContent side="bottom" className="max-w-[300px]">
           <p className="font-medium mb-1">Origem do valor</p>
           <p className="text-xs">
-            {viewMode === "clientes" && totalAReceberFromLista !== null
+            {resumoCardsFiltrado != null
+              ? "Soma das contas filtradas (mesma base da tabela)."
+              : viewMode === "clientes" && totalAReceberFromLista !== null
               ? "Soma da lista de clientes (Total em Aberto de cada linha). Sempre igual à tabela."
               : "Resumo pendente do dashboard de contas a receber."}
           </p>
@@ -1634,6 +1728,9 @@ const ContasAReceber = () => {
     createContaMutation.mutate(contaData);
   };
 
+  const isLoadingCards =
+    isLoadingReceber || (temFiltrosAtivos && isLoadingContasParaCards);
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -1641,11 +1738,11 @@ const ContasAReceber = () => {
           icon={DollarSign}
           title="Contas a Receber"
           subtitle="Gerencie recebimentos por cliente e parcela, com visão clara do que está em aberto."
-          loadingHint={isLoadingReceber ? "Carregando resumo e contas…" : undefined}
+          loadingHint={isLoadingCards ? "Carregando resumo e contas…" : undefined}
         />
 
         <ModuleStatCards
-          isLoading={isLoadingReceber}
+          isLoading={isLoadingCards}
           columns={5}
           items={statsCardItems}
         />
