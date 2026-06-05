@@ -443,7 +443,7 @@ export default function Pedidos() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col flex-1 min-h-0 w-full p-3 sm:p-4 md:p-6 gap-3 sm:gap-4 md:gap-5">
+      <div className="flex flex-col flex-1 basis-0 min-h-0 w-full overflow-hidden p-3 sm:p-4 md:p-6 gap-3 sm:gap-4 md:gap-5">
         {/* Cabeçalho */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 shrink-0">
           <div className="space-y-2 sm:space-y-3 min-w-0">
@@ -753,9 +753,9 @@ export default function Pedidos() {
           </SheetContent>
         </Sheet>
 
-        {/* Tabela — ocupa o espaço restante da tela */}
-        <div className="flex flex-col flex-1 min-h-0 bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
+        {/* Tabela — ocupa o espaço restante da tela com scroll interno */}
+        <div className="flex flex-col flex-1 min-h-0 h-0 bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-contain">
             <OrderList
               orders={orders}
               isLoading={isLoading}
