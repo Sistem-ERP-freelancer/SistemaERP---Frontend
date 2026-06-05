@@ -9472,13 +9472,68 @@ className={
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold flex items-center gap-2">
                         <MapPin className="w-5 h-5 text-primary" />
-                        Localização
+                        Endereço e contato
                       </h3>
-                      <div className="p-4 border rounded-lg">
-                        <p className="font-medium text-base whitespace-pre-wrap">
-                          {detailRoca.localizacao || '—'}
-                        </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border rounded-lg">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">CEP</Label>
+                          <p className="font-medium">{detailRoca.cep?.trim() || '—'}</p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs text-muted-foreground">Logradouro</Label>
+                          <p className="font-medium">{detailRoca.logradouro?.trim() || '—'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Número</Label>
+                          <p className="font-medium">{detailRoca.numero?.trim() || '—'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Complemento</Label>
+                          <p className="font-medium">{detailRoca.complemento?.trim() || '—'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Bairro</Label>
+                          <p className="font-medium">{detailRoca.bairro?.trim() || '—'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Cidade</Label>
+                          <p className="font-medium">{detailRoca.cidade?.trim() || '—'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">UF</Label>
+                          <p className="font-medium">{detailRoca.estado?.trim() || '—'}</p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs text-muted-foreground">Referência</Label>
+                          <p className="font-medium whitespace-pre-wrap">
+                            {detailRoca.referencia?.trim() || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            Telefone
+                          </Label>
+                          <p className="font-medium">
+                            {detailRoca.telefone?.trim()
+                              ? telefoneArmazenadoParaCampo(detailRoca.telefone) ||
+                                detailRoca.telefone
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">E-mail</Label>
+                          <p className="font-medium break-all">{detailRoca.email?.trim() || '—'}</p>
+                        </div>
                       </div>
+                      {detailRoca.localizacao?.trim() ? (
+                        <div className="p-4 border rounded-lg border-dashed">
+                          <Label className="text-xs text-muted-foreground">Localização (texto livre)</Label>
+                          <p className="font-medium text-base whitespace-pre-wrap mt-1">
+                            {detailRoca.localizacao}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
 
                     {(detailRoca.criadoEm || detailRoca.atualizadoEm) && (

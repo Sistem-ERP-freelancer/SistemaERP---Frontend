@@ -218,13 +218,6 @@ export default function Pedidos() {
   };
 
   const abrirDialogRelatorioPedidos = () => {
-    if (!dataInicialRelPed && !dataFinalRelPed && periodoRapidoRelPed === 'all') {
-      if (filters.data_inicial || filters.data_final) {
-        setDataInicialRelPed(filters.data_inicial ?? '');
-        setDataFinalRelPed(filters.data_final ?? '');
-        setPeriodoRapidoRelPed('custom');
-      }
-    }
     if (clienteRelPed === 'all' && filters.cliente_id) {
       setClienteRelPed(String(filters.cliente_id));
     }
@@ -233,6 +226,18 @@ export default function Pedidos() {
     }
     if (rocaRelPed === 'all' && filters.roca_id) {
       setRocaRelPed(String(filters.roca_id));
+    }
+    // Com filtro de roça na listagem: relatório sem período para incluir todos os pedidos da roça
+    if (filters.roca_id) {
+      setDataInicialRelPed('');
+      setDataFinalRelPed('');
+      setPeriodoRapidoRelPed('all');
+    } else if (!dataInicialRelPed && !dataFinalRelPed && periodoRapidoRelPed === 'all') {
+      if (filters.data_inicial || filters.data_final) {
+        setDataInicialRelPed(filters.data_inicial ?? '');
+        setDataFinalRelPed(filters.data_final ?? '');
+        setPeriodoRapidoRelPed('custom');
+      }
     }
     setRelatorioPedidosDialogOpen(true);
   };
@@ -956,7 +961,6 @@ export default function Pedidos() {
                   try {
                     setMargemLoadingAction('download');
                     await handleDownloadMargemPdf();
-                    setMargemDialogOpen(false);
                   } finally {
                     setMargemLoadingAction(null);
                   }
@@ -968,7 +972,6 @@ export default function Pedidos() {
                       dataInicialMargem?.trim() || undefined,
                       dataFinalMargem?.trim() || undefined,
                     );
-                    setMargemDialogOpen(false);
                   } catch (e) {
                     toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
                   } finally {
@@ -999,7 +1002,8 @@ export default function Pedidos() {
           <RelatorioModalShell
             icon={Filter}
             title="Relatório de pedidos"
-            description="Gere o PDF consolidado com o mesmo layout do relatório individual — um pedido por página, com itens, totais e endereço."
+            description="PDF consolidado — um pedido por página."
+            maxWidth="xl"
             footer={
               <RelatorioAcoesFooter
                 downloading={relPedLoadingAction === 'download' || loadingRelatorio}
@@ -1009,7 +1013,6 @@ export default function Pedidos() {
                   try {
                     setRelPedLoadingAction('download');
                     await downloadRelatorio(montarFiltrosRelatorioPedidos());
-                    setRelatorioPedidosDialogOpen(false);
                   } finally {
                     setRelPedLoadingAction(null);
                   }
@@ -1018,7 +1021,6 @@ export default function Pedidos() {
                   try {
                     setRelPedLoadingAction('print');
                     await pedidosService.printRelatorioPDF(montarFiltrosRelatorioPedidos());
-                    setRelatorioPedidosDialogOpen(false);
                   } catch (e) {
                     toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
                   } finally {
@@ -1028,7 +1030,7 @@ export default function Pedidos() {
               />
             }
           >
-            <div className="space-y-6">
+            <div className="space-y-4">
               <RelatorioPeriodoSection
                 dataInicial={dataInicialRelPed}
                 dataFinal={dataFinalRelPed}
