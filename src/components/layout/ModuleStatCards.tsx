@@ -43,7 +43,7 @@ export function ModuleStatCards({
   className,
 }: ModuleStatCardsProps) {
   const colCount = (columns ?? Math.min(Math.max(items.length, 2), 7)) as ColumnPreset;
-  const skeletons = loadingCount ?? items.length || 4;
+  const skeletons = loadingCount ?? (items.length || 4);
 
   if (isLoading) {
     return (
