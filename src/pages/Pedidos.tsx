@@ -406,52 +406,58 @@ export default function Pedidos() {
 
   return (
     <AppLayout>
-      <div className="p-4 sm:p-6 min-w-0 max-w-[1600px] mx-auto">
+      <div className="flex flex-col flex-1 min-h-0 w-full p-3 sm:p-4 md:p-6 gap-3 sm:gap-4 md:gap-5">
         {/* Cabeçalho */}
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
-          <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 shrink-0">
+          <div className="space-y-2 sm:space-y-3 min-w-0">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground tracking-tight">
                 Pedidos
               </h1>
-              <p className="text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
                 Gestão completa de vendas e compras
               </p>
             </div>
             <Tabs value={tabTipo} onValueChange={handleTabTipo}>
-              <TabsList className="bg-muted/60 h-9">
-                <TabsTrigger value="todos" className="text-xs sm:text-sm px-4">
+              <TabsList className="bg-muted/60 h-9 w-full sm:w-auto inline-flex">
+                <TabsTrigger value="todos" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
                   Todos
                 </TabsTrigger>
-                <TabsTrigger value="venda" className="text-xs sm:text-sm px-4">
+                <TabsTrigger value="venda" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
                   Vendas
                 </TabsTrigger>
-                <TabsTrigger value="compra" className="text-xs sm:text-sm px-4">
+                <TabsTrigger value="compra" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
                   Compras
                 </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 w-full sm:w-auto">
             <Button
               variant="outline"
-              className="gap-2 bg-background shadow-sm"
+              className="gap-2 bg-background shadow-sm flex-1 sm:flex-none"
               onClick={() => setRelatoriosDialogOpen(true)}
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4 shrink-0" />
               Relatórios
             </Button>
-            <Button onClick={openCreateForm} variant="gradient" className="gap-2 shadow-sm">
-              <Plus className="w-4 h-4" />
-              Novo Pedido
+            <Button
+              onClick={openCreateForm}
+              variant="gradient"
+              className="gap-2 shadow-sm flex-1 sm:flex-none"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="truncate">Novo Pedido</span>
             </Button>
           </div>
         </div>
 
-        <OrderStats variant="hero" />
+        <div className="shrink-0">
+          <OrderStats variant="hero" />
+        </div>
 
         {/* Barra de busca e filtros */}
-        <div className="bg-card rounded-xl border border-border/80 shadow-sm p-4 mb-4">
+        <div className="bg-card rounded-xl border border-border/80 shadow-sm p-3 sm:p-4 shrink-0">
           <div className="flex flex-col gap-3">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -462,7 +468,7 @@ export default function Pedidos() {
                 onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
-            <div className="flex flex-col lg:flex-row lg:items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-row lg:items-center gap-2">
               <Select
                 value={filters.status || 'all'}
                 onValueChange={(value) =>
@@ -556,7 +562,7 @@ export default function Pedidos() {
                 </>
               )}
 
-              <div className="flex items-center gap-2 ml-auto w-full sm:w-auto">
+              <div className="flex items-center gap-2 sm:col-span-2 lg:col-span-1 lg:ml-auto w-full lg:w-auto justify-between sm:justify-end">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -741,29 +747,31 @@ export default function Pedidos() {
           </SheetContent>
         </Sheet>
 
-        {/* Tabela */}
-        <div className="bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
-          <OrderList
-            orders={orders}
-            isLoading={isLoading}
-            onView={openViewDialog}
-            onEdit={openEditForm}
-            onCancel={handleOpenDeleteDialog}
-            onReport={handleDownloadRelatorioPedido}
-            reportingOrderId={reportingOrderId}
-            onStatusChange={handleStatusChange}
-            updatingStatusId={updatingStatusId}
-          />
+        {/* Tabela — ocupa o espaço restante da tela */}
+        <div className="flex flex-col flex-1 min-h-0 bg-card rounded-xl border border-border/80 shadow-sm overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
+            <OrderList
+              orders={orders}
+              isLoading={isLoading}
+              onView={openViewDialog}
+              onEdit={openEditForm}
+              onCancel={handleOpenDeleteDialog}
+              onReport={handleDownloadRelatorioPedido}
+              reportingOrderId={reportingOrderId}
+              onStatusChange={handleStatusChange}
+              updatingStatusId={updatingStatusId}
+            />
+          </div>
 
-          <div className="border-t border-border px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/20">
+          <div className="shrink-0 border-t border-border px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-muted/20">
             <p className="text-sm text-muted-foreground">
               {totalOrders === 0
                 ? 'Nenhum pedido encontrado'
                 : `Mostrando ${inicioItem} a ${fimItem} de ${totalOrders} pedidos`}
             </p>
             {!filters.busca && !filters.numero_pedido && totalPages > 1 && (
-              <Pagination>
-                <PaginationContent>
+              <Pagination className="mx-0 w-full sm:w-auto justify-center sm:justify-end overflow-x-auto">
+                <PaginationContent className="flex-wrap">
                   <PaginationItem>
                     <PaginationPrevious
                       onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}

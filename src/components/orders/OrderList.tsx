@@ -47,7 +47,7 @@ export function OrderList({
 }: OrderListProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center min-h-[12rem] py-12">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -55,7 +55,7 @@ export function OrderList({
 
   if (orders.length === 0) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center min-h-[12rem] flex flex-col items-center justify-center py-12 px-4">
         <ShoppingCart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
         <p className="text-muted-foreground">Nenhum pedido encontrado</p>
       </div>
@@ -85,18 +85,191 @@ export function OrderList({
     }
   };
 
+  const parceiroLabel = (order: Pedido) =>
+    order.tipo === 'VENDA'
+      ? order.cliente?.nome ||
+        order.roca_nome ||
+        order.roca?.nome ||
+        (order.cliente_id
+          ? `Cliente #${order.cliente_id}`
+          : order.roca_id
+            ? `Roça #${order.roca_id}`
+            : '--')
+      : order.fornecedor?.nome_fantasia ||
+        order.fornecedor?.nome_razao ||
+        order.roca_nome ||
+        order.roca?.nome ||
+        (order.fornecedor_id
+          ? `Fornecedor #${order.fornecedor_id}`
+          : order.roca_id
+            ? `Roça #${order.roca_id}`
+            : '--');
+
+  const renderActions = (order: Pedido) => (
+    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0"
+        onClick={() => onView(order)}
+        title="Visualizar"
+      >
+        <Eye className="w-4 h-4 text-muted-foreground" />
+      </Button>
+      {onReport && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => onReport(order)}
+          disabled={reportingOrderId === order.id}
+          title="Gerar relatório PDF"
+        >
+          {reportingOrderId === order.id ? (
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+          ) : (
+            <FileText className="w-4 h-4 text-primary" />
+          )}
+        </Button>
+      )}
+      {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => onEdit(order)}
+            title="Editar"
+          >
+            <Edit className="w-4 h-4 text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => onCancel(order)}
+            title="Excluir"
+          >
+            <Trash2 className="w-4 h-4 text-destructive" />
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
+  const renderStatus = (order: Pedido) =>
+    onStatusChange ? (
+      <Select
+        value={order.status}
+        onValueChange={(value) => {
+          if (value !== order.status) {
+            onStatusChange(order.id, value as StatusPedido);
+          }
+        }}
+        disabled={updatingStatusId === order.id}
+      >
+        <SelectTrigger
+          className={`h-7 w-full max-w-[130px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
+            order.status === 'ABERTO'
+              ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
+              : order.status === 'PARCIAL'
+                ? 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                : order.status === 'QUITADO'
+                  ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                  : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+          }`}
+        >
+          <SelectValue>
+            {updatingStatusId === order.id ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Atualizando...</span>
+              </div>
+            ) : (
+              <span>
+                {order.status === 'ABERTO'
+                  ? 'Pendente'
+                  : order.status === 'PARCIAL'
+                    ? 'Aberto'
+                    : order.status === 'QUITADO'
+                      ? 'Quitado'
+                      : 'Cancelado'}
+              </span>
+            )}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="ABERTO">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-yellow-500" />
+              Pendente
+            </div>
+          </SelectItem>
+          <SelectItem value="PARCIAL">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              Aberto
+            </div>
+          </SelectItem>
+          <SelectItem value="QUITADO">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              Quitado
+            </div>
+          </SelectItem>
+          <SelectItem value="CANCELADO">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              Cancelado
+            </div>
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    ) : (
+      <StatusBadge status={order.status} />
+    );
+
   return (
-    <div className="overflow-hidden">
-      <Table>
+    <>
+      {/* Cards — mobile */}
+      <div className="md:hidden divide-y divide-border">
+        {orders.map((order) => (
+          <article key={order.id} className="p-3 sm:p-4 space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-semibold text-primary text-sm truncate">
+                  {order.numero_pedido}
+                </p>
+                <p className="text-sm text-foreground truncate mt-0.5">{parceiroLabel(order)}</p>
+              </div>
+              <TypeBadge tipo={order.tipo} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {renderStatus(order)}
+              <span className="text-sm font-semibold ml-auto">
+                {formatCurrency(normalizeCurrency(order.valor_total, false))}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <span className="text-xs text-muted-foreground">{formatDate(order.data_pedido)}</span>
+              {renderActions(order)}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* Tabela — tablet/desktop */}
+      <div className="hidden md:block overflow-x-auto">
+        <Table className="min-w-[720px] w-full">
         <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50 border-b">
-            <TableHead className="font-semibold text-foreground">Número</TableHead>
-            <TableHead className="font-semibold text-foreground">Tipo</TableHead>
-            <TableHead className="font-semibold text-foreground">Cliente/Fornecedor</TableHead>
-            <TableHead className="font-semibold text-foreground">Status</TableHead>
-            <TableHead className="font-semibold text-foreground">Total</TableHead>
-            <TableHead className="font-semibold text-foreground">Data</TableHead>
-            <TableHead className="w-[160px] font-semibold text-foreground text-right">
+          <TableRow className="bg-muted/50 hover:bg-muted/50 border-b sticky top-0 z-[1]">
+            <TableHead className="font-semibold text-foreground whitespace-nowrap">Número</TableHead>
+            <TableHead className="font-semibold text-foreground whitespace-nowrap hidden lg:table-cell">Tipo</TableHead>
+            <TableHead className="font-semibold text-foreground min-w-[140px]">Cliente/Fornecedor</TableHead>
+            <TableHead className="font-semibold text-foreground whitespace-nowrap">Status</TableHead>
+            <TableHead className="font-semibold text-foreground whitespace-nowrap">Total</TableHead>
+            <TableHead className="font-semibold text-foreground whitespace-nowrap hidden lg:table-cell">Data</TableHead>
+            <TableHead className="w-[140px] lg:w-[160px] font-semibold text-foreground text-right whitespace-nowrap">
               Ações
             </TableHead>
           </TableRow>
@@ -104,168 +277,33 @@ export function OrderList({
         <TableBody>
           {orders.map((order) => (
             <TableRow key={order.id}>
-              <TableCell>
-                <span className="font-medium">{order.numero_pedido}</span>
+              <TableCell className="whitespace-nowrap">
+                <span className="font-medium text-primary">{order.numero_pedido}</span>
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden lg:table-cell">
                 <TypeBadge tipo={order.tipo} />
               </TableCell>
-              <TableCell>
-                <span className="text-sm">
-                  {order.tipo === 'VENDA'
-                    ? order.cliente?.nome ||
-                      order.roca_nome ||
-                      order.roca?.nome ||
-                      (order.cliente_id
-                        ? `Cliente #${order.cliente_id}`
-                        : order.roca_id
-                          ? `Roça #${order.roca_id}`
-                          : '--')
-                    : order.fornecedor?.nome_fantasia ||
-                      order.fornecedor?.nome_razao ||
-                      order.roca_nome ||
-                      order.roca?.nome ||
-                      (order.fornecedor_id
-                        ? `Fornecedor #${order.fornecedor_id}`
-                        : order.roca_id
-                          ? `Roça #${order.roca_id}`
-                          : '--')}
+              <TableCell className="max-w-[200px] lg:max-w-none">
+                <span className="text-sm truncate block max-w-[180px] lg:max-w-none">
+                  {parceiroLabel(order)}
                 </span>
               </TableCell>
-              <TableCell>
-                {onStatusChange ? (
-                  <Select
-                    value={order.status}
-                    onValueChange={(value) => {
-                      if (value !== order.status) {
-                        onStatusChange(order.id, value as StatusPedido);
-                      }
-                    }}
-                    disabled={updatingStatusId === order.id}
-                  >
-                    <SelectTrigger
-                      className={`h-7 w-[130px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
-                        order.status === 'ABERTO'
-                          ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
-                          : order.status === 'PARCIAL'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
-                          : order.status === 'QUITADO'
-                          ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-                          : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
-                      }`}
-                    >
-                      <SelectValue>
-                        {updatingStatusId === order.id ? (
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span>Atualizando...</span>
-                          </div>
-                        ) : (
-                          <span>
-                            {order.status === 'ABERTO'
-                              ? 'Pendente'
-                              : order.status === 'PARCIAL'
-                              ? 'Aberto'
-                              : order.status === 'QUITADO'
-                              ? 'Quitado'
-                              : 'Cancelado'}
-                          </span>
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ABERTO">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                          Pendente
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="PARCIAL">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                          Aberto
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="QUITADO">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                          Quitado
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="CANCELADO">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                          Cancelado
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <StatusBadge status={order.status} />
-                )}
+              <TableCell>{renderStatus(order)}</TableCell>
+              <TableCell className="whitespace-nowrap">
+                <span className="font-medium">
+                  {formatCurrency(normalizeCurrency(order.valor_total, false))}
+                </span>
               </TableCell>
-              <TableCell>
-                <span className="font-medium">{formatCurrency(normalizeCurrency(order.valor_total, false))}</span>
-              </TableCell>
-              <TableCell>
+              <TableCell className="hidden lg:table-cell whitespace-nowrap">
                 <span className="text-sm text-muted-foreground">{formatDate(order.data_pedido)}</span>
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => onView(order)}
-                    title="Visualizar"
-                  >
-                    <Eye className="w-4 h-4 text-muted-foreground" />
-                  </Button>
-                  {onReport && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => onReport(order)}
-                      disabled={reportingOrderId === order.id}
-                      title="Gerar relatório PDF"
-                    >
-                      {reportingOrderId === order.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      ) : (
-                        <FileText className="w-4 h-4 text-primary" />
-                      )}
-                    </Button>
-                  )}
-                  {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onEdit(order)}
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4 text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onCancel(order)}
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </TableCell>
+              <TableCell className="text-right">{renderActions(order)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-    </div>
+      </div>
+    </>
   );
 }
 

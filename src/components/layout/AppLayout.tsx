@@ -351,8 +351,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </header>
 
-        {/* Content */}
-        <div className="min-w-0 overflow-x-hidden flex-1 flex flex-col">
+        {/* Content — flex-1 + min-h-0 permite páginas em altura total com área rolável interna */}
+        <div className="min-w-0 min-h-0 overflow-hidden flex-1 flex flex-col">
           {children}
         </div>
       </main>
