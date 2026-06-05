@@ -13,13 +13,26 @@ import {
   XCircle,
 } from 'lucide-react';
 
+export type PedidoCardFilterKey =
+  | 'faturamento_venda'
+  | 'aberto_venda'
+  | 'em_andamento'
+  | 'cancelados';
+
 interface OrderStatsProps {
   tipoFiltro?: TipoPedido | 'all' | undefined;
   /** hero = 4 cards no topo (layout mockup); full = seções detalhadas */
   variant?: 'hero' | 'full';
+  activeCardFilter?: PedidoCardFilterKey | null;
+  onCardClick?: (key: PedidoCardFilterKey) => void;
 }
 
-export function OrderStats({ tipoFiltro, variant = 'full' }: OrderStatsProps = {}) {
+export function OrderStats({
+  tipoFiltro,
+  variant = 'full',
+  activeCardFilter = null,
+  onCardClick,
+}: OrderStatsProps = {}) {
   const { data: dashboard, isLoading } = useQuery({
     queryKey: ['pedidos', 'dashboard'],
     queryFn: () => pedidosService.obterDashboard(),
@@ -31,7 +44,17 @@ export function OrderStats({ tipoFiltro, variant = 'full' }: OrderStatsProps = {
     formatCurrency(normalizeCurrency(value, false));
 
   if (variant === 'hero') {
-    const heroCards = [
+    const qtdAndamento = dashboard?.pedidos_em_andamento?.quantidade || 0;
+    const qtdCancelados = dashboard?.pedidos_cancelados?.quantidade || 0;
+    const heroCards: Array<{
+      label: string;
+      value: string;
+      subtitle: string;
+      icon: typeof ShoppingCart;
+      iconColor: string;
+      iconBg: string;
+      filterKey: PedidoCardFilterKey;
+    }> = [
       {
         label: 'Faturamento (Vendas)',
         value: formatCurrencyValue(dashboard?.faturamento_confirmado_venda?.valor),
@@ -39,6 +62,7 @@ export function OrderStats({ tipoFiltro, variant = 'full' }: OrderStatsProps = {
         icon: ShoppingCart,
         iconColor: 'text-emerald-600',
         iconBg: 'bg-emerald-50',
+        filterKey: 'faturamento_venda',
       },
       {
         label: 'Valor em Aberto',
@@ -47,22 +71,25 @@ export function OrderStats({ tipoFiltro, variant = 'full' }: OrderStatsProps = {
         icon: FileText,
         iconColor: 'text-blue-600',
         iconBg: 'bg-blue-50',
+        filterKey: 'aberto_venda',
       },
       {
         label: 'Pedidos em Andamento',
-        value: String(dashboard?.pedidos_em_andamento?.quantidade || 0),
-        subtitle: 'pedidos',
+        value: String(qtdAndamento),
+        subtitle: `${qtdAndamento} pedido${qtdAndamento === 1 ? '' : 's'}`,
         icon: Package,
         iconColor: 'text-violet-600',
         iconBg: 'bg-violet-50',
+        filterKey: 'em_andamento',
       },
       {
         label: 'Pedidos Cancelados',
-        value: String(dashboard?.pedidos_cancelados?.quantidade || 0),
-        subtitle: 'pedidos',
+        value: String(qtdCancelados),
+        subtitle: `${qtdCancelados} pedido${qtdCancelados === 1 ? '' : 's'}`,
         icon: XCircle,
         iconColor: 'text-red-600',
         iconBg: 'bg-red-50',
+        filterKey: 'cancelados',
       },
     ];
 
@@ -71,10 +98,25 @@ export function OrderStats({ tipoFiltro, variant = 'full' }: OrderStatsProps = {
         {heroCards.map((stat, index) => (
           <motion.div
             key={stat.label}
+            role={onCardClick ? 'button' : undefined}
+            tabIndex={onCardClick ? 0 : undefined}
+            onClick={() => onCardClick?.(stat.filterKey)}
+            onKeyDown={(e) => {
+              if (onCardClick && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                onCardClick(stat.filterKey);
+              }
+            }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05, duration: 0.25 }}
-            className="bg-card rounded-xl border border-border/80 p-5 shadow-sm hover:shadow-md transition-shadow"
+            className={`bg-card rounded-xl border p-5 shadow-sm transition-shadow ${
+              onCardClick ? 'cursor-pointer hover:shadow-md' : ''
+            } ${
+              activeCardFilter === stat.filterKey
+                ? 'border-primary border-2 ring-2 ring-primary/20 shadow-md'
+                : 'border-border/80'
+            }`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">

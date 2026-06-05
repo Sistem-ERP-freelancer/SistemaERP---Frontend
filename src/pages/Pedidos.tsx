@@ -1,7 +1,7 @@
 import AppLayout from '@/components/layout/AppLayout';
 import OrderForm from '@/components/orders/OrderForm';
 import { OrderList } from '@/components/orders/OrderList';
-import { OrderStats } from '@/components/orders/OrderStats';
+import { OrderStats, type PedidoCardFilterKey } from '@/components/orders/OrderStats';
 import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
 import {
   RelatorioAcoesFooter,
@@ -43,7 +43,7 @@ import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
-import { CreatePedidoDto, StatusPedido, TipoPedido } from '@/types/pedido';
+import { CreatePedidoDto, FiltrosPedidos, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Filter, Loader2, Plus, Search, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -417,9 +417,36 @@ export default function Pedidos() {
     else updateFilters({ tipo: 'COMPRA' as TipoPedido });
   };
 
+  const activePedidoCard = filters.card_filtro ?? null;
+
+  const handlePedidoCardClick = (key: PedidoCardFilterKey) => {
+    const desativar = filters.card_filtro === key;
+    if (desativar) {
+      updateFilters({ card_filtro: undefined, status: undefined });
+      return;
+    }
+
+    const base: Partial<FiltrosPedidos> = { card_filtro: key };
+    switch (key) {
+      case 'faturamento_venda':
+        updateFilters({ ...base, tipo: 'VENDA', status: 'QUITADO' });
+        break;
+      case 'aberto_venda':
+        updateFilters({ ...base, tipo: 'VENDA', status: undefined });
+        break;
+      case 'em_andamento':
+        updateFilters({ ...base, status: undefined });
+        break;
+      case 'cancelados':
+        updateFilters({ ...base, status: 'CANCELADO', tipo: undefined });
+        break;
+    }
+  };
+
   const inicioItem = totalOrders === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const fimItem = Math.min(currentPage * itemsPerPage, totalOrders);
-  const exibirPaginacao = totalOrders > 0 && !filters.busca && !filters.numero_pedido;
+  const exibirPaginacao =
+    totalOrders > 0 && !filters.busca && !filters.numero_pedido;
 
   // Sincronizar searchTerm com os filtros quando os filtros mudarem externamente
   useEffect(() => {
@@ -570,7 +597,11 @@ export default function Pedidos() {
         </div>
 
         <div className="shrink-0">
-          <OrderStats variant="hero" />
+          <OrderStats
+            variant="hero"
+            activeCardFilter={activePedidoCard}
+            onCardClick={handlePedidoCardClick}
+          />
         </div>
 
         {/* Barra de busca + filtros (uma linha) */}

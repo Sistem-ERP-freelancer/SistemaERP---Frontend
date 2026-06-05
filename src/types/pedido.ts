@@ -153,6 +153,8 @@ export interface FiltrosPedidos {
   fornecedor_nome?: string;
   data_inicial?: string;
   data_final?: string;
+  /** Filtro rápido dos cards do dashboard (mapeado na listagem) */
+  card_filtro?: 'faturamento_venda' | 'aberto_venda' | 'em_andamento' | 'cancelados';
   page?: number;
   limit?: number;
 }

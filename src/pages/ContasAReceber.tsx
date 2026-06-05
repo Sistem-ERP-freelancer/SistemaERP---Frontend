@@ -49,6 +49,13 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  contaEstaPaga,
+  contaTemSaldoAberto,
+  fimDoMesYMD,
+  listarContasTodasAsPaginas,
+  toYMD,
+} from "@/lib/contas-financeiras-listagem";
 import { formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
@@ -96,7 +103,9 @@ const ContasAReceber = () => {
   /** Guia: card Total a Receber preferir soma da lista de clientes (bate com a tabela). */
   const [totalAReceberFromLista, setTotalAReceberFromLista] = useState<number | null>(null);
   /** Filtro por card clicável: todos | valor_pago | vencidas | vencendo_hoje | vencendo_este_mes */
-  const [activeCardFilter, setActiveCardFilter] = useState<"todos" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes">("todos");
+  const [activeCardFilter, setActiveCardFilter] = useState<
+    "todos" | "a_receber" | "valor_pago" | "vencidas" | "vencendo_hoje" | "vencendo_este_mes"
+  >("todos");
   const [searchTerm, setSearchTerm] = useState("");
   /** Filtro por cliente: null = todos; number = ID do cliente */
   const [clienteFilterId, setClienteFilterId] = useState<number | null>(null);
@@ -413,32 +422,121 @@ const ContasAReceber = () => {
       }
 
       try {
+        const clienteArg =
+          clienteFilterId != null && clienteFilterId > 0
+            ? clienteFilterId
+            : undefined;
+        const rocaArg =
+          rocaFilterId != null && rocaFilterId > 0 ? rocaFilterId : undefined;
+        const dataInicialArg =
+          dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+            ? dataInicialFilter
+            : undefined;
+        const dataFinalArg =
+          dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+            ? dataFinalFilter
+            : undefined;
+        const baseArgs = {
+          tipo: "RECEBER" as const,
+          cliente_id: clienteArg,
+          roca_id: rocaArg,
+          data_inicial: dataInicialArg,
+          data_final: dataFinalArg,
+        };
+
+        const paginateLocal = (merged: ContaFinanceira[]) => {
+          const start = (currentPage - 1) * pageSize;
+          return {
+            data: merged.slice(start, start + pageSize),
+            total: merged.length,
+          };
+        };
+
+        const filtroFolhaAtivo =
+          !!statusFilter &&
+          statusFilter !== "VENCIDO" &&
+          activeCardFilter === "todos";
+
+        /** Cards: buscar todas as páginas e paginar no cliente (evita tabela vazia com total errado). */
+        if (!filtroFolhaAtivo && activeCardFilter !== "todos") {
+          if (activeCardFilter === "valor_pago") {
+            const [pagasTotal, pagasParcial] = await Promise.all([
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_TOTAL" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_PARCIAL" }),
+            ]);
+            const seen = new Set<number>();
+            const merged = [...pagasTotal, ...pagasParcial].filter((c) => {
+              const id = Number(c.id);
+              if (!Number.isFinite(id) || seen.has(id)) return false;
+              seen.add(id);
+              return contaEstaPaga(c);
+            });
+            return paginateLocal(merged);
+          }
+          if (activeCardFilter === "a_receber") {
+            const [pendentes, parciais] = await Promise.all([
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PENDENTE" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_PARCIAL" }),
+            ]);
+            const seen = new Set<number>();
+            const merged = [...pendentes, ...parciais].filter((c) => {
+              const id = Number(c.id);
+              if (!Number.isFinite(id) || seen.has(id)) return false;
+              seen.add(id);
+              return contaTemSaldoAberto(c);
+            });
+            return paginateLocal(merged);
+          }
+          if (activeCardFilter === "vencidas") {
+            const merged = await listarContasTodasAsPaginas({
+              ...baseArgs,
+              proximidade_vencimento: "VENCIDA",
+            });
+            return paginateLocal(merged.filter(contaTemSaldoAberto));
+          }
+          if (activeCardFilter === "vencendo_hoje") {
+            const merged = await listarContasTodasAsPaginas({
+              ...baseArgs,
+              proximidade_vencimento: "VENCE_HOJE",
+            });
+            return paginateLocal(merged.filter(contaTemSaldoAberto));
+          }
+          if (activeCardFilter === "vencendo_este_mes") {
+            const merged = await listarContasTodasAsPaginas({
+              ...baseArgs,
+              data_inicial: toYMD(new Date()),
+              data_final: fimDoMesYMD(),
+            });
+            const fimMes = new Date();
+            fimMes.setMonth(fimMes.getMonth() + 1, 0);
+            fimMes.setHours(23, 59, 59, 999);
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            const filtered = merged.filter((c) => {
+              if (!contaTemSaldoAberto(c)) return false;
+              if (c.dias_ate_vencimento != null) return c.dias_ate_vencimento > 0;
+              const dv = parseDateOnlyLocal(c.data_vencimento);
+              if (!dv) return false;
+              dv.setHours(0, 0, 0, 0);
+              return dv > hoje && dv <= fimMes;
+            });
+            return paginateLocal(filtered);
+          }
+        }
+
         let status: string | undefined;
         let proximidadeVencimento: string | undefined;
 
-        /**
-         * "Vencido" na UI = data de vencimento já passou (dashboard conta assim).
-         * Na base o status costuma ser PENDENTE/ABERTO — não existe linha com status = VENCIDO.
-         * O backend filtra vencidas por data via proximidade_vencimento = VENCIDA.
-         */
         if (statusFilter === "VENCIDO") {
           proximidadeVencimento = "VENCIDA";
-        } else if (activeCardFilter === "vencidas") {
-          proximidadeVencimento = "VENCIDA";
-        } else if (activeCardFilter === "vencendo_hoje") {
-          proximidadeVencimento = "VENCE_HOJE";
-        } else if (activeCardFilter === "valor_pago") {
-          status = "PAGO_PARCIAL";
-        }
-
-        if (!status && statusFilter && statusFilter !== "VENCIDO") {
+        } else if (filtroFolhaAtivo) {
           if (statusFilter === "ABERTO") status = "ABERTO";
           else if (statusFilter === "PARCIAL") status = "PARCIAL";
           else if (statusFilter === "QUITADO") status = "QUITADO";
         }
 
         const response = await financeiroService.listar({
-          tipo: "RECEBER",
+          ...baseArgs,
           page: currentPage,
           limit: pageSize,
           status,
@@ -446,45 +544,24 @@ const ContasAReceber = () => {
             | "VENCIDA"
             | "VENCE_HOJE"
             | undefined,
-          cliente_id:
-            clienteFilterId != null && clienteFilterId > 0
-              ? clienteFilterId
-              : undefined,
-          roca_id:
-            rocaFilterId != null && rocaFilterId > 0
-              ? rocaFilterId
-              : undefined,
-          data_inicial:
-            dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
-              ? dataInicialFilter
-              : undefined,
-          data_final:
-            dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
-              ? dataFinalFilter
-              : undefined,
         });
-        
-        // Tratar diferentes formatos de resposta
-        let contasData = [];
+
+        let contasData: ContaFinanceira[] = [];
         let totalData = 0;
-        
+
         if (Array.isArray(response)) {
           contasData = response;
           totalData = response.length;
         } else if (response?.data && Array.isArray(response.data)) {
           contasData = response.data;
           totalData = response.total || response.data.length;
-        } else if ((response as any)?.contas && Array.isArray((response as any).contas)) {
-          contasData = (response as any).contas;
-          totalData = (response as any).total || (response as any).contas.length;
+        } else if ((response as { contas?: ContaFinanceira[] })?.contas) {
+          const contas = (response as { contas: ContaFinanceira[]; total?: number }).contas;
+          contasData = contas;
+          totalData = (response as { total?: number }).total || contas.length;
         }
-        
-        console.log('📊 [ContasAReceber] Resposta da API:', { response, contasData, totalData });
-        
-        return {
-          data: contasData,
-          total: totalData,
-        };
+
+        return { data: contasData, total: totalData };
       } catch (error) {
         console.warn("API de contas financeiras não disponível:", error);
         return { data: [], total: 0 };
@@ -663,7 +740,7 @@ const ContasAReceber = () => {
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
-      { label: "Total a Receber", value: formatarMoedaCard(totalReceber), icon: CreditCard, trend: null, trendUp: true, color: "text-royal", bgColor: "bg-royal/10", filterKey: "todos" as const },
+      { label: "Total a Receber", value: formatarMoedaCard(totalReceber), icon: CreditCard, trend: null, trendUp: true, color: "text-royal", bgColor: "bg-royal/10", filterKey: "a_receber" as const },
       { label: "Valor Recebido", value: formatarMoedaCard(valorPago), icon: DollarSign, trend: null, trendUp: true, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
       { label: "Vencidas", value: totalVencidas.toString(), icon: Calendar, trend: null, trendUp: false, color: "text-red-600", bgColor: "bg-red-100", filterKey: "vencidas" as const },
       { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
@@ -1246,8 +1323,6 @@ const ContasAReceber = () => {
   const filteredLinhasPedidos = useMemo(() => {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-    const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-    fimDoMes.setHours(23, 59, 59, 999);
 
     return linhasPedidos.filter((p: ContaReceber) => {
       const raw = p.data_vencimento ?? p.data_pedido;
@@ -1264,11 +1339,11 @@ const ContasAReceber = () => {
         return Number(p.valor_em_aberto ?? 0) > 0.009;
       }
 
-      if (activeCardFilter === "todos") return true;
-
-      if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
-      if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
-      if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
+      if (activeCardFilter === "a_receber") {
+        const st = (p.status || "").toUpperCase();
+        if (st === "QUITADO" || st === "PAGO_TOTAL" || st === "CANCELADO") return false;
+        return Number(p.valor_em_aberto ?? 0) > 0.009;
+      }
       if (activeCardFilter === "valor_pago") return p.status === "PARCIAL" || p.status === "QUITADO";
       return true;
     });
@@ -1277,8 +1352,6 @@ const ContasAReceber = () => {
   const filteredGruposContas = useMemo(() => {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-    const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-    fimDoMes.setHours(23, 59, 59, 999);
 
     return gruposContas.filter((g) => {
       if (statusFilter === "ABERTO" || statusFilter === "PARCIAL" || statusFilter === "QUITADO") {
@@ -1298,21 +1371,10 @@ const ContasAReceber = () => {
         return g.valor_aberto > 0.009;
       }
 
+      if (activeCardFilter === "a_receber") return g.valor_aberto > 0.009;
       if (activeCardFilter === "valor_pago") {
         return g.statusConsolidado === "Pago Parcial" || g.statusConsolidado === "Pago Total";
       }
-
-      if (activeCardFilter === "todos") return true;
-
-      if (!g.primeira_vencimento) return false;
-
-      const dataVenc = parseDateOnlyLocal(g.primeira_vencimento);
-      if (!dataVenc) return false;
-      dataVenc.setHours(0, 0, 0, 0);
-
-      if (activeCardFilter === "vencidas") return dataVenc.getTime() < hoje.getTime();
-      if (activeCardFilter === "vencendo_hoje") return dataVenc.getTime() === hoje.getTime();
-      if (activeCardFilter === "vencendo_este_mes") return dataVenc >= hoje && dataVenc <= fimDoMes;
       return true;
     });
   }, [gruposContas, activeCardFilter, statusFilter]);
@@ -1389,23 +1451,6 @@ const ContasAReceber = () => {
   // Filtrar por busca e por card ativo (mantido para fallback contas-financeiras)
   const filteredTransacoes = useMemo(() => {
     let filtered = transacoesDisplay;
-
-    // Filtrar por card ativo (especialmente para Vencidas e Vencendo Hoje)
-    if (activeCardFilter === "vencidas") {
-      // Filtrar apenas contas vencidas (por status ou por data)
-      filtered = filtered.filter(t => {
-        const conta = contasExibir.find(c => c.id === t.contaId);
-        if (!conta) return false;
-        return isContaVencida(conta);
-      });
-    } else if (activeCardFilter === "vencendo_hoje") {
-      // Filtrar apenas contas vencendo hoje
-      filtered = filtered.filter(t => {
-        const conta = contasExibir.find(c => c.id === t.contaId);
-        if (!conta) return false;
-        return isContaVencendoHoje(conta);
-      });
-    }
 
     // Busca numérica por ID
     if (isNumericSearch && contaPorId && contaPorId.tipo === "RECEBER") {
@@ -1773,12 +1818,26 @@ const ContasAReceber = () => {
                 key={stat.label}
                 role="button"
                 tabIndex={0}
-                onClick={() => setActiveCardFilter(stat.filterKey)}
-                onKeyDown={(e) => e.key === "Enter" && setActiveCardFilter(stat.filterKey)}
+                onClick={() =>
+                  setActiveCardFilter((prev) =>
+                    prev === stat.filterKey ? "todos" : stat.filterKey,
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setActiveCardFilter((prev) =>
+                      prev === stat.filterKey ? "todos" : stat.filterKey,
+                    );
+                  }
+                }}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-card rounded-xl p-3 sm:p-5 border border-border cursor-pointer hover:shadow-md transition-shadow min-w-0"
+                className={`bg-card rounded-xl p-3 sm:p-5 border transition-shadow min-w-0 cursor-pointer hover:shadow-md ${
+                  activeCardFilter === stat.filterKey
+                    ? "border-primary border-2 shadow-md ring-2 ring-primary/20"
+                    : "border-border"
+                }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className={`p-2 rounded-lg ${stat.bgColor}`}>

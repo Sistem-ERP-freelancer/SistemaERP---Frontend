@@ -38,14 +38,30 @@ export function useOrders() {
     queryKey: ['pedidos', currentPage, itemsPerPage, filters],
     queryFn: async () => {
       try {
-        // Se há busca por numero_pedido, aumentar o limite para garantir que encontre o pedido
-        // mesmo se estiver em outra página (busca parcial no frontend)
+        const cardFiltro = filters.card_filtro;
+        const cardFiltroCliente =
+          cardFiltro === 'aberto_venda' || cardFiltro === 'em_andamento';
+        // Busca ou cards com múltiplos status: buscar lote maior e filtrar no cliente
         const hasBusca = !!(filters.numero_pedido || filters.busca);
-        const limit = hasBusca ? 1000 : itemsPerPage;
-        
+        const needsWideFetch = hasBusca || cardFiltroCliente;
+        const limit = needsWideFetch ? 2000 : itemsPerPage;
+
+        const { card_filtro: _card, ...restFilters } = filters;
+        let apiFilters: FiltrosPedidos = { ...restFilters };
+
+        if (cardFiltro === 'faturamento_venda') {
+          apiFilters = { ...apiFilters, tipo: 'VENDA', status: 'QUITADO' };
+        } else if (cardFiltro === 'cancelados') {
+          apiFilters = { ...apiFilters, status: 'CANCELADO', tipo: undefined };
+        } else if (cardFiltro === 'aberto_venda') {
+          apiFilters = { ...apiFilters, tipo: 'VENDA', status: undefined };
+        } else if (cardFiltro === 'em_andamento') {
+          apiFilters = { ...apiFilters, status: undefined };
+        }
+
         const params = {
-          ...filters,
-          page: hasBusca ? 1 : currentPage, // Sempre página 1 quando há busca
+          ...apiFilters,
+          page: needsWideFetch ? 1 : currentPage,
           limit,
         };
         
@@ -105,34 +121,41 @@ export function useOrders() {
     return selectedOrder;
   }, [fullOrderDataForEdit, selectedOrder]);
 
-  const orders = useMemo(() => {
+  const filteredOrders = useMemo(() => {
     if (!ordersResponse) return [];
-    
+
     let ordersList: Pedido[] = [];
-    
-    // Se a resposta é um array direto (formato não esperado, mas tratamos)
+
     if (Array.isArray(ordersResponse)) {
-      console.warn('⚠️ [Pedidos] API retornou array direto:', ordersResponse);
       ordersList = ordersResponse;
-    }
-    // Se a resposta tem propriedade data (formato esperado)
-    else if (ordersResponse.data && Array.isArray(ordersResponse.data)) {
+    } else if (ordersResponse.data && Array.isArray(ordersResponse.data)) {
       ordersList = ordersResponse.data;
-    }
-    // Se a resposta tem propriedade pedidos (formato alternativo)
-    else if ((ordersResponse as any).pedidos && Array.isArray((ordersResponse as any).pedidos)) {
-      ordersList = (ordersResponse as any).pedidos;
-    }
-    else {
-      console.warn('⚠️ [Pedidos] Formato de resposta não reconhecido:', ordersResponse);
+    } else if ((ordersResponse as { pedidos?: Pedido[] }).pedidos) {
+      ordersList = (ordersResponse as { pedidos: Pedido[] }).pedidos;
+    } else {
       return [];
     }
-    
-    // Filtro adicional no frontend: numero_pedido (busca parcial) ou busca (número, cliente, fornecedor)
+
+    if (filters.card_filtro === 'aberto_venda') {
+      ordersList = ordersList.filter(
+        (o) =>
+          o.tipo === 'VENDA' &&
+          o.status !== 'QUITADO' &&
+          o.status !== 'CANCELADO',
+      );
+    } else if (filters.card_filtro === 'em_andamento') {
+      ordersList = ordersList.filter(
+        (o) => o.status === 'ABERTO' || o.status === 'PARCIAL',
+      );
+      if (filters.tipo) {
+        ordersList = ordersList.filter((o) => o.tipo === filters.tipo);
+      }
+    }
+
     if (filters.numero_pedido && !filters.busca) {
       const searchTerm = filters.numero_pedido.toLowerCase();
       ordersList = ordersList.filter((order) =>
-        order.numero_pedido?.toLowerCase().includes(searchTerm)
+        order.numero_pedido?.toLowerCase().includes(searchTerm),
       );
     } else if (filters.busca && filters.busca.trim()) {
       const termo = filters.busca.trim().toLowerCase();
@@ -148,34 +171,54 @@ export function useOrders() {
         return !!(matchNumero || matchCliente || matchFornecedor || matchRoca);
       });
     }
-    
+
     return ordersList;
-  }, [ordersResponse, filters.numero_pedido, filters.busca]);
+  }, [
+    ordersResponse,
+    filters.numero_pedido,
+    filters.busca,
+    filters.card_filtro,
+    filters.tipo,
+  ]);
+
+  const needsClientPagination =
+    filters.card_filtro === 'aberto_venda' ||
+    filters.card_filtro === 'em_andamento';
+
+  const orders = useMemo(() => {
+    if (!needsClientPagination) return filteredOrders;
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredOrders.slice(start, start + itemsPerPage);
+  }, [filteredOrders, needsClientPagination, currentPage, itemsPerPage]);
 
   const totalOrders = useMemo(() => {
-    // Se há filtro de busca/numero_pedido, usar o tamanho da lista filtrada
-    if ((filters.numero_pedido || filters.busca) && orders.length > 0) {
-      return orders.length;
+    const hasBusca = !!(filters.numero_pedido || filters.busca);
+    if (hasBusca || needsClientPagination) {
+      return filteredOrders.length;
     }
-    
+
     if (!ordersResponse) return 0;
-    
-    // Se a resposta tem propriedade total (formato esperado)
+
     if (typeof ordersResponse.total === 'number') {
       return ordersResponse.total;
     }
-    
-    // Se não tem total, usa o tamanho do array
+
     if (Array.isArray(ordersResponse)) {
       return ordersResponse.length;
     }
-    
+
     if (ordersResponse.data && Array.isArray(ordersResponse.data)) {
       return ordersResponse.data.length;
     }
-    
+
     return 0;
-  }, [ordersResponse, orders.length, filters.numero_pedido, filters.busca]);
+  }, [
+    ordersResponse,
+    filteredOrders.length,
+    filters.numero_pedido,
+    filters.busca,
+    needsClientPagination,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(totalOrders / itemsPerPage) || 1);
 

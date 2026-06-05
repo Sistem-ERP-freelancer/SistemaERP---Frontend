@@ -60,6 +60,11 @@ import {
     parseDateOnlyLocal,
 } from "@/lib/utils";
 import {
+  contaTemSaldoAberto,
+  fimDoMesYMD,
+  toYMD,
+} from "@/lib/contas-financeiras-listagem";
+import {
   type ContaFinanceira,
   CreateContaFinanceiraDto,
   financeiroService,
@@ -517,10 +522,59 @@ function ContasAPagar() {
               total: merged.length,
             };
           }
+          const paginateLocal = (merged: ContaFinanceira[]) => {
+            const start = (currentPage - 1) * pageSize;
+            return {
+              data: merged.slice(start, start + pageSize),
+              total: merged.length,
+            };
+          };
+
           if (activeCardFilter === "vencidas") {
-            proximidadeVencimento = "VENCIDA";
-          } else if (activeCardFilter === "vencendo_hoje") {
-            proximidadeVencimento = "VENCE_HOJE";
+            const merged = await listarContasPagarTodasAsPaginas({
+              tipo: "PAGAR",
+              proximidade_vencimento: "VENCIDA",
+              fornecedor_id: fornecedorArg,
+              roca_id: rocaArg,
+              data_inicial: dataInicialArg,
+              data_final: dataFinalArg,
+            });
+            return paginateLocal(merged.filter(contaTemSaldoAberto));
+          }
+          if (activeCardFilter === "vencendo_hoje") {
+            const merged = await listarContasPagarTodasAsPaginas({
+              tipo: "PAGAR",
+              proximidade_vencimento: "VENCE_HOJE",
+              fornecedor_id: fornecedorArg,
+              roca_id: rocaArg,
+              data_inicial: dataInicialArg,
+              data_final: dataFinalArg,
+            });
+            return paginateLocal(merged.filter(contaTemSaldoAberto));
+          }
+          if (activeCardFilter === "vencendo_este_mes") {
+            const hojeStr = toYMD(new Date());
+            const merged = await listarContasPagarTodasAsPaginas({
+              tipo: "PAGAR",
+              fornecedor_id: fornecedorArg,
+              roca_id: rocaArg,
+              data_inicial: hojeStr,
+              data_final: fimDoMesYMD(),
+            });
+            const fimMes = new Date();
+            fimMes.setMonth(fimMes.getMonth() + 1, 0);
+            fimMes.setHours(23, 59, 59, 999);
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            const filtered = merged.filter((c) => {
+              if (!contaTemSaldoAberto(c)) return false;
+              if (c.dias_ate_vencimento != null) return c.dias_ate_vencimento > 0;
+              const dv = parseDateOnlyLocal(c.data_vencimento);
+              if (!dv) return false;
+              dv.setHours(0, 0, 0, 0);
+              return dv > hoje && dv <= fimMes;
+            });
+            return paginateLocal(filtered);
           }
         }
 
@@ -1252,38 +1306,6 @@ function ContasAPagar() {
   const filteredTransacoes = useMemo(() => {
     let filtered = transacoesDisplay;
 
-    // Filtro por card clicável
-    if (activeCardFilter !== "todos") {
-      filtered = filtered.filter((t: any) => {
-        const dias = t.diasAteVencimento;
-        const status = (t.statusOriginal || "").toUpperCase();
-        const aberto = Number(t.valorEmAberto) || 0;
-        if (activeCardFilter === "vencidas") return dias != null && dias < 0;
-        if (activeCardFilter === "vencendo_hoje") return dias === 0;
-        if (activeCardFilter === "vencendo_este_mes") return dias != null && dias >= 1 && dias <= 30;
-        /** Contas com saldo em aberto (alinha ao card "Total a Pagar" / resumo pendente). */
-        if (activeCardFilter === "a_pagar") {
-          if (status === "QUITADO" || status === "PAGO_TOTAL" || status === "CANCELADO") {
-            return false;
-          }
-          return aberto > 0.009;
-        }
-        /**
-         * Contas já quitadas ou com pagamento registrado — o backend usa PAGO_TOTAL / PAGO_PARCIAL,
-         * não só QUITADO / PARCIAL.
-         */
-        if (activeCardFilter === "valor_pago") {
-          return (
-            status === "PAGO_TOTAL" ||
-            status === "PAGO_PARCIAL" ||
-            status === "QUITADO" ||
-            status === "PARCIAL"
-          );
-        }
-        return true;
-      });
-    }
-
     // Filtrar por tab ativa (especialmente para Vencidas e Vencendo Hoje)
     if (activeTab === "VENCIDO") {
       filtered = filtered.filter(t => {
@@ -1384,7 +1406,7 @@ function ContasAPagar() {
     }
 
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contasExibir, fornecedores, activeTab, activeCardFilter]);
+  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contasExibir, fornecedores, activeTab]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
@@ -1674,8 +1696,18 @@ function ContasAPagar() {
                 key={stat.label}
                 role="button"
                 tabIndex={0}
-                onClick={() => setActiveCardFilter(stat.filterKey)}
-                onKeyDown={(e) => e.key === "Enter" && setActiveCardFilter(stat.filterKey)}
+                onClick={() =>
+                  setActiveCardFilter((prev) =>
+                    prev === stat.filterKey ? "todos" : stat.filterKey,
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setActiveCardFilter((prev) =>
+                      prev === stat.filterKey ? "todos" : stat.filterKey,
+                    );
+                  }
+                }}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
