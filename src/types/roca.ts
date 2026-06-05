@@ -73,7 +73,20 @@ export interface UpdateProdutorRocaDto {
   ativo?: boolean;
 }
 
-export interface Roca {
+export interface RocaEnderecoContato {
+  cep?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  referencia?: string | null;
+  telefone?: string | null;
+  email?: string | null;
+}
+
+export interface Roca extends RocaEnderecoContato {
   id: number;
   codigo: string;
   nome: string;
@@ -97,7 +110,7 @@ export interface Roca {
   origemDenominadorProdutividade?: 'LANCAMENTOS' | 'MUDAS_CADASTRO' | null;
 }
 
-export interface CreateRocaDto {
+export interface CreateRocaDto extends RocaEnderecoContato {
   /** Se não informado, o backend gera automaticamente (ex: R001, R002). */
   codigo?: string;
   nome: string;
@@ -114,7 +127,7 @@ export interface RocaDetalhes extends Roca {
   produtorNome?: string;
 }
 
-export interface UpdateRocaDto {
+export interface UpdateRocaDto extends RocaEnderecoContato {
   codigo?: string | null;
   nome?: string;
   /** Envie null para limpar a localização. */

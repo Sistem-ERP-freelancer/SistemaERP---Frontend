@@ -187,19 +187,23 @@ export default function Pedidos() {
   const labelClienteRelatorioPdf = () => {
     if (clienteRelPed === 'all') return 'Não informado';
     return (
-      clientes.find((c) => c.id === Number(clienteRelPed))?.nome ?? 'Não informado'
+      clientes.find((c) => Number(c.id) === Number(clienteRelPed))?.nome ??
+      `Cliente #${clienteRelPed}`
     );
   };
 
   const labelFornecedorRelatorioPdf = () => {
     if (fornecedorRelPed === 'all') return 'Não informado';
-    const f = fornecedores.find((x) => x.id === Number(fornecedorRelPed));
-    return f?.nome_fantasia || f?.nome_razao || 'Não informado';
+    const f = fornecedores.find((x) => Number(x.id) === Number(fornecedorRelPed));
+    return f?.nome_fantasia || f?.nome_razao || `Fornecedor #${fornecedorRelPed}`;
   };
 
   const labelRocaRelatorioPdf = () => {
     if (rocaRelPed === 'all') return 'Não informado';
-    return rocasFiltro.find((r) => r.id === Number(rocaRelPed))?.nome ?? 'Não informado';
+    return (
+      rocasFiltro.find((r) => Number(r.id) === Number(rocaRelPed))?.nome ??
+      `Roça #${rocaRelPed}`
+    );
   };
 
   const abrirDialogRelatorioPedidos = () => {
@@ -1033,7 +1037,10 @@ export default function Pedidos() {
 
               <RelatorioFiltrosGrid>
                 <RelatorioCampoFiltro label="Cliente">
-                  <Select value={clienteRelPed} onValueChange={setClienteRelPed}>
+                  <Select
+                    value={clienteRelPed}
+                    onValueChange={(v) => setClienteRelPed(v)}
+                  >
                     <SelectTrigger className="bg-background">
                       <SelectValue placeholder="Todos os clientes" />
                     </SelectTrigger>

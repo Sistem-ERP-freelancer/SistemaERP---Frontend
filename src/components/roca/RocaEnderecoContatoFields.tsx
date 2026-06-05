@@ -1,0 +1,148 @@
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { formatCEP } from '@/lib/validators';
+import { Mail, MapPin, Phone } from 'lucide-react';
+
+export interface RocaEnderecoContatoData {
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  referencia?: string;
+  telefone?: string;
+  email?: string;
+}
+
+export const ROCA_ENDERECO_CONTATO_VAZIO: RocaEnderecoContatoData = {
+  cep: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  cidade: '',
+  estado: '',
+  referencia: '',
+  telefone: '',
+  email: '',
+};
+
+export function RocaEnderecoContatoFields({
+  value,
+  onChange,
+}: {
+  value: RocaEnderecoContatoData;
+  onChange: (next: RocaEnderecoContatoData) => void;
+}) {
+  const set = (field: keyof RocaEnderecoContatoData, raw: string) => {
+    onChange({ ...value, [field]: raw });
+  };
+
+  return (
+    <div className="bg-card border rounded-xl p-6 space-y-6">
+      <div className="flex items-center gap-2">
+        <div className="p-2 rounded-lg bg-blue-500/10">
+          <MapPin className="w-4 h-4 text-blue-600" />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold">Endereço e contato</h3>
+          <p className="text-xs text-muted-foreground">
+            Usado nos relatórios de pedidos vinculados à roça (todos os campos são opcionais).
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>CEP</Label>
+          <Input
+            placeholder="00000-000"
+            value={value.cep ?? ''}
+            maxLength={9}
+            onChange={(e) => set('cep', formatCEP(e.target.value))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Logradouro</Label>
+          <Input
+            placeholder="Rua, estrada, sítio..."
+            value={value.logradouro ?? ''}
+            onChange={(e) => set('logradouro', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Número</Label>
+          <Input
+            placeholder="S/N"
+            value={value.numero ?? ''}
+            onChange={(e) => set('numero', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Complemento</Label>
+          <Input
+            placeholder="Bloco, lote..."
+            value={value.complemento ?? ''}
+            onChange={(e) => set('complemento', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Bairro</Label>
+          <Input
+            value={value.bairro ?? ''}
+            onChange={(e) => set('bairro', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Cidade</Label>
+          <Input
+            value={value.cidade ?? ''}
+            onChange={(e) => set('cidade', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Estado (UF)</Label>
+          <Input
+            placeholder="ES"
+            maxLength={2}
+            value={value.estado ?? ''}
+            onChange={(e) => set('estado', e.target.value.toUpperCase())}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Referência</Label>
+          <Input
+            placeholder="Ponto de referência"
+            value={value.referencia ?? ''}
+            onChange={(e) => set('referencia', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+            Telefone
+          </Label>
+          <Input
+            placeholder="(00) 00000-0000"
+            value={value.telefone ?? ''}
+            onChange={(e) => set('telefone', e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+            E-mail
+          </Label>
+          <Input
+            type="email"
+            placeholder="contato@exemplo.com"
+            value={value.email ?? ''}
+            onChange={(e) => set('email', e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

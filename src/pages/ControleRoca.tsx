@@ -1,6 +1,11 @@
 import { CampoCnpjComConsulta } from '@/components/CampoCnpjComConsulta';
 import AppLayout from '@/components/layout/AppLayout';
 import {
+  RocaEnderecoContatoFields,
+  ROCA_ENDERECO_CONTATO_VAZIO,
+  type RocaEnderecoContatoData,
+} from '@/components/roca/RocaEnderecoContatoFields';
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -116,6 +121,38 @@ function valorDeEmbaPadraoDeMeeiro(
   return v != null && Number.isFinite(Number(v))
     ? Number(v)
     : VALOR_DE_EMBA_PADRAO;
+}
+
+function rocaEnderecoParaApi(data: RocaEnderecoContatoData) {
+  return {
+    cep: data.cep?.trim() || undefined,
+    logradouro: data.logradouro?.trim() || undefined,
+    numero: data.numero?.trim() || undefined,
+    complemento: data.complemento?.trim() || undefined,
+    bairro: data.bairro?.trim() || undefined,
+    cidade: data.cidade?.trim() || undefined,
+    estado: data.estado?.trim() || undefined,
+    referencia: data.referencia?.trim() || undefined,
+    telefone: data.telefone?.trim() || undefined,
+    email: data.email?.trim() || undefined,
+  };
+}
+
+function rocaEnderecoDeRegistro(
+  r: Partial<RocaEnderecoContatoData> | null | undefined,
+): RocaEnderecoContatoData {
+  return {
+    cep: r?.cep ?? '',
+    logradouro: r?.logradouro ?? '',
+    numero: r?.numero ?? '',
+    complemento: r?.complemento ?? '',
+    bairro: r?.bairro ?? '',
+    cidade: r?.cidade ?? '',
+    estado: r?.estado ?? '',
+    referencia: r?.referencia ?? '',
+    telefone: r?.telefone ?? '',
+    email: r?.email ?? '',
+  };
 }
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -439,6 +476,7 @@ export default function ControleRoca() {
     quantidadeMudasPlantadas: undefined,
     dataPlantio: undefined,
     dataInicioColheita: undefined,
+    ...ROCA_ENDERECO_CONTATO_VAZIO,
   });
   const createRoca = useMutation({
     mutationFn: (data: CreateRocaDto) => controleRocaService.criarRoca(data),
@@ -454,6 +492,7 @@ export default function ControleRoca() {
         quantidadeMudasPlantadas: undefined,
         dataPlantio: undefined,
         dataInicioColheita: undefined,
+        ...ROCA_ENDERECO_CONTATO_VAZIO,
       });
     },
     onError: (err: any) => {
@@ -487,6 +526,7 @@ export default function ControleRoca() {
     quantidadeMudasPlantadas: null,
     dataPlantio: null,
     dataInicioColheita: null,
+    ...ROCA_ENDERECO_CONTATO_VAZIO,
   });
 
   const updateRoca = useMutation({
@@ -3316,6 +3356,7 @@ export default function ControleRoca() {
                                         quantidadeMudasPlantadas: r.quantidadeMudasPlantadas ?? null,
                                         dataPlantio: r.dataPlantio ?? null,
                                         dataInicioColheita: r.dataInicioColheita ?? null,
+                                        ...rocaEnderecoDeRegistro(r),
                                       });
                                       setOpenEditRoca(true);
                                     }}
@@ -9101,6 +9142,7 @@ className={
               quantidadeMudasPlantadas: undefined,
               dataPlantio: undefined,
               dataInicioColheita: undefined,
+              ...ROCA_ENDERECO_CONTATO_VAZIO,
             });
         }}
       >
@@ -9264,6 +9306,11 @@ className={
                   </div>
                 </div>
               </div>
+
+              <RocaEnderecoContatoFields
+                value={formRoca}
+                onChange={(next) => setFormRoca((p) => ({ ...p, ...next }))}
+              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpenRoca(false)}>
@@ -9281,6 +9328,7 @@ className={
                     produtorId: formRoca.produtorId,
                     codigo: formRoca.codigo.trim() || undefined,
                     localizacao: formRoca.localizacao?.trim() || undefined,
+                    ...rocaEnderecoParaApi(formRoca),
                     ...(formRoca.quantidadeMudasPlantadas != null
                       ? { quantidadeMudasPlantadas: formRoca.quantidadeMudasPlantadas }
                       : {}),
@@ -9489,6 +9537,7 @@ className={
                           quantidadeMudasPlantadas: detailRoca.quantidadeMudasPlantadas ?? null,
                           dataPlantio: detailRoca.dataPlantio ?? null,
                           dataInicioColheita: detailRoca.dataInicioColheita ?? null,
+                          ...rocaEnderecoDeRegistro(detailRoca),
                         });
                         setOpenEditRoca(true);
                       }}
@@ -9663,6 +9712,11 @@ className={
                     </div>
                   </div>
                 </div>
+
+                <RocaEnderecoContatoFields
+                  value={formEditRoca}
+                  onChange={(next) => setFormEditRoca((p) => ({ ...p, ...next }))}
+                />
               </div>
             )}
             <DialogFooter>
@@ -9689,6 +9743,7 @@ className={
                         localizacaoVal === '' || formEditRoca.localizacao === ''
                           ? null
                           : localizacaoVal || undefined,
+                      ...rocaEnderecoParaApi(formEditRoca),
                       produtorId: formEditRoca.produtorId || undefined,
                       ativo: formEditRoca.ativo,
                       quantidadeMudasPlantadas:
