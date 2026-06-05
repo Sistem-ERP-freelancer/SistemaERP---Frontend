@@ -5,7 +5,9 @@ import {
 import { statTheme } from '@/components/layout/module-stat-themes';
 import {
   calcularResumoCardsPedidos,
+  labelFaturamentoCard,
   listarPedidosTodasPaginas,
+  type ResumoHeroPedidos,
 } from '@/lib/pedidos-stats';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { pedidosService } from '@/services/pedidos.service';
@@ -63,17 +65,22 @@ export function OrderStats({
     retry: false,
   });
 
-  const resumoFiltrado: Pick<
-    DashboardPedidos,
-    | 'faturamento_confirmado_venda'
-    | 'valor_em_aberto_venda'
-    | 'pedidos_em_andamento'
-    | 'pedidos_cancelados'
-  > | null = temFiltrosListagemAtivos && pedidosFiltrados
-    ? calcularResumoCardsPedidos(pedidosFiltrados)
-    : null;
+  const resumoFiltrado: ResumoHeroPedidos | null =
+    temFiltrosListagemAtivos && pedidosFiltrados
+      ? calcularResumoCardsPedidos(
+          pedidosFiltrados,
+          filtrosParaCards.tipo,
+        )
+      : null;
 
   const resumo = resumoFiltrado ?? dashboard;
+  const modoCard =
+    resumoFiltrado?.modoCard ??
+    (tipoFiltro === 'COMPRA'
+      ? 'COMPRA'
+      : tipoFiltro === 'VENDA'
+        ? 'VENDA'
+        : 'VENDA');
   const isLoading =
     temFiltrosListagemAtivos ? isLoadingFiltrados : isLoadingDashboard;
 
@@ -89,7 +96,7 @@ export function OrderStats({
     const heroItems: ModuleStatCardItem[] = [
       {
         key: 'faturamento_venda',
-        label: `Faturamento (Vendas) · ${qtdFaturamento} pedido${qtdFaturamento === 1 ? '' : 's'}`,
+        label: labelFaturamentoCard(modoCard, qtdFaturamento),
         value: isLoading ? '—' : formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
         Icon: ShoppingCart,
         ...statTheme.emerald,
