@@ -92,6 +92,7 @@ import {
   type DespesasStatusFiltro,
 } from '@/contexts/CentroCustosContext';
 import { formatValorMonetarioBr, parseValorMonetarioEntrada } from '@/lib/parse-valor-monetario';
+import { calcularResumoModuloDespesas } from '@/lib/centro-custo-resumo';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import {
   centroCustoService,
@@ -1349,6 +1350,31 @@ export default function CentroCustos() {
       ? 'Nenhuma despesa encontrada com os filtros selecionados ou o termo buscado.'
       : undefined;
 
+  const temFiltrosCards =
+    !isDespesasFiltroVazio(despesasFiltro) || despesasBusca.trim() !== '';
+
+  const { data: despesasParaCards, isLoading: isLoadingDespesasCards } = useQuery({
+    queryKey: [
+      'centro-custo',
+      'cards',
+      despesasFiltro,
+      despesasBusca,
+    ],
+    queryFn: () =>
+      fetchTodasDespesasParaRelatorio(
+        buildDespesasApiFiltros(despesasFiltro, despesasBusca),
+      ),
+    enabled: temFiltrosCards,
+    retry: false,
+  });
+
+  const resumoExibir = useMemo(() => {
+    if (!temFiltrosCards || despesasParaCards == null) return resumo;
+    return calcularResumoModuloDespesas(despesasParaCards);
+  }, [temFiltrosCards, despesasParaCards, resumo]);
+
+  const isLoadingCards = isLoading || (temFiltrosCards && isLoadingDespesasCards);
+
   const nomeTipoDespesa = (d: CentroCustoDespesa) =>
     d.tipoNome ?? tiposOpcoes.find((t) => t.id === d.tipoId)?.nome ?? '—';
 
@@ -1621,12 +1647,12 @@ export default function CentroCustos() {
     return CARD_STATS.map((c) => {
       const valNum =
         c.key === 'abertas'
-          ? resumo.qAbertas
+          ? resumoExibir.qAbertas
           : c.key === 'quitadas'
-            ? resumo.qQuitadas
+            ? resumoExibir.qQuitadas
             : c.key === 'valorAberto'
-              ? resumo.valorAbertoTotal
-              : resumo.valorPagoTotal;
+              ? resumoExibir.valorAbertoTotal
+              : resumoExibir.valorPagoTotal;
       return {
         key: c.key,
         label: c.label,
@@ -1636,7 +1662,7 @@ export default function CentroCustos() {
         Icon: c.Icon,
       };
     });
-  }, [resumo]);
+  }, [resumoExibir]);
 
   return (
     <AppLayout>
@@ -1650,13 +1676,13 @@ export default function CentroCustos() {
               sincronizado com o banco do seu tenant.
             </>
           }
-          loadingHint={isLoading ? 'Carregando resumo e despesas…' : undefined}
+          loadingHint={isLoadingCards ? 'Carregando resumo e despesas…' : undefined}
         />
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
           {tab === 'visao' && (
             <ModuleStatCards
-              isLoading={isLoading}
+              isLoading={isLoadingCards}
               columns={4}
               className="mb-0"
               items={centroCustoStatItems}

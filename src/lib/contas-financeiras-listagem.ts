@@ -99,10 +99,12 @@ export function saldoAbertoConta(c: ContaFinanceira): number {
   return Math.max(0, r || em);
 }
 
-/** Resumo dos cards de Contas a Receber a partir da listagem filtrada (mesma base da tabela). */
-export function calcularResumoCardsReceber(contas: ContaFinanceira[]): {
-  totalReceber: number;
-  valorRecebido: number;
+function calcularResumoCardsPorTipo(
+  contas: ContaFinanceira[],
+  tipo: 'RECEBER' | 'PAGAR',
+): {
+  totalPendente: number;
+  valorPago: number;
   vencidas: number;
   vencendoHoje: number;
   vencendoEsteMes: number;
@@ -112,22 +114,22 @@ export function calcularResumoCardsReceber(contas: ContaFinanceira[]): {
   const mesAtual = hoje.getMonth();
   const anoAtual = hoje.getFullYear();
 
-  let totalReceber = 0;
-  let valorRecebido = 0;
+  let totalPendente = 0;
+  let valorPago = 0;
   let vencidas = 0;
   let vencendoHoje = 0;
   let vencendoEsteMes = 0;
 
   for (const conta of contas) {
-    if (conta.tipo !== 'RECEBER') continue;
+    if (conta.tipo !== tipo) continue;
     const st = String(conta.status ?? '').toUpperCase();
     if (st === 'CANCELADO') continue;
 
-    valorRecebido += Number(conta.valor_pago) || 0;
+    valorPago += Number(conta.valor_pago) || 0;
 
     if (!contaTemSaldoAberto(conta)) continue;
 
-    totalReceber += saldoAbertoConta(conta);
+    totalPendente += saldoAbertoConta(conta);
 
     const diasAte =
       conta.dias_ate_vencimento !== undefined && conta.dias_ate_vencimento !== null
@@ -163,10 +165,78 @@ export function calcularResumoCardsReceber(contas: ContaFinanceira[]): {
   }
 
   return {
-    totalReceber: Number(totalReceber.toFixed(2)),
-    valorRecebido: Number(valorRecebido.toFixed(2)),
+    totalPendente: Number(totalPendente.toFixed(2)),
+    valorPago: Number(valorPago.toFixed(2)),
     vencidas,
     vencendoHoje,
     vencendoEsteMes,
+  };
+}
+
+/** Resumo dos cards de Contas a Receber a partir da listagem filtrada (mesma base da tabela). */
+export function calcularResumoCardsReceber(contas: ContaFinanceira[]): {
+  totalReceber: number;
+  valorRecebido: number;
+  vencidas: number;
+  vencendoHoje: number;
+  vencendoEsteMes: number;
+} {
+  const r = calcularResumoCardsPorTipo(contas, 'RECEBER');
+  return {
+    totalReceber: r.totalPendente,
+    valorRecebido: r.valorPago,
+    vencidas: r.vencidas,
+    vencendoHoje: r.vencendoHoje,
+    vencendoEsteMes: r.vencendoEsteMes,
+  };
+}
+
+/** Resumo dos cards de Contas a Pagar a partir da listagem filtrada (mesma base da tabela). */
+export function calcularResumoCardsPagar(contas: ContaFinanceira[]): {
+  totalPagar: number;
+  valorPago: number;
+  vencidas: number;
+  vencendoHoje: number;
+  vencendoEsteMes: number;
+} {
+  const r = calcularResumoCardsPorTipo(contas, 'PAGAR');
+  return {
+    totalPagar: r.totalPendente,
+    valorPago: r.valorPago,
+    vencidas: r.vencidas,
+    vencendoHoje: r.vencendoHoje,
+    vencendoEsteMes: r.vencendoEsteMes,
+  };
+}
+
+/** Cards do módulo Financeiro (receita / despesa / saldo) a partir das contas filtradas. */
+export function calcularStatsFinanceiroFiltrado(
+  receber: ContaFinanceira[],
+  pagar: ContaFinanceira[],
+): {
+  receitaMes: number;
+  despesaMes: number;
+  saldoAtual: number;
+} {
+  const somaCompetencia = (contas: ContaFinanceira[]) =>
+    contas
+      .filter((c) => String(c.status ?? '').toUpperCase() !== 'CANCELADO')
+      .reduce(
+        (s, c) =>
+          s +
+          Number(
+            (c as { valor_original?: number }).valor_original ??
+              (c as { valor_total?: number }).valor_total ??
+              0,
+          ),
+        0,
+      );
+
+  const receitaMes = Number(somaCompetencia(receber).toFixed(2));
+  const despesaMes = Number(somaCompetencia(pagar).toFixed(2));
+  return {
+    receitaMes,
+    despesaMes,
+    saldoAtual: Number((receitaMes - despesaMes).toFixed(2)),
   };
 }

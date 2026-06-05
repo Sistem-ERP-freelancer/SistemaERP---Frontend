@@ -599,6 +599,11 @@ export default function Pedidos() {
             variant="hero"
             activeCardFilter={activePedidoCard}
             onCardClick={handlePedidoCardClick}
+            filtrosListagem={(() => {
+              const { card_filtro: _card, ...rest } = filters;
+              return rest;
+            })()}
+            temFiltrosListagemAtivos={temFiltrosAtivos}
           />
         </div>
 

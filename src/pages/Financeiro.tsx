@@ -45,6 +45,10 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatDate } from "@/lib/utils";
+import {
+  calcularStatsFinanceiroFiltrado,
+  listarContasTodasAsPaginas,
+} from "@/lib/contas-financeiras-listagem";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { controleRocaService } from "@/services/controle-roca.service";
 import {
@@ -531,6 +535,101 @@ const Financeiro = () => {
     setFiltrosDialogOpen(false);
   };
 
+  const statusTabsFinanceiro = [
+    "PENDENTE",
+    "PAGO_PARCIAL",
+    "PAGO_TOTAL",
+    "VENCIDO",
+    "CANCELADO",
+  ] as const;
+
+  const filtrosContasCardsBase = useMemo(() => {
+    const status = statusTabsFinanceiro.includes(activeTab as (typeof statusTabsFinanceiro)[number])
+      ? activeTab
+      : undefined;
+    return {
+      cliente_id: clienteFilterId,
+      fornecedor_id: fornecedorFilterId,
+      data_inicial: dataInicialFilter || undefined,
+      data_final: dataFinalFilter || undefined,
+      status,
+    };
+  }, [
+    activeTab,
+    clienteFilterId,
+    fornecedorFilterId,
+    dataInicialFilter,
+    dataFinalFilter,
+  ]);
+
+  const buscaContasReceberCards =
+    temFiltrosAtivos &&
+    (tipoFiltroEfetivo === undefined || tipoFiltroEfetivo === "RECEBER");
+  const buscaContasPagarCards =
+    temFiltrosAtivos &&
+    (tipoFiltroEfetivo === undefined || tipoFiltroEfetivo === "PAGAR");
+
+  const { data: contasReceberCards, isLoading: isLoadingReceberCards } = useQuery({
+    queryKey: [
+      "contas-financeiras",
+      "financeiro",
+      "cards",
+      "receber",
+      filtrosContasCardsBase,
+    ],
+    queryFn: () =>
+      listarContasTodasAsPaginas({
+        ...filtrosContasCardsBase,
+        tipo: "RECEBER",
+      }),
+    enabled: buscaContasReceberCards,
+    retry: false,
+  });
+
+  const { data: contasPagarCards, isLoading: isLoadingPagarCards } = useQuery({
+    queryKey: [
+      "contas-financeiras",
+      "financeiro",
+      "cards",
+      "pagar",
+      filtrosContasCardsBase,
+    ],
+    queryFn: () =>
+      listarContasTodasAsPaginas({
+        ...filtrosContasCardsBase,
+        tipo: "PAGAR",
+      }),
+    enabled: buscaContasPagarCards,
+    retry: false,
+  });
+
+  const statsFiltrados = useMemo(() => {
+    if (!temFiltrosAtivos) return null;
+    const receber =
+      tipoFiltroEfetivo === "PAGAR" ? [] : (contasReceberCards ?? []);
+    const pagar =
+      tipoFiltroEfetivo === "RECEBER" ? [] : (contasPagarCards ?? []);
+    if (
+      (buscaContasReceberCards && contasReceberCards === undefined) ||
+      (buscaContasPagarCards && contasPagarCards === undefined)
+    ) {
+      return null;
+    }
+    return calcularStatsFinanceiroFiltrado(receber, pagar);
+  }, [
+    temFiltrosAtivos,
+    tipoFiltroEfetivo,
+    contasReceberCards,
+    contasPagarCards,
+    buscaContasReceberCards,
+    buscaContasPagarCards,
+  ]);
+
+  const isLoadingStatsFiltrados =
+    temFiltrosAtivos &&
+    ((buscaContasReceberCards && isLoadingReceberCards) ||
+      (buscaContasPagarCards && isLoadingPagarCards));
+
   // Buscar contas agrupadas (uma linha por cliente/pedido) - visão resumida
   const { data: contasAgrupadasResponse, isLoading: isLoadingContas } = useQuery({
     queryKey: ["contas-financeiras", "agrupado", activeTab, cardTipoFilter, secaoTipoFilter, page, limit, clienteFilterId, fornecedorFilterId, dataInicialFilter, dataFinalFilter],
@@ -590,9 +689,18 @@ const Financeiro = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    const receitaMes = parseValor(contasReceberStats?.receita_mes) || 0;
-    const despesaMes = parseValor(contasPagarStats?.despesa_mes) || 0;
-    const saldoAtual = receitaMes - despesaMes;
+    const receitaMes =
+      statsFiltrados != null
+        ? statsFiltrados.receitaMes
+        : parseValor(contasReceberStats?.receita_mes) || 0;
+    const despesaMes =
+      statsFiltrados != null
+        ? statsFiltrados.despesaMes
+        : parseValor(contasPagarStats?.despesa_mes) || 0;
+    const saldoAtual =
+      statsFiltrados != null
+        ? statsFiltrados.saldoAtual
+        : receitaMes - despesaMes;
 
     /** Mesmo padrão visual dos cards em Centro de custos (borda lateral + ícone + valor). */
     return [
@@ -629,7 +737,7 @@ const Financeiro = () => {
         cardFilter: "todos" as const,
       },
     ];
-  }, [contasReceberStats, contasPagarStats]);
+  }, [contasReceberStats, contasPagarStats, statsFiltrados]);
 
   // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({

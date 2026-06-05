@@ -106,6 +106,7 @@ import { useNavigate } from "react-router-dom";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
 import { toast } from "sonner";
 import { contaEhDespesaSemPedido } from "@/pages/contas-a-pagar/despesaContaUtils";
+import { calcularResumoCardsPagar } from "@/lib/contas-financeiras-listagem";
 
 /** Evita linhas repetidas se a API devolver duplicatas (mesmo id ou mesmo numero_conta). */
 function dedupeContasFinanceirasPagar(contas: ContaFinanceira[]): ContaFinanceira[] {
@@ -669,7 +670,8 @@ function ContasAPagar() {
     (rocaFilterId != null && rocaFilterId > 0) ||
     !!statusFilter ||
     !!dataInicialFilter ||
-    !!dataFinalFilter;
+    !!dataFinalFilter ||
+    (activeTab !== "Todos");
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     setFornecedorFilterId(null);
@@ -679,6 +681,91 @@ function ContasAPagar() {
     setDataFinalFilter("");
     setFiltrosDialogOpen(false);
   };
+
+  const baseFiltrosContasArgs = useMemo(() => {
+    const fornecedorArg =
+      fornecedorFilterId != null && fornecedorFilterId > 0
+        ? fornecedorFilterId
+        : undefined;
+    const rocaArg =
+      rocaFilterId != null && rocaFilterId > 0 ? rocaFilterId : undefined;
+    const dataInicialArg =
+      dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
+        ? dataInicialFilter
+        : undefined;
+    const dataFinalArg =
+      dataFinalFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataFinalFilter)
+        ? dataFinalFilter
+        : undefined;
+
+    const filtroTabOuStatus = (statusFilter ||
+      (activeTab !== "Todos" ? activeTab : "")) as string;
+
+    let status: string | undefined;
+    let proximidade_vencimento: "VENCIDA" | "VENCE_HOJE" | undefined;
+    if (filtroTabOuStatus === "VENCIDO") {
+      proximidade_vencimento = "VENCIDA";
+    } else if (filtroTabOuStatus === "VENCE_HOJE") {
+      proximidade_vencimento = "VENCE_HOJE";
+    } else if (["ABERTO", "PARCIAL", "QUITADO"].includes(filtroTabOuStatus)) {
+      status = filtroTabOuStatus;
+    } else if (
+      ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "CANCELADO"].includes(
+        filtroTabOuStatus,
+      )
+    ) {
+      status = filtroTabOuStatus;
+    }
+
+    return {
+      tipo: "PAGAR" as const,
+      fornecedor_id: fornecedorArg,
+      roca_id: rocaArg,
+      data_inicial: dataInicialArg,
+      data_final: dataFinalArg,
+      status,
+      proximidade_vencimento,
+    };
+  }, [
+    fornecedorFilterId,
+    rocaFilterId,
+    dataInicialFilter,
+    dataFinalFilter,
+    statusFilter,
+    activeTab,
+  ]);
+
+  const { data: contasParaCards, isLoading: isLoadingContasParaCards } = useQuery({
+    queryKey: ["contas-financeiras", "pagar", "cards", baseFiltrosContasArgs],
+    queryFn: async () => listarContasPagarTodasAsPaginas(baseFiltrosContasArgs),
+    enabled: temFiltrosAtivos,
+    retry: false,
+  });
+
+  const contasFiltradasParaCards = useMemo(() => {
+    if (!contasParaCards?.length) return contasParaCards ?? [];
+    if (rocaFilterId == null || rocaFilterId <= 0) return contasParaCards;
+
+    const nomeRoca = rocasLista
+      .find((r) => r.id === rocaFilterId)
+      ?.nome?.trim()
+      .toLowerCase();
+    return contasParaCards.filter((c) => {
+      if (Number(c.roca_id) === rocaFilterId) return true;
+      if (
+        nomeRoca &&
+        (c.roca_nome ?? "").trim().toLowerCase() === nomeRoca
+      ) {
+        return true;
+      }
+      return false;
+    });
+  }, [contasParaCards, rocaFilterId, rocasLista]);
+
+  const resumoCardsFiltrado = useMemo(() => {
+    if (!temFiltrosAtivos) return null;
+    return calcularResumoCardsPagar(contasFiltradasParaCards);
+  }, [temFiltrosAtivos, contasFiltradasParaCards]);
 
   // Resetar página quando tab, busca ou filtros mudarem
   useEffect(() => {
@@ -786,13 +873,29 @@ function ContasAPagar() {
     };
 
     // Cards sempre usam resumo consolidado (não paginado) para não variar por página da tabela.
-    const totalPagar = parseValor(dashboardPagar?.valor_total_pendente) ?? 0;
-    const totalPago = parseValor(
-      dashboardPagar?.valor_total_pago_contabilizado ?? dashboardPagar?.valor_total_pago,
-    ) ?? 0;
-    const totalVencidas = Number(dashboardPagar?.vencidas ?? 0);
-    const totalVencendoHoje = Number(dashboardPagar?.vencendo_hoje ?? 0);
-    const totalVencendoEsteMes = Number(dashboardPagar?.vencendo_este_mes ?? 0);
+    const totalPagar =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.totalPagar
+        : parseValor(dashboardPagar?.valor_total_pendente) ?? 0;
+    const totalPago =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.valorPago
+        : parseValor(
+            dashboardPagar?.valor_total_pago_contabilizado ??
+              dashboardPagar?.valor_total_pago,
+          ) ?? 0;
+    const totalVencidas =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.vencidas
+        : Number(dashboardPagar?.vencidas ?? 0);
+    const totalVencendoHoje =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.vencendoHoje
+        : Number(dashboardPagar?.vencendo_hoje ?? 0);
+    const totalVencendoEsteMes =
+      resumoCardsFiltrado != null
+        ? resumoCardsFiltrado.vencendoEsteMes
+        : Number(dashboardPagar?.vencendo_este_mes ?? 0);
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
@@ -837,7 +940,7 @@ function ContasAPagar() {
         ...statTheme.sky,
       },
     ];
-  }, [dashboardPagar]);
+  }, [dashboardPagar, resumoCardsFiltrado]);
 
   const statsCardItems = useMemo((): ModuleStatCardItem[] => {
     return stats.map((stat) => ({
@@ -1479,6 +1582,9 @@ function ContasAPagar() {
     createContaMutation.mutate(contaData);
   };
 
+  const isLoadingCards =
+    isLoadingPagar || (temFiltrosAtivos && isLoadingContasParaCards);
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -1486,11 +1592,11 @@ function ContasAPagar() {
           icon={CreditCard}
           title="Contas a Pagar"
           subtitle="Gerencie suas contas a pagar e acompanhe vencimentos em um só lugar."
-          loadingHint={isLoadingPagar ? "Carregando resumo e contas…" : undefined}
+          loadingHint={isLoadingCards ? "Carregando resumo e contas…" : undefined}
         />
 
         <ModuleStatCards
-          isLoading={isLoadingPagar}
+          isLoading={isLoadingCards}
           columns={5}
           items={statsCardItems}
         />
