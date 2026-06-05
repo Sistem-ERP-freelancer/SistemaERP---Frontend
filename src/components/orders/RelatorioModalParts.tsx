@@ -108,6 +108,7 @@ export function RelatorioPeriodoSection({
   onDataFinal,
   periodoAtivo,
   onPeriodoRapido,
+  onQualquerPeriodo,
 }: {
   dataInicial: string;
   dataFinal: string;
@@ -115,6 +116,8 @@ export function RelatorioPeriodoSection({
   onDataFinal: (v: string) => void;
   periodoAtivo: string;
   onPeriodoRapido: (key: (typeof PERIODOS_RAPIDOS)[number][0]) => void;
+  /** Quando informado, exibe atalho para gerar sem filtro de datas */
+  onQualquerPeriodo?: () => void;
 }) {
   return (
     <section className="space-y-3">
@@ -141,6 +144,17 @@ export function RelatorioPeriodoSection({
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
+        {onQualquerPeriodo ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={periodoAtivo === 'all' ? 'default' : 'outline'}
+            className="rounded-full text-xs sm:text-sm"
+            onClick={onQualquerPeriodo}
+          >
+            Qualquer período
+          </Button>
+        ) : null}
         {PERIODOS_RAPIDOS.map(([key, label]) => (
           <Button
             key={key}

@@ -108,8 +108,8 @@ export default function Pedidos() {
   const [dataInicialRelPed, setDataInicialRelPed] = useState('');
   const [dataFinalRelPed, setDataFinalRelPed] = useState('');
   const [periodoRapidoRelPed, setPeriodoRapidoRelPed] = useState<
-    'custom' | 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior'
-  >('mes_atual');
+    'all' | 'custom' | 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior'
+  >('all');
   const [clienteRelPed, setClienteRelPed] = useState<string>('all');
   const [fornecedorRelPed, setFornecedorRelPed] = useState<string>('all');
   const [rocaRelPed, setRocaRelPed] = useState<string>('all');
@@ -121,7 +121,12 @@ export default function Pedidos() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingFromFiltersRef = useRef(false);
 
-  const toYMD = (d: Date) => d.toISOString().slice(0, 10);
+  const toYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const hoje = toYMD(new Date());
   const ontem = toYMD((() => { const d = new Date(); d.setDate(d.getDate() - 1); return d; })());
   const ultimos7 = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return toYMD(d); })();
@@ -206,14 +211,18 @@ export default function Pedidos() {
     );
   };
 
+  const limparPeriodoRelPed = () => {
+    setDataInicialRelPed('');
+    setDataFinalRelPed('');
+    setPeriodoRapidoRelPed('all');
+  };
+
   const abrirDialogRelatorioPedidos = () => {
-    if (!dataInicialRelPed && !dataFinalRelPed) {
+    if (!dataInicialRelPed && !dataFinalRelPed && periodoRapidoRelPed === 'all') {
       if (filters.data_inicial || filters.data_final) {
         setDataInicialRelPed(filters.data_inicial ?? '');
         setDataFinalRelPed(filters.data_final ?? '');
         setPeriodoRapidoRelPed('custom');
-      } else {
-        aplicarPeriodoRapidoRelPed('mes_atual');
       }
     }
     if (clienteRelPed === 'all' && filters.cliente_id) {
@@ -1033,6 +1042,7 @@ export default function Pedidos() {
                   setPeriodoRapidoRelPed('custom');
                 }}
                 onPeriodoRapido={(key) => aplicarPeriodoRapidoRelPed(key)}
+                onQualquerPeriodo={limparPeriodoRelPed}
               />
 
               <RelatorioFiltrosGrid>

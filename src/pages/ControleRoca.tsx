@@ -9226,21 +9226,6 @@ className={
                     />
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    Localização
-                    <span className="text-xs text-muted-foreground">(opcional)</span>
-                  </Label>
-                  <Textarea
-                    value={formRoca.localizacao || ''}
-                    onChange={(e) =>
-                      setFormRoca((p) => ({ ...p, localizacao: e.target.value }))
-                    }
-                    placeholder="Onde fica a roça (ponto de referência, comunidade, cidade, etc.)"
-                    rows={2}
-                  />
-                </div>
 
                 <RocaEnderecoContatoFields
                   embedded
@@ -9329,7 +9314,6 @@ className={
                     nome: formRoca.nome.trim(),
                     produtorId: formRoca.produtorId,
                     codigo: formRoca.codigo.trim() || undefined,
-                    localizacao: formRoca.localizacao?.trim() || undefined,
                     ...rocaEnderecoParaApi(formRoca),
                     ...(formRoca.quantidadeMudasPlantadas != null
                       ? { quantidadeMudasPlantadas: formRoca.quantidadeMudasPlantadas }

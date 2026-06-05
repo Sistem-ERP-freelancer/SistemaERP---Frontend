@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatCEP } from '@/lib/validators';
+import { formatCEP, formatTelefone, telefoneArmazenadoParaCampo } from '@/lib/validators';
 import { Mail, MapPin, Phone } from 'lucide-react';
 
 export interface RocaEnderecoContatoData {
@@ -116,8 +116,9 @@ export function RocaEnderecoContatoFields({
           </Label>
           <Input
             placeholder="(00) 00000-0000"
-            value={value.telefone ?? ''}
-            onChange={(e) => set('telefone', e.target.value)}
+            value={telefoneArmazenadoParaCampo(value.telefone)}
+            onChange={(e) => set('telefone', formatTelefone(e.target.value))}
+            maxLength={15}
           />
         </div>
         <div className="space-y-2">
