@@ -114,7 +114,6 @@ export default function Pedidos() {
   const [rocaRelPed, setRocaRelPed] = useState<string>('all');
   const [relPedLoadingAction, setRelPedLoadingAction] = useState<'download' | 'print' | null>(null);
   const [relatoriosDialogOpen, setRelatoriosDialogOpen] = useState(false);
-  const [filtroParceiro, setFiltroParceiro] = useState<string>('all');
   const [periodoRapidoLista, setPeriodoRapidoLista] = useState<
     'all' | 'hoje' | '7d' | 'mes_atual' | 'custom'
   >('all');
@@ -264,15 +263,23 @@ export default function Pedidos() {
     return map[s];
   };
 
-  const labelParceiroFiltro = () => {
-    if (filtroParceiro === 'all') return null;
-    if (filtroParceiro.startsWith('c-')) {
-      const id = Number(filtroParceiro.slice(2));
-      return clientes.find((c) => c.id === id)?.nome ?? `Cliente #${id}`;
-    }
-    const id = Number(filtroParceiro.slice(2));
-    const f = fornecedores.find((x) => x.id === id);
-    return f?.nome_fantasia || f?.nome_razao || `Fornecedor #${id}`;
+  const labelClienteFiltro = () => {
+    if (!filters.cliente_id) return null;
+    return (
+      clientes.find((c) => c.id === filters.cliente_id)?.nome ??
+      `Cliente #${filters.cliente_id}`
+    );
+  };
+
+  const labelFornecedorFiltro = () => {
+    if (!filters.fornecedor_id) return null;
+    const f = fornecedores.find((x) => x.id === filters.fornecedor_id);
+    return f?.nome_fantasia || f?.nome_razao || `Fornecedor #${filters.fornecedor_id}`;
+  };
+
+  const labelRocaFiltro = () => {
+    if (filters.roca_id == null || filters.roca_id <= 0) return null;
+    return rocasFiltro.find((r) => r.id === filters.roca_id)?.nome ?? `Roça #${filters.roca_id}`;
   };
 
   const labelPeriodoFiltro = () => {
@@ -307,7 +314,6 @@ export default function Pedidos() {
       cliente_nome: undefined,
     });
     setSearchTerm('');
-    setFiltroParceiro('all');
     setPeriodoRapidoLista('all');
     setFiltrosDialogOpen(false);
   };
@@ -330,23 +336,6 @@ export default function Pedidos() {
     }
     if (tipo === 'mes_atual') {
       updateFilters({ data_inicial: mesAtualInicio, data_final: hoje });
-    }
-  };
-
-  const handleFiltroParceiro = (value: string) => {
-    setFiltroParceiro(value);
-    if (value === 'all') {
-      updateFilters({ cliente_id: undefined, fornecedor_id: undefined });
-    } else if (value.startsWith('c-')) {
-      updateFilters({
-        cliente_id: Number(value.slice(2)),
-        fornecedor_id: undefined,
-      });
-    } else if (value.startsWith('f-')) {
-      updateFilters({
-        fornecedor_id: Number(value.slice(2)),
-        cliente_id: undefined,
-      });
     }
   };
 
@@ -540,9 +529,14 @@ export default function Pedidos() {
                   Status: {labelStatusFiltro(filters.status)}
                 </span>
               )}
-              {labelParceiroFiltro() && (
+              {labelClienteFiltro() && (
                 <span className="inline-flex items-center max-w-[200px] truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
-                  {labelParceiroFiltro()}
+                  Cliente: {labelClienteFiltro()}
+                </span>
+              )}
+              {labelFornecedorFiltro() && (
+                <span className="inline-flex items-center max-w-[200px] truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  Fornecedor: {labelFornecedorFiltro()}
                 </span>
               )}
               {labelPeriodoFiltro() && (
@@ -550,9 +544,9 @@ export default function Pedidos() {
                   {labelPeriodoFiltro()}
                 </span>
               )}
-              {filters.roca_id != null && filters.roca_id > 0 && (
-                <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
-                  Roça: {rocasFiltro.find((r) => r.id === filters.roca_id)?.nome ?? filters.roca_id}
+              {labelRocaFiltro() && (
+                <span className="inline-flex items-center max-w-[200px] truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
+                  Roça: {labelRocaFiltro()}
                 </span>
               )}
               {filters.somente_com_roca && (
@@ -614,39 +608,92 @@ export default function Pedidos() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Cliente / Fornecedor</Label>
-                <Select value={filtroParceiro} onValueChange={handleFiltroParceiro}>
+                <Label className="text-sm font-semibold">Cliente</Label>
+                <Select
+                  value={filters.cliente_id ? String(filters.cliente_id) : 'all'}
+                  onValueChange={(value) =>
+                    updateFilters({
+                      cliente_id: value === 'all' ? undefined : Number(value),
+                    })
+                  }
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Todos" />
+                    <SelectValue placeholder="Todos os clientes" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    {clientes.length > 0 && (
-                      <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          Clientes
-                        </div>
-                        {clientes.map((c) => (
-                          <SelectItem key={`c-${c.id}`} value={`c-${c.id}`}>
-                            {c.nome}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {fornecedores.length > 0 && (
-                      <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          Fornecedores
-                        </div>
-                        {fornecedores.map((f) => (
-                          <SelectItem key={`f-${f.id}`} value={`f-${f.id}`}>
-                            {f.nome_fantasia || f.nome_razao}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Fornecedor</Label>
+                <Select
+                  value={filters.fornecedor_id ? String(filters.fornecedor_id) : 'all'}
+                  onValueChange={(value) =>
+                    updateFilters({
+                      fornecedor_id: value === 'all' ? undefined : Number(value),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os fornecedores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {fornecedores.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        {f.nome_fantasia || f.nome_razao || `Fornecedor #${f.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Roça</Label>
+                <Select
+                  value={
+                    filters.roca_id != null && filters.roca_id > 0
+                      ? String(filters.roca_id)
+                      : 'all'
+                  }
+                  onValueChange={(value) =>
+                    updateFilters({
+                      roca_id: value === 'all' ? undefined : Number(value),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as roças" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {rocasFiltro.map((roca) => (
+                      <SelectItem key={roca.id} value={String(roca.id)}>
+                        {roca.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-input"
+                    checked={!!filters.somente_com_roca}
+                    onChange={(e) =>
+                      updateFilters({
+                        somente_com_roca: e.target.checked || undefined,
+                      })
+                    }
+                  />
+                  Somente pedidos com roça vinculada
+                </label>
               </div>
 
               <div className="space-y-2">
@@ -692,49 +739,6 @@ export default function Pedidos() {
                     </div>
                   </div>
                 )}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Roça</Label>
-                <Select
-                  value={
-                    filters.roca_id != null && filters.roca_id > 0
-                      ? String(filters.roca_id)
-                      : 'all'
-                  }
-                  onValueChange={(value) =>
-                    updateFilters({
-                      roca_id: value === 'all' ? undefined : Number(value),
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as roças" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as roças</SelectItem>
-                    {rocasFiltro.map((roca) => (
-                      <SelectItem key={roca.id} value={String(roca.id)}>
-                        {roca.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="rounded border-input"
-                    checked={!!filters.somente_com_roca}
-                    onChange={(e) =>
-                      updateFilters({
-                        somente_com_roca: e.target.checked || undefined,
-                      })
-                    }
-                  />
-                  Somente pedidos com roça vinculada
-                </label>
               </div>
 
               <div className="flex gap-2 pt-2">
