@@ -10,6 +10,7 @@ import {
   RelatorioHubCard,
   RelatorioModalShell,
   RelatorioPeriodoSection,
+  RelatorioResumoFiltrosPreview,
 } from '@/components/orders/RelatorioModalParts';
 import { Button } from '@/components/ui/button';
 import {
@@ -170,9 +171,55 @@ export default function Pedidos() {
     roca_id: rocaRelPed !== 'all' ? Number(rocaRelPed) : undefined,
   });
 
+  const formatarDataRelatorio = (data: string) => {
+    const [y, m, d] = data.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  const labelPeriodoRelatorioPdf = () => {
+    const ini = dataInicialRelPed?.trim();
+    const fim = dataFinalRelPed?.trim();
+    if (ini && fim) return `${formatarDataRelatorio(ini)} a ${formatarDataRelatorio(fim)}`;
+    if (ini || fim) return ini || fim || 'Não informado';
+    return 'Não informado';
+  };
+
+  const labelClienteRelatorioPdf = () => {
+    if (clienteRelPed === 'all') return 'Não informado';
+    return (
+      clientes.find((c) => c.id === Number(clienteRelPed))?.nome ?? 'Não informado'
+    );
+  };
+
+  const labelFornecedorRelatorioPdf = () => {
+    if (fornecedorRelPed === 'all') return 'Não informado';
+    const f = fornecedores.find((x) => x.id === Number(fornecedorRelPed));
+    return f?.nome_fantasia || f?.nome_razao || 'Não informado';
+  };
+
+  const labelRocaRelatorioPdf = () => {
+    if (rocaRelPed === 'all') return 'Não informado';
+    return rocasFiltro.find((r) => r.id === Number(rocaRelPed))?.nome ?? 'Não informado';
+  };
+
   const abrirDialogRelatorioPedidos = () => {
     if (!dataInicialRelPed && !dataFinalRelPed) {
-      aplicarPeriodoRapidoRelPed('mes_atual');
+      if (filters.data_inicial || filters.data_final) {
+        setDataInicialRelPed(filters.data_inicial ?? '');
+        setDataFinalRelPed(filters.data_final ?? '');
+        setPeriodoRapidoRelPed('custom');
+      } else {
+        aplicarPeriodoRapidoRelPed('mes_atual');
+      }
+    }
+    if (clienteRelPed === 'all' && filters.cliente_id) {
+      setClienteRelPed(String(filters.cliente_id));
+    }
+    if (fornecedorRelPed === 'all' && filters.fornecedor_id) {
+      setFornecedorRelPed(String(filters.fornecedor_id));
+    }
+    if (rocaRelPed === 'all' && filters.roca_id) {
+      setRocaRelPed(String(filters.roca_id));
     }
     setRelatorioPedidosDialogOpen(true);
   };
@@ -428,6 +475,20 @@ export default function Pedidos() {
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Erro ao gerar relatório do pedido';
+      toast.error(message);
+    } finally {
+      setReportingOrderId(null);
+    }
+  };
+
+  const handlePrintRelatorioPedido = async (order: (typeof orders)[number]) => {
+    setReportingOrderId(order.id);
+    try {
+      await pedidosService.printRelatorioPedidoPdf(order.id);
+      toast.success(`Relatório do pedido ${order.numero_pedido} aberto para impressão.`);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Erro ao abrir relatório do pedido';
       toast.error(message);
     } finally {
       setReportingOrderId(null);
@@ -849,7 +910,7 @@ export default function Pedidos() {
               <RelatorioHubCard
                 icon={Filter}
                 title="Relatório de pedidos"
-                description="PDF com itens — filtre por cliente, fornecedor, roça e período."
+                description="PDF premium com itens, totais e endereço da roça, cliente ou fornecedor. Filtros não escolhidos aparecem como Não informado."
                 onClick={() => {
                   setRelatoriosDialogOpen(false);
                   abrirDialogRelatorioPedidos();
@@ -925,7 +986,7 @@ export default function Pedidos() {
           <RelatorioModalShell
             icon={Filter}
             title="Relatório de pedidos"
-            description="Filtre por cliente, fornecedor, roça e período. Pedidos cancelados não entram no PDF."
+            description="Gere o PDF consolidado com layout premium. Apenas os filtros selecionados restringem a busca; os demais aparecem como Não informado no cabeçalho."
             footer={
               <RelatorioAcoesFooter
                 downloading={relPedLoadingAction === 'download' || loadingRelatorio}
@@ -1019,6 +1080,15 @@ export default function Pedidos() {
                   </Select>
                 </RelatorioCampoFiltro>
               </RelatorioFiltrosGrid>
+
+              <RelatorioResumoFiltrosPreview
+                linhas={[
+                  { label: 'Período', valor: labelPeriodoRelatorioPdf() },
+                  { label: 'Cliente', valor: labelClienteRelatorioPdf() },
+                  { label: 'Fornecedor', valor: labelFornecedorRelatorioPdf() },
+                  { label: 'Roça', valor: labelRocaRelatorioPdf() },
+                ]}
+              />
             </div>
           </RelatorioModalShell>
         </Dialog>
@@ -1041,6 +1111,9 @@ export default function Pedidos() {
           isOpen={isViewDialogOpen}
           onClose={closeViewDialog}
           order={selectedOrder}
+          onDownloadReport={handleDownloadRelatorioPedido}
+          onPrintReport={handlePrintRelatorioPedido}
+          reportingOrderId={reportingOrderId}
           onRequestCancel={(order) => {
             closeViewDialog();
             openCancelDialog(order);

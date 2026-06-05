@@ -24,10 +24,13 @@ import {
     Building2,
     Calendar,
     DollarSign,
+    Download,
     Edit,
     FileText,
     Info,
+    Loader2,
     Package,
+    Printer,
     ShoppingCart,
     Truck,
     User,
@@ -46,6 +49,9 @@ interface OrderViewDialogProps {
   order: Pedido | null;
   /** Ao clicar em "Cancelar pedido", fecha o dialog e abre o fluxo de confirmação de cancelamento. */
   onRequestCancel?: (order: Pedido) => void;
+  onDownloadReport?: (order: Pedido) => void;
+  onPrintReport?: (order: Pedido) => void;
+  reportingOrderId?: number | null;
 }
 
 export function OrderViewDialog({
@@ -53,6 +59,9 @@ export function OrderViewDialog({
   onClose,
   order,
   onRequestCancel,
+  onDownloadReport,
+  onPrintReport,
+  reportingOrderId = null,
 }: OrderViewDialogProps) {
   const [dialogDataVencimentoAberto, setDialogDataVencimentoAberto] = useState(false);
   const [dialogCondicaoAberto, setDialogCondicaoAberto] = useState(false);
@@ -121,6 +130,45 @@ export function OrderViewDialog({
             Visualização detalhada do pedido
           </DialogDescription>
         </DialogHeader>
+
+        {(onDownloadReport || onPrintReport) && (
+          <div className="flex flex-wrap gap-2 -mt-1">
+            {onDownloadReport && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                disabled={reportingOrderId === order.id}
+                onClick={() => onDownloadReport(order)}
+              >
+                {reportingOrderId === order.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                Baixar PDF
+              </Button>
+            )}
+            {onPrintReport && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                disabled={reportingOrderId === order.id}
+                onClick={() => onPrintReport(order)}
+              >
+                {reportingOrderId === order.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Printer className="w-4 h-4" />
+                )}
+                Imprimir
+              </Button>
+            )}
+          </div>
+        )}
 
         <div className="space-y-6">
           {/* Informações Básicas */}

@@ -123,7 +123,7 @@ export function OrderList({
           className="h-8 w-8 shrink-0"
           onClick={() => onReport(order)}
           disabled={reportingOrderId === order.id}
-          title="Gerar relatório PDF"
+          title="Relatório PDF com itens e endereço"
         >
           {reportingOrderId === order.id ? (
             <Loader2 className="w-4 h-4 animate-spin text-primary" />

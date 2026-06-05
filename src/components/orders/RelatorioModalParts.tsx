@@ -186,6 +186,47 @@ export function RelatorioCampoFiltro({
   );
 }
 
+export function RelatorioResumoFiltrosPreview({
+  linhas,
+  notaEndereco = true,
+}: {
+  linhas: Array<{ label: string; valor: string }>;
+  notaEndereco?: boolean;
+}) {
+  return (
+    <section className="rounded-xl border border-border/80 bg-muted/25 p-4 space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Como aparecerá no PDF
+      </p>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+        {linhas.map(({ label, valor }) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd
+              className={cn(
+                'font-medium truncate',
+                valor === 'Não informado' && 'text-muted-foreground italic font-normal',
+              )}
+              title={valor}
+            >
+              {valor}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {notaEndereco ? (
+        <p className="text-xs text-muted-foreground leading-relaxed border-t border-border/60 pt-3">
+          Cada pedido no relatório traz o endereço da{' '}
+          <span className="font-medium text-foreground">roça</span>, do{' '}
+          <span className="font-medium text-foreground">cliente</span> ou do{' '}
+          <span className="font-medium text-foreground">fornecedor</span>, conforme
+          vinculação do pedido.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function RelatorioAcoesFooter({
   onDownload,
   onPrint,
