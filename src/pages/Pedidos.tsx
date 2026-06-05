@@ -57,6 +57,8 @@ export default function Pedidos() {
     totalOrders,
     currentPage,
     totalPages,
+    itemsPerPage,
+    setItemsPerPage,
     filters,
     isLoading,
     isFormOpen,
@@ -352,8 +354,9 @@ export default function Pedidos() {
     else updateFilters({ tipo: 'COMPRA' as TipoPedido });
   };
 
-  const inicioItem = totalOrders === 0 ? 0 : (currentPage - 1) * 15 + 1;
-  const fimItem = Math.min(currentPage * 15, totalOrders);
+  const inicioItem = totalOrders === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const fimItem = Math.min(currentPage * itemsPerPage, totalOrders);
+  const exibirPaginacao = totalOrders > 0 && !filters.busca && !filters.numero_pedido;
 
   // Sincronizar searchTerm com os filtros quando os filtros mudarem externamente
   useEffect(() => {
@@ -769,53 +772,69 @@ export default function Pedidos() {
             />
           </div>
 
-          <div className="border-t border-border px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 bg-muted/20">
-            <p className="text-sm text-muted-foreground">
+          <div className="border-t border-border px-3 sm:px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-muted/20">
+            <p className="text-sm text-muted-foreground shrink-0">
               {totalOrders === 0
                 ? 'Nenhum pedido encontrado'
                 : `Mostrando ${inicioItem} a ${fimItem} de ${totalOrders} pedidos`}
             </p>
-            {!filters.busca && !filters.numero_pedido && totalPages > 1 && (
-              <Pagination className="mx-0 w-full sm:w-auto justify-center sm:justify-end overflow-x-auto">
-                <PaginationContent className="flex-wrap">
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                      className={
-                        currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
-                      }
-                    />
-                  </PaginationItem>
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let page: number;
-                    if (totalPages <= 5) page = i + 1;
-                    else if (currentPage <= 3) page = i + 1;
-                    else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
-                    else page = currentPage - 2 + i;
-                    return (
-                      <PaginationItem key={page}>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(page)}
-                          isActive={currentPage === page}
-                          className="cursor-pointer"
-                        >
-                          {page}
-                        </PaginationLink>
-                      </PaginationItem>
-                    );
-                  })}
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                      className={
-                        currentPage === totalPages
-                          ? 'pointer-events-none opacity-50'
-                          : 'cursor-pointer'
-                      }
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+            {exibirPaginacao && (
+              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                <Pagination className="mx-0 w-full sm:w-auto justify-center overflow-x-auto">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        className={
+                          currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+                        }
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let page: number;
+                      if (totalPages <= 5) page = i + 1;
+                      else if (currentPage <= 3) page = i + 1;
+                      else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
+                      else page = currentPage - 2 + i;
+                      return (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(page)}
+                            isActive={currentPage === page}
+                            className="cursor-pointer min-w-9"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        className={
+                          currentPage === totalPages
+                            ? 'pointer-events-none opacity-50'
+                            : 'cursor-pointer'
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+                <Select
+                  value={String(itemsPerPage)}
+                  onValueChange={(v) => setItemsPerPage(Number(v))}
+                >
+                  <SelectTrigger className="h-9 w-[130px] bg-background shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10 por página</SelectItem>
+                    <SelectItem value="15">15 por página</SelectItem>
+                    <SelectItem value="25">25 por página</SelectItem>
+                    <SelectItem value="50">50 por página</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </div>
         </div>

@@ -13,13 +13,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-const ITEMS_PER_PAGE = 15;
+const DEFAULT_ITEMS_PER_PAGE = 10;
 
 export function useOrders() {
   const queryClient = useQueryClient();
 
   // Estados de UI
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPageState] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [filters, setFilters] = useState<FiltrosPedidos>({});
   const [selectedOrder, setSelectedOrder] = useState<Pedido | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<Pedido | null>(null);
@@ -34,13 +35,13 @@ export function useOrders() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['pedidos', currentPage, filters],
+    queryKey: ['pedidos', currentPage, itemsPerPage, filters],
     queryFn: async () => {
       try {
         // Se há busca por numero_pedido, aumentar o limite para garantir que encontre o pedido
         // mesmo se estiver em outra página (busca parcial no frontend)
         const hasBusca = !!(filters.numero_pedido || filters.busca);
-        const limit = hasBusca ? 1000 : ITEMS_PER_PAGE;
+        const limit = hasBusca ? 1000 : itemsPerPage;
         
         const params = {
           ...filters,
@@ -176,7 +177,12 @@ export function useOrders() {
     return 0;
   }, [ordersResponse, orders.length, filters.numero_pedido, filters.busca]);
 
-  const totalPages = Math.ceil(totalOrders / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(totalOrders / itemsPerPage) || 1);
+
+  const setItemsPerPage = (size: number) => {
+    setItemsPerPageState(size);
+    setCurrentPage(1);
+  };
 
   // Query para buscar todos os pedidos (para estatísticas)
   const { data: allOrdersResponse } = useQuery({
@@ -683,6 +689,8 @@ export function useOrders() {
     totalOrders,
     currentPage,
     totalPages,
+    itemsPerPage,
+    setItemsPerPage,
     filters,
     stats,
     selectedOrder: orderForView,
