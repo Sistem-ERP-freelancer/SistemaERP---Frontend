@@ -1,5 +1,11 @@
 import { CampoCnpjComConsulta } from "@/components/CampoCnpjComConsulta";
 import AppLayout from "@/components/layout/AppLayout";
+import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from "@/components/layout/ModuleStatCards";
+import { statTheme } from "@/components/layout/module-stat-themes";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -256,6 +262,45 @@ const Fornecedores = () => {
   // Usar estatísticas calculadas (sempre atualizadas) ao invés da API
   const estatisticas = estatisticasCalculadas;
 
+  const fornecedorStatItems = useMemo((): ModuleStatCardItem[] => {
+    return [
+      {
+        key: "total",
+        label: "Total de fornecedores",
+        value: estatisticas?.total || 0,
+        Icon: Users,
+        ...statTheme.primary,
+      },
+      {
+        key: "ativos",
+        label: "Fornecedores ativos",
+        value: estatisticas?.ativos || 0,
+        Icon: CheckCircle,
+        ...statTheme.emerald,
+      },
+      {
+        key: "inativos",
+        label: "Fornecedores inativos",
+        value: estatisticas?.inativos || 0,
+        Icon: XCircle,
+        ...statTheme.slate,
+      },
+      {
+        key: "bloqueados",
+        label: "Bloqueados",
+        value: estatisticas?.bloqueados || 0,
+        Icon: Ban,
+        ...statTheme.red,
+      },
+      {
+        key: "novos",
+        label: "Novos no mês",
+        value: estatisticas?.novosNoMes || 0,
+        Icon: Calendar,
+        ...statTheme.cyan,
+      },
+    ];
+  }, [estatisticas]);
 
   // Verificar se há filtros ativos
   // Verificar tipos de filtros conforme guia de endpoints
@@ -1795,23 +1840,33 @@ const Fornecedores = () => {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Fornecedores</h1>
-            <p className="text-muted-foreground">Gerencie seus fornecedores</p>
-          </div>
-          <Button 
-            variant="gradient" 
-            className="gap-2"
-            onClick={() => {
-              resetForm();
-              setDialogOpen(true);
-            }}
-          >
-            <Plus className="w-4 h-4" />
-            Criar Fornecedor
-          </Button>
-          <Dialog
+        <ModulePageHeader
+          icon={Building2}
+          title="Fornecedores"
+          subtitle="Cadastro e gestão de fornecedores, com visão rápida de status e volume."
+          loadingHint={isLoadingEstatisticas ? "Carregando resumo…" : undefined}
+          actions={
+            <Button
+              variant="gradient"
+              className="gap-2"
+              onClick={() => {
+                resetForm();
+                setDialogOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              Criar Fornecedor
+            </Button>
+          }
+        />
+
+        <ModuleStatCards
+          isLoading={isLoadingEstatisticas}
+          columns={5}
+          items={fornecedorStatItems}
+        />
+
+        <Dialog
             open={dialogOpen}
             onOpenChange={(open) => {
               setDialogOpen(open);
@@ -2500,7 +2555,6 @@ const Fornecedores = () => {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
 
         {/* Search and Filters */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
@@ -2776,113 +2830,6 @@ const Fornecedores = () => {
               />
             </div>
           </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-          {isLoadingEstatisticas ? (
-            <>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-card rounded-xl p-5 border border-border"
-                >
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
-                </motion.div>
-              ))}
-            </>
-          ) : (
-            <>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Users className="w-5 h-5 text-primary" />
-                  </div>
-                </div>
-                <p className="text-2xl font-bold text-foreground mb-1">
-                  {estatisticas?.total || 0}
-                </p>
-                <p className="text-sm text-muted-foreground">Total</p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  </div>
-                </div>
-                <p className="text-2xl font-bold text-green-500 mb-1">
-                  {estatisticas?.ativos || 0}
-                </p>
-                <p className="text-sm text-muted-foreground">Ativos</p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-gray-500/10">
-                    <XCircle className="w-5 h-5 text-gray-500" />
-                  </div>
-                </div>
-                <p className="text-2xl font-bold text-muted-foreground mb-1">
-                  {estatisticas?.inativos || 0}
-                </p>
-                <p className="text-sm text-muted-foreground">Inativos</p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-red-500/10">
-                    <Ban className="w-5 h-5 text-red-500" />
-                  </div>
-                </div>
-                <p className="text-2xl font-bold text-red-500 mb-1">
-                  {estatisticas?.bloqueados || 0}
-                </p>
-                <p className="text-sm text-muted-foreground">Bloqueados</p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="bg-card rounded-xl p-5 border border-border hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-cyan/10">
-                    <Calendar className="w-5 h-5 text-cyan" />
-                  </div>
-                </div>
-                <p className="text-2xl font-bold text-cyan mb-1">
-                  {estatisticas?.novosNoMes || 0}
-                </p>
-                <p className="text-sm text-muted-foreground">Novos (mês)</p>
-              </motion.div>
-            </>
-          )}
         </div>
 
         {/* Table */}

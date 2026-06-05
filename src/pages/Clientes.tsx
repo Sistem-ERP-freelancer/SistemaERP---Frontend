@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -1530,12 +1531,13 @@ const Clientes = () => {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-            <p className="text-muted-foreground">Gerencie seus clientes</p>
-          </div>
-          <ClienteCreateDialog
+        <ModulePageHeader
+          icon={User}
+          title="Clientes"
+          subtitle="Cadastro e gestão de clientes, com indicadores de status e inadimplência."
+          loadingHint={isLoadingEstatisticas ? "Carregando resumo…" : undefined}
+          actions={
+            <ClienteCreateDialog
             open={dialogOpen}
             onOpenChange={setDialogOpen}
             onCreate={({
@@ -1687,7 +1689,8 @@ const Clientes = () => {
             }}
             isPending={createClienteMutation.isPending}
           />
-        </div>
+          }
+        />
 
         {/* Stats Grid */}
         <ClienteStats

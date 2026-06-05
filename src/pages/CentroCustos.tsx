@@ -1,4 +1,10 @@
 import AppLayout from '@/components/layout/AppLayout';
+import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from '@/components/layout/ModuleStatCards';
+import { statTheme } from '@/components/layout/module-stat-themes';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -125,37 +131,29 @@ const CARD_STATS = [
     key: 'abertas',
     label: 'Total de despesas em aberto',
     kind: 'count' as const,
-    border: 'border-l-4 border-l-amber-500',
-    iconWrap:
-      'bg-amber-500/[0.12] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
     Icon: Receipt,
+    ...statTheme.amber,
   },
   {
     key: 'quitadas',
     label: 'Total de despesas quitadas',
     kind: 'count' as const,
-    border: 'border-l-4 border-l-emerald-500',
-    iconWrap:
-      'bg-emerald-500/[0.12] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
     Icon: PiggyBank,
+    ...statTheme.emerald,
   },
   {
     key: 'valorAberto',
     label: 'Valor total em aberto',
     kind: 'money' as const,
-    border: 'border-l-4 border-l-rose-500',
-    iconWrap:
-      'bg-rose-500/[0.12] text-rose-700 dark:bg-rose-500/15 dark:text-rose-400',
     Icon: Wallet,
+    ...statTheme.rose,
   },
   {
     key: 'valorPago',
     label: 'Valor pago',
     kind: 'money' as const,
-    border: 'border-l-4 border-l-sky-600 dark:border-l-sky-400',
-    iconWrap:
-      'bg-sky-500/[0.12] text-sky-800 dark:bg-sky-500/15 dark:text-sky-300',
     Icon: Scale,
+    ...statTheme.sky,
   },
 ];
 
@@ -1619,69 +1617,50 @@ export default function CentroCustos() {
     }
   };
 
+  const centroCustoStatItems = useMemo((): ModuleStatCardItem[] => {
+    return CARD_STATS.map((c) => {
+      const valNum =
+        c.key === 'abertas'
+          ? resumo.qAbertas
+          : c.key === 'quitadas'
+            ? resumo.qQuitadas
+            : c.key === 'valorAberto'
+              ? resumo.valorAbertoTotal
+              : resumo.valorPagoTotal;
+      return {
+        key: c.key,
+        label: c.label,
+        value: c.kind === 'count' ? String(valNum) : formatCurrency(valNum),
+        border: c.border,
+        iconWrap: c.iconWrap,
+        Icon: c.Icon,
+      };
+    });
+  }, [resumo]);
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        <div className="mb-6">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Landmark className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Centro de Despesa</h1>
-              <p className="text-muted-foreground text-sm sm:text-base mt-1">
-                Cadastro de{' '}
-                <span className="whitespace-nowrap">tipos de custo</span> e despesas por roça, sincronizado com o
-                banco do seu tenant.
-              </p>
-              {isLoading ? (
-                <p className="text-xs text-muted-foreground mt-2">Carregando resumo e despesas…</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
+        <ModulePageHeader
+          icon={Landmark}
+          title="Centro de Despesa"
+          subtitle={
+            <>
+              Cadastro de <span className="whitespace-nowrap">tipos de custo</span> e despesas por roça,
+              sincronizado com o banco do seu tenant.
+            </>
+          }
+          loadingHint={isLoading ? 'Carregando resumo e despesas…' : undefined}
+        />
 
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
           {tab === 'visao' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-                {CARD_STATS.map((c) => {
-                  const Icon = c.Icon;
-                  const valNum =
-                    c.key === 'abertas'
-                      ? resumo.qAbertas
-                      : c.key === 'quitadas'
-                        ? resumo.qQuitadas
-                        : c.key === 'valorAberto'
-                          ? resumo.valorAbertoTotal
-                          : resumo.valorPagoTotal;
-                  const display =
-                    c.kind === 'count' ? String(valNum) : formatCurrency(valNum);
-                  return (
-                    <Card
-                      key={c.key}
-                      className={`h-full overflow-hidden border border-border/60 shadow-sm ${c.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
-                            {c.label}
-                          </p>
-                          <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.iconWrap}`}
-                          >
-                            <Icon className="h-4 w-4" aria-hidden />
-                          </div>
-                        </div>
-                        <p className="mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl text-slate-900 dark:text-foreground">
-                          {display}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
+            <ModuleStatCards
+              isLoading={isLoading}
+              columns={4}
+              className="mb-0"
+              items={centroCustoStatItems}
+            />
           )}
 
           <div

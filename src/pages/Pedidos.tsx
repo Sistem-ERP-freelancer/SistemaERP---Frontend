@@ -1,4 +1,5 @@
 import AppLayout from '@/components/layout/AppLayout';
+import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
 import OrderForm from '@/components/orders/OrderForm';
 import { OrderList } from '@/components/orders/OrderList';
 import { OrderStats, type PedidoCardFilterKey } from '@/components/orders/OrderStats';
@@ -45,7 +46,7 @@ import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { CreatePedidoDto, FiltrosPedidos, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Filter, Loader2, Plus, Search, XCircle } from 'lucide-react';
+import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -551,49 +552,46 @@ export default function Pedidos() {
   return (
     <AppLayout>
       <div className="w-full min-w-0 p-3 sm:p-4 md:p-6 pb-8 gap-3 sm:gap-4 md:gap-5 flex flex-col">
-        {/* Cabeçalho */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 shrink-0">
-          <div className="space-y-2 sm:space-y-3 min-w-0">
-            <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground tracking-tight">
-                Pedidos
-              </h1>
-              <p className="text-sm text-muted-foreground mt-0.5 sm:mt-1">
-                Gestão completa de vendas e compras
-              </p>
+        <ModulePageHeader
+          icon={ShoppingCart}
+          title="Pedidos"
+          subtitle="Gestão completa de vendas e compras, com visão financeira e operacional."
+          actions={
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button
+                variant="outline"
+                className="gap-2 bg-background shadow-sm flex-1 sm:flex-none"
+                onClick={() => setRelatoriosDialogOpen(true)}
+              >
+                <FileText className="w-4 h-4 shrink-0" />
+                Relatórios
+              </Button>
+              <Button
+                onClick={openCreateForm}
+                variant="gradient"
+                className="gap-2 shadow-sm flex-1 sm:flex-none"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span className="truncate">Novo Pedido</span>
+              </Button>
             </div>
-            <Tabs value={tabTipo} onValueChange={handleTabTipo}>
-              <TabsList className="bg-muted/60 h-9 w-full sm:w-auto inline-flex">
-                <TabsTrigger value="todos" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
-                  Todos
-                </TabsTrigger>
-                <TabsTrigger value="venda" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
-                  Vendas
-                </TabsTrigger>
-                <TabsTrigger value="compra" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
-                  Compras
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <div className="flex gap-2 shrink-0 w-full sm:w-auto">
-            <Button
-              variant="outline"
-              className="gap-2 bg-background shadow-sm flex-1 sm:flex-none"
-              onClick={() => setRelatoriosDialogOpen(true)}
-            >
-              <FileText className="w-4 h-4 shrink-0" />
-              Relatórios
-            </Button>
-            <Button
-              onClick={openCreateForm}
-              variant="gradient"
-              className="gap-2 shadow-sm flex-1 sm:flex-none"
-            >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span className="truncate">Novo Pedido</span>
-            </Button>
-          </div>
+          }
+        />
+
+        <div className="shrink-0 mb-4">
+          <Tabs value={tabTipo} onValueChange={handleTabTipo}>
+            <TabsList className="bg-muted/60 h-9 w-full sm:w-auto inline-flex">
+              <TabsTrigger value="todos" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
+                Todos
+              </TabsTrigger>
+              <TabsTrigger value="venda" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
+                Vendas
+              </TabsTrigger>
+              <TabsTrigger value="compra" className="text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-none">
+                Compras
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         <div className="shrink-0">

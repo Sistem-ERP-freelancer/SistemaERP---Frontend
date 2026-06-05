@@ -7,9 +7,10 @@ import { DeleteCarrierDialog } from '@/components/carriers/DeleteCarrierDialog';
 import { Pagination } from '@/components/carriers/Pagination';
 import { SearchInput } from '@/components/carriers/SearchInput';
 import AppLayout from '@/components/layout/AppLayout';
+import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
 import { Button } from '@/components/ui/button';
 import { useCarriers } from '@/hooks/useCarriers';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, Truck } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Transportadoras() {
@@ -76,18 +77,20 @@ export default function Transportadoras() {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Transportadoras</h1>
-            <p className="text-muted-foreground">
-              Gestão de transportadoras do ERP
-            </p>
-          </div>
-        </div>
+        <ModulePageHeader
+          icon={Truck}
+          title="Transportadoras"
+          subtitle="Gestão de transportadoras do ERP, com visão de ativas e inativas."
+          loadingHint={isLoading ? 'Carregando transportadoras…' : undefined}
+          actions={
+            <Button onClick={openCreateForm}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nova Transportadora
+            </Button>
+          }
+        />
 
         <div>
-          {/* Estatísticas */}
           <CarrierStats carriers={carriers} />
 
           {/* Barra de Ações */}
@@ -100,10 +103,6 @@ export default function Transportadoras() {
                   placeholder="Buscar por nome ou CNPJ..."
                 />
               </div>
-              <Button onClick={openCreateForm}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Transportadora
-              </Button>
             </div>
           </div>
 

@@ -1,3 +1,8 @@
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from '@/components/layout/ModuleStatCards';
+import { statTheme } from '@/components/layout/module-stat-themes';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { pedidosService } from '@/services/pedidos.service';
 import { TipoPedido } from '@/types/pedido';
@@ -44,99 +49,57 @@ export function OrderStats({
     formatCurrency(normalizeCurrency(value, false));
 
   if (variant === 'hero') {
+    const qtdFaturamento = dashboard?.faturamento_confirmado_venda?.quantidade || 0;
+    const qtdAberto = dashboard?.valor_em_aberto_venda?.quantidade || 0;
     const qtdAndamento = dashboard?.pedidos_em_andamento?.quantidade || 0;
     const qtdCancelados = dashboard?.pedidos_cancelados?.quantidade || 0;
-    const heroCards: Array<{
-      label: string;
-      value: string;
-      subtitle: string;
-      icon: typeof ShoppingCart;
-      iconColor: string;
-      iconBg: string;
-      filterKey: PedidoCardFilterKey;
-    }> = [
+
+    const heroItems: ModuleStatCardItem[] = [
       {
-        label: 'Faturamento (Vendas)',
-        value: formatCurrencyValue(dashboard?.faturamento_confirmado_venda?.valor),
-        subtitle: `${dashboard?.faturamento_confirmado_venda?.quantidade || 0} pedidos`,
-        icon: ShoppingCart,
-        iconColor: 'text-emerald-600',
-        iconBg: 'bg-emerald-50',
-        filterKey: 'faturamento_venda',
+        key: 'faturamento_venda',
+        label: `Faturamento (Vendas) · ${qtdFaturamento} pedido${qtdFaturamento === 1 ? '' : 's'}`,
+        value: isLoading ? '—' : formatCurrencyValue(dashboard?.faturamento_confirmado_venda?.valor),
+        Icon: ShoppingCart,
+        ...statTheme.emerald,
+        active: activeCardFilter === 'faturamento_venda',
+        onClick: onCardClick ? () => onCardClick('faturamento_venda') : undefined,
       },
       {
-        label: 'Valor em Aberto',
-        value: formatCurrencyValue(dashboard?.valor_em_aberto_venda?.valor),
-        subtitle: `${dashboard?.valor_em_aberto_venda?.quantidade || 0} pedidos`,
-        icon: FileText,
-        iconColor: 'text-blue-600',
-        iconBg: 'bg-blue-50',
-        filterKey: 'aberto_venda',
+        key: 'aberto_venda',
+        label: `Valor em Aberto · ${qtdAberto} pedido${qtdAberto === 1 ? '' : 's'}`,
+        value: isLoading ? '—' : formatCurrencyValue(dashboard?.valor_em_aberto_venda?.valor),
+        Icon: FileText,
+        ...statTheme.sky,
+        active: activeCardFilter === 'aberto_venda',
+        onClick: onCardClick ? () => onCardClick('aberto_venda') : undefined,
       },
       {
-        label: 'Pedidos em Andamento',
-        value: String(qtdAndamento),
-        subtitle: `${qtdAndamento} pedido${qtdAndamento === 1 ? '' : 's'}`,
-        icon: Package,
-        iconColor: 'text-violet-600',
-        iconBg: 'bg-violet-50',
-        filterKey: 'em_andamento',
+        key: 'em_andamento',
+        label: `Pedidos em Andamento · ${qtdAndamento} pedido${qtdAndamento === 1 ? '' : 's'}`,
+        value: isLoading ? '—' : String(qtdAndamento),
+        Icon: Package,
+        ...statTheme.violet,
+        active: activeCardFilter === 'em_andamento',
+        onClick: onCardClick ? () => onCardClick('em_andamento') : undefined,
       },
       {
-        label: 'Pedidos Cancelados',
-        value: String(qtdCancelados),
-        subtitle: `${qtdCancelados} pedido${qtdCancelados === 1 ? '' : 's'}`,
-        icon: XCircle,
-        iconColor: 'text-red-600',
-        iconBg: 'bg-red-50',
-        filterKey: 'cancelados',
+        key: 'cancelados',
+        label: `Pedidos Cancelados · ${qtdCancelados} pedido${qtdCancelados === 1 ? '' : 's'}`,
+        value: isLoading ? '—' : String(qtdCancelados),
+        Icon: XCircle,
+        ...statTheme.red,
+        active: activeCardFilter === 'cancelados',
+        onClick: onCardClick ? () => onCardClick('cancelados') : undefined,
       },
     ];
 
     return (
-      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {heroCards.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            role={onCardClick ? 'button' : undefined}
-            tabIndex={onCardClick ? 0 : undefined}
-            onClick={() => onCardClick?.(stat.filterKey)}
-            onKeyDown={(e) => {
-              if (onCardClick && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault();
-                onCardClick(stat.filterKey);
-              }
-            }}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05, duration: 0.25 }}
-            className={`bg-card rounded-xl border p-5 shadow-sm transition-shadow ${
-              onCardClick ? 'cursor-pointer hover:shadow-md' : ''
-            } ${
-              activeCardFilter === stat.filterKey
-                ? 'border-primary border-2 ring-2 ring-primary/20 shadow-md'
-                : 'border-border/80'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                {isLoading ? (
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mb-2" />
-                ) : (
-                  <p className="text-2xl font-bold text-foreground tracking-tight truncate">
-                    {stat.value}
-                  </p>
-                )}
-                <p className="text-sm font-medium text-foreground mt-1">{stat.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{stat.subtitle}</p>
-              </div>
-              <div className={`p-2.5 rounded-xl shrink-0 ${stat.iconBg}`}>
-                <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+      <ModuleStatCards
+        isLoading={isLoading}
+        columns={4}
+        className="mb-0"
+        items={heroItems}
+      />
     );
   }
 

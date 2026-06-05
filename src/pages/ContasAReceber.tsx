@@ -1,5 +1,11 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
 import AppLayout from "@/components/layout/AppLayout";
+import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from "@/components/layout/ModuleStatCards";
+import { statTheme } from "@/components/layout/module-stat-themes";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -740,13 +746,89 @@ const ContasAReceber = () => {
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
-      { label: "Total a Receber", value: formatarMoedaCard(totalReceber), icon: CreditCard, trend: null, trendUp: true, color: "text-royal", bgColor: "bg-royal/10", filterKey: "a_receber" as const },
-      { label: "Valor Recebido", value: formatarMoedaCard(valorPago), icon: DollarSign, trend: null, trendUp: true, color: "text-green-600", bgColor: "bg-green-100", filterKey: "valor_pago" as const },
-      { label: "Vencidas", value: totalVencidas.toString(), icon: Calendar, trend: null, trendUp: false, color: "text-red-600", bgColor: "bg-red-100", filterKey: "vencidas" as const },
-      { label: "Vencendo Hoje", value: totalVencendoHoje.toString(), icon: Calendar, trend: null, color: "text-amber-600", bgColor: "bg-amber-100", filterKey: "vencendo_hoje" as const },
-      { label: "Vencendo Este Mês", value: totalVencendoEsteMes.toString(), icon: Calendar, trend: null, color: "text-blue-600", bgColor: "bg-blue-100", filterKey: "vencendo_este_mes" as const },
+      {
+        key: "a_receber",
+        filterKey: "a_receber" as const,
+        label: "Total a Receber",
+        value: formatarMoedaCard(totalReceber),
+        Icon: CreditCard,
+        ...statTheme.sky,
+      },
+      {
+        key: "valor_pago",
+        filterKey: "valor_pago" as const,
+        label: "Valor Recebido",
+        value: formatarMoedaCard(valorPago),
+        Icon: DollarSign,
+        ...statTheme.emerald,
+      },
+      {
+        key: "vencidas",
+        filterKey: "vencidas" as const,
+        label: "Vencidas",
+        value: totalVencidas.toString(),
+        Icon: Calendar,
+        ...statTheme.red,
+      },
+      {
+        key: "vencendo_hoje",
+        filterKey: "vencendo_hoje" as const,
+        label: "Vencendo Hoje",
+        value: totalVencendoHoje.toString(),
+        Icon: Calendar,
+        ...statTheme.amber,
+      },
+      {
+        key: "vencendo_este_mes",
+        filterKey: "vencendo_este_mes" as const,
+        label: "Vencendo Este Mês",
+        value: totalVencendoEsteMes.toString(),
+        Icon: Calendar,
+        ...statTheme.blue,
+      },
     ];
   }, [dashboardReceber, viewMode, totalAReceberFromLista, usarFallbackContasFinanceiras, pedidos]);
+
+  const totalReceberTooltip = (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="rounded-full p-0.5 text-muted-foreground hover:text-foreground focus:outline-none shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Info className="w-3.5 h-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[300px]">
+          <p className="font-medium mb-1">Origem do valor</p>
+          <p className="text-xs">
+            {viewMode === "clientes" && totalAReceberFromLista !== null
+              ? "Soma da lista de clientes (Total em Aberto de cada linha). Sempre igual à tabela."
+              : "Resumo pendente do dashboard de contas a receber."}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+
+  const statsCardItems = useMemo((): ModuleStatCardItem[] => {
+    return stats.map((stat) => ({
+      key: stat.key,
+      label: stat.label,
+      value: stat.value,
+      border: stat.border,
+      iconWrap: stat.iconWrap,
+      Icon: stat.Icon,
+      labelExtra: stat.key === "a_receber" ? totalReceberTooltip : undefined,
+      active: activeCardFilter === stat.filterKey,
+      onClick: () =>
+        setActiveCardFilter((prev) =>
+          prev === stat.filterKey ? "todos" : stat.filterKey,
+        ),
+    }));
+  }, [stats, activeCardFilter, totalReceberTooltip]);
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -1555,14 +1637,20 @@ const ContasAReceber = () => {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Contas a Receber</h1>
-              <p className="text-muted-foreground">Gerencie recebimentos por cliente e parcela</p>
-            </div>
-          </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <ModulePageHeader
+          icon={DollarSign}
+          title="Contas a Receber"
+          subtitle="Gerencie recebimentos por cliente e parcela, com visão clara do que está em aberto."
+          loadingHint={isLoadingReceber ? "Carregando resumo e contas…" : undefined}
+        />
+
+        <ModuleStatCards
+          isLoading={isLoadingReceber}
+          columns={5}
+          items={statsCardItems}
+        />
+
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Nova Conta a Receber</DialogTitle>
@@ -1792,91 +1880,6 @@ const ContasAReceber = () => {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-
-        {/* Stats Grid - 5 cards na mesma linha, adaptável ao tamanho da tela */}
-        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2">
-          <div className="grid grid-cols-5 gap-2 sm:gap-4 mb-4 min-w-[520px] sm:min-w-0">
-          {isLoadingReceber ? (
-            <>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-card rounded-xl p-5 border border-border"
-                >
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
-                </motion.div>
-              ))}
-            </>
-          ) : (
-            stats.map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                role="button"
-                tabIndex={0}
-                onClick={() =>
-                  setActiveCardFilter((prev) =>
-                    prev === stat.filterKey ? "todos" : stat.filterKey,
-                  )
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setActiveCardFilter((prev) =>
-                      prev === stat.filterKey ? "todos" : stat.filterKey,
-                    );
-                  }
-                }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className={`bg-card rounded-xl p-3 sm:p-5 border transition-shadow min-w-0 cursor-pointer hover:shadow-md ${
-                  activeCardFilter === stat.filterKey
-                    ? "border-primary border-2 shadow-md ring-2 ring-primary/20"
-                    : "border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {stat.trend && (
-                      <span className={`text-sm font-medium ${stat.trend.includes("pendentes") ? "text-destructive" : stat.trendUp ? "text-cyan" : "text-destructive"}`}>
-                        {stat.trend}
-                      </span>
-                    )}
-                    {stat.label === "Total a Receber" && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" className="rounded-full p-0.5 text-muted-foreground hover:text-foreground focus:outline-none">
-                              <Info className="w-4 h-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-[300px]">
-                            <p className="font-medium mb-1">Origem do valor</p>
-                            <p className="text-xs">
-                              {viewMode === 'clientes' && totalAReceberFromLista !== null
-                                ? 'Soma da lista de clientes (Total em Aberto de cada linha). Sempre igual à tabela. Nunca usa valor_total_receber.'
-                                : 'Fallback: valor_total_pendente de GET /contas-financeiras/dashboard/receber. Nunca valor_total_receber.'}
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </div>
-                </div>
-                <p className="text-base sm:text-xl lg:text-2xl font-bold text-foreground mb-1 truncate">{stat.value}</p>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">{stat.label}</p>
-              </motion.div>
-            ))
-          )}
-          </div>
-        </div>
 
         {viewMode === "clientes" ? (
           <ContasAReceberListaClientes onTotalAReceber={handleTotalAReceberFromLista} />

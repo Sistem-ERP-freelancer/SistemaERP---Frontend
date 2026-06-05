@@ -1,4 +1,10 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from "@/components/layout/ModuleStatCards";
+import { statTheme } from "@/components/layout/module-stat-themes";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -308,6 +314,53 @@ const Estoque = () => {
     };
   }, [movimentacoesFiltradas]);
 
+  const movimentacaoStatItems = useMemo((): ModuleStatCardItem[] => {
+    const formatValorTipo = (tipo: TipoMovimentacao, total: number) => {
+      const isEntradaOuDevolucao = tipo === "ENTRADA" || tipo === "DEVOLUCAO";
+      const isSaidaPerdaTransf =
+        tipo === "SAIDA" || tipo === "PERDA" || tipo === "TRANSFERENCIA";
+      if (isEntradaOuDevolucao) return `+${Math.abs(total)} un`;
+      if (isSaidaPerdaTransf) return `-${Math.abs(total)} un`;
+      return total >= 0 ? `+${total} un` : `${total} un`;
+    };
+
+    const tipos: Array<{
+      tipo: TipoMovimentacao;
+      label: string;
+      Icon: typeof ArrowDownCircle;
+      theme: (typeof statTheme)[keyof typeof statTheme];
+    }> = [
+      { tipo: "ENTRADA", label: "Entrada", Icon: ArrowDownCircle, theme: statTheme.emerald },
+      { tipo: "SAIDA", label: "Saída", Icon: ArrowUpCircle, theme: statTheme.red },
+      { tipo: "AJUSTE", label: "Ajuste", Icon: Settings, theme: statTheme.blue },
+      { tipo: "DEVOLUCAO", label: "Devolução", Icon: RotateCcw, theme: statTheme.sky },
+      { tipo: "PERDA", label: "Perda", Icon: AlertTriangle, theme: statTheme.amber },
+      { tipo: "TRANSFERENCIA", label: "Transferência", Icon: Truck, theme: statTheme.purple },
+    ];
+
+    return [
+      {
+        key: "balanco",
+        label: "Balanço · saldo líquido",
+        value: `${balanco >= 0 ? "+" : ""}${balanco} un`,
+        Icon: Package,
+        ...statTheme.primary,
+      },
+      ...tipos.map(({ tipo, label, Icon, theme }) => ({
+        key: tipo,
+        label,
+        value: formatValorTipo(tipo, totaisPorTipo[tipo] ?? 0),
+        Icon,
+        ...theme,
+        active: filtroTipo === tipo,
+        onClick: () => {
+          setFiltroTipo(filtroTipo === tipo ? "Todos" : tipo);
+          setCurrentPage(1);
+        },
+      })),
+    ];
+  }, [balanco, totaisPorTipo, filtroTipo]);
+
   // Mutation para criar movimentação
   const movimentarEstoqueMutation = useMutation({
     mutationFn: ({ produtoId, data }: { produtoId: number; data: MovimentacaoEstoqueDto }) =>
@@ -492,95 +545,13 @@ const Estoque = () => {
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Movimentações</h1>
-            <p className="text-muted-foreground">
-              Registro de entradas e saídas de estoque
-            </p>
-          </div>
-        </div>
+        <ModulePageHeader
+          icon={Package}
+          title="Movimentações"
+          subtitle="Registro de entradas e saídas de estoque, com filtros rápidos por tipo."
+        />
 
-        {/* Cards de Dashboard - mesmo design do dashboard de pedidos */}
-        <div className="space-y-4 mb-6">
-          {/* Por tipo - clicáveis para filtrar */}
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-              Movimentações por tipo
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3">
-              {/* Card Balanço - não clicável */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0, duration: 0.3 }}
-                className="bg-card border rounded-xl p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <p className={`text-xl font-bold mb-1 ${balanco >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                      {balanco >= 0 ? "+" : ""}{balanco} un
-                    </p>
-                    <p className="text-sm font-medium text-foreground">
-                      Balanço
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Saldo líquido
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20">
-                    <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                </div>
-              </motion.div>
-              {[
-                { tipo: "ENTRADA", label: "Entrada", Icon: ArrowDownCircle, color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-900/20" },
-                { tipo: "SAIDA", label: "Saída", Icon: ArrowUpCircle, color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-900/20" },
-                { tipo: "AJUSTE", label: "Ajuste", Icon: Settings, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/20" },
-                { tipo: "DEVOLUCAO", label: "Devolução", Icon: RotateCcw, color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/20" },
-                { tipo: "PERDA", label: "Perda", Icon: AlertTriangle, color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-100 dark:bg-amber-900/20" },
-                { tipo: "TRANSFERENCIA", label: "Transferência", Icon: Truck, color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-100 dark:bg-purple-900/20" },
-              ].map(({ tipo, label, Icon, color, bgColor }, index) => {
-                const total = totaisPorTipo[tipo] ?? 0;
-                const isEntradaOuDevolucao = tipo === "ENTRADA" || tipo === "DEVOLUCAO";
-                const isSaidaPerdaTransf = tipo === "SAIDA" || tipo === "PERDA" || tipo === "TRANSFERENCIA";
-                const valorFormatado = isEntradaOuDevolucao
-                  ? `+${Math.abs(total)}`
-                  : isSaidaPerdaTransf
-                    ? `-${Math.abs(total)}`
-                    : total >= 0 ? `+${total}` : `${total}`;
-                const ativo = filtroTipo === tipo;
-                return (
-                  <motion.button
-                    key={tipo}
-                    type="button"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15 + index * 0.03, duration: 0.3 }}
-                    onClick={() => {
-                      setFiltroTipo(ativo ? "Todos" : tipo);
-                      setCurrentPage(1);
-                    }}
-                    className={`flex items-start justify-between gap-2 rounded-xl border p-4 text-left transition-shadow cursor-pointer bg-card hover:shadow-md ${ativo ? "ring-2 ring-primary ring-offset-2" : ""}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xl font-bold mb-1 ${color}`}>
-                        {valorFormatado} un
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {label}
-                      </p>
-                    </div>
-                    <div className={`p-2 rounded-lg shrink-0 ${bgColor}`}>
-                      <Icon className={`w-5 h-5 ${color}`} />
-                    </div>
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <ModuleStatCards columns={7} items={movimentacaoStatItems} />
 
         {/* Barra de Busca, Filtros e Ordenação */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
