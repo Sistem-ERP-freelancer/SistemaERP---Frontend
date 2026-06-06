@@ -102,12 +102,8 @@ export interface Roca extends RocaEnderecoContato {
   /** Soma da quantidade colhida nos lançamentos ativos. */
   quantidadeColhidaTotal?: number;
   quantidadePesColhidosTotal?: number;
-  /** quantidadeColhidaTotal / quantidadePesColhidosTotal (calculado no backend). */
-  quantidadeColhidaPorPe?: number | null;
-  /** Divisor usado em quantidadeColhidaPorPe (pés nos lançamentos ou mudas do cadastro). */
-  denominadorProdutividade?: number | null;
-  /** De onde veio o divisor do cálculo de produtividade. */
-  origemDenominadorProdutividade?: 'LANCAMENTOS' | 'MUDAS_CADASTRO' | null;
+  /** Percentual colhido (qtd. colhida ÷ mudas plantadas), ex.: "80%". */
+  percentualColhido?: string;
 }
 
 export interface CreateRocaDto extends RocaEnderecoContato {

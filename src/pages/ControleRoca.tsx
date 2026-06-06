@@ -306,10 +306,10 @@ function formatQuantidadeColhida(v: number | null | undefined): string {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
-/** Exibe quantidade colhida por pé (razão dos lançamentos). */
-function formatColhidaPorPe(v: number | null | undefined): string {
-  if (v == null || Number.isNaN(Number(v))) return '—';
-  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+/** Exibe percentual colhido (valor já formatado pelo backend, ex.: "80%"). */
+function formatPercentualColhido(v: string | null | undefined): string {
+  if (v == null || v === '') return '0%';
+  return v;
 }
 
 function formatDataIsoPt(iso: string | null | undefined): string {
@@ -2794,7 +2794,7 @@ export default function ControleRoca() {
                           </TableHead>
                           <TableHead className="text-center whitespace-nowrap">Mudas plantadas</TableHead>
                           <TableHead className="text-center whitespace-nowrap">Qtd. colhida</TableHead>
-                          <TableHead className="text-center whitespace-nowrap">Colheita por pé</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">% colhida</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2831,15 +2831,7 @@ export default function ControleRoca() {
                                 {formatQuantidadeColhida(rItem.quantidadeColhidaTotal)}
                               </TableCell>
                               <TableCell className="text-center tabular-nums">
-                                <span className="inline-flex flex-col items-center gap-0.5 mx-auto">
-                                  <span>{formatColhidaPorPe(rItem.quantidadeColhidaPorPe)}</span>
-                                  {rItem.origemDenominadorProdutividade === 'MUDAS_CADASTRO' &&
-                                    rItem.quantidadeColhidaPorPe != null && (
-                                      <span className="text-[10px] font-normal text-muted-foreground leading-tight">
-                                        ÷ mudas
-                                      </span>
-                                    )}
-                                </span>
+                                {formatPercentualColhido(rItem.percentualColhido)}
                               </TableCell>
                             </TableRow>
                           ))
@@ -2848,8 +2840,7 @@ export default function ControleRoca() {
                     </Table>
                   </div>
                   <p className="text-xs text-muted-foreground text-center">
-                    Colheita por pé: média (total colhido ÷ pés nos lançamentos, ou ÷ mudas se não houver
-                    pés informados).
+                    % colhida: quantidade colhida ÷ mudas plantadas cadastradas na roça.
                   </p>
                 </div>
               </div>
@@ -3286,7 +3277,7 @@ export default function ControleRoca() {
                         Qtd. colhida
                       </TableHead>
                       <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">
-                        Colhida / pé
+                        % colhida
                       </TableHead>
                       <TableHead className="w-[70px] text-right">Ações</TableHead>
                     </TableRow>
@@ -3325,7 +3316,7 @@ export default function ControleRoca() {
                               {formatQuantidadeColhida(r.quantidadeColhidaTotal)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums hidden lg:table-cell">
-                              {formatColhidaPorPe(r.quantidadeColhidaPorPe)}
+                              {formatPercentualColhido(r.percentualColhido)}
                             </TableCell>
                             <TableCell className="text-right">
                               <DropdownMenu>
@@ -9431,40 +9422,13 @@ className={
                           </p>
                         </div>
                         <div>
-                          <Label className="text-xs text-muted-foreground">Quantidade colhida por pé</Label>
+                          <Label className="text-xs text-muted-foreground">Percentual colhido</Label>
                           <p className="font-medium tabular-nums">
-                            {formatColhidaPorPe(detailRoca.quantidadeColhidaPorPe)}
+                            {formatPercentualColhido(detailRoca.percentualColhido)}
                           </p>
-                          {detailRoca.quantidadeColhidaPorPe != null &&
-                          detailRoca.denominadorProdutividade != null &&
-                          detailRoca.origemDenominadorProdutividade != null ? (
-                            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                              {detailRoca.origemDenominadorProdutividade === 'LANCAMENTOS' ? (
-                                <>
-                                  <span className="font-medium text-foreground">Como foi calculado: </span>
-                                  total colhido ({formatQuantidadeColhida(detailRoca.quantidadeColhidaTotal)}) ÷{' '}
-                                  <span className="tabular-nums">{detailRoca.denominadorProdutividade}</span> pé(s)
-                                  somados nos itens dos lançamentos. Este número é uma{' '}
-                                  <span className="font-medium text-foreground">média por pé</span>, não a
-                                  quantidade de pés nem o total colhido.
-                                </>
-                              ) : (
-                                <>
-                                  <span className="font-medium text-foreground">Como foi calculado: </span>
-                                  total colhido ({formatQuantidadeColhida(detailRoca.quantidadeColhidaTotal)}) ÷{' '}
-                                  <span className="tabular-nums">{detailRoca.denominadorProdutividade}</span>{' '}
-                                  mudas cadastradas nesta roça — porque nos lançamentos não há “pés colhidos”
-                                  preenchidos. Se você informar pés em cada produto do lançamento, o sistema
-                                  passa a usar essa soma no lugar das mudas.
-                                </>
-                              )}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              É a média: total colhido ÷ pés nos lançamentos; se não houver pés informados,
-                              usa as mudas plantadas cadastradas nesta roça.
-                            </p>
-                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Quantidade colhida ÷ mudas plantadas cadastradas nesta roça.
+                          </p>
                         </div>
                       </div>
                     </div>
