@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { canAccessFinanceiro } from '@/lib/role-access';
 import {
   centroCustoService,
   type ApiCentroCustoDespesa,
@@ -255,8 +256,9 @@ const CentroCustosContext = createContext<CentroCustosContextValue | null>(null)
 
 export function CentroCustosProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const podeSincronizar = !authLoading && isAuthenticated;
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const podeSincronizar =
+    !authLoading && isAuthenticated && canAccessFinanceiro(user?.role);
 
   const [tiposPage, setTiposPage] = useState(1);
   const [despesasPage, setDespesasPage] = useState(1);
