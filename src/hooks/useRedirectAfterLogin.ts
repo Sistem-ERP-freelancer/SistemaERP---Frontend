@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { getDefaultRouteForRole } from '@/lib/role-access';
 import { authService } from '@/services/auth.service';
 
 export const useRedirectAfterLogin = () => {
@@ -18,17 +19,11 @@ export const useRedirectAfterLogin = () => {
         console.log('🔄 useRedirectAfterLogin - Role:', role);
       }
       
-      if (role === 'SUPER_ADMIN') {
-        if (import.meta.env.DEV) {
-          console.log('🔄 Redirecionando para /admin');
-        }
-        navigate('/admin', { replace: true });
-      } else if (isAuthenticated) {
-        if (import.meta.env.DEV) {
-          console.log('🔄 Redirecionando para /dashboard');
-        }
-        navigate('/dashboard', { replace: true });
+      const destino = getDefaultRouteForRole(role);
+      if (import.meta.env.DEV) {
+        console.log('🔄 Redirecionando para', destino);
       }
+      navigate(destino, { replace: true });
     }
   }, [isAuthenticated, user, isLoading, navigate]);
 };

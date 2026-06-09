@@ -1,4 +1,7 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { OrderStats } from "@/components/orders/OrderStats";
+import { useAuth } from "@/contexts/AuthContext";
+import { canAccessFinanceiro } from "@/lib/role-access";
 import { Card, CardContent } from "@/components/ui/card";
 import {
     Table,
@@ -109,6 +112,9 @@ function parseValorDashboard(valor: unknown): number {
 }
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const acessoFinanceiro = canAccessFinanceiro(user?.role);
+
   /** Vazio = totais da 3ª faixa são histórico geral; linhas 1–2 usam o mês atual como referência. */
   const [mesAnoFiltro, setMesAnoFiltro] = useState<string>("");
   /** Só aplicado com "Todos os meses" (`painel_totais_gerais` no backend). */
@@ -178,6 +184,7 @@ const Dashboard = () => {
     queryFn: () => financeiroService.getDashboardUnificado(parametrosDashboardFinanceiro),
     refetchInterval: 30000,
     retry: false,
+    enabled: acessoFinanceiro,
   });
 
   const { data: rocasOpcoes = [] } = useQuery({
@@ -185,6 +192,7 @@ const Dashboard = () => {
     queryFn: () => controleRocaService.listarRocas(undefined, false),
     staleTime: 5 * 60 * 1000,
     retry: false,
+    enabled: acessoFinanceiro,
   });
 
   const painelFinanceiro = useMemo(() => {
@@ -439,6 +447,7 @@ const Dashboard = () => {
     },
     refetchInterval: 30000,
     retry: false,
+    enabled: acessoFinanceiro,
   });
 
   type DreLinha = {
@@ -521,10 +530,29 @@ const Dashboard = () => {
         {/* Page Title */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">Visão geral do seu negócio</p>
+          <p className="text-muted-foreground">
+            {acessoFinanceiro
+              ? "Visão geral do seu negócio"
+              : "Resumo de pedidos do seu perfil"}
+          </p>
         </div>
 
-        {/* Acompanhamento financeiro — layout refinado (ícones, cores por tipo, seções numeradas) */}
+        {!acessoFinanceiro ? (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm"
+          >
+            <OrderStats variant="hero" />
+            <p className="mt-4 text-sm text-muted-foreground text-center max-w-xl mx-auto">
+              Seu perfil de vendedor tem acesso a pedidos, clientes e produtos.
+              Relatórios financeiros ficam disponíveis para Administrador, Gerente ou Financeiro.
+            </p>
+          </motion.div>
+        ) : null}
+
+        {acessoFinanceiro ? (
+        <>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -873,6 +901,8 @@ const Dashboard = () => {
             </div>
           </div>
         </motion.div>
+        </>
+        ) : null}
       </div>
     </AppLayout>
   );

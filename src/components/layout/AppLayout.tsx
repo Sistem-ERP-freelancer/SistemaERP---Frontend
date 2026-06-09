@@ -30,6 +30,7 @@ import {
     Wallet,
     X
 } from "lucide-react";
+import { filterMenuByRole } from "@/lib/role-access";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -88,7 +89,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isSuperAdmin } = useAuth();
-  const menuItems = getMenuItems(isSuperAdmin);
+  const menuItems = filterMenuByRole(
+    getMenuItems(isSuperAdmin),
+    user?.role,
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -267,7 +271,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {/* Opções apenas para ADMIN e GERENTE */}
-                {(user?.role === "ADMIN" || user?.role === "GERENTE") && (
+                {(user?.role === "ADMIN" ||
+                  user?.role === "GERENTE") && (
                   <>
                     <DropdownMenuItem asChild>
                       <Link to="/settings" className="flex items-center cursor-pointer">

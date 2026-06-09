@@ -1,5 +1,6 @@
 import { AdminRoute } from "@/components/AdminRoute";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { RoleRoute } from "@/components/RoleRoute";
 import { SettingsRoute } from "@/components/SettingsRoute";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -35,6 +36,14 @@ import Pedidos from "./pages/Pedidos";
 import Produtos from "./pages/Produtos";
 import Settings from "./pages/Settings";
 import Transportadoras from "./pages/Transportadoras";
+
+function ProtectedFinanceRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <RoleRoute>{children}</RoleRoute>
+    </ProtectedRoute>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -122,9 +131,9 @@ const App = () => (
             <Route 
               path="/financeiro" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <Financeiro />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               } 
             />
             <Route
@@ -138,89 +147,89 @@ const App = () => (
             <Route 
               path="/contas-a-pagar" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAPagar />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               } 
             />
             <Route 
               path="/contas-a-receber" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAReceber />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/contas-a-receber/clientes/:clienteId" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAReceberClienteDetalhes />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/financeiro/contas-receber/:pedidoId" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAReceberPedidoDetalhes />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/financeiro/contas-receber/:pedidoId/pagamentos" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAReceberPedidoPagamentos />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/financeiro/contas-receber/conta/:contaId" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAReceberContaDetalhes />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/financeiro/contas-receber/conta/:contaId/pagamentos" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAReceberContaPagamentos />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
-            <Route
+            <Route 
               path="/financeiro/contas-pagar/conta/:contaId/pagamentos"
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAPagarContaFinanceiraPagamentos />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
-            <Route
+            <Route 
               path="/financeiro/contas-pagar/despesa/:contaId"
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAPagarDespesaDetalhes />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/financeiro/contas-pagar/:pedidoId" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAPagarPedidoDetalhes />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
               path="/financeiro/contas-pagar/:pedidoId/pagamentos" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <ContasAPagarPedidoPagamentos />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               }
             />
             <Route 
@@ -266,9 +275,9 @@ const App = () => (
             <Route 
               path="/centro-custos" 
               element={
-                <ProtectedRoute>
+                <ProtectedFinanceRoute>
                   <CentroCustos />
-                </ProtectedRoute>
+                </ProtectedFinanceRoute>
               } 
             />
             <Route 
