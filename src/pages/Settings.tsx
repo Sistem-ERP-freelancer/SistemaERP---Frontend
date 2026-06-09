@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { EmpresaConfigSection } from "@/components/settings/EmpresaConfigSection";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,16 +39,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDate } from "@/lib/utils";
 import { Configuracoes, configuracoesService } from "@/services/configuracoes.service";
-import { tenantsService, UpdateTenantInfoDto } from "@/services/tenants.service";
+import { tenantsService } from "@/services/tenants.service";
+import { UpdateTenantEmpresaDto } from "@/types/tenant-empresa";
 import { CreateUsuarioDto, UpdateUsuarioDto, Usuario, usuariosService } from "@/services/usuarios.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     ArrowLeft,
     Building2,
-    Calendar,
-    Edit,
-    FileText,
-    Globe,
     Loader2,
     MoreVertical,
     Plus,
@@ -92,15 +90,6 @@ const Settings = () => {
     queryKey: ["configuracoes"],
     queryFn: () => configuracoesService.obter(),
     enabled: activeTab === "configuracoes" && (user?.role === "ADMIN" || user?.role === "GERENTE"),
-  });
-
-  // Estado para edição de informações da empresa
-  const [isEditTenantDialogOpen, setIsEditTenantDialogOpen] = useState(false);
-  const [tenantForm, setTenantForm] = useState<UpdateTenantInfoDto>({
-    nome: "",
-    cnpj: "",
-    email: "",
-    telefone: "",
   });
 
   // Buscar informações do tenant usando o novo endpoint
@@ -180,11 +169,9 @@ const Settings = () => {
   });
 
   const updateTenantMutation = useMutation({
-    mutationFn: (data: UpdateTenantInfoDto) => tenantsService.atualizarMeuTenant(data),
+    mutationFn: (data: UpdateTenantEmpresaDto) => tenantsService.atualizarMeuTenant(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tenant-me"] });
-      setIsEditTenantDialogOpen(false);
-      setTenantForm({ nome: "", cnpj: "", email: "", telefone: "" });
       toast.success("Informações da empresa atualizadas com sucesso!");
     },
     onError: (error: any) => {
@@ -276,22 +263,6 @@ const Settings = () => {
       fuso_horario: "America/Sao_Paulo",
       idioma: "pt-BR",
     });
-  };
-
-  const handleOpenEditTenantDialog = () => {
-    if (tenantInfo) {
-      setTenantForm({
-        nome: tenantInfo.nome || "",
-        cnpj: tenantInfo.cnpj || "",
-        email: tenantInfo.email || "",
-        telefone: tenantInfo.telefone || "",
-      });
-    }
-    setIsEditTenantDialogOpen(true);
-  };
-
-  const handleSaveTenant = () => {
-    updateTenantMutation.mutate(tenantForm);
   };
 
   const getRoleBadge = (role: string) => {
@@ -688,125 +659,14 @@ const Settings = () => {
 
           {/* Tab: Empresa */}
           <TabsContent value="empresa" className="mt-6">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Informações da Empresa
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Dados do tenant atual
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {tenantInfo && (
-                    <Badge 
-                      variant="default" 
-                      className={
-                        tenantInfo.status === "ATIVO"
-                          ? "bg-green-500/10 text-green-500 hover:bg-green-500/20"
-                          : tenantInfo.status === "INATIVO"
-                          ? "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20"
-                          : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
-                      }
-                    >
-                      {tenantInfo.status || "Ativo"}
-                    </Badge>
-                  )}
-                  {canEditConfig && tenantInfo && (
-                    <Button onClick={handleOpenEditTenantDialog} variant="outline" size="sm">
-                      <Edit className="h-4 w-4 mr-2" />
-                      Editar
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {loadingTenant ? (
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">Carregando informações da empresa...</p>
-                  </CardContent>
-                </Card>
-              ) : tenantError ? (
-                <Card className="border-amber-500/20 bg-amber-500/5">
-                  <CardContent className="p-6">
-                    <p className="text-sm text-amber-600 dark:text-amber-400 mb-2">
-                      Não foi possível carregar as informações da empresa.
-                    </p>
-                    <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
-                      {tenantError instanceof Error 
-                        ? tenantError.message 
-                        : "Erro ao carregar informações. Verifique suas permissões."}
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : tenantInfo ? (
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="space-y-6">
-                      {/* Informações básicas */}
-                      <div>
-                        <h3 className="text-lg font-semibold text-foreground mb-2">
-                          {tenantInfo.nome}
-                        </h3>
-                        {tenantInfo.codigo && (
-                          <p className="text-sm text-muted-foreground">Código: {tenantInfo.codigo}</p>
-                        )}
-                      </div>
-
-                      {/* Demais dados da empresa */}
-                      <div className="grid md:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                          {(tenantInfo.created_at || tenantInfo.dataCriacao) && (
-                            <div className="flex items-start gap-3">
-                              <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
-                              <div>
-                                <p className="text-sm font-medium text-foreground">Data de Criação</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {formatDate(tenantInfo.created_at || tenantInfo.dataCriacao || "")}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="space-y-4">
-                          {tenantInfo.subdominio && (
-                            <div className="flex items-start gap-3">
-                              <Globe className="h-5 w-5 text-muted-foreground mt-0.5" />
-                              <div>
-                                <p className="text-sm font-medium text-foreground">Subdomínio</p>
-                                <p className="text-sm text-muted-foreground">{tenantInfo.subdominio}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card>
-                  <CardContent className="p-6">
-                    <p className="text-sm text-muted-foreground text-center">
-                      Não foi possível obter o ID do tenant do token JWT.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {!canEditConfig && (
-                <Card className="border-amber-500/20 bg-amber-500/5">
-                  <CardContent className="p-4">
-                    <p className="text-sm text-amber-600 dark:text-amber-400">
-                      Para alterar as informações da empresa, entre em contato com um Administrador.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            <EmpresaConfigSection
+              tenantInfo={tenantInfo}
+              loading={loadingTenant}
+              error={tenantError}
+              canEdit={canEditConfig}
+              saving={updateTenantMutation.isPending}
+              onSave={(data) => updateTenantMutation.mutate(data)}
+            />
           </TabsContent>
         </Tabs>
 
@@ -908,83 +768,6 @@ const Settings = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog: Editar Informações da Empresa */}
-        <Dialog open={isEditTenantDialogOpen} onOpenChange={setIsEditTenantDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Editar Informações da Empresa</DialogTitle>
-              <DialogDescription>
-                Atualize as informações básicas da empresa. Apenas ADMIN pode fazer alterações.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="tenant-nome">Nome da Empresa</Label>
-                <Input
-                  id="tenant-nome"
-                  value={tenantForm.nome}
-                  onChange={(e) => setTenantForm({ ...tenantForm, nome: e.target.value })}
-                  placeholder="Nome da empresa"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tenant-cnpj">CNPJ</Label>
-                <Input
-                  id="tenant-cnpj"
-                  value={tenantForm.cnpj}
-                  onChange={(e) => setTenantForm({ ...tenantForm, cnpj: e.target.value })}
-                  placeholder="00.000.000/0000-00"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Aceita com ou sem formatação
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tenant-email">Email</Label>
-                <Input
-                  id="tenant-email"
-                  type="email"
-                  value={tenantForm.email}
-                  onChange={(e) => setTenantForm({ ...tenantForm, email: e.target.value })}
-                  placeholder="contato@empresa.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tenant-telefone">Telefone</Label>
-                <Input
-                  id="tenant-telefone"
-                  value={tenantForm.telefone}
-                  onChange={(e) => setTenantForm({ ...tenantForm, telefone: e.target.value })}
-                  placeholder="(11) 98765-4321"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsEditTenantDialogOpen(false);
-                  setTenantForm({ nome: "", cnpj: "", email: "", telefone: "" });
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleSaveTenant}
-                disabled={updateTenantMutation.isPending}
-              >
-                {updateTenantMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  "Salvar Alterações"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </AppLayout>
   );

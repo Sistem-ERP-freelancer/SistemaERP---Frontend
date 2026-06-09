@@ -1,3 +1,4 @@
+import { TenantConfiguracoes, UpdateTenantEmpresaDto } from '@/types/tenant-empresa';
 import { apiClient } from './api';
 
 export interface Tenant {
@@ -11,16 +12,9 @@ export interface Tenant {
   schema_name?: string;
   status: 'ATIVO' | 'INATIVO' | 'SUSPENSO';
   data_expiracao?: string | null;
-  configuracoes?: {
-    tema?: string;
-    moeda?: string;
-    fuso_horario?: string;
-    idioma?: string;
-    [key: string]: any;
-  };
+  configuracoes?: TenantConfiguracoes;
   created_at?: string;
   updated_at?: string;
-  // Campos alternativos que a API pode retornar
   createdAt?: string;
   dataCriacao?: string;
   updatedAt?: string;
@@ -34,12 +28,7 @@ export interface CreateTenantDto {
   telefone?: string;
 }
 
-export interface UpdateTenantInfoDto {
-  nome?: string;
-  cnpj?: string;
-  email?: string;
-  telefone?: string;
-}
+export type UpdateTenantInfoDto = UpdateTenantEmpresaDto;
 
 class TenantsService {
   async listar(): Promise<Tenant[]> {
