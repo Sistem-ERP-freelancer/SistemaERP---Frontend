@@ -1183,17 +1183,26 @@ export function OrderForm({
                   <Select
                     value={transportadoraId?.toString() || ''}
                     onValueChange={(value) => setTransportadoraId(Number(value))}
+                    disabled={transportadoras.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma transportadora" />
+                      <SelectValue
+                        placeholder={
+                          transportadoras.length === 0
+                            ? 'Não há transportadora cadastrada'
+                            : 'Selecione uma transportadora'
+                        }
+                      />
                     </SelectTrigger>
-                    <SelectContent>
-                      {transportadoras.map((transportadora) => (
-                        <SelectItem key={transportadora.id} value={transportadora.id.toString()}>
-                          {transportadora.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                    {transportadoras.length > 0 && (
+                      <SelectContent>
+                        {transportadoras.map((transportadora) => (
+                          <SelectItem key={transportadora.id} value={transportadora.id.toString()}>
+                            {transportadora.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    )}
                   </Select>
                 </div>
 

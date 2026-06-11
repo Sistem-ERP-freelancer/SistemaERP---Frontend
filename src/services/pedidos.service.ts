@@ -457,8 +457,17 @@ class PedidosService {
    * Baixa o PDF de um pedido específico.
    * GET /pedidos/:id/relatorio/pdf
    */
-  async downloadRelatorioPedidoPdf(pedidoId: number, numeroPedido?: string): Promise<void> {
-    const blob = await apiClient.getBlob(`/pedidos/${pedidoId}/relatorio/pdf`);
+  async downloadRelatorioPedidoPdf(
+    pedidoId: number,
+    numeroPedido?: string,
+    campos: 'completo' | 'principais' = 'completo',
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (campos === 'principais') q.append('campos', 'principais');
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `/pedidos/${pedidoId}/relatorio/pdf${query ? `?${query}` : ''}`,
+    );
     const safeNumero =
       numeroPedido?.replace(/[^\w-]+/g, '_') || String(pedidoId);
     const url = URL.createObjectURL(blob);
@@ -474,8 +483,16 @@ class PedidosService {
   /**
    * Abre o PDF de um pedido em nova aba para impressão.
    */
-  async printRelatorioPedidoPdf(pedidoId: number): Promise<void> {
-    const blob = await apiClient.getBlob(`/pedidos/${pedidoId}/relatorio/pdf`);
+  async printRelatorioPedidoPdf(
+    pedidoId: number,
+    campos: 'completo' | 'principais' = 'completo',
+  ): Promise<void> {
+    const q = new URLSearchParams();
+    if (campos === 'principais') q.append('campos', 'principais');
+    const query = q.toString();
+    const blob = await apiClient.getBlob(
+      `/pedidos/${pedidoId}/relatorio/pdf${query ? `?${query}` : ''}`,
+    );
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
     if (!win) {
@@ -495,6 +512,7 @@ class PedidosService {
     roca_id?: number;
     data_inicial?: string;
     data_final?: string;
+    campos?: 'completo' | 'principais';
   }): Promise<void> {
     const q = new URLSearchParams();
     if (params?.cliente_id) q.append('cliente_id', String(params.cliente_id));
@@ -502,6 +520,7 @@ class PedidosService {
     if (params?.roca_id) q.append('roca_id', String(params.roca_id));
     if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
     if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    if (params?.campos === 'principais') q.append('campos', 'principais');
     const query = q.toString();
     const blob = await apiClient.getBlob(
       `/pedidos/relatorio/pdf${query ? `?${query}` : ''}`,
@@ -522,6 +541,7 @@ class PedidosService {
     roca_id?: number;
     data_inicial?: string;
     data_final?: string;
+    campos?: 'completo' | 'principais';
   }): Promise<void> {
     const q = new URLSearchParams();
     if (params?.cliente_id) q.append('cliente_id', String(params.cliente_id));
@@ -529,6 +549,7 @@ class PedidosService {
     if (params?.roca_id) q.append('roca_id', String(params.roca_id));
     if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
     if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    if (params?.campos === 'principais') q.append('campos', 'principais');
     const query = q.toString();
     const blob = await apiClient.getBlob(
       `/pedidos/relatorio/pdf${query ? `?${query}` : ''}`,

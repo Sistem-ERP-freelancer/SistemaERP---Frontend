@@ -7,10 +7,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import {
   CalendarRange,
   Download,
+  FileText,
   Filter,
   Loader2,
   LucideIcon,
@@ -237,6 +239,53 @@ export function RelatorioCampoFiltro({
       <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
       {children}
     </div>
+  );
+}
+
+export type RelatorioPedidoCampos = 'completo' | 'principais';
+
+export function RelatorioPedidoCamposSection({
+  value,
+  onChange,
+  disabled = false,
+  hint,
+}: {
+  value: RelatorioPedidoCampos;
+  onChange: (value: RelatorioPedidoCampos) => void;
+  disabled?: boolean;
+  hint?: string;
+}) {
+  return (
+    <RelatorioSectionCard title="Conteúdo do relatório" icon={FileText}>
+      <RadioGroup
+        value={value}
+        onValueChange={(v) => onChange(v as RelatorioPedidoCampos)}
+        className="space-y-2"
+        disabled={disabled}
+      >
+        <div className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 py-3">
+          <RadioGroupItem value="completo" id="rel-ped-campos-completo" className="mt-0.5" />
+          <Label htmlFor="rel-ped-campos-completo" className="cursor-pointer space-y-0.5 font-normal">
+            <span className="block text-sm font-medium text-foreground">Todos os campos</span>
+            <span className="block text-xs text-muted-foreground leading-relaxed">
+              Inclui endereço e contato do cliente ou fornecedor.
+            </span>
+          </Label>
+        </div>
+        <div className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-background/80 px-3 py-3">
+          <RadioGroupItem value="principais" id="rel-ped-campos-principais" className="mt-0.5" />
+          <Label htmlFor="rel-ped-campos-principais" className="cursor-pointer space-y-0.5 font-normal">
+            <span className="block text-sm font-medium text-foreground">Apenas campos principais</span>
+            <span className="block text-xs text-muted-foreground leading-relaxed">
+              Omite endereço e contato; mantém cliente, detalhes do pedido e itens.
+            </span>
+          </Label>
+        </div>
+      </RadioGroup>
+      {hint ? (
+        <p className="text-xs text-muted-foreground leading-relaxed pt-1">{hint}</p>
+      ) : null}
+    </RelatorioSectionCard>
   );
 }
 

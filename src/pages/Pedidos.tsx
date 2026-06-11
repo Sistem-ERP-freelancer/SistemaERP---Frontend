@@ -10,8 +10,10 @@ import {
   RelatorioFiltrosGrid,
   RelatorioHubCard,
   RelatorioModalShell,
+  RelatorioPedidoCamposSection,
   RelatorioPeriodoSection,
   RelatorioResumoFiltrosPreview,
+  type RelatorioPedidoCampos,
 } from '@/components/orders/RelatorioModalParts';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,7 +46,7 @@ import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
-import { CreatePedidoDto, FiltrosPedidos, StatusPedido, TipoPedido } from '@/types/pedido';
+import { CreatePedidoDto, FiltrosPedidos, Pedido, StatusPedido, TipoPedido, pedidoVinculadoRoca } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -115,6 +117,11 @@ export default function Pedidos() {
   const [fornecedorRelPed, setFornecedorRelPed] = useState<string>('all');
   const [rocaRelPed, setRocaRelPed] = useState<string>('all');
   const [relPedLoadingAction, setRelPedLoadingAction] = useState<'download' | 'print' | null>(null);
+  const [camposRelPed, setCamposRelPed] = useState<RelatorioPedidoCampos>('completo');
+  const [relatorioIndividualDialogOpen, setRelatorioIndividualDialogOpen] = useState(false);
+  const [relatorioIndividualOrder, setRelatorioIndividualOrder] = useState<Pedido | null>(null);
+  const [camposRelIndividual, setCamposRelIndividual] = useState<RelatorioPedidoCampos>('completo');
+  const [relIndividualLoadingAction, setRelIndividualLoadingAction] = useState<'download' | 'print' | null>(null);
   const [relatoriosDialogOpen, setRelatoriosDialogOpen] = useState(false);
   const [periodoRapidoLista, setPeriodoRapidoLista] = useState<
     'all' | 'hoje' | '7d' | 'mes_atual' | 'custom'
@@ -175,6 +182,7 @@ export default function Pedidos() {
     fornecedor_id:
       fornecedorRelPed !== 'all' ? Number(fornecedorRelPed) : undefined,
     roca_id: rocaRelPed !== 'all' ? Number(rocaRelPed) : undefined,
+    campos: camposRelPed,
   });
 
   const formatarDataRelatorio = (data: string) => {
@@ -241,6 +249,52 @@ export default function Pedidos() {
       }
     }
     setRelatorioPedidosDialogOpen(true);
+  };
+
+  const abrirDialogRelatorioIndividual = (order: Pedido) => {
+    setRelatorioIndividualOrder(order);
+    setCamposRelIndividual('completo');
+    setRelatorioIndividualDialogOpen(true);
+  };
+
+  const handleDownloadRelatorioPedido = async (
+    order: Pedido,
+    campos: RelatorioPedidoCampos = camposRelIndividual,
+  ) => {
+    setReportingOrderId(order.id);
+    try {
+      await pedidosService.downloadRelatorioPedidoPdf(
+        order.id,
+        order.numero_pedido,
+        campos,
+      );
+      toast.success(`Relatório do pedido ${order.numero_pedido} baixado.`);
+      setRelatorioIndividualDialogOpen(false);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Erro ao gerar relatório do pedido';
+      toast.error(message);
+    } finally {
+      setReportingOrderId(null);
+    }
+  };
+
+  const handlePrintRelatorioPedido = async (
+    order: Pedido,
+    campos: RelatorioPedidoCampos = camposRelIndividual,
+  ) => {
+    setReportingOrderId(order.id);
+    try {
+      await pedidosService.printRelatorioPedidoPdf(order.id, campos);
+      toast.success(`Relatório do pedido ${order.numero_pedido} aberto para impressão.`);
+      setRelatorioIndividualDialogOpen(false);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Erro ao abrir relatório do pedido';
+      toast.error(message);
+    } finally {
+      setReportingOrderId(null);
+    }
   };
 
   const aplicarPeriodoRapido = (tipo: 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior') => {
@@ -508,37 +562,6 @@ export default function Pedidos() {
   const handleOpenDeleteDialog = (order: any) => {
     openCancelDialog(order);
     setIsDeleteDialogOpen(true);
-  };
-
-  const handleDownloadRelatorioPedido = async (order: (typeof orders)[number]) => {
-    setReportingOrderId(order.id);
-    try {
-      await pedidosService.downloadRelatorioPedidoPdf(
-        order.id,
-        order.numero_pedido,
-      );
-      toast.success(`Relatório do pedido ${order.numero_pedido} baixado.`);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Erro ao gerar relatório do pedido';
-      toast.error(message);
-    } finally {
-      setReportingOrderId(null);
-    }
-  };
-
-  const handlePrintRelatorioPedido = async (order: (typeof orders)[number]) => {
-    setReportingOrderId(order.id);
-    try {
-      await pedidosService.printRelatorioPedidoPdf(order.id);
-      toast.success(`Relatório do pedido ${order.numero_pedido} aberto para impressão.`);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Erro ao abrir relatório do pedido';
-      toast.error(message);
-    } finally {
-      setReportingOrderId(null);
-    }
   };
 
   const handleOrderSubmit = (data: CreatePedidoDto) => {
@@ -876,7 +899,7 @@ export default function Pedidos() {
               onView={openViewDialog}
               onEdit={openEditForm}
               onCancel={handleOpenDeleteDialog}
-              onReport={handleDownloadRelatorioPedido}
+              onReport={abrirDialogRelatorioIndividual}
               reportingOrderId={reportingOrderId}
               onStatusChange={handleStatusChange}
               updatingStatusId={updatingStatusId}
@@ -1036,7 +1059,7 @@ export default function Pedidos() {
           <RelatorioModalShell
             icon={Filter}
             title="Relatório de pedidos"
-            description="PDF consolidado — um pedido por página. Pedidos por roça não incluem endereço nem contato."
+            description="PDF consolidado — um pedido por página."
             maxWidth="xl"
             footer={
               <RelatorioAcoesFooter
@@ -1134,12 +1157,15 @@ export default function Pedidos() {
                 </RelatorioCampoFiltro>
               </RelatorioFiltrosGrid>
 
-              {rocaRelPed !== 'all' ? (
-                <p className="rounded-xl border border-primary/20 bg-primary/[0.05] px-4 py-3 text-sm text-muted-foreground">
-                  Relatórios filtrados por roça exibem apenas o nome da roça e os itens do pedido —
-                  sem seção de endereço ou contato.
-                </p>
-              ) : null}
+              <RelatorioPedidoCamposSection
+                value={camposRelPed}
+                onChange={setCamposRelPed}
+                hint={
+                  rocaRelPed !== 'all'
+                    ? 'Relatórios filtrados por roça não exibem endereço nem contato, independentemente da opção escolhida.'
+                    : undefined
+                }
+              />
 
               <RelatorioResumoFiltrosPreview
                 linhas={[
@@ -1150,6 +1176,70 @@ export default function Pedidos() {
                 ]}
               />
             </div>
+          </RelatorioModalShell>
+        </Dialog>
+
+        <Dialog
+          open={relatorioIndividualDialogOpen}
+          onOpenChange={(open) => {
+            setRelatorioIndividualDialogOpen(open);
+            if (!open) {
+              setRelatorioIndividualOrder(null);
+              setRelIndividualLoadingAction(null);
+            }
+          }}
+        >
+          <RelatorioModalShell
+            icon={FileText}
+            title={
+              relatorioIndividualOrder
+                ? `Relatório — ${relatorioIndividualOrder.numero_pedido}`
+                : 'Relatório de pedido'
+            }
+            description="Escolha quais informações incluir no PDF."
+            footer={
+              relatorioIndividualOrder ? (
+                <RelatorioAcoesFooter
+                  downloading={relIndividualLoadingAction === 'download'}
+                  printing={relIndividualLoadingAction === 'print'}
+                  disabled={relIndividualLoadingAction !== null}
+                  onDownload={async () => {
+                    if (!relatorioIndividualOrder) return;
+                    try {
+                      setRelIndividualLoadingAction('download');
+                      await handleDownloadRelatorioPedido(
+                        relatorioIndividualOrder,
+                        camposRelIndividual,
+                      );
+                    } finally {
+                      setRelIndividualLoadingAction(null);
+                    }
+                  }}
+                  onPrint={async () => {
+                    if (!relatorioIndividualOrder) return;
+                    try {
+                      setRelIndividualLoadingAction('print');
+                      await handlePrintRelatorioPedido(
+                        relatorioIndividualOrder,
+                        camposRelIndividual,
+                      );
+                    } finally {
+                      setRelIndividualLoadingAction(null);
+                    }
+                  }}
+                />
+              ) : null
+            }
+          >
+            <RelatorioPedidoCamposSection
+              value={camposRelIndividual}
+              onChange={setCamposRelIndividual}
+              hint={
+                relatorioIndividualOrder && pedidoVinculadoRoca(relatorioIndividualOrder)
+                  ? 'Pedidos vinculados à roça não exibem endereço nem contato, independentemente da opção escolhida.'
+                  : undefined
+              }
+            />
           </RelatorioModalShell>
         </Dialog>
 
@@ -1171,8 +1261,8 @@ export default function Pedidos() {
           isOpen={isViewDialogOpen}
           onClose={closeViewDialog}
           order={selectedOrder}
-          onDownloadReport={handleDownloadRelatorioPedido}
-          onPrintReport={handlePrintRelatorioPedido}
+          onDownloadReport={abrirDialogRelatorioIndividual}
+          onPrintReport={abrirDialogRelatorioIndividual}
           reportingOrderId={reportingOrderId}
           onRequestCancel={(order) => {
             closeViewDialog();

@@ -8,6 +8,7 @@ export interface RelatorioPedidosFiltros {
   roca_id?: number;
   data_inicial?: string;
   data_final?: string;
+  campos?: 'completo' | 'principais';
 }
 
 interface UseRelatorioPedidosReturn {
