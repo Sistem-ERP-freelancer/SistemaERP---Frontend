@@ -46,7 +46,7 @@ import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
-import { CreatePedidoDto, FiltrosPedidos, Pedido, StatusPedido, TipoPedido, pedidoVinculadoRoca } from '@/types/pedido';
+import { CreatePedidoDto, FiltrosPedidos, Pedido, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -1160,11 +1160,6 @@ export default function Pedidos() {
               <RelatorioPedidoCamposSection
                 value={camposRelPed}
                 onChange={setCamposRelPed}
-                hint={
-                  rocaRelPed !== 'all'
-                    ? 'Relatórios filtrados por roça não exibem endereço nem contato, independentemente da opção escolhida.'
-                    : undefined
-                }
               />
 
               <RelatorioResumoFiltrosPreview
@@ -1234,11 +1229,6 @@ export default function Pedidos() {
             <RelatorioPedidoCamposSection
               value={camposRelIndividual}
               onChange={setCamposRelIndividual}
-              hint={
-                relatorioIndividualOrder && pedidoVinculadoRoca(relatorioIndividualOrder)
-                  ? 'Pedidos vinculados à roça não exibem endereço nem contato, independentemente da opção escolhida.'
-                  : undefined
-              }
             />
           </RelatorioModalShell>
         </Dialog>
