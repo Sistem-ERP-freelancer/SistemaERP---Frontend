@@ -161,7 +161,8 @@ export function validateToken(token: string | null): {
     errors.push('Token expirado');
   }
 
-  if (!hasSchemaName(token)) {
+  const role = payload.role?.toUpperCase?.()?.trim();
+  if (role !== 'SUPER_ADMIN' && !hasSchemaName(token)) {
     errors.push('Token não contém schema_name (obrigatório)');
   }
 

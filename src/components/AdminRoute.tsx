@@ -41,7 +41,11 @@ export const AdminRoute = ({ children }: AdminRouteProps) => {
     console.log('🛡️ AdminRoute - Acesso admin:', isAdmin);
   }
 
-  if (!isAuthenticated) {
+  const hasValidSession =
+    isAuthenticated ||
+    (authService.isAuthenticated() && !!authService.getCurrentUser());
+
+  if (!hasValidSession) {
     if (import.meta.env.DEV) {
       console.log('❌ AdminRoute - Não autenticado, redirecionando para login');
     }

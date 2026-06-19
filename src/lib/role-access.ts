@@ -22,6 +22,12 @@ export function canAccessSettings(role?: string | null): boolean {
   return r === 'ADMIN' || r === 'GERENTE';
 }
 
+/** Emissão e gestão de NF-e (espelha backend Spedy). */
+export function canManageNotaFiscal(role?: string | null): boolean {
+  const r = normalizeRole(role);
+  return r === 'ADMIN' || r === 'GERENTE' || r === 'FINANCEIRO';
+}
+
 const ROUTE_ROLES: Record<string, AppRole[] | 'all'> = {
   '/dashboard': 'all',
   '/pedidos': 'all',

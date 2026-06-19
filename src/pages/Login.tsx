@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { authService } from "@/services/auth.service";
 import { useRedirectAfterLogin } from "@/hooks/useRedirectAfterLogin";
 import { cn } from "@/lib/utils";
 import { LoginBackground } from "@/components/login/LoginBackground";
@@ -167,23 +166,10 @@ const Login = () => {
         senha: password,
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
       const userFromResponse = response?.user || response?.usuario;
-      const userFromStorage = authService.getCurrentUser();
-      const roleFromResponse = userFromResponse?.role?.toUpperCase()?.trim();
-      const roleFromStorage = userFromStorage?.role?.toUpperCase()?.trim();
-      const finalRole = roleFromResponse || roleFromStorage;
-
-      if (finalRole === "SUPER_ADMIN") {
-        setTimeout(() => {
-          window.location.href = "/admin";
-        }, 100);
-      } else {
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 100);
-      }
+      const role = userFromResponse?.role?.toUpperCase()?.trim();
+      const destino = role === 'SUPER_ADMIN' ? '/admin' : '/dashboard';
+      window.location.assign(destino);
     } catch (error) {
       console.error("Erro no login:", error);
     } finally {

@@ -40,6 +40,7 @@ import {
 import { useState } from 'react';
 import { AlterarCondicaoPagamento } from './AlterarCondicaoPagamento';
 import { AtualizarDataVencimento } from './AtualizarDataVencimento';
+import { PedidoNotaFiscalSection } from './PedidoNotaFiscalSection';
 import { PedidoFinanceiroResumo } from './PedidoFinanceiroResumo';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
@@ -546,6 +547,15 @@ export function OrderViewDialog({
               </div>
             </div>
           </div>
+
+          {/* Nota Fiscal (vendas) */}
+          <PedidoNotaFiscalSection
+            pedidoId={order.id}
+            numeroPedido={order.numero_pedido}
+            tipo={order.tipo}
+            status={order.status}
+            dialogOpen={isOpen}
+          />
 
           {/* Resumo Financeiro do Pedido */}
           <PedidoFinanceiroResumo

@@ -1,6 +1,36 @@
+import { decodeToken } from '@/lib/token-utils';
 import { authService, LoginRequest, LoginResponse, User } from '@/services/auth.service';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+
+function restoreUserFromSession(): User | null {
+  if (!authService.isAuthenticated()) {
+    return null;
+  }
+
+  const savedUser = authService.getCurrentUser();
+  if (savedUser) {
+    return savedUser;
+  }
+
+  const token = authService.getToken();
+  if (!token) {
+    return null;
+  }
+
+  const payload = decodeToken(token);
+  if (!payload?.sub || !payload?.email) {
+    return null;
+  }
+
+  return {
+    id: payload.sub,
+    email: payload.email,
+    role: payload.role || '',
+    nome: payload.email.split('@')[0],
+    ativo: true,
+  };
+}
 
 interface AuthContextType {
   user: User | null;
@@ -18,16 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Primeiro valida o token (se expirado, isAuthenticated() limpa o storage e retorna false)
-    if (!authService.isAuthenticated()) {
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
-    const savedUser = authService.getCurrentUser();
-    if (savedUser) {
-      setUser(savedUser);
-    }
+    setUser(restoreUserFromSession());
     setIsLoading(false);
   }, []);
 
@@ -87,7 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: authService.isAuthenticated() && !!user,
         isSuperAdmin,
         login,
         logout,

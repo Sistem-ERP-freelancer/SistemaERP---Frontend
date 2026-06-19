@@ -25,6 +25,8 @@ export interface CreateTenantDto {
   cnpj: string;
   email: string;
   senha?: string;
+  admin_senha?: string;
+  admin_email?: string;
   telefone?: string;
 }
 
@@ -74,7 +76,15 @@ class TenantsService {
   }
 
   async criar(data: CreateTenantDto): Promise<Tenant> {
-    const response = await apiClient.post<any>('/tenants', data);
+    const payload = {
+      nome: data.nome,
+      cnpj: data.cnpj,
+      email: data.email,
+      telefone: data.telefone,
+      admin_email: data.admin_email ?? data.email,
+      admin_senha: data.admin_senha ?? data.senha,
+    };
+    const response = await apiClient.post<any>('/tenants', payload);
     // Normaliza os dados
     return {
       ...response,

@@ -264,27 +264,39 @@ class ApiClient {
             }
             break;
           
-          case 401:
-            // Unauthorized - Token inválido ou expirado
+          case 401: {
+            const isLoginRequest = /\/usuarios\/login$/i.test(endpoint);
+            if (isLoginRequest) {
+              errorMessage =
+                (typeof errorMessage === 'string' &&
+                errorMessage !== 'Unauthorized'
+                  ? errorMessage
+                  : null) || 'E-mail ou senha incorretos.';
+              break;
+            }
+            // Unauthorized - Token inválido ou expirado (requisições autenticadas)
             errorMessage = 'Sessão expirada. Faça login novamente.';
-            // Fazer logout
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             localStorage.removeItem('user');
-            
-            // Redireciona para login apenas se não estiver já na página de login
-            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+
+            if (
+              typeof window !== 'undefined' &&
+              !window.location.pathname.includes('/login')
+            ) {
               if (import.meta.env.DEV) {
-                console.warn('⚠️ [API] Token inválido ou expirado. Redirecionando para login...');
+                console.warn(
+                  '⚠️ [API] Token inválido ou expirado. Redirecionando para login...',
+                );
                 const tokenInfo = getTokenInfo(this.getAuthToken() || '');
                 console.log('📋 [API] Token info antes do logout:', tokenInfo);
               }
-              // Usa setTimeout para evitar problemas de navegação durante o erro
               setTimeout(() => {
                 window.location.href = '/login';
               }, 100);
             }
             break;
+          }
           
           case 403:
             // Forbidden - Sem permissão (NÃO fazer logout)
