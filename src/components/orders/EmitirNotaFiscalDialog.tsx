@@ -21,6 +21,10 @@ import {
 import { BRAZILIAN_UFS, isValidBrazilUf } from '@/lib/brazil-uf';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { formatCurrency } from '@/lib/utils';
+import {
+  formatTelefone,
+  telefoneArmazenadoParaCampo,
+} from '@/lib/validators';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
 import {
   STATUS_NOTA_FISCAL_LABELS,
@@ -294,7 +298,7 @@ export function EmitirNotaFiscalDialog({
     setClienteDoc(c?.cpf_cnpj || '');
     setClienteIe(c?.inscricao_estadual || '');
     setClienteEmail(c?.email || '');
-    setClienteTelefone(c?.telefone || '');
+    setClienteTelefone(telefoneArmazenadoParaCampo(c?.telefone || ''));
     setEndereco({
       id: c?.endereco?.id ?? undefined,
       cep: c?.endereco?.cep || '',
@@ -365,7 +369,7 @@ export function EmitirNotaFiscalDialog({
         cpf_cnpj: clienteDoc.trim(),
         inscricao_estadual: clienteIe.trim() || undefined,
         email: clienteEmail.trim() || undefined,
-        telefone: clienteTelefone.trim() || undefined,
+        telefone: telefoneArmazenadoParaCampo(clienteTelefone) || undefined,
       },
       endereco: {
         ...endereco,
@@ -605,7 +609,10 @@ export function EmitirNotaFiscalDialog({
                       id="nf-cliente-tel"
                       className="h-11"
                       value={clienteTelefone}
-                      onChange={(e) => setClienteTelefone(e.target.value)}
+                      onChange={(e) =>
+                        setClienteTelefone(formatTelefone(e.target.value))
+                      }
+                      placeholder="(00) 00000-0000"
                     />
                   </FormField>
                 </div>
@@ -670,7 +677,7 @@ export function EmitirNotaFiscalDialog({
                       value={
                         endereco.estado && isValidBrazilUf(endereco.estado)
                           ? endereco.estado.toUpperCase()
-                          : undefined
+                          : ''
                       }
                       onValueChange={(value) =>
                         setEndereco((p) => ({ ...p, estado: value }))
