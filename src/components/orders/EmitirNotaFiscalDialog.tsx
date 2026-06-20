@@ -146,6 +146,10 @@ function formatEndereco(end?: NotaFiscalPreEmissaoEndereco | null): string {
   return partes.length ? partes.join(', ') : '—';
 }
 
+function ncmValido(ncm: string): boolean {
+  return ncm.replace(/\D/g, '').length === 8;
+}
+
 function calcularFaltantesLocal(data: {
   empresaCnpj: string;
   spedyConfigurado: boolean;
@@ -215,10 +219,10 @@ function calcularFaltantesLocal(data: {
     }
   }
   for (const item of data.itens) {
-    if (campoVazio(item.ncm)) {
+    if (campoVazio(item.ncm) || !ncmValido(item.ncm)) {
       faltantes.push({
         campo: `produto.${item.produto_id}.ncm`,
-        label: `NCM — ${item.nome}`,
+        label: `NCM válido (8 dígitos) — ${item.nome}`,
         secao: 'produto',
         produto_id: item.produto_id,
       });
@@ -264,6 +268,11 @@ export function EmitirNotaFiscalDialog({
     codigo_ibge: '',
   });
   const [ncmPorProduto, setNcmPorProduto] = useState<Record<number, string>>({});
+  const [erroEmissao, setErroEmissao] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) setErroEmissao(null);
+  }, [open]);
 
   useEffect(() => {
     if (!data) return;
@@ -327,11 +336,16 @@ export function EmitirNotaFiscalDialog({
       onSuccess?.(nota);
       onOpenChange(false);
     },
-    onError: (err) => toast.error(extractErrorMessage(err)),
+    onError: (err) => {
+      const msg = extractErrorMessage(err);
+      setErroEmissao(msg);
+      toast.error(msg);
+    },
   });
 
   const handleEmitir = () => {
     if (!data || !podeEmitir) return;
+    setErroEmissao(null);
     const payload: EmitirNotaFiscalPayload = {
       cliente: {
         nome: clienteNome.trim(),
@@ -406,6 +420,16 @@ export function EmitirNotaFiscalDialog({
 
           {data && (
             <div className="space-y-6 pb-4">
+              {erroEmissao && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Falha ao emitir NF-e</AlertTitle>
+                  <AlertDescription className="text-sm whitespace-pre-wrap">
+                    {erroEmissao}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {faltantes.length > 0 && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -701,6 +725,8 @@ export function EmitirNotaFiscalDialog({
                                   }))
                                 }
                                 placeholder="00000000"
+                                maxLength={8}
+                                inputMode="numeric"
                                 className={
                                   campoFaltando(faltantes, ncmKey)
                                     ? 'border-destructive h-11 font-mono text-xs'
