@@ -11,7 +11,7 @@ import {
   type NotaFiscal,
   type StatusNotaFiscal,
 } from '@/types/nota-fiscal';
-import { StatusPedido, TipoPedido } from '@/types/pedido';
+import { Pedido, StatusPedido, TipoPedido } from '@/types/pedido';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,6 +22,8 @@ import {
   Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { EmitirNotaFiscalDialog } from './EmitirNotaFiscalDialog';
+import { useState } from 'react';
 
 interface PedidoNotaFiscalSectionProps {
   pedidoId: number;
@@ -73,6 +75,7 @@ export function PedidoNotaFiscalSection({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const podeGerenciar = canManageNotaFiscal(user?.role);
+  const [emitirDialogOpen, setEmitirDialogOpen] = useState(false);
   const isVenda = tipo === 'VENDA';
   const pedidoCancelado = status === 'CANCELADO';
 
@@ -88,21 +91,6 @@ export function PedidoNotaFiscalSection({
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey });
   };
-
-  const emitirMutation = useMutation({
-    mutationFn: () => notaFiscalService.emitir(pedidoId),
-    onSuccess: (result) => {
-      queryClient.setQueryData(queryKey, result);
-      const statusLabel = STATUS_NOTA_FISCAL_LABELS[result.status] ?? result.status;
-      const temArquivo = !!(result.spedyInvoiceId ?? result.spedy_invoice_id);
-      toast.success('Nota enviada à Spedy', {
-        description: temArquivo
-          ? `Status: ${statusLabel}. Use os botões PDF e XML para baixar os arquivos.`
-          : `Status: ${statusLabel}`,
-      });
-    },
-    onError: (err) => toast.error(extractErrorMessage(err)),
-  });
 
   const consultarMutation = useMutation({
     mutationFn: () => notaFiscalService.consultar(pedidoId),
@@ -143,12 +131,19 @@ export function PedidoNotaFiscalSection({
     'spedyInvoiceId',
   );
   const busy =
-    emitirMutation.isPending ||
     consultarMutation.isPending ||
     pdfMutation.isPending ||
     xmlMutation.isPending;
 
+  const pedidoResumo = {
+    id: pedidoId,
+    numero_pedido: numeroPedido,
+    tipo,
+    status,
+  } as Pedido;
+
   return (
+    <>
     <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -170,13 +165,9 @@ export function PedidoNotaFiscalSection({
                 <Button
                   size="sm"
                   disabled={busy}
-                  onClick={() => emitirMutation.mutate()}
+                  onClick={() => setEmitirDialogOpen(true)}
                 >
-                  {emitirMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileCheck2 className="w-4 h-4 mr-2" />
-                  )}
+                  <FileCheck2 className="w-4 h-4 mr-2" />
                   {notaStatus === 'rejected' ? 'Emitir novamente' : 'Emitir nota'}
                 </Button>
               )}
@@ -305,5 +296,16 @@ export function PedidoNotaFiscalSection({
         )}
       </CardContent>
     </Card>
+
+    <EmitirNotaFiscalDialog
+      open={emitirDialogOpen}
+      onOpenChange={setEmitirDialogOpen}
+      order={pedidoResumo}
+      onSuccess={(result) => {
+        queryClient.setQueryData(queryKey, result);
+        invalidate();
+      }}
+    />
+    </>
   );
 }

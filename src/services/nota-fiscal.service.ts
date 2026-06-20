@@ -1,5 +1,9 @@
 import { apiClient } from './api';
-import type { NotaFiscal } from '@/types/nota-fiscal';
+import type {
+  EmitirNotaFiscalPayload,
+  NotaFiscal,
+  NotaFiscalPreEmissao,
+} from '@/types/nota-fiscal';
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -25,8 +29,20 @@ class NotaFiscalService {
     }
   }
 
-  async emitir(pedidoId: number): Promise<NotaFiscal> {
-    return apiClient.post<NotaFiscal>(`/pedidos/${pedidoId}/nota-fiscal/emitir`, {});
+  async obterPreEmissao(pedidoId: number): Promise<NotaFiscalPreEmissao> {
+    return apiClient.get<NotaFiscalPreEmissao>(
+      `/pedidos/${pedidoId}/nota-fiscal/pre-emissao`,
+    );
+  }
+
+  async emitir(
+    pedidoId: number,
+    payload?: EmitirNotaFiscalPayload,
+  ): Promise<NotaFiscal> {
+    return apiClient.post<NotaFiscal>(
+      `/pedidos/${pedidoId}/nota-fiscal/emitir`,
+      payload ?? {},
+    );
   }
 
   async consultar(pedidoId: number): Promise<NotaFiscal> {

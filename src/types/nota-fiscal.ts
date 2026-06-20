@@ -60,3 +60,92 @@ export const STATUS_NOTA_BLOQUEIA_REEMISSAO: StatusNotaFiscal[] = [
   'received',
   'inContingent',
 ];
+
+export type SecaoNotaFiscal =
+  | 'empresa'
+  | 'integracao'
+  | 'pedido'
+  | 'cliente'
+  | 'endereco'
+  | 'produto';
+
+export interface CampoFaltanteNotaFiscal {
+  campo: string;
+  label: string;
+  secao: SecaoNotaFiscal;
+  produto_id?: number;
+}
+
+export interface NotaFiscalPreEmissaoEndereco {
+  id?: number | null;
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento?: string | null;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  codigo_ibge?: string | null;
+}
+
+export interface NotaFiscalPreEmissaoCliente {
+  id: number;
+  nome: string;
+  nome_fantasia?: string | null;
+  nome_razao?: string | null;
+  cpf_cnpj: string;
+  inscricao_estadual?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  endereco: NotaFiscalPreEmissaoEndereco | null;
+}
+
+export interface NotaFiscalPreEmissaoItem {
+  produto_id: number;
+  nome: string;
+  sku?: string | null;
+  ncm: string;
+  quantidade: number;
+  preco_unitario: number;
+  subtotal: number;
+}
+
+export interface NotaFiscalPreEmissao {
+  pedido: {
+    id: number;
+    numero_pedido: string;
+    tipo: string;
+    status: string;
+    valor_total: number;
+    data_pedido: string;
+    forma_pagamento?: string | null;
+  };
+  empresa: {
+    cnpj: string;
+    nome?: string | null;
+  };
+  spedy_configurado: boolean;
+  nota_existente?: {
+    status: StatusNotaFiscal;
+    numero_nf?: number | null;
+    bloqueia_reemissao: boolean;
+  } | null;
+  cliente: NotaFiscalPreEmissaoCliente | null;
+  itens: NotaFiscalPreEmissaoItem[];
+  campos_faltantes: CampoFaltanteNotaFiscal[];
+  pode_emitir: boolean;
+}
+
+export interface EmitirNotaFiscalPayload {
+  cliente?: {
+    nome?: string;
+    nome_fantasia?: string;
+    nome_razao?: string;
+    cpf_cnpj?: string;
+    inscricao_estadual?: string;
+    email?: string;
+    telefone?: string;
+  };
+  endereco?: NotaFiscalPreEmissaoEndereco;
+  produtos?: Array<{ produto_id: number; ncm?: string; sku?: string }>;
+}

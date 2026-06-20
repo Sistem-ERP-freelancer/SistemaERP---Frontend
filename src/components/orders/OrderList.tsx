@@ -18,9 +18,11 @@ import { normalizeCurrency } from '@/lib/utils';
 import { Pedido, pedidoVinculadoRoca, StatusPedido } from '@/types/pedido';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Edit, Eye, FileText, Loader2, ShoppingCart, Trash2 } from 'lucide-react';
+import { Edit, Eye, FileText, Loader2, Receipt, ShoppingCart, Trash2 } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
+import { canManageNotaFiscal } from '@/lib/role-access';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface OrderListProps {
   orders: Pedido[];
@@ -29,6 +31,7 @@ interface OrderListProps {
   onEdit: (order: Pedido) => void;
   onCancel: (order: Pedido) => void;
   onReport?: (order: Pedido) => void;
+  onEmitNotaFiscal?: (order: Pedido) => void;
   reportingOrderId?: number | null;
   onStatusChange?: (id: number, status: StatusPedido) => void;
   updatingStatusId?: number | null;
@@ -41,10 +44,14 @@ export function OrderList({
   onEdit, 
   onCancel,
   onReport,
+  onEmitNotaFiscal,
   reportingOrderId = null,
   onStatusChange,
   updatingStatusId = null,
 }: OrderListProps) {
+  const { user } = useAuth();
+  const podeEmitirNf = canManageNotaFiscal(user?.role);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[12rem] py-12">
@@ -134,6 +141,17 @@ export function OrderList({
           ) : (
             <FileText className="w-4 h-4 text-primary" />
           )}
+        </Button>
+      )}
+      {podeEmitirNf && onEmitNotaFiscal && order.tipo === 'VENDA' && order.status !== 'CANCELADO' && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => onEmitNotaFiscal(order)}
+          title="Emitir nota fiscal"
+        >
+          <Receipt className="w-4 h-4 text-violet-600 dark:text-violet-400" />
         </Button>
       )}
       {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (

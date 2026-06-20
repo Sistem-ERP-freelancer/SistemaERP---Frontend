@@ -1,5 +1,6 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
+import { EmitirNotaFiscalDialog } from '@/components/orders/EmitirNotaFiscalDialog';
 import OrderForm from '@/components/orders/OrderForm';
 import { OrderList } from '@/components/orders/OrderList';
 import { OrderStats, type PedidoCardFilterKey } from '@/components/orders/OrderStats';
@@ -123,6 +124,8 @@ export default function Pedidos() {
   const [camposRelIndividual, setCamposRelIndividual] = useState<RelatorioPedidoCampos>('completo');
   const [relIndividualLoadingAction, setRelIndividualLoadingAction] = useState<'download' | 'print' | null>(null);
   const [relatoriosDialogOpen, setRelatoriosDialogOpen] = useState(false);
+  const [notaFiscalDialogOpen, setNotaFiscalDialogOpen] = useState(false);
+  const [notaFiscalOrder, setNotaFiscalOrder] = useState<Pedido | null>(null);
   const [periodoRapidoLista, setPeriodoRapidoLista] = useState<
     'all' | 'hoje' | '7d' | 'mes_atual' | 'custom'
   >('all');
@@ -564,6 +567,11 @@ export default function Pedidos() {
     setIsDeleteDialogOpen(true);
   };
 
+  const handleOpenNotaFiscal = (order: Pedido) => {
+    setNotaFiscalOrder(order);
+    setNotaFiscalDialogOpen(true);
+  };
+
   const handleOrderSubmit = (data: CreatePedidoDto) => {
     if (selectedOrder) {
       updateOrder(selectedOrder.id, data);
@@ -900,6 +908,7 @@ export default function Pedidos() {
               onEdit={openEditForm}
               onCancel={handleOpenDeleteDialog}
               onReport={abrirDialogRelatorioIndividual}
+              onEmitNotaFiscal={handleOpenNotaFiscal}
               reportingOrderId={reportingOrderId}
               onStatusChange={handleStatusChange}
               updatingStatusId={updatingStatusId}
@@ -1258,6 +1267,15 @@ export default function Pedidos() {
             closeViewDialog();
             openCancelDialog(order);
           }}
+        />
+
+        <EmitirNotaFiscalDialog
+          open={notaFiscalDialogOpen}
+          onOpenChange={(open) => {
+            setNotaFiscalDialogOpen(open);
+            if (!open) setNotaFiscalOrder(null);
+          }}
+          order={notaFiscalOrder}
         />
 
         {/* Modal de Confirmação de Cancelamento */}
