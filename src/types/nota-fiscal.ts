@@ -110,20 +110,31 @@ export interface NotaFiscalPreEmissaoItem {
   subtotal: number;
 }
 
+export interface NotaFiscalPreEmissaoEmpresa {
+  cnpj: string;
+  razao_social?: string | null;
+  nome_fantasia?: string | null;
+  inscricao_estadual?: string | null;
+  endereco?: NotaFiscalPreEmissaoEndereco | null;
+  regime_tributario?: string | null;
+  cfop_interno?: string | null;
+  cfop_interestadual?: string | null;
+}
+
 export interface NotaFiscalPreEmissao {
   pedido: {
     id: number;
     numero_pedido: string;
     tipo: string;
     status: string;
+    subtotal: number;
+    frete: number;
+    desconto_valor: number;
     valor_total: number;
-    data_pedido: string;
+    data_pedido: string | null;
     forma_pagamento?: string | null;
   };
-  empresa: {
-    cnpj: string;
-    nome?: string | null;
-  };
+  empresa: NotaFiscalPreEmissaoEmpresa;
   spedy_configurado: boolean;
   nota_existente?: {
     status: StatusNotaFiscal;
