@@ -43,11 +43,11 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border bg-card p-4 space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    <section className="rounded-xl border bg-card p-6 sm:p-7 space-y-5">
+      <div className="space-y-1.5 pb-1">
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       {children}
@@ -57,9 +57,33 @@ function SectionCard({
 
 function ReadOnlyField({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <p className="text-sm break-words">{value ?? '—'}</p>
+    <div className="rounded-lg border border-border/60 bg-muted/25 px-4 py-3.5 space-y-2 min-h-[4.75rem]">
+      <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </Label>
+      <p className="text-sm leading-relaxed break-words">{value ?? '—'}</p>
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  htmlFor,
+  required,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <Label htmlFor={htmlFor} className="text-sm font-medium">
+        {label}
+        {required ? ' *' : ''}
+      </Label>
+      {children}
     </div>
   );
 }
@@ -348,18 +372,18 @@ export function EmitirNotaFiscalDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-4 shrink-0 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-violet-600" />
+      <DialogContent className="max-w-[min(1680px,99vw)] w-[99vw] h-[98dvh] max-h-[98dvh] sm:max-w-[min(1680px,99vw)] sm:max-h-[98dvh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-8 pt-7 pb-5 shrink-0 border-b">
+          <DialogTitle className="flex items-center gap-3 text-xl">
+            <Receipt className="w-6 h-6 text-violet-600" />
             Emitir Nota Fiscal
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-base pt-1">
             Pedido {order.numero_pedido} — revise todos os dados antes de emitir.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
+        <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6">
           {isLoading && (
             <div className="flex items-center gap-2 py-8 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -381,7 +405,7 @@ export function EmitirNotaFiscalDialog({
           )}
 
           {data && (
-            <div className="space-y-4 pb-2">
+            <div className="space-y-6 pb-4">
               {faltantes.length > 0 && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -406,7 +430,7 @@ export function EmitirNotaFiscalDialog({
               )}
 
               <SectionCard title="Pedido" description="Dados da venda que serão enviados na NF-e">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
                   <ReadOnlyField label="Número" value={data.pedido.numero_pedido} />
                   <ReadOnlyField label="Data" value={formatarDataPedido(data.pedido.data_pedido)} />
                   <ReadOnlyField label="Status" value={data.pedido.status} />
@@ -435,7 +459,7 @@ export function EmitirNotaFiscalDialog({
                 title="Empresa emitente"
                 description="Dados fiscais da empresa (Configurações → Empresa)"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <ReadOnlyField
                     label="Razão social"
                     value={data.empresa.razao_social || data.empresa.nome_fantasia}
@@ -491,133 +515,126 @@ export function EmitirNotaFiscalDialog({
                 title="Cliente (destinatário)"
                 description="Edite os campos necessários para a NF-e"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2 space-y-1">
-                    <Label htmlFor="nf-cliente-nome">Nome *</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <FormField label="Nome" htmlFor="nf-cliente-nome" required>
                     <Input
                       id="nf-cliente-nome"
+                      className={`h-11 ${inputClass('cliente.nome') ?? ''}`}
                       value={clienteNome}
                       onChange={(e) => setClienteNome(e.target.value)}
-                      className={inputClass('cliente.nome')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cliente-fantasia">Nome fantasia</Label>
+                  </FormField>
+                  <FormField label="Nome fantasia" htmlFor="nf-cliente-fantasia">
                     <Input
                       id="nf-cliente-fantasia"
+                      className="h-11"
                       value={clienteFantasia}
                       onChange={(e) => setClienteFantasia(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cliente-razao">Razão social</Label>
+                  </FormField>
+                  <FormField label="Razão social" htmlFor="nf-cliente-razao">
                     <Input
                       id="nf-cliente-razao"
+                      className="h-11"
                       value={clienteRazao}
                       onChange={(e) => setClienteRazao(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cliente-doc">CPF/CNPJ *</Label>
+                  </FormField>
+                  <FormField label="CPF/CNPJ" htmlFor="nf-cliente-doc" required>
                     <Input
                       id="nf-cliente-doc"
+                      className={`h-11 ${inputClass('cliente.cpf_cnpj') ?? ''}`}
                       value={clienteDoc}
                       onChange={(e) => setClienteDoc(e.target.value)}
-                      className={inputClass('cliente.cpf_cnpj')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cliente-ie">Inscrição estadual</Label>
+                  </FormField>
+                  <FormField label="Inscrição estadual" htmlFor="nf-cliente-ie">
                     <Input
                       id="nf-cliente-ie"
+                      className="h-11"
                       value={clienteIe}
                       onChange={(e) => setClienteIe(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cliente-email">E-mail</Label>
+                  </FormField>
+                  <FormField label="E-mail" htmlFor="nf-cliente-email">
                     <Input
                       id="nf-cliente-email"
                       type="email"
+                      className="h-11"
                       value={clienteEmail}
                       onChange={(e) => setClienteEmail(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cliente-tel">Telefone</Label>
+                  </FormField>
+                  <FormField label="Telefone" htmlFor="nf-cliente-tel">
                     <Input
                       id="nf-cliente-tel"
+                      className="h-11"
                       value={clienteTelefone}
                       onChange={(e) => setClienteTelefone(e.target.value)}
                     />
-                  </div>
+                  </FormField>
                 </div>
               </SectionCard>
 
               <SectionCard title="Endereço do cliente" description="Endereço de entrega/faturamento">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cep">CEP *</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <FormField label="CEP" htmlFor="nf-cep" required>
                     <Input
                       id="nf-cep"
+                      className={`h-11 ${inputClass('endereco.cep') ?? ''}`}
                       value={endereco.cep}
                       onChange={(e) => setEndereco((p) => ({ ...p, cep: e.target.value }))}
-                      className={inputClass('endereco.cep')}
                     />
-                  </div>
-                  <div className="sm:col-span-2 space-y-1">
-                    <Label htmlFor="nf-log">Logradouro *</Label>
+                  </FormField>
+                  <FormField label="Logradouro" htmlFor="nf-log" required>
                     <Input
                       id="nf-log"
+                      className={`h-11 ${inputClass('endereco.logradouro') ?? ''}`}
                       value={endereco.logradouro}
                       onChange={(e) =>
                         setEndereco((p) => ({ ...p, logradouro: e.target.value }))
                       }
-                      className={inputClass('endereco.logradouro')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-num">Número *</Label>
+                  </FormField>
+                  <FormField label="Número" htmlFor="nf-num" required>
                     <Input
                       id="nf-num"
+                      className={`h-11 ${inputClass('endereco.numero') ?? ''}`}
                       value={endereco.numero}
                       onChange={(e) => setEndereco((p) => ({ ...p, numero: e.target.value }))}
-                      className={inputClass('endereco.numero')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-comp">Complemento</Label>
+                  </FormField>
+                  <FormField label="Complemento" htmlFor="nf-comp">
                     <Input
                       id="nf-comp"
+                      className="h-11"
                       value={endereco.complemento || ''}
                       onChange={(e) =>
                         setEndereco((p) => ({ ...p, complemento: e.target.value }))
                       }
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-bairro">Bairro *</Label>
+                  </FormField>
+                  <FormField label="Bairro" htmlFor="nf-bairro" required>
                     <Input
                       id="nf-bairro"
+                      className={`h-11 ${inputClass('endereco.bairro') ?? ''}`}
                       value={endereco.bairro}
                       onChange={(e) => setEndereco((p) => ({ ...p, bairro: e.target.value }))}
-                      className={inputClass('endereco.bairro')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-cidade">Cidade *</Label>
+                  </FormField>
+                  <FormField label="Cidade" htmlFor="nf-cidade" required>
                     <Input
                       id="nf-cidade"
+                      className={`h-11 ${inputClass('endereco.cidade') ?? ''}`}
                       value={endereco.cidade}
                       onChange={(e) => setEndereco((p) => ({ ...p, cidade: e.target.value }))}
-                      className={inputClass('endereco.cidade')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-uf">UF *</Label>
+                  </FormField>
+                  <FormField label="UF" htmlFor="nf-uf" required>
                     <Input
                       id="nf-uf"
                       maxLength={2}
+                      className={`h-11 ${inputClass('endereco.estado') ?? ''}`}
                       value={endereco.estado}
                       onChange={(e) =>
                         setEndereco((p) => ({
@@ -625,20 +642,19 @@ export function EmitirNotaFiscalDialog({
                           estado: e.target.value.toUpperCase().slice(0, 2),
                         }))
                       }
-                      className={inputClass('endereco.estado')}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="nf-ibge">Código IBGE</Label>
+                  </FormField>
+                  <FormField label="Código IBGE" htmlFor="nf-ibge">
                     <Input
                       id="nf-ibge"
+                      className="h-11"
                       value={endereco.codigo_ibge || ''}
                       onChange={(e) =>
                         setEndereco((p) => ({ ...p, codigo_ibge: e.target.value }))
                       }
                       placeholder="Opcional"
                     />
-                  </div>
+                  </FormField>
                 </div>
               </SectionCard>
 
@@ -646,17 +662,17 @@ export function EmitirNotaFiscalDialog({
                 title={`Produtos (${data.itens.length})`}
                 description="Itens do pedido — informe o NCM de cada produto"
               >
-                <div className="rounded-lg border overflow-x-auto">
-                  <table className="w-full text-sm min-w-[640px]">
+                <div className="rounded-xl border overflow-x-auto">
+                  <table className="w-full text-sm min-w-[720px]">
                     <thead className="bg-muted/50">
                       <tr>
-                        <th className="text-left p-2 font-medium w-10">#</th>
-                        <th className="text-left p-2 font-medium w-24">SKU</th>
-                        <th className="text-left p-2 font-medium">Produto</th>
-                        <th className="text-right p-2 font-medium w-16">Qtd</th>
-                        <th className="text-right p-2 font-medium w-28">Unit.</th>
-                        <th className="text-right p-2 font-medium w-28">Subtotal</th>
-                        <th className="text-left p-2 font-medium w-36">NCM *</th>
+                        <th className="text-left px-4 py-3.5 font-medium w-12">#</th>
+                        <th className="text-left px-4 py-3.5 font-medium w-28">SKU</th>
+                        <th className="text-left px-4 py-3.5 font-medium min-w-[180px]">Produto</th>
+                        <th className="text-right px-4 py-3.5 font-medium w-20">Qtd</th>
+                        <th className="text-right px-4 py-3.5 font-medium w-32">Unit.</th>
+                        <th className="text-right px-4 py-3.5 font-medium w-36">Subtotal</th>
+                        <th className="text-left px-4 py-3.5 font-medium w-40">NCM *</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -665,17 +681,17 @@ export function EmitirNotaFiscalDialog({
                         const ncmVal = ncmPorProduto[item.produto_id] ?? '';
                         return (
                           <tr key={item.produto_id} className="border-t">
-                            <td className="p-2 text-muted-foreground">{idx + 1}</td>
-                            <td className="p-2 font-mono text-xs">{item.sku || '—'}</td>
-                            <td className="p-2">{item.nome}</td>
-                            <td className="p-2 text-right">{item.quantidade}</td>
-                            <td className="p-2 text-right">
+                            <td className="px-4 py-4 text-muted-foreground">{idx + 1}</td>
+                            <td className="px-4 py-4 font-mono text-xs">{item.sku || '—'}</td>
+                            <td className="px-4 py-4 leading-relaxed">{item.nome}</td>
+                            <td className="px-4 py-4 text-right">{item.quantidade}</td>
+                            <td className="px-4 py-4 text-right whitespace-nowrap">
                               {formatCurrency(item.preco_unitario)}
                             </td>
-                            <td className="p-2 text-right font-medium">
+                            <td className="px-4 py-4 text-right font-medium whitespace-nowrap">
                               {formatCurrency(item.subtotal)}
                             </td>
-                            <td className="p-2">
+                            <td className="px-4 py-4">
                               <Input
                                 value={ncmVal}
                                 onChange={(e) =>
@@ -687,8 +703,8 @@ export function EmitirNotaFiscalDialog({
                                 placeholder="00000000"
                                 className={
                                   campoFaltando(faltantes, ncmKey)
-                                    ? 'border-destructive h-8 font-mono text-xs'
-                                    : 'h-8 font-mono text-xs'
+                                    ? 'border-destructive h-11 font-mono text-xs'
+                                    : 'h-11 font-mono text-xs'
                                 }
                               />
                             </td>
@@ -698,13 +714,13 @@ export function EmitirNotaFiscalDialog({
                     </tbody>
                     <tfoot className="border-t bg-muted/30">
                       <tr>
-                        <td colSpan={5} className="p-2 text-right font-medium">
+                        <td colSpan={5} className="px-4 py-4 text-right font-medium">
                           Total do pedido
                         </td>
-                        <td className="p-2 text-right font-semibold text-primary">
+                        <td className="px-4 py-4 text-right font-semibold text-primary whitespace-nowrap">
                           {formatCurrency(data.pedido.valor_total)}
                         </td>
-                        <td />
+                        <td className="px-4 py-4" />
                       </tr>
                     </tfoot>
                   </table>
@@ -714,11 +730,12 @@ export function EmitirNotaFiscalDialog({
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2 sm:gap-0 bg-background">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="px-8 py-5 border-t shrink-0 gap-3 sm:gap-4 bg-background">
+          <Button variant="outline" size="lg" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button
+            size="lg"
             onClick={handleEmitir}
             disabled={!data || !podeEmitir || emitirMutation.isPending || isLoading}
             className="gap-2"
