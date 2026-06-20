@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { canManageNotaFiscal } from '@/lib/role-access';
+import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { cn } from '@/lib/utils';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
 import {
@@ -57,12 +58,7 @@ function statusBadgeClass(status: StatusNotaFiscal): string {
 }
 
 function extractErrorMessage(error: unknown): string {
-  const err = error as { message?: string; response?: { data?: { message?: string | string[] } } };
-  const msg = err?.response?.data?.message;
-  if (Array.isArray(msg)) return msg.join(', ');
-  if (typeof msg === 'string' && msg.trim()) return msg;
-  if (err?.message) return err.message;
-  return 'Não foi possível concluir a operação.';
+  return extractApiErrorMessage(error);
 }
 
 export function PedidoNotaFiscalSection({

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { formatCurrency } from '@/lib/utils';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
 import {
@@ -89,12 +90,7 @@ function FormField({
 }
 
 function extractErrorMessage(error: unknown): string {
-  const err = error as { message?: string; response?: { data?: { message?: string | string[] } } };
-  const msg = err?.response?.data?.message;
-  if (Array.isArray(msg)) return msg.join(', ');
-  if (typeof msg === 'string' && msg.trim()) return msg;
-  if (err?.message) return err.message;
-  return 'Não foi possível concluir a operação.';
+  return extractApiErrorMessage(error);
 }
 
 function campoVazio(val?: string | null): boolean {

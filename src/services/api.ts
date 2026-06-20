@@ -1,6 +1,7 @@
 // Cliente HTTP base para todas as requisições da API
 
 import { getTokenInfo, validateToken } from '@/lib/token-utils';
+import { normalizeApiErrorMessage } from '@/lib/api-error-message';
 
 const PRODUCTION_API_DEFAULT =
   'https://sistemaerp-3.onrender.com/api/v1';
@@ -238,10 +239,10 @@ class ApiClient {
         }
 
         // Tratamento específico por código de status HTTP
-        let errorMessage = errorData?.message || 
-          errorData?.error?.message || 
-          errorData?.error ||
-          (Array.isArray(errorData?.message) ? errorData.message.join(', ') : null) ||
+        let errorMessage =
+          normalizeApiErrorMessage(errorData) ||
+          normalizeApiErrorMessage(errorData?.message) ||
+          normalizeApiErrorMessage(errorData?.error) ||
           `Erro ${response.status}: ${response.statusText}`;
 
         // Mensagens específicas para erros comuns
