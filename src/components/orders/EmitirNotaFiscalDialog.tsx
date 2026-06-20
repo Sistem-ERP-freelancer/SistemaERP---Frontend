@@ -140,6 +140,11 @@ function labelRegime(regime?: string | null): string {
   return regime || '—';
 }
 
+function labelSpedyAmbiente(ambiente?: 'homologacao' | 'producao' | null): string {
+  if (ambiente === 'producao') return 'Produção (SEFAZ real)';
+  return 'Homologação (sandbox — testes)';
+}
+
 function formatEndereco(end?: NotaFiscalPreEmissaoEndereco | null): string {
   if (!end) return '—';
   const partes = [
@@ -547,6 +552,22 @@ export function EmitirNotaFiscalDialog({
                       }
                     />
                   </div>
+                  {data.spedy_configurado && (
+                    <ReadOnlyField
+                      label="Ambiente Spedy"
+                      value={
+                        <span
+                          className={
+                            data.spedy_ambiente === 'producao'
+                              ? 'font-medium text-amber-700 dark:text-amber-400'
+                              : 'font-medium text-blue-700 dark:text-blue-400'
+                          }
+                        >
+                          {labelSpedyAmbiente(data.spedy_ambiente)}
+                        </span>
+                      }
+                    />
+                  )}
                 </div>
               </SectionCard>
 

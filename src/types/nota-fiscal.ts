@@ -136,6 +136,7 @@ export interface NotaFiscalPreEmissao {
   };
   empresa: NotaFiscalPreEmissaoEmpresa;
   spedy_configurado: boolean;
+  spedy_ambiente: 'homologacao' | 'producao';
   nota_existente?: {
     status: StatusNotaFiscal;
     numero_nf?: number | null;
