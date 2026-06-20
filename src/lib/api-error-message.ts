@@ -47,7 +47,12 @@ export function extractApiErrorMessage(error: unknown): string {
   if (fromNested) return fromNested;
 
   const fromError = normalizeApiErrorMessage(err?.message);
-  if (fromError) return fromError;
+  if (
+    fromError &&
+    !/^Request failed with status code \d+$/i.test(fromError)
+  ) {
+    return fromError;
+  }
 
   const status = err?.response?.status;
   if (status) return `Erro ${status} ao processar a requisição.`;
