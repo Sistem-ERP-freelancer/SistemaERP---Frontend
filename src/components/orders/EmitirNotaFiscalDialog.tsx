@@ -11,6 +11,14 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { BRAZILIAN_UFS, isValidBrazilUf } from '@/lib/brazil-uf';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { formatCurrency } from '@/lib/utils';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
@@ -212,6 +220,13 @@ function calcularFaltantesLocal(data: {
       if (campoVazio(data.endereco[key] as string)) {
         faltantes.push({ campo, label, secao: 'endereco' });
       }
+    }
+    if (!campoVazio(data.endereco.estado) && !isValidBrazilUf(data.endereco.estado)) {
+      faltantes.push({
+        campo: 'endereco.estado',
+        label: `UF inválida (${data.endereco.estado.toUpperCase()}). Selecione um estado válido`,
+        secao: 'endereco',
+      });
     }
   }
   for (const item of data.itens) {
@@ -651,18 +666,36 @@ export function EmitirNotaFiscalDialog({
                     />
                   </FormField>
                   <FormField label="UF" htmlFor="nf-uf" required>
-                    <Input
-                      id="nf-uf"
-                      maxLength={2}
-                      className={`h-11 ${inputClass('endereco.estado') ?? ''}`}
-                      value={endereco.estado}
-                      onChange={(e) =>
-                        setEndereco((p) => ({
-                          ...p,
-                          estado: e.target.value.toUpperCase().slice(0, 2),
-                        }))
+                    <Select
+                      value={
+                        endereco.estado && isValidBrazilUf(endereco.estado)
+                          ? endereco.estado.toUpperCase()
+                          : undefined
                       }
-                    />
+                      onValueChange={(value) =>
+                        setEndereco((p) => ({ ...p, estado: value }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="nf-uf"
+                        className={`h-11 ${inputClass('endereco.estado') ?? ''}`}
+                      >
+                        <SelectValue placeholder="Selecione o estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BRAZILIAN_UFS.map((uf) => (
+                          <SelectItem key={uf} value={uf}>
+                            {uf}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {endereco.estado && !isValidBrazilUf(endereco.estado) && (
+                      <p className="text-xs text-destructive">
+                        &quot;{endereco.estado.toUpperCase()}&quot; não é válido — o cadastro
+                        tinha UF incorreta. Selecione acima (ex: CE, SP, PE).
+                      </p>
+                    )}
                   </FormField>
                   <FormField label="Código IBGE" htmlFor="nf-ibge">
                     <Input
