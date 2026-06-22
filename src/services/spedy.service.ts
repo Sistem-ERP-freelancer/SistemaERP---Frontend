@@ -7,7 +7,13 @@ export interface SpedyTenantStatus {
   ambiente: 'homologacao' | 'producao';
   cadastro_automatico_disponivel: boolean;
   pode_ativar: boolean;
+  pode_atualizar_certificado: boolean;
   send_email_to_customer: boolean;
+}
+
+export interface SpedyCertificadoResult {
+  message: string;
+  company_id: string;
 }
 
 export interface SpedyAtivarResult {
@@ -69,5 +75,12 @@ export const spedyService = {
       fd.append('certificado', certificado);
     }
     return apiClient.postForm<SpedyAtivarResult>('/tenant/me/spedy/ativar', fd);
+  },
+
+  atualizarCertificado(certificado: File, senhaCertificado: string): Promise<SpedyCertificadoResult> {
+    const fd = new FormData();
+    fd.append('certificado', certificado);
+    fd.append('senhaCertificado', senhaCertificado.trim());
+    return apiClient.postForm<SpedyCertificadoResult>('/tenant/me/spedy/certificado', fd);
   },
 };

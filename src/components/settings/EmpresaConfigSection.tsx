@@ -64,6 +64,7 @@ export function EmpresaConfigSection({
   const [certificadoFile, setCertificadoFile] = useState<File | null>(null);
   const [senhaCertificado, setSenhaCertificado] = useState('');
   const [ativandoSpedy, setAtivandoSpedy] = useState(false);
+  const [atualizandoCertificado, setAtualizandoCertificado] = useState(false);
 
   const { data: spedyStatus, isLoading: loadingSpedyStatus } = useQuery({
     queryKey: ['spedy-tenant-status'],
@@ -193,14 +194,47 @@ export function EmpresaConfigSection({
     }
   };
 
+  const integracaoAtiva =
+    spedyStatus?.integracao_ativa ||
+    Boolean(tenantInfo?.configuracoes?.spedy?.apiKey);
+
+  const handleAtualizarCertificado = async () => {
+    if (!certificadoFile) {
+      toast.error('Selecione o arquivo do certificado digital (.pfx).');
+      return;
+    }
+    if (!senhaCertificado.trim()) {
+      toast.error('Informe a senha do certificado digital.');
+      return;
+    }
+
+    setAtualizandoCertificado(true);
+    try {
+      const result = await spedyService.atualizarCertificado(
+        certificadoFile,
+        senhaCertificado,
+      );
+      toast.success(result.message);
+      setCertificadoFile(null);
+      setSenhaCertificado('');
+      if (certInputRef.current) certInputRef.current.value = '';
+      await queryClient.invalidateQueries({ queryKey: ['spedy-tenant-status'] });
+    } catch (err) {
+      toast.error(extractApiErrorMessage(err));
+    } finally {
+      setAtualizandoCertificado(false);
+    }
+  };
+
   const podeMostrarAtivacao =
     canEdit &&
     spedyStatus?.cadastro_automatico_disponivel &&
     spedyStatus?.pode_ativar;
 
-  const integracaoAtiva =
-    spedyStatus?.integracao_ativa ||
-    Boolean(tenantInfo?.configuracoes?.spedy?.apiKey);
+  const podeMostrarAtualizarCertificado =
+    canEdit &&
+    integracaoAtiva &&
+    (spedyStatus?.pode_atualizar_certificado ?? true);
 
   if (loading) {
     return (
@@ -651,6 +685,89 @@ export function EmpresaConfigSection({
                   <>
                     <ShieldCheck className="h-4 w-4 mr-2" />
                     Ativar emissão de NF-e
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {podeMostrarAtualizarCertificado && (
+            <div className="sm:col-span-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-4">
+              <div className="flex items-start gap-3">
+                <Upload className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Certificado digital</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Envie o arquivo .pfx da empresa para a Spedy. Necessário para autorizar
+                    NF-e (sem certificado válido as notas ficam rejeitadas).
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Arquivo .pfx</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={certInputRef}
+                      type="file"
+                      accept=".pfx"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        setCertificadoFile(file);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => certInputRef.current?.click()}
+                      disabled={disabled || atualizandoCertificado}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {certificadoFile ? certificadoFile.name : 'Selecionar .pfx'}
+                    </Button>
+                    {certificadoFile && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setCertificadoFile(null);
+                          if (certInputRef.current) certInputRef.current.value = '';
+                        }}
+                        disabled={atualizandoCertificado}
+                      >
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Senha do certificado</Label>
+                  <Input
+                    type="password"
+                    value={senhaCertificado}
+                    onChange={(e) => setSenhaCertificado(e.target.value)}
+                    disabled={disabled || atualizandoCertificado}
+                    placeholder="Senha do .pfx"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={handleAtualizarCertificado}
+                disabled={disabled || atualizandoCertificado}
+              >
+                {atualizandoCertificado ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enviando certificado...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Atualizar certificado digital
                   </>
                 )}
               </Button>

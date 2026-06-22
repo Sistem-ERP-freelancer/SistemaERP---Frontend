@@ -350,9 +350,16 @@ export function EmitirNotaFiscalDialog({
       notaFiscalService.emitir(pedidoId!, payload),
     onSuccess: (nota) => {
       queryClient.invalidateQueries({ queryKey: ['pedidos', pedidoId, 'nota-fiscal'] });
-      toast.success('Nota enviada à Spedy', {
-        description: STATUS_NOTA_FISCAL_LABELS[nota.status] ?? nota.status,
-      });
+      const statusLabel = STATUS_NOTA_FISCAL_LABELS[nota.status] ?? nota.status;
+      const motivo = nota.mensagem_processamento ?? nota.mensagemProcessamento;
+      const description = motivo ? `${statusLabel} — ${motivo}` : statusLabel;
+
+      if (nota.status === 'rejected' || nota.status === 'denied') {
+        toast.warning('Nota enviada à Spedy', { description });
+      } else {
+        toast.success('Nota enviada à Spedy', { description });
+      }
+
       onSuccess?.(nota);
       onOpenChange(false);
     },
