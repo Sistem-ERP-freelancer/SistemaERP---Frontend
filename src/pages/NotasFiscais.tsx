@@ -83,7 +83,7 @@ export default function NotasFiscais() {
 
   const queryKey = ['notas-fiscais', page, busca, statusFiltro] as const;
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey,
     queryFn: () =>
       notaFiscalService.listar({
@@ -194,6 +194,15 @@ export default function NotasFiscais() {
               <div className="p-10 text-center">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Carregando emissões...</p>
+              </div>
+            ) : isError ? (
+              <div className="p-10 text-center space-y-3">
+                <p className="text-sm text-destructive">
+                  {extractApiErrorMessage(error)}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  Tentar novamente
+                </Button>
               </div>
             ) : !data?.items.length ? (
               <div className="p-10 text-center text-sm text-muted-foreground">
