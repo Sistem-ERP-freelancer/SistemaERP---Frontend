@@ -227,7 +227,7 @@ export default function NotasFiscais() {
                     {data.items.map((item) => {
                       const podeBaixar = item.status === 'authorized';
                       return (
-                        <TableRow key={item.id}>
+                        <TableRow key={`${item.pedido_id}-${item.numero_pedido}`}>
                           <TableCell className="font-medium text-primary whitespace-nowrap">
                             {item.numero_pedido}
                           </TableCell>
