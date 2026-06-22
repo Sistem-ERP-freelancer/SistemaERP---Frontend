@@ -1,6 +1,8 @@
 import { apiClient } from './api';
 import type {
   EmitirNotaFiscalPayload,
+  ListarNotasFiscaisFiltros,
+  ListarNotasFiscaisResponse,
   NotaFiscal,
   NotaFiscalPreEmissao,
 } from '@/types/nota-fiscal';
@@ -32,6 +34,18 @@ class NotaFiscalService {
   async obterPreEmissao(pedidoId: number): Promise<NotaFiscalPreEmissao> {
     return apiClient.get<NotaFiscalPreEmissao>(
       `/pedidos/${pedidoId}/nota-fiscal/pre-emissao`,
+    );
+  }
+
+  async listar(filtros: ListarNotasFiscaisFiltros = {}): Promise<ListarNotasFiscaisResponse> {
+    const params = new URLSearchParams();
+    if (filtros.page) params.set('page', String(filtros.page));
+    if (filtros.limit) params.set('limit', String(filtros.limit));
+    if (filtros.busca?.trim()) params.set('busca', filtros.busca.trim());
+    if (filtros.status) params.set('status', filtros.status);
+    const qs = params.toString();
+    return apiClient.get<ListarNotasFiscaisResponse>(
+      `/notas-fiscais${qs ? `?${qs}` : ''}`,
     );
   }
 

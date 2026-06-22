@@ -161,3 +161,35 @@ export interface EmitirNotaFiscalPayload {
   endereco?: NotaFiscalPreEmissaoEndereco;
   produtos?: Array<{ produto_id: number; ncm?: string; sku?: string }>;
 }
+
+export interface NotaFiscalListItem {
+  id: number;
+  pedido_id: number;
+  numero_pedido: string;
+  cliente_nome: string | null;
+  status: StatusNotaFiscal;
+  numero_nf: number | null;
+  serie: string | null;
+  chave_acesso: string | null;
+  valor_total: number | null;
+  ambiente: string | null;
+  mensagem_processamento: string | null;
+  data_emissao: string;
+  emitida_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListarNotasFiscaisResponse {
+  items: NotaFiscalListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ListarNotasFiscaisFiltros {
+  page?: number;
+  limit?: number;
+  busca?: string;
+  status?: StatusNotaFiscal;
+}

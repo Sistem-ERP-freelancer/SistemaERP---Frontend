@@ -31,6 +31,7 @@ export function canManageNotaFiscal(role?: string | null): boolean {
 const ROUTE_ROLES: Record<string, AppRole[] | 'all'> = {
   '/dashboard': 'all',
   '/pedidos': 'all',
+  '/notas-fiscais': ['ADMIN', 'GERENTE', 'FINANCEIRO'],
   '/clientes': 'all',
   '/produtos': 'all',
   '/estoque': 'all',

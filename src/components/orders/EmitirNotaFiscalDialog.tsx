@@ -350,6 +350,7 @@ export function EmitirNotaFiscalDialog({
       notaFiscalService.emitir(pedidoId!, payload),
     onSuccess: (nota) => {
       queryClient.invalidateQueries({ queryKey: ['pedidos', pedidoId, 'nota-fiscal'] });
+      queryClient.invalidateQueries({ queryKey: ['notas-fiscais'] });
       const statusLabel = STATUS_NOTA_FISCAL_LABELS[nota.status] ?? nota.status;
       const motivo = nota.mensagem_processamento ?? nota.mensagemProcessamento;
       const description = motivo ? `${statusLabel} — ${motivo}` : statusLabel;

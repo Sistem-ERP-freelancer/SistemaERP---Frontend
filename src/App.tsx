@@ -32,6 +32,7 @@ import Fornecedores from "./pages/Fornecedores";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import NotasFiscais from "./pages/NotasFiscais";
 import Pedidos from "./pages/Pedidos";
 import Produtos from "./pages/Produtos";
 import Settings from "./pages/Settings";
@@ -127,6 +128,16 @@ const App = () => (
                   <Pedidos />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/notas-fiscais"
+              element={
+                <ProtectedRoute>
+                  <RoleRoute>
+                    <NotasFiscais />
+                  </RoleRoute>
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/financeiro" 
