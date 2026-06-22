@@ -526,6 +526,50 @@ class ApiClient {
   delete<T>(endpoint: string, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  /** POST multipart/form-data (ex.: upload de certificado Spedy). */
+  async postForm<T>(endpoint: string, formData: FormData): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    const tokenValidation = this.validateTokenBeforeRequest();
+    if (!tokenValidation.valid) {
+      const error = new Error(
+        tokenValidation.error || 'Token inválido ou expirado',
+      ) as any;
+      error.response = { status: 401, data: { message: tokenValidation.error } };
+      throw error;
+    }
+
+    const token = this.getAuthToken();
+    const response = await fetchWithOptionalRetry(
+      url,
+      {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      },
+      endpoint,
+    );
+
+    if (!response.ok) {
+      let errorData: unknown;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { message: response.statusText };
+      }
+      const errorMessage =
+        normalizeApiErrorMessage(errorData) ||
+        `Erro ${response.status}: ${response.statusText}`;
+      const error = new Error(errorMessage) as any;
+      error.response = { status: response.status, data: errorData };
+      throw error;
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+    return response.json() as Promise<T>;
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);

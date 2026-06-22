@@ -31,6 +31,7 @@ export interface TenantSpedyConfig {
   apiKey?: string | null;
   ambiente?: SpedyAmbiente | null;
   sendEmailToCustomer?: boolean | null;
+  companyId?: string | null;
 }
 
 export interface TenantConfiguracoes {

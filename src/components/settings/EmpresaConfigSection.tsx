@@ -13,8 +13,10 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { formatCEP, formatTelefone, telefoneArmazenadoParaCampo } from '@/lib/validators';
+import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { cepService } from '@/services/cep.service';
 import { ConsultaCnpjResponse } from '@/services/cnpj.service';
+import { spedyService } from '@/services/spedy.service';
 import { Tenant } from '@/services/tenants.service';
 import {
   EMPRESA_FORM_PADRAO,
@@ -31,8 +33,11 @@ import {
   Receipt,
   Save,
   Search,
+  ShieldCheck,
+  Upload,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 interface EmpresaConfigSectionProps {
@@ -52,8 +57,19 @@ export function EmpresaConfigSection({
   saving,
   onSave,
 }: EmpresaConfigSectionProps) {
+  const queryClient = useQueryClient();
+  const certInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<UpdateTenantEmpresaDto>(EMPRESA_FORM_PADRAO);
   const [buscandoCep, setBuscandoCep] = useState(false);
+  const [certificadoFile, setCertificadoFile] = useState<File | null>(null);
+  const [senhaCertificado, setSenhaCertificado] = useState('');
+  const [ativandoSpedy, setAtivandoSpedy] = useState(false);
+
+  const { data: spedyStatus, isLoading: loadingSpedyStatus } = useQuery({
+    queryKey: ['spedy-tenant-status'],
+    queryFn: () => spedyService.obterStatus(),
+    enabled: canEdit && !loading,
+  });
 
   useEffect(() => {
     if (tenantInfo) {
@@ -117,6 +133,65 @@ export function EmpresaConfigSection({
   };
 
   const disabled = !canEdit || saving;
+
+  const validarFormularioEmpresa = (): string | null => {
+    if (!form.nome?.trim()) return 'Informe a razão social.';
+    if (!form.nomeFantasia?.trim()) return 'Informe o nome fantasia.';
+    if (!form.cnpj?.replace(/\D/g, '')) return 'Informe o CNPJ.';
+    if (!form.cep?.replace(/\D/g, '')) return 'Informe o CEP.';
+    if (!form.logradouro?.trim()) return 'Informe o logradouro.';
+    if (!form.numero?.trim()) return 'Informe o número.';
+    if (!form.bairro?.trim()) return 'Informe o bairro.';
+    if (!form.cidade?.trim()) return 'Informe a cidade.';
+    if (!form.estado?.trim()) return 'Informe a UF.';
+    return null;
+  };
+
+  const handleAtivarSpedy = async () => {
+    const erro = validarFormularioEmpresa();
+    if (erro) {
+      toast.error(erro);
+      return;
+    }
+
+    const ambiente = form.spedyAmbiente || 'homologacao';
+    if (ambiente === 'producao' && !certificadoFile) {
+      toast.error('Certificado digital (.pfx) é obrigatório para produção.');
+      return;
+    }
+    if (certificadoFile && !senhaCertificado.trim()) {
+      toast.error('Informe a senha do certificado digital.');
+      return;
+    }
+
+    setAtivandoSpedy(true);
+    try {
+      const result = await spedyService.ativar(
+        form,
+        certificadoFile ?? undefined,
+        senhaCertificado.trim() || undefined,
+      );
+      toast.success(result.message);
+      setCertificadoFile(null);
+      setSenhaCertificado('');
+      if (certInputRef.current) certInputRef.current.value = '';
+      await queryClient.invalidateQueries({ queryKey: ['tenant-me'] });
+      await queryClient.invalidateQueries({ queryKey: ['spedy-tenant-status'] });
+    } catch (err) {
+      toast.error(extractApiErrorMessage(err));
+    } finally {
+      setAtivandoSpedy(false);
+    }
+  };
+
+  const podeMostrarAtivacao =
+    canEdit &&
+    spedyStatus?.cadastro_automatico_disponivel &&
+    spedyStatus?.pode_ativar;
+
+  const integracaoAtiva =
+    spedyStatus?.integracao_ativa ||
+    Boolean(tenantInfo?.configuracoes?.spedy?.apiKey);
 
   if (loading) {
     return (
@@ -462,6 +537,128 @@ export function EmpresaConfigSection({
           <CardDescription>Credenciais e ambiente para emissão de notas</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
+          {!loadingSpedyStatus && (
+            <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+              {integracaoAtiva ? (
+                <Badge variant="default" className="bg-green-600/90">
+                  Integração ativa
+                </Badge>
+              ) : (
+                <Badge variant="secondary">Não configurada</Badge>
+              )}
+              {spedyStatus?.ambiente && (
+                <Badge variant="outline">
+                  {spedyStatus.ambiente === 'producao' ? 'Produção' : 'Homologação'}
+                </Badge>
+              )}
+              {spedyStatus?.company_id && (
+                <span className="text-xs text-muted-foreground">
+                  Emissor: {spedyStatus.company_id}
+                </span>
+              )}
+            </div>
+          )}
+
+          {podeMostrarAtivacao && (
+            <div className="sm:col-span-2 rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-4">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Ativar emissão de NF-e na Spedy</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cadastra automaticamente o emissor (POST /companies), habilita NF-e de
+                    produto e grava a API Key desta empresa. Em homologação o certificado é
+                    opcional; em produção é obrigatório.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Certificado digital (.pfx)</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={certInputRef}
+                      type="file"
+                      accept=".pfx"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        setCertificadoFile(file);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => certInputRef.current?.click()}
+                      disabled={disabled || ativandoSpedy}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {certificadoFile ? certificadoFile.name : 'Selecionar .pfx'}
+                    </Button>
+                    {certificadoFile && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setCertificadoFile(null);
+                          if (certInputRef.current) certInputRef.current.value = '';
+                        }}
+                        disabled={ativandoSpedy}
+                      >
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {form.spedyAmbiente === 'producao'
+                      ? 'Obrigatório em produção.'
+                      : 'Opcional em homologação (notas podem ficar rejeitadas sem certificado válido).'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Senha do certificado</Label>
+                  <Input
+                    type="password"
+                    value={senhaCertificado}
+                    onChange={(e) => setSenhaCertificado(e.target.value)}
+                    disabled={disabled || ativandoSpedy}
+                    placeholder="Senha do .pfx"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={handleAtivarSpedy}
+                disabled={disabled || ativandoSpedy}
+              >
+                {ativandoSpedy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Ativando na Spedy...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                    Ativar emissão de NF-e
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {!loadingSpedyStatus &&
+            canEdit &&
+            spedyStatus &&
+            !spedyStatus.cadastro_automatico_disponivel &&
+            !integracaoAtiva && (
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Cadastro automático indisponível no servidor. Cole a API Key manualmente abaixo
+                ou configure SPEDY_MASTER_API_KEY no backend.
+              </p>
+            )}
+
           <div className="space-y-2 sm:col-span-2">
             <Label>API Key</Label>
             <Input
@@ -473,7 +670,9 @@ export function EmpresaConfigSection({
             />
             {canEdit && (
               <p className="text-xs text-muted-foreground">
-                Deixe em branco ou mantenha os pontos para não alterar a chave já salva.
+                {integracaoAtiva
+                  ? 'Chave gerada automaticamente pela Spedy. Deixe em branco ou mantenha os pontos para não alterar.'
+                  : 'Deixe em branco ou mantenha os pontos para não alterar a chave já salva.'}
               </p>
             )}
           </div>
