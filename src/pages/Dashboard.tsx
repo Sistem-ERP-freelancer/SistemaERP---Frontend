@@ -12,8 +12,10 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatISODateLocal } from "@/lib/utils";
-import type { ApiCentroCustoDespesa } from "@/services/centro-custo.service";
-import { centroCustoService } from "@/services/centro-custo.service";
+import {
+  centroCustoService,
+  type ApiCentroCustoDespesa,
+} from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { useQuery } from "@tanstack/react-query";
@@ -104,11 +106,66 @@ function mesAnoAtualLocal(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function parseValorDashboard(valor: unknown): number {
-  if (valor === null || valor === undefined || valor === "") return 0;
-  const num =
-    typeof valor === "string" ? parseFloat(valor) : Number(valor);
-  return Number.isFinite(num) ? num : 0;
+/** Máximo por página na API de centro de custo (backend limita em 100). */
+const CC_DRE_PAGE_LIMIT = 100;
+
+async function agregarCentroCustoParaDre(filtros: {
+  dataInicial: string;
+  dataFinal: string;
+  rocaId?: number;
+}): Promise<{
+  items: { tipoId: number; nome: string; valor: number }[];
+  total: number;
+}> {
+  try {
+    const res = await centroCustoService.agregarDespesasPorTipo(filtros);
+    return {
+      items: (res?.items ?? []).map((t) => ({
+        tipoId: t.tipoId,
+        nome: t.nome,
+        valor: Number(t.valor.toFixed(2)),
+      })),
+      total: Number((res?.total ?? 0).toFixed(2)),
+    };
+  } catch {
+    const despesas: ApiCentroCustoDespesa[] = [];
+    let totalRegistros = Infinity;
+    let page = 1;
+    while ((page - 1) * CC_DRE_PAGE_LIMIT < totalRegistros) {
+      const res = await centroCustoService.listarDespesas(
+        page,
+        CC_DRE_PAGE_LIMIT,
+        filtros,
+      );
+      totalRegistros = res?.total ?? 0;
+      despesas.push(...(res?.items ?? []));
+      if (!res?.items?.length) break;
+      page += 1;
+    }
+    const porTipo = new Map<number, { nome: string; valor: number }>();
+    for (const d of despesas) {
+      const tipoId = Number(d.tipoId) || 0;
+      if (tipoId <= 0) continue;
+      const valor = Number(d.valor) || 0;
+      const nome = (d.tipoNome || `Tipo #${tipoId}`).trim();
+      const cur = porTipo.get(tipoId);
+      if (cur) cur.valor += valor;
+      else porTipo.set(tipoId, { nome, valor });
+    }
+    const items = [...porTipo.entries()]
+      .sort((a, b) =>
+        a[1].nome.localeCompare(b[1].nome, "pt-BR", { sensitivity: "base" }),
+      )
+      .map(([tipoId, { nome, valor }]) => ({
+        tipoId,
+        nome,
+        valor: Number(valor.toFixed(2)),
+      }));
+    return {
+      items,
+      total: Number(items.reduce((s, x) => s + x.valor, 0).toFixed(2)),
+    };
+  }
 }
 
 const Dashboard = () => {
@@ -342,37 +399,22 @@ const Dashboard = () => {
     queryKey: ["dashboard", "dre-real", parametrosDre, rocaFiltro],
     queryFn: async () => {
       const { data_inicial, data_final } = parametrosDre;
-      const limit = 200;
 
-      const [resumoFinanceiroMes, despesasPagina1] = await Promise.all([
+      const filtrosCentroCusto = {
+        dataInicial: data_inicial,
+        dataFinal: data_final,
+        ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
+      };
+
+      const [resumoFinanceiroMes, agregadoCentroCusto] = await Promise.all([
         financeiroService.getDashboardUnificado({
           data_inicial,
           data_final,
           painel_totais_gerais: true,
           ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
         }),
-        centroCustoService.listarDespesas(1, limit, {
-          dataInicial: data_inicial,
-          dataFinal: data_final,
-          ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
-        }),
+        agregarCentroCustoParaDre(filtrosCentroCusto),
       ]);
-
-      const despesas = [...(despesasPagina1?.items ?? [])];
-
-      const totalPaginasDespesas = Math.max(
-        1,
-        Math.ceil((despesasPagina1?.total ?? despesas.length) / limit),
-      );
-
-      for (let page = 2; page <= totalPaginasDespesas; page += 1) {
-        const resposta = await centroCustoService.listarDespesas(page, limit, {
-          dataInicial: data_inicial,
-          dataFinal: data_final,
-          ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
-        });
-        despesas.push(...(resposta?.items ?? []));
-      }
 
       const resumoRaw = resumoFinanceiroMes as Record<string, unknown>;
       const painelRaw =
@@ -386,46 +428,13 @@ const Dashboard = () => {
       const totalVendasEfetivas = numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
-      /** Soma por tipo de custo (centro de despesa) — espelha o que vira contas a pagar do CC. */
-      const fornecedoresPorTipoMap = new Map<
-        number,
-        { nome: string; valor: number }
-      >();
-
-      for (const despesa of despesas) {
-        const valor = parseValorDashboard(despesa.valor);
-        const tipoId = Number((despesa as ApiCentroCustoDespesa).tipoId) || 0;
-        const nomeTipoExibicao = (
-          (despesa as ApiCentroCustoDespesa).tipoNome ||
-          (tipoId > 0 ? `Tipo #${tipoId}` : "Sem tipo")
-        ).trim();
-
-        if (tipoId > 0) {
-          const cur = fornecedoresPorTipoMap.get(tipoId);
-          if (cur) cur.valor += valor;
-          else fornecedoresPorTipoMap.set(tipoId, { nome: nomeTipoExibicao, valor });
-        }
-      }
-
-      const somaCentroDespesaNoPeriodo = [...fornecedoresPorTipoMap.values()].reduce(
-        (s, x) => s + x.valor,
-        0,
-      );
+      const fornecedoresPorTipo = agregadoCentroCusto.items;
+      const somaCentroDespesaNoPeriodo = agregadoCentroCusto.total;
       /** Compras (contas a pagar no período) que não batem com o agregado do centro de despesa no mesmo recorte. */
       const fornecedoresDemaisCompras = Math.max(
         0,
         Number((totalFornecedores - somaCentroDespesaNoPeriodo).toFixed(2)),
       );
-
-      const fornecedoresPorTipo = [...fornecedoresPorTipoMap.entries()]
-        .sort((a, b) =>
-          a[1].nome.localeCompare(b[1].nome, "pt-BR", { sensitivity: "base" }),
-        )
-        .map(([tipoId, { nome, valor }]) => ({
-          tipoId,
-          nome,
-          valor: Number(valor.toFixed(2)),
-        }));
 
       /** Alinha os cards à tabela: com filtro por roça a API pode zerar compras (conta sem `roca_id`), mas o centro de custo tem valores. */
       const totalDespesasEfetivasDre =

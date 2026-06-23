@@ -39,6 +39,13 @@ export type CentroCustoResumoModulo = {
   valorPagoTotal: number;
 };
 
+export type CentroCustoDespesaPorTipo = {
+  tipoId: number;
+  nome: string;
+  valor: number;
+  quantidade: number;
+};
+
 export type PaginatedResult<T> = {
   items: T[];
   total: number;
@@ -125,6 +132,27 @@ class CentroCustoService {
     return apiClient.post<{ alvo: number; criadas: number }>(
       `${BASE}/despesas/sincronizar-contas-financeiras`,
       {},
+    );
+  }
+
+  agregarDespesasPorTipo(filtros?: {
+    dataInicial?: string;
+    dataFinal?: string;
+    rocaId?: number;
+  }): Promise<{ items: CentroCustoDespesaPorTipo[]; total: number }> {
+    const q = new URLSearchParams();
+    if (filtros?.dataInicial?.trim()) {
+      q.set('dataInicial', filtros.dataInicial.trim().slice(0, 10));
+    }
+    if (filtros?.dataFinal?.trim()) {
+      q.set('dataFinal', filtros.dataFinal.trim().slice(0, 10));
+    }
+    if (filtros?.rocaId != null && filtros.rocaId > 0) {
+      q.set('rocaId', String(filtros.rocaId));
+    }
+    const qs = q.toString();
+    return apiClient.get<{ items: CentroCustoDespesaPorTipo[]; total: number }>(
+      `${BASE}/despesas/agregado-por-tipo${qs ? `?${qs}` : ''}`,
     );
   }
 
