@@ -110,8 +110,8 @@ function mesAnoAtualLocal(): string {
 const CC_DRE_PAGE_LIMIT = 100;
 
 async function agregarCentroCustoParaDre(filtros: {
-  dataInicial: string;
-  dataFinal: string;
+  dataInicial?: string;
+  dataFinal?: string;
   rocaId?: number;
 }): Promise<{
   items: { tipoId: number; nome: string; valor: number }[];
@@ -213,10 +213,11 @@ const Dashboard = () => {
   const parametrosDre = useMemo(() => {
     const anoReferencia = Number(refMesYyyyMm.split("-")[0]) || new Date().getFullYear();
     const mesEscolhido = dreMesAnoFiltro?.trim();
+    /** Vazio = mesmo recorte do Centro de Despesa sem filtro de data (todas as despesas). */
     if (!mesEscolhido) {
       return {
-        data_inicial: `${anoReferencia}-01-01`,
-        data_final: `${anoReferencia}-12-31`,
+        semRecorteData: true as const,
+        rotuloPeriodo: "Todo o período",
       };
     }
     const [ano, mes] = mesEscolhido.split("-").map(Number);
@@ -225,8 +226,10 @@ const Dashboard = () => {
     const primeiro = new Date(anoValido, mesValido - 1, 1);
     const ultimo = new Date(anoValido, mesValido, 0);
     return {
+      semRecorteData: false as const,
       data_inicial: formatISODateLocal(primeiro),
       data_final: formatISODateLocal(ultimo),
+      rotuloPeriodo: `${String(mesValido).padStart(2, "0")}/${anoValido}`,
     };
   }, [dreMesAnoFiltro, refMesYyyyMm]);
 
@@ -398,21 +401,28 @@ const Dashboard = () => {
   const { data: dreDadosReais, isLoading: loadingDre } = useQuery({
     queryKey: ["dashboard", "dre-real", parametrosDre, rocaFiltro],
     queryFn: async () => {
-      const { data_inicial, data_final } = parametrosDre;
+      const filtrosCentroCusto = parametrosDre.semRecorteData
+        ? { ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}) }
+        : {
+            dataInicial: parametrosDre.data_inicial,
+            dataFinal: parametrosDre.data_final,
+            ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
+          };
 
-      const filtrosCentroCusto = {
-        dataInicial: data_inicial,
-        dataFinal: data_final,
-        ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
-      };
+      const paramsDashboard = parametrosDre.semRecorteData
+        ? {
+            painel_totais_gerais: true as const,
+            ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
+          }
+        : {
+            data_inicial: parametrosDre.data_inicial,
+            data_final: parametrosDre.data_final,
+            painel_totais_gerais: true as const,
+            ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
+          };
 
       const [resumoFinanceiroMes, agregadoCentroCusto] = await Promise.all([
-        financeiroService.getDashboardUnificado({
-          data_inicial,
-          data_final,
-          painel_totais_gerais: true,
-          ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
-        }),
+        financeiroService.getDashboardUnificado(paramsDashboard),
         agregarCentroCustoParaDre(filtrosCentroCusto),
       ]);
 
@@ -430,15 +440,20 @@ const Dashboard = () => {
 
       const fornecedoresPorTipo = agregadoCentroCusto.items;
       const somaCentroDespesaNoPeriodo = agregadoCentroCusto.total;
-      /** Compras (contas a pagar no período) que não batem com o agregado do centro de despesa no mesmo recorte. */
-      const fornecedoresDemaisCompras = Math.max(
-        0,
-        Number((totalFornecedores - somaCentroDespesaNoPeriodo).toFixed(2)),
-      );
 
-      /** Alinha os cards à tabela: com filtro por roça a API pode zerar compras (conta sem `roca_id`), mas o centro de custo tem valores. */
-      const totalDespesasEfetivasDre =
-        fornecedoresPorTipo.length === 0 && fornecedoresDemaisCompras <= 0.005
+      /** Com recorte mensal: diferença entre contas a pagar (competência) e centro de custo no mesmo período. */
+      const fornecedoresDemaisCompras = parametrosDre.semRecorteData
+        ? 0
+        : Math.max(
+            0,
+            Number(
+              (totalFornecedores - somaCentroDespesaNoPeriodo).toFixed(2),
+            ),
+          );
+
+      const totalDespesasEfetivasDre = parametrosDre.semRecorteData
+        ? somaCentroDespesaNoPeriodo
+        : fornecedoresPorTipo.length === 0 && fornecedoresDemaisCompras <= 0.005
           ? totalFornecedores
           : Number(
               (somaCentroDespesaNoPeriodo + fornecedoresDemaisCompras).toFixed(
@@ -780,10 +795,12 @@ const Dashboard = () => {
                     DRE - Demonstrativo de Resultados no Exercício
                   </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Fornecedores por tipo de centro de despesa recompõem as{' '}
-                    <strong className="font-medium text-foreground">compras do mês</strong> (competência).
-                    Os totais à direita seguem <strong className="font-medium text-foreground">vendas − compras</strong>
-                    , como no saldo da 1.ª faixa.
+                    Valores por tipo espelham o{' '}
+                    <strong className="font-medium text-foreground">Centro de Despesa</strong>
+                    {parametrosDre.semRecorteData
+                      ? " (todo o período, sem filtro de data)."
+                      : ` (mês ${parametrosDre.rotuloPeriodo}).`}
+                    {' '}Os totais à direita seguem a soma das linhas abaixo.
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
@@ -809,7 +826,7 @@ const Dashboard = () => {
                     />
                     {!dreMesAnoFiltro ? (
                       <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-muted-foreground">
-                        Todos os meses
+                        Todo o período
                       </span>
                     ) : null}
                   </div>
