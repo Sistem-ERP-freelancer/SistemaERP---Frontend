@@ -1,6 +1,11 @@
 import { Notifications } from "@/components/Notifications";
 import { TopERPLogo } from "@/components/TopERPLogo";
 import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -10,68 +15,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-    Boxes,
     ChevronDown,
-    DollarSign,
-    FileText,
-    Landmark,
-    LayoutDashboard,
+    ChevronRight,
     LogOut,
     Menu,
-    Package,
-    Receipt,
     Settings,
     Shield,
-    ShoppingCart,
-    Sprout,
-    Truck,
-    TruckIcon,
     User,
-    Users,
-    Wallet,
-    X
+    X,
 } from "lucide-react";
-import { filterMenuByRole } from "@/lib/role-access";
+import {
+    getAppMenu,
+    groupHasActiveRoute,
+    isActiveRoute,
+    type MenuAction,
+    type MenuEntry,
+    type MenuGroup,
+    type MenuLink,
+} from "@/lib/menu-config";
+import { filterMenuEntriesByRole } from "@/lib/role-access";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-
-const getMenuItems = (isSuperAdmin: boolean) => {
-  const baseItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-    { icon: DollarSign, label: "Financeiro", href: "/financeiro" },
-    { icon: Landmark, label: "Centro de Despesa", href: "/centro-custos" },
-    { icon: FileText, label: "Contas a Pagar", href: "/contas-a-pagar" },
-    { icon: Wallet, label: "Contas a Receber", href: "/contas-a-receber" },
-    { icon: ShoppingCart, label: "Pedidos", href: "/pedidos" },
-    { icon: Receipt, label: "Notas Fiscais", href: "/notas-fiscais" },
-    { icon: Truck, label: "Fornecedores", href: "/fornecedores" },
-    { icon: Users, label: "Clientes", href: "/clientes" },
-    { icon: Package, label: "Produtos", href: "/produtos" },
-    { icon: Boxes, label: "Movimentações", href: "/estoque" },
-    { icon: TruckIcon, label: "Transportadoras", href: "/transportadoras" },
-    { icon: Sprout, label: "Controle de Roça", href: "/controle-roca" },
-    { icon: Settings, label: "Configurações", href: "/settings" },
-  ];
-
-  if (isSuperAdmin) {
-    return [
-      { icon: Shield, label: "Painel Admin", href: "/admin" },
-      ...baseItems,
-    ];
-  }
-
-  return baseItems;
-};
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const LARGURA_MENU_COMPLETO_PX = 1024; // a partir de 1024px (notebook 15", etc.) o menu pode mostrar ícones + nomes; abaixo disso é overlay no mobile
+const LARGURA_MENU_COMPLETO_PX = 1024;
 
 const AppLayout = ({ children }: AppLayoutProps) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const updateSidebar = () => {
@@ -88,13 +63,27 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     window.addEventListener("resize", updateSidebar);
     return () => window.removeEventListener("resize", updateSidebar);
   }, []);
+
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isSuperAdmin } = useAuth();
-  const menuItems = filterMenuByRole(
-    getMenuItems(isSuperAdmin),
-    user?.role,
+
+  const menuEntries = useMemo(
+    () => filterMenuEntriesByRole(getAppMenu(isSuperAdmin), user?.role),
+    [isSuperAdmin, user?.role],
   );
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const next = { ...prev };
+      for (const entry of menuEntries) {
+        if (entry.kind === "group" && groupHasActiveRoute(location.pathname, entry)) {
+          next[entry.id] = true;
+        }
+      }
+      return next;
+    });
+  }, [location.pathname, menuEntries]);
 
   const handleLogout = async () => {
     await logout();
@@ -113,33 +102,218 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     }
   };
 
+  const closeSidebarOnMobile = () => {
+    if (typeof window !== "undefined" && window.innerWidth < LARGURA_MENU_COMPLETO_PX) {
+      setSidebarOpen(false);
+    }
+  };
+
   const getUserInitials = () => {
     if (user?.nome) {
       return user.nome
-        .split(' ')
-        .map(n => n[0])
-        .join('')
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
         .toUpperCase()
         .slice(0, 2);
     }
     if (user?.email) {
       return user.email[0].toUpperCase();
     }
-    return 'U';
+    return "U";
+  };
+
+  const linkClasses = (active: boolean, nested = false) =>
+    cn(
+      "flex items-center gap-2 sm:gap-3 rounded-lg transition-all duration-200 active:opacity-90 w-full text-left min-h-[44px]",
+      nested ? "px-2.5 sm:px-3 py-2.5 pl-9 sm:pl-10" : "px-2.5 sm:px-3 py-3",
+      active
+        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow"
+        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    );
+
+  const renderMenuLink = (item: MenuLink, nested = false) => {
+    const active = isActiveRoute(location.pathname, item.href);
+    return (
+      <Link
+        key={item.href}
+        to={item.href}
+        onClick={closeSidebarOnMobile}
+        className={linkClasses(active, nested)}
+      >
+        <item.icon className="w-5 h-5 shrink-0" />
+        {sidebarOpen && (
+          <span
+            className="font-medium min-w-0 max-w-full whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:overflow-visible min-[1920px]:text-clip"
+            title={item.label}
+          >
+            {item.label}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  const renderMenuAction = (item: MenuAction, nested = false) => {
+    if (item.action !== "logout") return null;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => {
+          closeSidebarOnMobile();
+          void handleLogout();
+        }}
+        className={cn(
+          linkClasses(false, nested),
+          "hover:bg-destructive/20 hover:text-destructive",
+        )}
+      >
+        <item.icon className="w-5 h-5 shrink-0" />
+        {sidebarOpen && <span className="font-medium whitespace-nowrap">{item.label}</span>}
+      </button>
+    );
+  };
+
+  const renderGroupChild = (child: MenuLink | MenuAction) => {
+    if (child.kind === "link") return renderMenuLink(child, true);
+    return renderMenuAction(child, true);
+  };
+
+  const renderCollapsedGroup = (group: MenuGroup) => {
+    const active = groupHasActiveRoute(location.pathname, group);
+    return (
+      <DropdownMenu key={group.id}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-center min-h-[44px] w-full rounded-lg transition-all duration-200",
+              active
+                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            )}
+            title={group.label}
+          >
+            <group.icon className="w-5 h-5 shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" className="w-52">
+          <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {group.children.map((child) => {
+            if (child.kind === "link") {
+              const childActive = isActiveRoute(location.pathname, child.href);
+              return (
+                <DropdownMenuItem key={child.href} asChild>
+                  <Link
+                    to={child.href}
+                    className={cn("flex items-center gap-2 cursor-pointer", childActive && "font-medium")}
+                    onClick={closeSidebarOnMobile}
+                  >
+                    <child.icon className="w-4 h-4" />
+                    {child.label}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            }
+            return (
+              <DropdownMenuItem
+                key={child.id}
+                onClick={() => void handleLogout()}
+                className="text-destructive focus:text-destructive cursor-pointer gap-2"
+              >
+                <child.icon className="w-4 h-4" />
+                {child.label}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  const renderExpandedGroup = (group: MenuGroup) => {
+    const active = groupHasActiveRoute(location.pathname, group);
+    const open = expandedGroups[group.id] ?? false;
+
+    return (
+      <Collapsible
+        key={group.id}
+        open={open}
+        onOpenChange={(isOpen) =>
+          setExpandedGroups((prev) => ({ ...prev, [group.id]: isOpen }))
+        }
+      >
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 w-full text-left",
+              active
+                ? "text-sidebar-primary-foreground bg-sidebar-primary/80"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            )}
+          >
+            <group.icon className="w-5 h-5 shrink-0" />
+            {sidebarOpen && (
+              <>
+                <span className="font-medium flex-1 min-w-0 whitespace-nowrap">{group.label}</span>
+                {open ? (
+                  <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 shrink-0 opacity-70" />
+                )}
+              </>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        {sidebarOpen && (
+          <CollapsibleContent className="space-y-0.5 pt-0.5">
+            {group.children.map((child) => renderGroupChild(child))}
+          </CollapsibleContent>
+        )}
+      </Collapsible>
+    );
+  };
+
+  const renderMenuEntry = (entry: MenuEntry) => {
+    if (entry.kind === "link") {
+      if (!sidebarOpen) {
+        const active = isActiveRoute(location.pathname, entry.href);
+        return (
+          <Link
+            key={entry.href}
+            to={entry.href}
+            title={entry.label}
+            className={cn(
+              "flex items-center justify-center min-h-[44px] w-full rounded-lg transition-all duration-200",
+              active
+                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            )}
+          >
+            <entry.icon className="w-5 h-5 shrink-0" />
+          </Link>
+        );
+      }
+      return renderMenuLink(entry);
+    }
+
+    if (!sidebarOpen) return renderCollapsedGroup(entry);
+    return renderExpandedGroup(entry);
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Mobile overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar: fixed na viewport; largura fluida em telas pequenas; main compensa com pl no lg+ */}
-      <aside 
+      <aside
         className={cn(
           "flex flex-col bg-sidebar transition-[width,transform] duration-300 ease-out touch-manipulation",
           "fixed inset-y-0 left-0 z-50 h-[100dvh] max-h-[100dvh] min-h-0 overflow-x-hidden shadow-xl lg:shadow-none",
@@ -149,23 +323,14 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             : "w-0 -translate-x-full border-0 overflow-hidden lg:overflow-visible lg:w-16 xl:w-20 lg:translate-x-0",
         )}
       >
-        {/* Logo - Fixo no topo */}
         <div className="h-14 sm:h-16 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 border-b border-sidebar-border gap-2">
-          {sidebarOpen && (
-            <TopERPLogo 
-              variant="sidebar"
-              showText={false}
-            />
-          )}
+          {sidebarOpen && <TopERPLogo variant="sidebar" showText={false} />}
           {!sidebarOpen && (
             <div className="mx-auto">
-              <TopERPLogo 
-                variant="sidebar"
-                showText={false}
-              />
+              <TopERPLogo variant="sidebar" showText={false} />
             </div>
           )}
-          <button 
+          <button
             onClick={toggleSidebar}
             className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-sidebar-accent text-sidebar-foreground transition-colors shrink-0"
           >
@@ -173,54 +338,11 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </button>
         </div>
 
-        {/* Navigation - Área rolável */}
         <nav className="flex-1 py-3 sm:py-4 px-2 sm:px-3 space-y-0.5 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-none overscroll-y-contain">
-          {menuItems.map((item) => {
-            const isActive = location.pathname === item.href;
-            const itemClasses = `flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-3 min-h-[44px] rounded-lg transition-all duration-200 active:opacity-90 w-full text-left ${
-              isActive
-                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-glow"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            }`;
-
-            return (
-              <Link
-                key={item.label}
-                to={item.href}
-                onClick={() => {
-                  if (typeof window !== "undefined" && window.innerWidth < LARGURA_MENU_COMPLETO_PX) {
-                    setSidebarOpen(false);
-                  }
-                }}
-                className={itemClasses}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {sidebarOpen && (
-                  <span
-                    className="font-medium min-w-0 max-w-full whitespace-nowrap min-[1920px]:whitespace-normal min-[1920px]:overflow-visible min-[1920px]:text-clip"
-                    title={item.label}
-                  >
-                    {item.label}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+          {menuEntries.map((entry) => renderMenuEntry(entry))}
         </nav>
-
-        {/* Logout - Fixo no final */}
-        <div className="flex-shrink-0 px-2 sm:px-3 pt-2 pb-3 border-t border-sidebar-border">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 min-h-[44px] rounded-lg w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-colors"
-          >
-            <LogOut className="w-5 h-5 shrink-0" />
-            {sidebarOpen && <span className="font-medium whitespace-nowrap">Sair</span>}
-          </button>
-        </div>
       </aside>
 
-      {/* Main: padding esquerdo = largura da sidebar no desktop (sidebar fora do fluxo) */}
       <main
         className={cn(
           "min-h-[100dvh] min-w-0 flex flex-col transition-[padding] duration-300 ease-out",
@@ -230,10 +352,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             : "lg:pl-16 xl:pl-20",
         )}
       >
-        {/* Header */}
         <header className="h-14 sm:h-16 bg-card border-b border-border flex items-center justify-between px-3 sm:px-6 gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <button 
+            <button
               onClick={toggleSidebar}
               className="lg:hidden touch-target min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-secondary text-foreground transition-colors shrink-0"
             >
@@ -245,9 +366,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 p-1.5 sm:p-1 min-h-[44px] min-w-[44px] sm:min-w-0 rounded-full hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full primary-gradient flex items-center justify-center text-primary-foreground font-semibold text-sm">
-              {getUserInitials()}
-            </div>
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full primary-gradient flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                    {getUserInitials()}
+                  </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
@@ -272,9 +393,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* Opções apenas para ADMIN e GERENTE */}
-                {(user?.role === "ADMIN" ||
-                  user?.role === "GERENTE") && (
+                {(user?.role === "ADMIN" || user?.role === "GERENTE") && (
                   <>
                     <DropdownMenuItem asChild>
                       <Link to="/settings" className="flex items-center cursor-pointer">
@@ -299,7 +418,6 @@ const AppLayout = ({ children }: AppLayoutProps) => {
                     <DropdownMenuSeparator />
                   </>
                 )}
-                {/* Logout sempre disponível para todos */}
                 <DropdownMenuItem
                   onClick={handleLogout}
                   className="text-destructive focus:text-destructive cursor-pointer"
@@ -312,10 +430,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </header>
 
-        {/* Content */}
-        <div className="min-w-0 flex-1 flex flex-col">
-          {children}
-        </div>
+        <div className="min-w-0 flex-1 flex flex-col">{children}</div>
       </main>
     </div>
   );

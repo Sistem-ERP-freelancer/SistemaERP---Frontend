@@ -1,3 +1,5 @@
+import type { MenuEntry } from "./menu-config";
+
 export type AppRole =
   | 'ADMIN'
   | 'GERENTE'
@@ -74,4 +76,23 @@ export function filterMenuByRole<T extends { href: string }>(
   role?: string | null,
 ): T[] {
   return items.filter((item) => canAccessRoute(role, item.href));
+}
+
+export function filterMenuEntriesByRole(
+  entries: MenuEntry[],
+  role?: string | null,
+): MenuEntry[] {
+  return entries.flatMap((entry) => {
+    if (entry.kind === "link") {
+      return canAccessRoute(role, entry.href) ? [entry] : [];
+    }
+
+    const children = entry.children.filter((child) => {
+      if (child.kind === "action") return true;
+      return canAccessRoute(role, child.href);
+    });
+
+    if (children.length === 0) return [];
+    return [{ ...entry, children }];
+  });
 }
