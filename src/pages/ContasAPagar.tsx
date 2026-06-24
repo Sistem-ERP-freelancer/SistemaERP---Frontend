@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { EmDesenvolvimentoDialog } from "@/components/EmDesenvolvimentoDialog";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
   ModuleStatCards,
@@ -211,6 +212,9 @@ function ContasAPagar() {
   >("todos");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
+  const [relatorioEmDesenvolvimento, setRelatorioEmDesenvolvimento] = useState<string | null>(
+    null,
+  );
   const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState<string>("");
   const [relatorioFornecedorPdfLoading, setRelatorioFornecedorPdfLoading] = useState(false);
   const [relatorioFornecedorDataInicial, setRelatorioFornecedorDataInicial] = useState("");
@@ -2056,8 +2060,16 @@ function ContasAPagar() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setRelatorioEmDesenvolvimento("Relatório geral")}>
+                  Relatório geral
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setRelatorioFornecedorPdfOpen(true)}>
                   Relatório financeiro por fornecedor
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setRelatorioEmDesenvolvimento("Relatório por centro de custo")}
+                >
+                  Relatório por centro de custo
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2649,6 +2661,13 @@ function ContasAPagar() {
             </div>
           </DialogContent>
         </Dialog>
+        <EmDesenvolvimentoDialog
+          open={relatorioEmDesenvolvimento !== null}
+          onOpenChange={(open) => {
+            if (!open) setRelatorioEmDesenvolvimento(null);
+          }}
+          title={relatorioEmDesenvolvimento ?? "Em desenvolvimento"}
+        />
       </div>
     </AppLayout>
   );
