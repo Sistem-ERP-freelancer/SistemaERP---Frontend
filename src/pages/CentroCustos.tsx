@@ -92,7 +92,6 @@ import {
   type DespesasStatusFiltro,
 } from '@/contexts/CentroCustosContext';
 import { formatValorMonetarioBr, parseValorMonetarioEntrada } from '@/lib/parse-valor-monetario';
-import { calcularResumoModuloDespesas } from '@/lib/centro-custo-resumo';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import {
   centroCustoService,
@@ -254,13 +253,20 @@ function DespesasTable({
                     {dataPagamento ? formatDate(dataPagamento) : '—'}
                   </TableCell>
                   <TableCell className="text-center">
-                    <DropdownMenu>
+                    <DropdownMenu modal={false}>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" title="Ações">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Ações"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <MoreHorizontal className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="center" className="w-44">
+                      <DropdownMenuContent align="end" side="bottom" className="z-[100] w-44">
                         <DropdownMenuItem
                           onSelect={() => {
                             void onDetalhe(d);
@@ -334,6 +340,7 @@ function CentroCustoTablePagination({
           <PaginationItem>
             <PaginationPrevious
               href="#"
+              onPointerDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.preventDefault();
                 setPage((prev) => Math.max(1, prev - 1));
@@ -358,6 +365,7 @@ function CentroCustoTablePagination({
               <PaginationItem key={pageNum}>
                 <PaginationLink
                   href="#"
+                  onPointerDown={(e) => e.preventDefault()}
                   onClick={(e) => {
                     e.preventDefault();
                     setPage(pageNum);
@@ -373,6 +381,7 @@ function CentroCustoTablePagination({
           <PaginationItem>
             <PaginationNext
               href="#"
+              onPointerDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.preventDefault();
                 setPage((prev) => Math.min(totalPages, prev + 1));
@@ -1350,30 +1359,7 @@ export default function CentroCustos() {
       ? 'Nenhuma despesa encontrada com os filtros selecionados ou o termo buscado.'
       : undefined;
 
-  const temFiltrosCards =
-    !isDespesasFiltroVazio(despesasFiltro) || despesasBusca.trim() !== '';
-
-  const { data: despesasParaCards, isLoading: isLoadingDespesasCards } = useQuery({
-    queryKey: [
-      'centro-custo',
-      'cards',
-      despesasFiltro,
-      despesasBusca,
-    ],
-    queryFn: () =>
-      fetchTodasDespesasParaRelatorio(
-        buildDespesasApiFiltros(despesasFiltro, despesasBusca),
-      ),
-    enabled: temFiltrosCards,
-    retry: false,
-  });
-
-  const resumoExibir = useMemo(() => {
-    if (!temFiltrosCards || despesasParaCards == null) return resumo;
-    return calcularResumoModuloDespesas(despesasParaCards);
-  }, [temFiltrosCards, despesasParaCards, resumo]);
-
-  const isLoadingCards = isLoading || (temFiltrosCards && isLoadingDespesasCards);
+  const isLoadingCards = isLoading;
 
   const nomeTipoDespesa = (d: CentroCustoDespesa) =>
     d.tipoNome ?? tiposOpcoes.find((t) => t.id === d.tipoId)?.nome ?? '—';
@@ -1647,12 +1633,12 @@ export default function CentroCustos() {
     return CARD_STATS.map((c) => {
       const valNum =
         c.key === 'abertas'
-          ? resumoExibir.qAbertas
+          ? resumo.qAbertas
           : c.key === 'quitadas'
-            ? resumoExibir.qQuitadas
+            ? resumo.qQuitadas
             : c.key === 'valorAberto'
-              ? resumoExibir.valorAbertoTotal
-              : resumoExibir.valorPagoTotal;
+              ? resumo.valorAbertoTotal
+              : resumo.valorPagoTotal;
       return {
         key: c.key,
         label: c.label,
@@ -1662,7 +1648,7 @@ export default function CentroCustos() {
         Icon: c.Icon,
       };
     });
-  }, [resumoExibir]);
+  }, [resumo]);
 
   return (
     <AppLayout>
@@ -1720,7 +1706,7 @@ export default function CentroCustos() {
           )}
 
           {tab === 'visao' && (
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-x-auto">
               <DespesasTable
                 despesas={despesas}
                 nomeTipo={despesaNomeTipo}
@@ -1963,7 +1949,7 @@ export default function CentroCustos() {
 
             <div className="space-y-2">
               <h2 className="text-base font-semibold">Lista de despesas</h2>
-              <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="rounded-xl border bg-card overflow-x-auto">
                 <DespesasTable
                   despesas={despesas}
                   nomeTipo={despesaNomeTipo}
