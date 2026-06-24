@@ -1,15 +1,19 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeftRight,
   BarChart3,
   Boxes,
+  Building2,
   DollarSign,
   FileText,
   FolderOpen,
   Landmark,
   LayoutDashboard,
+  LineChart,
   LogOut,
   Package,
   Receipt,
+  Scale,
   Settings,
   Shield,
   ShoppingCart,
@@ -55,9 +59,23 @@ export function getAppMenu(isSuperAdmin: boolean): MenuEntry[] {
       label: "Financeiro",
       children: [
         { kind: "link", icon: BarChart3, label: "Visão Geral", href: "/financeiro" },
+        {
+          kind: "link",
+          icon: LineChart,
+          label: "Fluxo de Caixa",
+          href: "/financeiro/fluxo-de-caixa",
+        },
         { kind: "link", icon: Landmark, label: "Centro de Despesa", href: "/centro-custos" },
         { kind: "link", icon: FileText, label: "Contas a Pagar", href: "/contas-a-pagar" },
         { kind: "link", icon: Wallet, label: "Contas a Receber", href: "/contas-a-receber" },
+        { kind: "link", icon: Building2, label: "Bancos e Contas", href: "/financeiro/bancos-contas" },
+        { kind: "link", icon: Scale, label: "Saldo Bancário", href: "/financeiro/saldo-bancario" },
+        {
+          kind: "link",
+          icon: ArrowLeftRight,
+          label: "Conciliação Bancária",
+          href: "/financeiro/conciliacao-bancaria",
+        },
       ],
     },
     {
@@ -114,7 +132,7 @@ export function getAppMenu(isSuperAdmin: boolean): MenuEntry[] {
 
 export function isActiveRoute(pathname: string, href: string): boolean {
   if (pathname === href) return true;
-  if (href === "/dashboard") return false;
+  if (href === "/dashboard" || href === "/financeiro") return false;
   return pathname.startsWith(`${href}/`);
 }
 

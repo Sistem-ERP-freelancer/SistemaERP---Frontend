@@ -26,6 +26,7 @@ import ContasAReceber from "./pages/ContasAReceber";
 import ControleRoca from "./pages/ControleRoca";
 import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
+import EmDesenvolvimentoPage from "./pages/EmDesenvolvimentoPage";
 import Financeiro from "./pages/Financeiro";
 import RelatorioComprasCliente from "./pages/RelatorioComprasCliente";
 import Fornecedores from "./pages/Fornecedores";
@@ -37,6 +38,7 @@ import Pedidos from "./pages/Pedidos";
 import Produtos from "./pages/Produtos";
 import Settings from "./pages/Settings";
 import Transportadoras from "./pages/Transportadoras";
+import { ArrowLeftRight, Building2, LineChart, Scale } from "lucide-react";
 
 function ProtectedFinanceRoute({ children }: { children: React.ReactNode }) {
   return (
@@ -146,6 +148,54 @@ const App = () => (
                   <Financeiro />
                 </ProtectedFinanceRoute>
               } 
+            />
+            <Route
+              path="/financeiro/bancos-contas"
+              element={
+                <ProtectedFinanceRoute>
+                  <EmDesenvolvimentoPage
+                    icon={Building2}
+                    title="Bancos e Contas"
+                    subtitle="Cadastro de bancos e contas bancárias vinculadas às empresas."
+                  />
+                </ProtectedFinanceRoute>
+              }
+            />
+            <Route
+              path="/financeiro/saldo-bancario"
+              element={
+                <ProtectedFinanceRoute>
+                  <EmDesenvolvimentoPage
+                    icon={Scale}
+                    title="Saldo Bancário"
+                    subtitle="Controle de saldo inicial, movimentações e saldo final do dia."
+                  />
+                </ProtectedFinanceRoute>
+              }
+            />
+            <Route
+              path="/financeiro/conciliacao-bancaria"
+              element={
+                <ProtectedFinanceRoute>
+                  <EmDesenvolvimentoPage
+                    icon={ArrowLeftRight}
+                    title="Conciliação Bancária"
+                    subtitle="Conferência entre saldo inicial, pagamentos, recebimentos e saldo final."
+                  />
+                </ProtectedFinanceRoute>
+              }
+            />
+            <Route
+              path="/financeiro/fluxo-de-caixa"
+              element={
+                <ProtectedFinanceRoute>
+                  <EmDesenvolvimentoPage
+                    icon={LineChart}
+                    title="Fluxo de Caixa"
+                    subtitle="Acompanhamento de entradas, saídas e projeção do caixa."
+                  />
+                </ProtectedFinanceRoute>
+              }
             />
             <Route
               path="/relatorio/compras-cliente"
