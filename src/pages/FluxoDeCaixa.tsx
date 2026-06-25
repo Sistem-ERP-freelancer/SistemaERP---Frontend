@@ -16,7 +16,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { exportarFluxoCaixaExcel } from '@/lib/fluxo-caixa-export';
+import { fimDoMesYMD, toYMD } from '@/lib/contas-financeiras-listagem';
+import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { cn, formatCurrency } from '@/lib/utils';
+import { controleRocaService } from '@/services/controle-roca.service';
+import {
+  financeiroService,
+  type FluxoCaixaLinha,
+} from '@/services/financeiro.service';
+import type { Roca } from '@/types/roca';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -27,9 +37,11 @@ import {
   FileSpreadsheet,
   Filter,
   LineChart,
+  Loader2,
   Wallet,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 type DiaColuna = {
   key: string;
@@ -37,155 +49,21 @@ type DiaColuna = {
   weekday: string;
 };
 
-type LinhaTabela = {
-  id: string;
-  label: string;
-  tipo:
-    | 'secao'
-    | 'item'
-    | 'subtotal'
-    | 'saldo-dia'
-    | 'saldo-acumulado';
-  secao?: 'entradas' | 'saidas';
-  valores: (number | null)[];
-  indent?: boolean;
-};
-
-const RESUMO_CARDS: ModuleStatCardItem[] = [
-  {
-    key: 'saldo-inicial',
-    label: 'Saldo inicial',
-    value: formatCurrency(12450),
-    Icon: Wallet,
-    ...statTheme.blue,
-  },
-  {
-    key: 'total-receber',
-    label: 'Total a receber',
-    value: formatCurrency(450000),
-    Icon: ArrowUpRight,
-    ...statTheme.emerald,
-  },
-  {
-    key: 'total-pagar',
-    label: 'Total a pagar',
-    value: formatCurrency(132000),
-    Icon: ArrowDownRight,
-    ...statTheme.rose,
-  },
-  {
-    key: 'saldo-projetado',
-    label: 'Saldo projetado',
-    value: formatCurrency(318000),
-    Icon: Calculator,
-    iconWrap: 'bg-sky-50',
-    iconClass: 'text-[#003366]',
-    valueClass: 'text-[#003366]',
-  },
-];
+type LinhaTabela = FluxoCaixaLinha;
 
 const GRADE_BORDA = 'border border-slate-200';
 
-const DIAS_MOCK: DiaColuna[] = [
-  { key: '23', label: '23/06', weekday: 'Ter' },
-  { key: '24', label: '24/06', weekday: 'Qua' },
-  { key: '25', label: '25/06', weekday: 'Qui' },
-  { key: '26', label: '26/06', weekday: 'Sex' },
-  { key: '27', label: '27/06', weekday: 'Sáb' },
-  { key: '28', label: '28/06', weekday: 'Dom' },
-];
+function inicioDoMesYMD(ref = new Date()): string {
+  return toYMD(new Date(ref.getFullYear(), ref.getMonth(), 1));
+}
 
-const LINHAS_MOCK: LinhaTabela[] = [
-  {
-    id: 'entradas-secao',
-    label: 'ENTRADAS',
-    tipo: 'secao',
-    secao: 'entradas',
-    valores: [],
-  },
-  {
-    id: 'a-receber',
-    label: 'A receber',
-    tipo: 'item',
-    secao: 'entradas',
-    indent: true,
-    valores: [15000, 8500, null, null, null, null],
-  },
-  {
-    id: 'saidas-secao',
-    label: 'SAÍDAS',
-    tipo: 'secao',
-    secao: 'saidas',
-    valores: [],
-  },
-  {
-    id: 'freelancer',
-    label: 'Freelancer',
-    tipo: 'item',
-    secao: 'saidas',
-    indent: true,
-    valores: [5000, 3200, 2500, 3000, null, null],
-  },
-  {
-    id: 'rh',
-    label: 'RH',
-    tipo: 'item',
-    secao: 'saidas',
-    indent: true,
-    valores: [8000, 4000, 3200, 3500, null, null],
-  },
-  {
-    id: 'insumos',
-    label: 'Insumos',
-    tipo: 'item',
-    secao: 'saidas',
-    indent: true,
-    valores: [2500, 1200, null, null, null, null],
-  },
-  {
-    id: 'combustivel',
-    label: 'Combustível',
-    tipo: 'item',
-    secao: 'saidas',
-    indent: true,
-    valores: [1200, 500, 2000, 1500, null, 750],
-  },
-  {
-    id: 'manutencao',
-    label: 'Manutenção',
-    tipo: 'item',
-    secao: 'saidas',
-    indent: true,
-    valores: [800, 300, null, 1000, null, null],
-  },
-  {
-    id: 'compras',
-    label: 'Compras',
-    tipo: 'item',
-    secao: 'saidas',
-    indent: true,
-    valores: [null, null, null, null, null, null],
-  },
-  {
-    id: 'total-saidas',
-    label: 'Total saídas',
-    tipo: 'subtotal',
-    secao: 'saidas',
-    valores: [17500, 9200, 7700, 9000, null, 750],
-  },
-  {
-    id: 'saldo-dia',
-    label: 'Saldo do dia',
-    tipo: 'saldo-dia',
-    valores: [-2500, -700, -7700, -9000, null, -750],
-  },
-  {
-    id: 'saldo-acumulado',
-    label: 'Saldo acumulado',
-    tipo: 'saldo-acumulado',
-    valores: [28500, 27800, 20100, 11100, 11100, 10350],
-  },
-];
+function periodoPadrao() {
+  const hoje = new Date();
+  return {
+    dataInicial: inicioDoMesYMD(hoje),
+    dataFinal: fimDoMesYMD(hoje),
+  };
+}
 
 function formatValorCelula(value: number | null): string {
   if (value === null) return '-';
@@ -222,6 +100,7 @@ function FluxoDeCaixaTabela({
   saidasAberto,
   onToggleEntradas,
   onToggleSaidas,
+  isLoading,
 }: {
   linhas: LinhaTabela[];
   dias: DiaColuna[];
@@ -229,6 +108,7 @@ function FluxoDeCaixaTabela({
   saidasAberto: boolean;
   onToggleEntradas: () => void;
   onToggleSaidas: () => void;
+  isLoading?: boolean;
 }) {
   const linhasVisiveis = useMemo(() => {
     return linhas.filter((linha) => {
@@ -240,6 +120,22 @@ function FluxoDeCaixaTabela({
   }, [linhas, entradasAberto, saidasAberto]);
 
   const celulaGrade = cn(GRADE_BORDA, 'px-3 py-2.5');
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[280px] items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-[#003366]" />
+      </div>
+    );
+  }
+
+  if (dias.length === 0) {
+    return (
+      <div className="flex min-h-[200px] items-center justify-center py-12 text-sm text-slate-500">
+        Nenhum dado para o período selecionado.
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto pb-1">
@@ -362,8 +258,140 @@ function FluxoDeCaixaTabela({
 }
 
 export default function FluxoDeCaixa() {
+  const padrao = useMemo(() => periodoPadrao(), []);
   const [entradasAberto, setEntradasAberto] = useState(true);
   const [saidasAberto, setSaidasAberto] = useState(true);
+
+  const [formDataInicial, setFormDataInicial] = useState(padrao.dataInicial);
+  const [formDataFinal, setFormDataFinal] = useState(padrao.dataFinal);
+  const [formRocaId, setFormRocaId] = useState<string>('todas');
+
+  const [filtros, setFiltros] = useState({
+    dataInicial: padrao.dataInicial,
+    dataFinal: padrao.dataFinal,
+    rocaId: undefined as number | undefined,
+  });
+
+  const { data: rocasApi = [] } = useQuery({
+    queryKey: ['fluxo-caixa', 'rocas-ativas'],
+    queryFn: () => controleRocaService.listarRocas(undefined, false),
+  });
+
+  const rocasAtivas = useMemo(
+    () => (rocasApi as Roca[]).filter((r) => r.ativo !== false),
+    [rocasApi],
+  );
+
+  const {
+    data: fluxoData,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      'fluxo-caixa',
+      filtros.dataInicial,
+      filtros.dataFinal,
+      filtros.rocaId ?? 'todas',
+    ],
+    queryFn: () =>
+      financeiroService.obterFluxoCaixa({
+        data_inicial: filtros.dataInicial,
+        data_final: filtros.dataFinal,
+        roca_id: filtros.rocaId,
+      }),
+    staleTime: 30_000,
+  });
+
+  const dias: DiaColuna[] = useMemo(
+    () =>
+      (fluxoData?.colunas ?? []).map((c) => ({
+        key: c.data,
+        label: c.label,
+        weekday: c.weekday,
+      })),
+    [fluxoData?.colunas],
+  );
+
+  const linhas = fluxoData?.linhas ?? [];
+
+  const resumoCards: ModuleStatCardItem[] = useMemo(() => {
+    const cards = fluxoData?.cards;
+    return [
+      {
+        key: 'saldo-inicial',
+        label: 'Saldo inicial',
+        value: formatCurrency(cards?.saldo_inicial ?? 0),
+        Icon: Wallet,
+        ...statTheme.blue,
+      },
+      {
+        key: 'total-receber',
+        label: 'Total a receber',
+        value: formatCurrency(cards?.total_a_receber ?? 0),
+        Icon: ArrowUpRight,
+        ...statTheme.emerald,
+      },
+      {
+        key: 'total-pagar',
+        label: 'Total a pagar',
+        value: formatCurrency(cards?.total_a_pagar ?? 0),
+        Icon: ArrowDownRight,
+        ...statTheme.rose,
+      },
+      {
+        key: 'saldo-projetado',
+        label: 'Saldo projetado',
+        value: formatCurrency(cards?.saldo_projetado ?? 0),
+        Icon: Calculator,
+        iconWrap: 'bg-sky-50',
+        iconClass: 'text-[#003366]',
+        valueClass: 'text-[#003366]',
+      },
+    ];
+  }, [fluxoData?.cards]);
+
+  const aplicarFiltros = useCallback(() => {
+    if (!formDataInicial || !formDataFinal) {
+      toast.error('Informe o período completo.');
+      return;
+    }
+    if (formDataInicial > formDataFinal) {
+      toast.error('A data inicial não pode ser maior que a data final.');
+      return;
+    }
+    const rocaId =
+      formRocaId !== 'todas' ? Number.parseInt(formRocaId, 10) : undefined;
+    if (formRocaId !== 'todas' && (!rocaId || Number.isNaN(rocaId))) {
+      toast.error('Selecione uma roça válida.');
+      return;
+    }
+    setFiltros({
+      dataInicial: formDataInicial,
+      dataFinal: formDataFinal,
+      rocaId: rocaId && rocaId > 0 ? rocaId : undefined,
+    });
+  }, [formDataInicial, formDataFinal, formRocaId]);
+
+  const exportarExcel = useCallback(() => {
+    if (!fluxoData) {
+      toast.error('Carregue os dados antes de exportar.');
+      return;
+    }
+    const rocaNome =
+      filtros.rocaId != null
+        ? rocasAtivas.find((r) => r.id === filtros.rocaId)?.nome
+        : undefined;
+    try {
+      exportarFluxoCaixaExcel(fluxoData, { rocaNome });
+      toast.success('Planilha exportada com sucesso.');
+    } catch (e) {
+      toast.error(extractApiErrorMessage(e) || 'Não foi possível exportar.');
+    }
+  }, [fluxoData, filtros.rocaId, rocasAtivas]);
+
+  const erroMsg = error ? extractApiErrorMessage(error) : null;
 
   return (
     <AppLayout>
@@ -384,14 +412,16 @@ export default function FluxoDeCaixa() {
                   <Input
                     id="fluxo-periodo-inicio"
                     type="date"
-                    defaultValue="2026-06-01"
+                    value={formDataInicial}
+                    onChange={(e) => setFormDataInicial(e.target.value)}
                     className="h-8 min-w-[130px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                   />
                   <span className="shrink-0 text-slate-400">—</span>
                   <Input
                     id="fluxo-periodo-fim"
                     type="date"
-                    defaultValue="2026-06-30"
+                    value={formDataFinal}
+                    onChange={(e) => setFormDataFinal(e.target.value)}
                     className="h-8 min-w-[130px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                   />
                 </div>
@@ -399,14 +429,17 @@ export default function FluxoDeCaixa() {
 
               <div className="min-w-[160px] space-y-1.5">
                 <Label>Roça</Label>
-                <Select defaultValue="todas">
+                <Select value={formRocaId} onValueChange={setFormRocaId}>
                   <SelectTrigger className="border-slate-200 bg-white">
                     <SelectValue placeholder="Selecione a roça" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todas">Todas</SelectItem>
-                    <SelectItem value="roca-1">Roça Norte</SelectItem>
-                    <SelectItem value="roca-2">Roça Sul</SelectItem>
+                    {rocasAtivas.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -416,14 +449,22 @@ export default function FluxoDeCaixa() {
               <Button
                 type="button"
                 className="gap-2 bg-[#003366] hover:bg-[#002244]"
+                onClick={aplicarFiltros}
+                disabled={isFetching}
               >
-                <Filter className="h-4 w-4" />
+                {isFetching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Filter className="h-4 w-4" />
+                )}
                 Filtrar
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 className="gap-2 border-slate-200 bg-white hover:bg-slate-50"
+                onClick={exportarExcel}
+                disabled={!fluxoData || isLoading}
               >
                 <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
                 Exportar Excel
@@ -432,7 +473,18 @@ export default function FluxoDeCaixa() {
           </CardContent>
         </Card>
 
-        <ModuleStatCards columns={4} items={RESUMO_CARDS} />
+        {erroMsg && (
+          <Card className="mb-4 border-rose-200 bg-rose-50/50">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm text-rose-700">
+              <span>{erroMsg}</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+                Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <ModuleStatCards columns={4} items={resumoCards} isLoading={isLoading} />
 
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardContent className="p-0">
@@ -441,12 +493,13 @@ export default function FluxoDeCaixa() {
             </div>
 
             <FluxoDeCaixaTabela
-              linhas={LINHAS_MOCK}
-              dias={DIAS_MOCK}
+              linhas={linhas}
+              dias={dias}
               entradasAberto={entradasAberto}
               saidasAberto={saidasAberto}
               onToggleEntradas={() => setEntradasAberto((v) => !v)}
               onToggleSaidas={() => setSaidasAberto((v) => !v)}
+              isLoading={isLoading}
             />
 
             <div className="flex flex-col items-center gap-1 border-t border-slate-200 bg-slate-50/40 px-4 py-2.5">

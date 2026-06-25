@@ -225,6 +225,43 @@ export interface DashboardUnificado {
   painel_acompanhamento?: PainelAcompanhamentoFinanceiro;
 }
 
+export type FluxoCaixaLinhaTipo =
+  | 'secao'
+  | 'item'
+  | 'subtotal'
+  | 'saldo-dia'
+  | 'saldo-acumulado';
+
+export interface FluxoCaixaColuna {
+  data: string;
+  label: string;
+  weekday: string;
+}
+
+export interface FluxoCaixaLinha {
+  id: string;
+  label: string;
+  tipo: FluxoCaixaLinhaTipo;
+  secao?: 'entradas' | 'saidas';
+  valores: (number | null)[];
+  indent?: boolean;
+  origem?: 'pedido_venda' | 'pedido_compra' | 'centro_custo';
+  tipo_id?: number;
+}
+
+export interface FluxoCaixaResponse {
+  periodo: { inicio: string; fim: string };
+  filtros: { roca_id?: number };
+  cards: {
+    saldo_inicial: number;
+    total_a_receber: number;
+    total_a_pagar: number;
+    saldo_projetado: number;
+  };
+  colunas: FluxoCaixaColuna[];
+  linhas: FluxoCaixaLinha[];
+}
+
 class FinanceiroService {
   async listarAgrupado(params?: {
     page?: number;
@@ -648,6 +685,23 @@ class FinanceiroService {
     const query = q.toString();
     const list = await apiClient.get<any[]>(`/financeiro/contas-receber${query ? `?${query}` : ''}`);
     return Array.isArray(list) ? list : [];
+  }
+
+  /**
+   * GET /financeiro/fluxo-caixa — projeção diária por vencimentos e despesas CC.
+   */
+  async obterFluxoCaixa(params: {
+    data_inicial: string;
+    data_final: string;
+    roca_id?: number;
+  }): Promise<FluxoCaixaResponse> {
+    const q = new URLSearchParams();
+    q.append('data_inicial', params.data_inicial);
+    q.append('data_final', params.data_final);
+    if (params.roca_id != null && params.roca_id > 0) {
+      q.append('roca_id', String(params.roca_id));
+    }
+    return apiClient.get<FluxoCaixaResponse>(`/financeiro/fluxo-caixa?${q.toString()}`);
   }
 }
 
