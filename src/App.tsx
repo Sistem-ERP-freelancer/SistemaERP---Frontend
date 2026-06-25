@@ -28,6 +28,7 @@ import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
 import EmDesenvolvimentoPage from "./pages/EmDesenvolvimentoPage";
 import Financeiro from "./pages/Financeiro";
+import FluxoDeCaixa from "./pages/FluxoDeCaixa";
 import RelatorioComprasCliente from "./pages/RelatorioComprasCliente";
 import Fornecedores from "./pages/Fornecedores";
 import Landing from "./pages/Landing";
@@ -38,7 +39,7 @@ import Pedidos from "./pages/Pedidos";
 import Produtos from "./pages/Produtos";
 import Settings from "./pages/Settings";
 import Transportadoras from "./pages/Transportadoras";
-import { ArrowLeftRight, Building2, LineChart, Scale } from "lucide-react";
+import { ArrowLeftRight, Building2, Scale } from "lucide-react";
 
 function ProtectedFinanceRoute({ children }: { children: React.ReactNode }) {
   return (
@@ -189,11 +190,7 @@ const App = () => (
               path="/financeiro/fluxo-de-caixa"
               element={
                 <ProtectedFinanceRoute>
-                  <EmDesenvolvimentoPage
-                    icon={LineChart}
-                    title="Fluxo de Caixa"
-                    subtitle="Acompanhamento de entradas, saídas e projeção do caixa."
-                  />
+                  <FluxoDeCaixa />
                 </ProtectedFinanceRoute>
               }
             />
