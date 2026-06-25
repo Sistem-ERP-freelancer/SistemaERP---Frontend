@@ -7,11 +7,6 @@ import {
 import { statTheme } from '@/components/layout/module-stat-themes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -21,14 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { cn, formatCurrency } from '@/lib/utils';
 import {
   ArrowDownRight,
@@ -173,18 +160,23 @@ function formatValorCelula(value: number | null): string {
   return value < 0 ? `-${abs}` : abs;
 }
 
-function corValor(value: number | null, tipo: LinhaTabela['tipo']): string {
-  if (value === null) return 'text-muted-foreground';
+function corValorCelula(
+  value: number | null,
+  tipo: LinhaTabela['tipo'],
+): string {
+  if (value === null) return 'text-slate-400';
   if (tipo === 'saldo-acumulado') {
-    return 'font-bold text-sky-700 dark:text-sky-400';
+    return 'font-bold text-[#003366] dark:text-sky-300';
   }
-  if (tipo === 'saldo-dia' || tipo === 'subtotal') {
-    if (value < 0) return 'font-semibold text-rose-600 dark:text-rose-400';
-    if (value > 0) return 'font-semibold text-emerald-600 dark:text-emerald-400';
-    return 'font-semibold text-muted-foreground';
+  if (tipo === 'subtotal') {
+    return 'font-bold text-rose-600 dark:text-rose-400';
   }
-  if (tipo === 'item') return 'text-foreground';
-  return 'text-foreground';
+  if (tipo === 'saldo-dia') {
+    if (value < 0) return 'font-bold text-rose-600 dark:text-rose-400';
+    if (value > 0) return 'font-bold text-emerald-600 dark:text-emerald-400';
+    return 'font-bold text-slate-500';
+  }
+  return 'text-slate-700 dark:text-slate-200';
 }
 
 const RESUMO_CARDS: ModuleStatCardItem[] = [
@@ -223,109 +215,132 @@ function FluxoDeCaixaTabela({
   dias,
   entradasAberto,
   saidasAberto,
+  onToggleEntradas,
+  onToggleSaidas,
 }: {
   linhas: LinhaTabela[];
   dias: DiaColuna[];
   entradasAberto: boolean;
   saidasAberto: boolean;
+  onToggleEntradas: () => void;
+  onToggleSaidas: () => void;
 }) {
   const linhasVisiveis = useMemo(() => {
     return linhas.filter((linha) => {
       if (linha.tipo === 'secao') return true;
       if (linha.secao === 'entradas' && !entradasAberto) return false;
-      if (linha.secao === 'saidas' && linha.tipo !== 'subtotal' && !saidasAberto) {
-        return false;
-      }
-      if (linha.secao === 'saidas' && linha.tipo === 'subtotal' && !saidasAberto) {
-        return false;
-      }
+      if (linha.secao === 'saidas' && !saidasAberto) return false;
       return true;
     });
   }, [linhas, entradasAberto, saidasAberto]);
 
   return (
     <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="sticky left-0 z-20 min-w-[200px] bg-muted/95 backdrop-blur-sm sm:min-w-[240px]">
+      <table className="w-full min-w-[720px] border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-slate-200">
+            <th className="sticky left-0 z-20 min-w-[220px] border-b border-slate-200 bg-sky-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#003366] dark:bg-sky-950/40 dark:text-sky-200">
               Centro de custo / Categoria
-            </TableHead>
+            </th>
             {dias.map((dia) => (
-              <TableHead
+              <th
                 key={dia.key}
-                className="min-w-[88px] text-center text-xs font-semibold sm:min-w-[96px]"
+                className="min-w-[92px] border-b border-slate-200 bg-sky-50 px-2 py-3 text-center font-semibold text-[#003366] dark:bg-sky-950/40 dark:text-sky-200"
               >
-                <div>{dia.label}</div>
-                <div className="font-normal text-muted-foreground">({dia.weekday})</div>
-              </TableHead>
+                <div className="text-sm">{dia.label}</div>
+                <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                  ({dia.weekday})
+                </div>
+              </th>
             ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+          </tr>
+        </thead>
+        <tbody>
           {linhasVisiveis.map((linha) => {
             if (linha.tipo === 'secao') {
               const isEntradas = linha.secao === 'entradas';
+              const aberto = isEntradas ? entradasAberto : saidasAberto;
+              const onToggle = isEntradas ? onToggleEntradas : onToggleSaidas;
+
               return (
-                <TableRow
+                <tr
                   key={linha.id}
                   className={cn(
-                    'hover:opacity-95',
+                    'border-b border-slate-100',
                     isEntradas
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-600'
-                      : 'bg-rose-600 text-white hover:bg-rose-600',
+                      ? 'bg-emerald-50/90 dark:bg-emerald-950/20'
+                      : 'bg-rose-50/90 dark:bg-rose-950/20',
                   )}
                 >
-                  <TableCell
+                  <td
                     colSpan={dias.length + 1}
-                    className="sticky left-0 z-10 py-2.5 font-bold tracking-wide"
+                    className={cn(
+                      'sticky left-0 z-10 px-4 py-2.5',
+                      isEntradas
+                        ? 'bg-emerald-50/95 dark:bg-emerald-950/30'
+                        : 'bg-rose-50/95 dark:bg-rose-950/30',
+                    )}
                   >
-                    {linha.label}
-                  </TableCell>
-                </TableRow>
+                    <button
+                      type="button"
+                      onClick={onToggle}
+                      className={cn(
+                        'flex items-center gap-1.5 text-xs font-bold tracking-wide',
+                        isEntradas
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-rose-700 dark:text-rose-400',
+                      )}
+                    >
+                      {aberto ? (
+                        <ChevronDown className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 shrink-0" />
+                      )}
+                      {linha.label}
+                    </button>
+                  </td>
+                </tr>
               );
             }
 
-            const isDestaque =
-              linha.tipo === 'subtotal' ||
-              linha.tipo === 'saldo-dia' ||
-              linha.tipo === 'saldo-acumulado';
+            const labelClass = cn(
+              'sticky left-0 z-10 border-b border-slate-100 bg-white px-4 py-2.5 text-left text-slate-700 dark:bg-background dark:text-slate-200',
+              linha.indent && 'pl-10',
+              linha.tipo === 'subtotal' &&
+                'bg-rose-50/40 font-semibold text-rose-700 dark:bg-rose-950/10 dark:text-rose-400',
+              linha.tipo === 'saldo-dia' &&
+                'bg-slate-50/80 font-semibold dark:bg-slate-900/40',
+              linha.tipo === 'saldo-acumulado' &&
+                'bg-sky-50/80 font-bold text-[#003366] dark:bg-sky-950/20 dark:text-sky-300',
+            );
+
+            const rowClass = cn(
+              'border-b border-slate-100',
+              linha.tipo === 'subtotal' && 'bg-rose-50/30 dark:bg-rose-950/10',
+              linha.tipo === 'saldo-dia' && 'bg-slate-50/50 dark:bg-slate-900/20',
+              linha.tipo === 'saldo-acumulado' &&
+                'bg-sky-50/60 dark:bg-sky-950/15',
+            );
 
             return (
-              <TableRow
-                key={linha.id}
-                className={cn(
-                  isDestaque && 'bg-muted/30 font-medium',
-                  linha.tipo === 'saldo-acumulado' && 'bg-sky-50/80 dark:bg-sky-950/20',
-                )}
-              >
-                <TableCell
-                  className={cn(
-                    'sticky left-0 z-10 bg-background',
-                    linha.indent && 'pl-8',
-                    isDestaque && 'bg-muted/30',
-                    linha.tipo === 'saldo-acumulado' &&
-                      'bg-sky-50/95 font-bold dark:bg-sky-950/30',
-                  )}
-                >
-                  {linha.label}
-                </TableCell>
+              <tr key={linha.id} className={rowClass}>
+                <td className={labelClass}>{linha.label}</td>
                 {linha.valores.map((valor, idx) => (
-                  <TableCell
+                  <td
                     key={`${linha.id}-${dias[idx]?.key ?? idx}`}
                     className={cn(
-                      'text-center tabular-nums text-sm',
-                      corValor(valor, linha.tipo),
+                      'border-b border-slate-100 px-2 py-2.5 text-center tabular-nums',
+                      corValorCelula(valor, linha.tipo),
                     )}
                   >
                     {formatValorCelula(valor)}
-                  </TableCell>
+                  </td>
                 ))}
-              </TableRow>
+              </tr>
             );
           })}
-        </TableBody>
-      </Table>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -385,8 +400,12 @@ export default function FluxoDeCaixa() {
                 <Filter className="h-4 w-4" />
                 Filtrar
               </Button>
-              <Button type="button" variant="outline" className="gap-2">
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
                 Exportar Excel
               </Button>
             </div>
@@ -397,36 +416,8 @@ export default function FluxoDeCaixa() {
 
         <Card className="overflow-hidden border-border/60 shadow-sm">
           <CardContent className="p-0">
-            <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-4 py-3">
-              <Collapsible open={entradasAberto} onOpenChange={setEntradasAberto}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-emerald-700">
-                    {entradasAberto ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                    Entradas
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent />
-              </Collapsible>
-
-              <Collapsible open={saidasAberto} onOpenChange={setSaidasAberto}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-rose-700">
-                    {saidasAberto ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                    Saídas
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent />
-              </Collapsible>
-
-              <p className="ml-auto text-xs text-muted-foreground">
+            <div className="flex items-center justify-end border-b border-slate-100 bg-slate-50/50 px-4 py-2">
+              <p className="text-xs text-muted-foreground">
                 ← Role para ver mais datas
               </p>
             </div>
@@ -436,9 +427,11 @@ export default function FluxoDeCaixa() {
               dias={DIAS_MOCK}
               entradasAberto={entradasAberto}
               saidasAberto={saidasAberto}
+              onToggleEntradas={() => setEntradasAberto((v) => !v)}
+              onToggleSaidas={() => setSaidasAberto((v) => !v)}
             />
 
-            <p className="border-t px-4 py-2 text-center text-xs text-muted-foreground">
+            <p className="border-t border-slate-100 px-4 py-2.5 text-center text-xs text-muted-foreground">
               Role para ver mais centros ↓
             </p>
           </CardContent>
