@@ -1,10 +1,5 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
-import {
-  ModuleStatCards,
-  type ModuleStatCardItem,
-} from '@/components/layout/ModuleStatCards';
-import { statTheme } from '@/components/layout/module-stat-themes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,10 +12,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn, formatCurrency } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 import {
   ArrowDownRight,
   ArrowUpRight,
   Calculator,
+  Calendar,
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
@@ -48,6 +45,16 @@ type LinhaTabela = {
   secao?: 'entradas' | 'saidas';
   valores: (number | null)[];
   indent?: boolean;
+};
+
+type ResumoCardConfig = {
+  key: string;
+  label: string;
+  value: number;
+  valueClass: string;
+  Icon: LucideIcon;
+  iconWrap: string;
+  iconClass: string;
 };
 
 const DIAS_MOCK: DiaColuna[] = [
@@ -151,6 +158,47 @@ const LINHAS_MOCK: LinhaTabela[] = [
   },
 ];
 
+const RESUMO_CARDS: ResumoCardConfig[] = [
+  {
+    key: 'saldo-inicial',
+    label: 'Saldo inicial',
+    value: 12450,
+    valueClass: 'text-blue-600',
+    Icon: Wallet,
+    iconWrap: 'bg-blue-50',
+    iconClass: 'text-blue-600',
+  },
+  {
+    key: 'total-receber',
+    label: 'Total a receber',
+    value: 450000,
+    valueClass: 'text-emerald-600',
+    Icon: ArrowUpRight,
+    iconWrap: 'bg-emerald-50',
+    iconClass: 'text-emerald-600',
+  },
+  {
+    key: 'total-pagar',
+    label: 'Total a pagar',
+    value: 132000,
+    valueClass: 'text-rose-600',
+    Icon: ArrowDownRight,
+    iconWrap: 'bg-rose-50',
+    iconClass: 'text-rose-600',
+  },
+  {
+    key: 'saldo-projetado',
+    label: 'Saldo projetado',
+    value: 318000,
+    valueClass: 'text-[#003366]',
+    Icon: Calculator,
+    iconWrap: 'bg-sky-50',
+    iconClass: 'text-[#003366]',
+  },
+];
+
+const GRADE_BORDA = 'border border-slate-200';
+
 function formatValorCelula(value: number | null): string {
   if (value === null) return '-';
   const abs = Math.abs(value).toLocaleString('pt-BR', {
@@ -166,49 +214,56 @@ function corValorCelula(
 ): string {
   if (value === null) return 'text-slate-400';
   if (tipo === 'saldo-acumulado') {
-    return 'font-bold text-[#003366] dark:text-sky-300';
+    return 'font-bold text-[#003366]';
   }
   if (tipo === 'subtotal') {
-    return 'font-bold text-rose-600 dark:text-rose-400';
+    return 'font-bold text-rose-600';
   }
   if (tipo === 'saldo-dia') {
-    if (value < 0) return 'font-bold text-rose-600 dark:text-rose-400';
-    if (value > 0) return 'font-bold text-emerald-600 dark:text-emerald-400';
+    if (value < 0) return 'font-bold text-rose-600';
+    if (value > 0) return 'font-bold text-emerald-600';
     return 'font-bold text-slate-500';
   }
-  return 'text-slate-700 dark:text-slate-200';
+  return 'text-slate-800';
 }
 
-const RESUMO_CARDS: ModuleStatCardItem[] = [
-  {
-    key: 'saldo-inicial',
-    label: 'Saldo inicial',
-    value: formatCurrency(12450),
-    ...statTheme.blue,
-    Icon: Wallet,
-  },
-  {
-    key: 'total-receber',
-    label: 'Total a receber',
-    value: formatCurrency(450000),
-    ...statTheme.emerald,
-    Icon: ArrowUpRight,
-  },
-  {
-    key: 'total-pagar',
-    label: 'Total a pagar',
-    value: formatCurrency(132000),
-    ...statTheme.rose,
-    Icon: ArrowDownRight,
-  },
-  {
-    key: 'saldo-projetado',
-    label: 'Saldo projetado',
-    value: formatCurrency(318000),
-    ...statTheme.sky,
-    Icon: Calculator,
-  },
-];
+function FluxoResumoCards({ items }: { items: ResumoCardConfig[] }) {
+  return (
+    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {items.map((item) => {
+        const Icon = item.Icon;
+        return (
+          <Card
+            key={item.key}
+            className="overflow-hidden border-slate-200 bg-white shadow-sm"
+          >
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-medium text-slate-500">{item.label}</p>
+                <div
+                  className={cn(
+                    'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+                    item.iconWrap,
+                  )}
+                >
+                  <Icon className={cn('h-5 w-5', item.iconClass)} aria-hidden />
+                </div>
+              </div>
+              <p
+                className={cn(
+                  'mt-4 text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]',
+                  item.valueClass,
+                )}
+              >
+                {formatCurrency(item.value)}
+              </p>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 function FluxoDeCaixaTabela({
   linhas,
@@ -234,21 +289,32 @@ function FluxoDeCaixaTabela({
     });
   }, [linhas, entradasAberto, saidasAberto]);
 
+  const celulaGrade = cn(GRADE_BORDA, 'px-3 py-2.5');
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+    <div className="overflow-x-auto pb-1">
+      <table className="w-full min-w-[780px] border-collapse bg-white text-sm">
         <thead>
-          <tr className="border-b border-slate-200">
-            <th className="sticky left-0 z-20 min-w-[220px] border-b border-slate-200 bg-sky-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[#003366] dark:bg-sky-950/40 dark:text-sky-200">
+          <tr>
+            <th
+              className={cn(
+                celulaGrade,
+                'sticky left-0 z-20 min-w-[220px] bg-sky-50/90 text-left text-sm font-bold text-[#003366]',
+              )}
+            >
               Centro de custo / Categoria
             </th>
-            {dias.map((dia) => (
+            {dias.map((dia, idx) => (
               <th
                 key={dia.key}
-                className="min-w-[92px] border-b border-slate-200 bg-sky-50 px-2 py-3 text-center font-semibold text-[#003366] dark:bg-sky-950/40 dark:text-sky-200"
+                className={cn(
+                  celulaGrade,
+                  'min-w-[96px] bg-sky-50/90 text-center font-bold text-[#003366]',
+                  idx === dias.length - 1 && 'min-w-[100px]',
+                )}
               >
-                <div className="text-sm">{dia.label}</div>
-                <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                <div>{dia.label}</div>
+                <div className="text-xs font-normal text-slate-500">
                   ({dia.weekday})
                 </div>
               </th>
@@ -261,24 +327,15 @@ function FluxoDeCaixaTabela({
               const isEntradas = linha.secao === 'entradas';
               const aberto = isEntradas ? entradasAberto : saidasAberto;
               const onToggle = isEntradas ? onToggleEntradas : onToggleSaidas;
+              const secaoBg = isEntradas ? 'bg-emerald-50/80' : 'bg-rose-50/80';
 
               return (
-                <tr
-                  key={linha.id}
-                  className={cn(
-                    'border-b border-slate-100',
-                    isEntradas
-                      ? 'bg-emerald-50/90 dark:bg-emerald-950/20'
-                      : 'bg-rose-50/90 dark:bg-rose-950/20',
-                  )}
-                >
+                <tr key={linha.id}>
                   <td
-                    colSpan={dias.length + 1}
                     className={cn(
-                      'sticky left-0 z-10 px-4 py-2.5',
-                      isEntradas
-                        ? 'bg-emerald-50/95 dark:bg-emerald-950/30'
-                        : 'bg-rose-50/95 dark:bg-rose-950/30',
+                      celulaGrade,
+                      'sticky left-0 z-10',
+                      secaoBg,
                     )}
                   >
                     <button
@@ -286,9 +343,7 @@ function FluxoDeCaixaTabela({
                       onClick={onToggle}
                       className={cn(
                         'flex items-center gap-1.5 text-xs font-bold tracking-wide',
-                        isEntradas
-                          ? 'text-emerald-700 dark:text-emerald-400'
-                          : 'text-rose-700 dark:text-rose-400',
+                        isEntradas ? 'text-emerald-700' : 'text-rose-700',
                       )}
                     >
                       {aberto ? (
@@ -299,38 +354,49 @@ function FluxoDeCaixaTabela({
                       {linha.label}
                     </button>
                   </td>
+                  {dias.map((dia) => (
+                    <td
+                      key={`${linha.id}-${dia.key}`}
+                      className={cn(celulaGrade, secaoBg)}
+                    />
+                  ))}
                 </tr>
               );
             }
 
-            const labelClass = cn(
-              'sticky left-0 z-10 border-b border-slate-100 bg-white px-4 py-2.5 text-left text-slate-700 dark:bg-background dark:text-slate-200',
-              linha.indent && 'pl-10',
-              linha.tipo === 'subtotal' &&
-                'bg-rose-50/40 font-semibold text-rose-700 dark:bg-rose-950/10 dark:text-rose-400',
-              linha.tipo === 'saldo-dia' &&
-                'bg-slate-50/80 font-semibold dark:bg-slate-900/40',
-              linha.tipo === 'saldo-acumulado' &&
-                'bg-sky-50/80 font-bold text-[#003366] dark:bg-sky-950/20 dark:text-sky-300',
-            );
+            const labelBg =
+              linha.tipo === 'subtotal'
+                ? 'bg-rose-50/50'
+                : linha.tipo === 'saldo-dia'
+                  ? 'bg-slate-50/70'
+                  : linha.tipo === 'saldo-acumulado'
+                    ? 'bg-sky-50/60'
+                    : 'bg-white';
 
-            const rowClass = cn(
-              'border-b border-slate-100',
-              linha.tipo === 'subtotal' && 'bg-rose-50/30 dark:bg-rose-950/10',
-              linha.tipo === 'saldo-dia' && 'bg-slate-50/50 dark:bg-slate-900/20',
+            const labelClass = cn(
+              celulaGrade,
+              'sticky left-0 z-10 text-left text-slate-800',
+              labelBg,
+              linha.indent && 'pl-8',
+              linha.tipo === 'subtotal' && 'font-semibold text-rose-700',
+              linha.tipo === 'saldo-dia' && 'font-semibold text-slate-800',
               linha.tipo === 'saldo-acumulado' &&
-                'bg-sky-50/60 dark:bg-sky-950/15',
+                'font-bold text-[#003366]',
             );
 
             return (
-              <tr key={linha.id} className={rowClass}>
+              <tr key={linha.id}>
                 <td className={labelClass}>{linha.label}</td>
                 {linha.valores.map((valor, idx) => (
                   <td
                     key={`${linha.id}-${dias[idx]?.key ?? idx}`}
                     className={cn(
-                      'border-b border-slate-100 px-2 py-2.5 text-center tabular-nums',
+                      celulaGrade,
+                      'bg-white text-center tabular-nums',
                       corValorCelula(valor, linha.tipo),
+                      linha.tipo === 'subtotal' && 'bg-rose-50/30',
+                      linha.tipo === 'saldo-dia' && 'bg-slate-50/50',
+                      linha.tipo === 'saldo-acumulado' && 'bg-sky-50/40',
                     )}
                   >
                     {formatValorCelula(valor)}
@@ -358,32 +424,33 @@ export default function FluxoDeCaixa() {
           subtitle="Projeção diária — centros de custo x datas"
         />
 
-        <Card className="mb-6 border-border/60 shadow-sm">
-          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="grid w-full gap-4 sm:w-auto sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="mb-6 border-slate-200 bg-white shadow-sm">
+          <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
               <div className="space-y-1.5">
                 <Label htmlFor="fluxo-periodo-inicio">Período</Label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2">
+                  <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
                   <Input
                     id="fluxo-periodo-inicio"
                     type="date"
                     defaultValue="2026-06-01"
-                    className="min-w-0"
+                    className="h-8 min-w-[130px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                   />
-                  <span className="shrink-0 text-muted-foreground">—</span>
+                  <span className="shrink-0 text-slate-400">—</span>
                   <Input
                     id="fluxo-periodo-fim"
                     type="date"
                     defaultValue="2026-06-30"
-                    className="min-w-0"
+                    className="h-8 min-w-[130px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="min-w-[160px] space-y-1.5">
                 <Label>Roça</Label>
                 <Select defaultValue="todas">
-                  <SelectTrigger>
+                  <SelectTrigger className="border-slate-200 bg-white">
                     <SelectValue placeholder="Selecione a roça" />
                   </SelectTrigger>
                   <SelectContent>
@@ -395,31 +462,32 @@ export default function FluxoDeCaixa() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 sm:ml-auto">
-              <Button type="button" className="gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                className="gap-2 bg-[#003366] hover:bg-[#002244]"
+              >
                 <Filter className="h-4 w-4" />
                 Filtrar
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                className="gap-2 border-slate-200 bg-white hover:bg-slate-50"
               >
-                <FileSpreadsheet className="h-4 w-4" />
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
                 Exportar Excel
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <ModuleStatCards items={RESUMO_CARDS} columns={4} />
+        <FluxoResumoCards items={RESUMO_CARDS} />
 
-        <Card className="overflow-hidden border-border/60 shadow-sm">
+        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardContent className="p-0">
-            <div className="flex items-center justify-end border-b border-slate-100 bg-slate-50/50 px-4 py-2">
-              <p className="text-xs text-muted-foreground">
-                ← Role para ver mais datas
-              </p>
+            <div className="flex items-center justify-end border-b border-slate-200 bg-slate-50/60 px-4 py-2">
+              <p className="text-xs text-slate-500">← Role para ver mais datas</p>
             </div>
 
             <FluxoDeCaixaTabela
@@ -431,9 +499,10 @@ export default function FluxoDeCaixa() {
               onToggleSaidas={() => setSaidasAberto((v) => !v)}
             />
 
-            <p className="border-t border-slate-100 px-4 py-2.5 text-center text-xs text-muted-foreground">
-              Role para ver mais centros ↓
-            </p>
+            <div className="flex flex-col items-center gap-1 border-t border-slate-200 bg-slate-50/40 px-4 py-2.5">
+              <p className="text-xs text-slate-500">Role para ver mais centros ↓</p>
+              <div className="h-1.5 w-24 rounded-full bg-slate-200" />
+            </div>
           </CardContent>
         </Card>
       </div>
