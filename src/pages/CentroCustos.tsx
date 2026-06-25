@@ -1628,8 +1628,9 @@ export default function CentroCustos() {
         key: c.key,
         label: c.label,
         value: c.kind === 'count' ? String(valNum) : formatCurrency(valNum),
-        border: c.border,
         iconWrap: c.iconWrap,
+        iconClass: c.iconClass,
+        valueClass: c.valueClass,
         Icon: c.Icon,
       };
     });

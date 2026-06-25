@@ -1,5 +1,10 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from '@/components/layout/ModuleStatCards';
+import { statTheme } from '@/components/layout/module-stat-themes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,7 +17,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn, formatCurrency } from '@/lib/utils';
-import type { LucideIcon } from 'lucide-react';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -47,15 +51,40 @@ type LinhaTabela = {
   indent?: boolean;
 };
 
-type ResumoCardConfig = {
-  key: string;
-  label: string;
-  value: number;
-  valueClass: string;
-  Icon: LucideIcon;
-  iconWrap: string;
-  iconClass: string;
-};
+const RESUMO_CARDS: ModuleStatCardItem[] = [
+  {
+    key: 'saldo-inicial',
+    label: 'Saldo inicial',
+    value: formatCurrency(12450),
+    Icon: Wallet,
+    ...statTheme.blue,
+  },
+  {
+    key: 'total-receber',
+    label: 'Total a receber',
+    value: formatCurrency(450000),
+    Icon: ArrowUpRight,
+    ...statTheme.emerald,
+  },
+  {
+    key: 'total-pagar',
+    label: 'Total a pagar',
+    value: formatCurrency(132000),
+    Icon: ArrowDownRight,
+    ...statTheme.rose,
+  },
+  {
+    key: 'saldo-projetado',
+    label: 'Saldo projetado',
+    value: formatCurrency(318000),
+    Icon: Calculator,
+    iconWrap: 'bg-sky-50',
+    iconClass: 'text-[#003366]',
+    valueClass: 'text-[#003366]',
+  },
+];
+
+const GRADE_BORDA = 'border border-slate-200';
 
 const DIAS_MOCK: DiaColuna[] = [
   { key: '23', label: '23/06', weekday: 'Ter' },
@@ -158,47 +187,6 @@ const LINHAS_MOCK: LinhaTabela[] = [
   },
 ];
 
-const RESUMO_CARDS: ResumoCardConfig[] = [
-  {
-    key: 'saldo-inicial',
-    label: 'Saldo inicial',
-    value: 12450,
-    valueClass: 'text-blue-600',
-    Icon: Wallet,
-    iconWrap: 'bg-blue-50',
-    iconClass: 'text-blue-600',
-  },
-  {
-    key: 'total-receber',
-    label: 'Total a receber',
-    value: 450000,
-    valueClass: 'text-emerald-600',
-    Icon: ArrowUpRight,
-    iconWrap: 'bg-emerald-50',
-    iconClass: 'text-emerald-600',
-  },
-  {
-    key: 'total-pagar',
-    label: 'Total a pagar',
-    value: 132000,
-    valueClass: 'text-rose-600',
-    Icon: ArrowDownRight,
-    iconWrap: 'bg-rose-50',
-    iconClass: 'text-rose-600',
-  },
-  {
-    key: 'saldo-projetado',
-    label: 'Saldo projetado',
-    value: 318000,
-    valueClass: 'text-[#003366]',
-    Icon: Calculator,
-    iconWrap: 'bg-sky-50',
-    iconClass: 'text-[#003366]',
-  },
-];
-
-const GRADE_BORDA = 'border border-slate-200';
-
 function formatValorCelula(value: number | null): string {
   if (value === null) return '-';
   const abs = Math.abs(value).toLocaleString('pt-BR', {
@@ -225,44 +213,6 @@ function corValorCelula(
     return 'font-bold text-slate-500';
   }
   return 'text-slate-800';
-}
-
-function FluxoResumoCards({ items }: { items: ResumoCardConfig[] }) {
-  return (
-    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {items.map((item) => {
-        const Icon = item.Icon;
-        return (
-          <Card
-            key={item.key}
-            className="overflow-hidden border-slate-200 bg-white shadow-sm"
-          >
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium text-slate-500">{item.label}</p>
-                <div
-                  className={cn(
-                    'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
-                    item.iconWrap,
-                  )}
-                >
-                  <Icon className={cn('h-5 w-5', item.iconClass)} aria-hidden />
-                </div>
-              </div>
-              <p
-                className={cn(
-                  'mt-4 text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]',
-                  item.valueClass,
-                )}
-              >
-                {formatCurrency(item.value)}
-              </p>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
 }
 
 function FluxoDeCaixaTabela({
@@ -482,7 +432,7 @@ export default function FluxoDeCaixa() {
           </CardContent>
         </Card>
 
-        <FluxoResumoCards items={RESUMO_CARDS} />
+        <ModuleStatCards columns={4} items={RESUMO_CARDS} />
 
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardContent className="p-0">

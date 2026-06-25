@@ -1,4 +1,6 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { ModuleStatCard } from "@/components/layout/ModuleStatCards";
+import { statTheme } from "@/components/layout/module-stat-themes";
 import { OrderStats } from "@/components/orders/OrderStats";
 import { useAuth } from "@/contexts/AuthContext";
 import { canAccessFinanceiro } from "@/lib/role-access";
@@ -58,40 +60,35 @@ function painelMetricKindFromLegenda(legenda: string): PainelMetricKind {
 
 const painelMetricVisual: Record<
   PainelMetricKind,
-  { border: string; iconWrap: string; Icon: LucideIcon }
+  { iconWrap: string; iconClass: string; valueClass: string; Icon: LucideIcon }
 > = {
   compras: {
-    border: "border-l-4 border-l-red-600",
-    iconWrap:
-      "bg-red-500/[0.12] text-red-700 dark:bg-red-500/15 dark:text-red-400",
+    ...statTheme.red,
     Icon: ShoppingCart,
   },
   vendas: {
-    border: "border-l-4 border-l-emerald-500",
-    iconWrap:
-      "bg-emerald-500/[0.12] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+    ...statTheme.emerald,
     Icon: TrendingUp,
   },
   saldo: {
-    border: "border-l-4 border-l-sky-600 dark:border-l-sky-400",
-    iconWrap:
-      "bg-sky-500/[0.12] text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
+    ...statTheme.blue,
     Icon: Scale,
   },
 };
 
 function painelValorClass(kind: PainelMetricKind, valor: number): string {
   if (kind === "saldo") {
-    if (valor < 0) return "text-destructive";
-    if (valor > 0) return "text-emerald-600 dark:text-emerald-400";
+    if (valor < 0) return statTheme.rose.valueClass;
+    if (valor > 0) return statTheme.emerald.valueClass;
+    return statTheme.blue.valueClass;
   }
   if (kind === "compras") {
-    return "text-red-700 dark:text-red-400";
+    return statTheme.red.valueClass;
   }
   if (kind === "vendas" && valor > 0) {
-    return "text-emerald-700 dark:text-emerald-400";
+    return statTheme.emerald.valueClass;
   }
-  return "text-slate-900 dark:text-foreground";
+  return statTheme.slate.valueClass;
 }
 
 /** API pode devolver número ou string decimal; JSON às vezes vem em camelCase. */
@@ -732,7 +729,6 @@ const Dashboard = () => {
                         const valorN = numPainel(c.valor);
                         const kind = painelMetricKindFromLegenda(c.legenda);
                         const visual = painelMetricVisual[kind];
-                        const Icon = visual.Icon;
                         return (
                           <motion.div
                             key={`${bloco.titulo}-${c.legenda}`}
@@ -740,27 +736,17 @@ const Dashboard = () => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.12 + blocoIdx * 0.05 + idx * 0.04 }}
                           >
-                            <Card
-                              className={`h-full overflow-hidden border border-border/60 shadow-none transition-shadow hover:shadow-md ${visual.border} bg-gradient-to-b from-background to-muted/30 dark:to-muted/20`}
-                            >
-                              <CardContent className="p-4 sm:p-4">
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
-                                    {c.legenda}
-                                  </p>
-                                  <div
-                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${visual.iconWrap}`}
-                                  >
-                                    <Icon className="h-4 w-4" aria-hidden />
-                                  </div>
-                                </div>
-                                <p
-                                  className={`mt-3 text-xl font-bold tabular-nums tracking-tight sm:text-2xl ${painelValorClass(kind, valorN)}`}
-                                >
-                                  {formatCurrency(valorN)}
-                                </p>
-                              </CardContent>
-                            </Card>
+                            <ModuleStatCard
+                              item={{
+                                key: `${bloco.titulo}-${c.legenda}`,
+                                label: c.legenda,
+                                value: formatCurrency(valorN),
+                                iconWrap: visual.iconWrap,
+                                iconClass: visual.iconClass,
+                                valueClass: painelValorClass(kind, valorN),
+                                Icon: visual.Icon,
+                              }}
+                            />
                           </motion.div>
                         );
                       })}

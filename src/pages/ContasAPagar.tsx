@@ -951,8 +951,9 @@ function ContasAPagar() {
       key: stat.key,
       label: stat.label,
       value: stat.value,
-      border: stat.border,
       iconWrap: stat.iconWrap,
+      iconClass: stat.iconClass,
+      valueClass: stat.valueClass,
       Icon: stat.Icon,
       active: activeCardFilter === stat.filterKey,
       onClick: () =>

@@ -1,5 +1,10 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
 import AppLayout from "@/components/layout/AppLayout";
+import {
+  ModuleStatCards,
+  type ModuleStatCardItem,
+} from "@/components/layout/ModuleStatCards";
+import { statTheme } from "@/components/layout/module-stat-themes";
 import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -705,24 +710,23 @@ const Financeiro = () => {
     /** Mesmo padrão visual dos cards em Centro de custos (borda lateral + ícone + valor). */
     return [
       {
+        key: "receita_mes",
         label: "Receita do Mês",
         value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(receitaMes),
         Icon: TrendingUp,
-        border: "border-l-4 border-l-sky-600 dark:border-l-sky-400",
-        iconWrap:
-          "bg-sky-500/[0.12] text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
+        ...statTheme.sky,
         cardFilter: "RECEBER" as const,
       },
       {
+        key: "despesa_mes",
         label: "Despesas do Mês",
         value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(despesaMes),
         Icon: TrendingDown,
-        border: "border-l-4 border-l-rose-500",
-        iconWrap:
-          "bg-rose-500/[0.12] text-rose-700 dark:bg-rose-500/15 dark:text-rose-400",
+        ...statTheme.rose,
         cardFilter: "PAGAR" as const,
       },
       {
+        key: "saldo_atual",
         label: "Saldo Atual",
         value: new Intl.NumberFormat("pt-BR", {
           style: "currency",
@@ -731,13 +735,31 @@ const Financeiro = () => {
           maximumFractionDigits: 2,
         }).format(saldoAtual),
         Icon: Wallet,
-        border: "border-l-4 border-l-blue-600 dark:border-l-blue-400",
-        iconWrap:
-          "bg-blue-500/[0.12] text-blue-800 dark:bg-blue-500/15 dark:text-blue-300",
+        ...statTheme.blue,
         cardFilter: "todos" as const,
       },
     ];
   }, [contasReceberStats, contasPagarStats, statsFiltrados]);
+
+  const statsCardItems = useMemo((): ModuleStatCardItem[] => {
+    return stats.map((stat) => {
+      const cardFilter = stat.cardFilter ?? "todos";
+      return {
+        key: stat.key,
+        label: stat.label,
+        value: stat.value,
+        iconWrap: stat.iconWrap,
+        iconClass: stat.iconClass,
+        valueClass: stat.valueClass,
+        Icon: stat.Icon,
+        active: cardFilter !== "todos" && cardTipoFilter === cardFilter,
+        onClick: () => {
+          setCardTipoFilter(cardFilter);
+          setPage(1);
+        },
+      };
+    });
+  }, [stats, cardTipoFilter]);
 
   // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -1459,67 +1481,7 @@ const Financeiro = () => {
           </Dialog>
         </div>
 
-        {/* Stats — mesma interação; grid 3 colunas largura total (md+), responsivo */}
-        <div className="mb-6 w-full">
-          <div className="mx-auto grid w-full max-w-full grid-cols-1 gap-4 sm:gap-4 md:grid-cols-3 md:gap-5">
-            {stats.map((stat, index) => {
-              const Icon = stat.Icon;
-              const cardFilter = stat.cardFilter ?? "todos";
-              const filtroTipoAtivo =
-                cardFilter !== "todos" && cardTipoFilter === cardFilter;
-              return (
-                <motion.div
-                  key={stat.label}
-                  className="min-w-0"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setCardTipoFilter(cardFilter);
-                      setPage(1);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setCardTipoFilter(cardFilter);
-                        setPage(1);
-                      }
-                    }}
-                    className={cn(
-                      "h-full overflow-hidden border border-border/60 shadow-sm cursor-pointer transition-all hover:shadow-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      stat.border,
-                      "bg-gradient-to-b from-background to-muted/30 dark:to-muted/20",
-                      filtroTipoAtivo ? "ring-2 ring-primary/45" : "",
-                    )}
-                  >
-                    <CardContent className="p-5 sm:p-6">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground sm:text-sm">
-                          {stat.label}
-                        </p>
-                        <div
-                          className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                            stat.iconWrap,
-                          )}
-                        >
-                          <Icon className="h-5 w-5" aria-hidden />
-                        </div>
-                      </div>
-                      <p className="mt-4 text-2xl font-bold tabular-nums tracking-tight sm:text-3xl text-slate-900 dark:text-foreground">
-                        {stat.value}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
+        <ModuleStatCards columns={3} className="mb-6" items={statsCardItems} />
 
         {/* Filtros e busca — barra tipo Centro de Custos */}
         <div className="mb-6 rounded-2xl border border-border/60 bg-muted/40 p-3 sm:p-4 dark:bg-muted/25">

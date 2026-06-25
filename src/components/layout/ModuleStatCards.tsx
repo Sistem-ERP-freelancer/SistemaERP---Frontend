@@ -8,8 +8,9 @@ export type ModuleStatCardItem = {
   key: string;
   label: string;
   value: string | number;
-  border: string;
   iconWrap: string;
+  iconClass: string;
+  valueClass: string;
   Icon: LucideIcon;
   active?: boolean;
   onClick?: () => void;
@@ -19,13 +20,67 @@ export type ModuleStatCardItem = {
 type ColumnPreset = 2 | 3 | 4 | 5 | 6 | 7;
 
 const GRID_BY_COLUMNS: Record<ColumnPreset, string> = {
-  2: 'grid grid-cols-2 gap-3 lg:gap-4',
-  3: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4',
-  4: 'grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4',
-  5: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4',
-  6: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 lg:gap-4',
-  7: 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 lg:gap-4',
+  2: 'grid grid-cols-1 gap-4 sm:grid-cols-2',
+  3: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3',
+  4: 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4',
+  5: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
+  6: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
+  7: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7',
 };
+
+interface ModuleStatCardProps {
+  item: ModuleStatCardItem;
+}
+
+export function ModuleStatCard({ item }: ModuleStatCardProps) {
+  const Icon = item.Icon;
+  const interactive = Boolean(item.onClick);
+  const Wrapper = interactive ? 'button' : 'div';
+
+  return (
+    <Wrapper
+      type={interactive ? 'button' : undefined}
+      onClick={item.onClick}
+      className={cn(
+        interactive && 'cursor-pointer text-left',
+        item.active &&
+          'rounded-xl ring-2 ring-primary/40 ring-offset-2 ring-offset-background',
+      )}
+    >
+      <Card
+        className={cn(
+          'h-full overflow-hidden border-slate-200 bg-white shadow-sm',
+          interactive && 'transition-shadow hover:shadow-md',
+        )}
+      >
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <p className="line-clamp-3 text-sm font-medium text-slate-500">
+              {item.label}
+              {item.labelExtra}
+            </p>
+            <div
+              className={cn(
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+                item.iconWrap,
+              )}
+            >
+              <Icon className={cn('h-5 w-5', item.iconClass)} aria-hidden />
+            </div>
+          </div>
+          <p
+            className={cn(
+              'mt-4 text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]',
+              item.valueClass,
+            )}
+          >
+            {item.value}
+          </p>
+        </CardContent>
+      </Card>
+    </Wrapper>
+  );
+}
 
 interface ModuleStatCardsProps {
   items: ModuleStatCardItem[];
@@ -51,7 +106,7 @@ export function ModuleStatCards({
         {Array.from({ length: skeletons }, (_, i) => (
           <Card
             key={i}
-            className="h-full overflow-hidden border border-border/60 bg-gradient-to-b from-background to-muted/30 shadow-sm dark:to-muted/20"
+            className="h-full overflow-hidden border-slate-200 bg-white shadow-sm"
           >
             <CardContent className="flex items-center justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -64,53 +119,9 @@ export function ModuleStatCards({
 
   return (
     <div className={cn(GRID_BY_COLUMNS[colCount], 'mb-6', className)}>
-      {items.map((item) => {
-        const Icon = item.Icon;
-        const interactive = Boolean(item.onClick);
-        const Wrapper = interactive ? 'button' : 'div';
-
-        return (
-          <Wrapper
-            key={item.key}
-            type={interactive ? 'button' : undefined}
-            onClick={item.onClick}
-            className={cn(
-              interactive && 'cursor-pointer text-left',
-              item.active && 'rounded-xl ring-2 ring-primary/40 ring-offset-2 ring-offset-background',
-            )}
-          >
-            <Card
-              className={cn(
-                'h-full overflow-hidden border border-border/60 bg-gradient-to-b from-background to-muted/30 shadow-sm dark:to-muted/20',
-                item.border,
-                interactive && 'transition-shadow hover:shadow-md',
-              )}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-start gap-1">
-                    <p className="line-clamp-3 text-xs font-medium leading-snug text-muted-foreground">
-                      {item.label}
-                    </p>
-                    {item.labelExtra}
-                  </div>
-                  <div
-                    className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                      item.iconWrap,
-                    )}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden />
-                  </div>
-                </div>
-                <p className="mt-3 text-xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
-                  {item.value}
-                </p>
-              </CardContent>
-            </Card>
-          </Wrapper>
-        );
-      })}
+      {items.map((item) => (
+        <ModuleStatCard key={item.key} item={item} />
+      ))}
     </div>
   );
 }
