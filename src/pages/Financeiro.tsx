@@ -1,5 +1,6 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
 import AppLayout from "@/components/layout/AppLayout";
+import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -81,7 +82,6 @@ import {
     Filter,
     Info,
     Loader2,
-    MoreVertical,
     Plus,
     Printer,
     RotateCcw,
@@ -1818,7 +1818,7 @@ const Financeiro = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-md border overflow-hidden"
+          className="rounded-md border overflow-x-auto"
         >
           <Table>
             <TableHeader>
@@ -1883,13 +1883,7 @@ const Financeiro = () => {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                      <TableRowActionsMenu>
                           <DropdownMenuItem onClick={() => {
                             setSelectedContaId(transacao.contaId);
                             setViewDialogOpen(true);
@@ -1933,8 +1927,7 @@ const Financeiro = () => {
                             <Trash2 className="w-4 h-4 mr-2" />
                             Excluir
                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      </TableRowActionsMenu>
                     </TableCell>
                   </TableRow>
                 ))

@@ -1,5 +1,6 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
 import AppLayout from "@/components/layout/AppLayout";
+import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
   ModuleStatCards,
@@ -88,7 +89,6 @@ import {
     Filter,
     Info,
     Loader2,
-    MoreVertical,
     Printer,
     Search,
     ShoppingCart
@@ -2493,7 +2493,7 @@ const ContasAReceber = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-md border overflow-hidden"
+          className="rounded-md border overflow-x-auto"
         >
           <Table>
             <TableHeader>
@@ -2588,13 +2588,7 @@ const ContasAReceber = () => {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                        <TableRowActionsMenu>
                             <DropdownMenuItem onClick={() => {
                               if (grupo?.pedido_id != null) {
                                 navigate(`/financeiro/contas-receber/${grupo.pedido_id}`);
@@ -2678,8 +2672,7 @@ const ContasAReceber = () => {
                                 Recibo de pagamento
                               </DropdownMenuItem>
                             )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        </TableRowActionsMenu>
                       </TableCell>
                     </TableRow>
                   );
@@ -2717,13 +2710,7 @@ const ContasAReceber = () => {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                      <TableRowActionsMenu>
                           <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${transacao.pedidoId}`)}>
                             <Eye className="w-4 h-4 mr-2" />
                             Ver detalhes
@@ -2805,8 +2792,7 @@ const ContasAReceber = () => {
                             <FileText className="w-4 h-4 mr-2" />
                             Recibo de pagamento
                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      </TableRowActionsMenu>
                     </TableCell>
                   </TableRow>
                 ))

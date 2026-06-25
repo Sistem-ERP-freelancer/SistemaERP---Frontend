@@ -1,5 +1,6 @@
 import { CampoCnpjComConsulta } from "@/components/CampoCnpjComConsulta";
 import AppLayout from "@/components/layout/AppLayout";
+import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
   ModuleStatCards,
@@ -95,7 +96,6 @@ import {
     Mail as MailIcon,
     MapPin,
     MapPin as MapPinIcon,
-    MoreVertical,
     Phone,
     Phone as PhoneIcon,
     Plus,
@@ -2836,7 +2836,7 @@ const Fornecedores = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-md border overflow-hidden"
+          className="rounded-md border overflow-x-auto"
         >
           <Table>
             <TableHeader>
@@ -2986,13 +2986,7 @@ const Fornecedores = () => {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                      <TableRowActionsMenu>
                           <DropdownMenuItem onClick={() => handleView(fornecedor.id)}>
                             <Eye className="w-4 h-4 mr-2" />
                             Visualizar
@@ -3008,8 +3002,7 @@ const Fornecedores = () => {
                             <Trash2 className="w-4 h-4 mr-2" />
                             Excluir
                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      </TableRowActionsMenu>
                     </TableCell>
                   </TableRow>
                 ))

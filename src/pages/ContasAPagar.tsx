@@ -1,5 +1,6 @@
 import AppLayout from "@/components/layout/AppLayout";
 import { EmDesenvolvimentoDialog } from "@/components/EmDesenvolvimentoDialog";
+import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
   ModuleStatCards,
@@ -96,7 +97,6 @@ import {
     Filter,
     Info,
     Loader2,
-    MoreVertical,
     Printer,
     Search,
     ShoppingCart,
@@ -2080,7 +2080,7 @@ function ContasAPagar() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-md border overflow-hidden"
+          className="rounded-md border overflow-x-auto"
         >
           <Table>
             <TableHeader>
@@ -2219,13 +2219,7 @@ function ContasAPagar() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                      <TableRowActionsMenu>
                           <DropdownMenuItem onClick={() => {
                             if ((transacao as any).pedidoId) {
                               navigate(`/financeiro/contas-pagar/${(transacao as any).pedidoId}`);
@@ -2286,8 +2280,7 @@ function ContasAPagar() {
                             <FileText className="w-4 h-4 mr-2" />
                             Recibo de pagamento
                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      </TableRowActionsMenu>
                     </TableCell>
                   </TableRow>
                 ))

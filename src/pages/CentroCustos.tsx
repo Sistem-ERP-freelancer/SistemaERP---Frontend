@@ -1,4 +1,5 @@
 import AppLayout from '@/components/layout/AppLayout';
+import { TableRowActionsMenu } from '@/components/TableRowActionsMenu';
 import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
 import {
   ModuleStatCards,
@@ -40,7 +41,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,7 +112,6 @@ import {
   Filter,
   Landmark,
   Loader2,
-  MoreHorizontal,
   Pencil,
   PiggyBank,
   Plus,
@@ -253,20 +252,7 @@ function DespesasTable({
                     {dataPagamento ? formatDate(dataPagamento) : '—'}
                   </TableCell>
                   <TableCell className="text-center">
-                    <DropdownMenu modal={false}>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Ações"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="bottom" className="z-[100] w-44">
+                    <TableRowActionsMenu icon="horizontal" contentClassName="w-44">
                         <DropdownMenuItem
                           onSelect={() => {
                             void onDetalhe(d);
@@ -307,8 +293,7 @@ function DespesasTable({
                             </DropdownMenuItem>
                           </>
                         ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    </TableRowActionsMenu>
                   </TableCell>
                 </TableRow>
               );

@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { EmpresaConfigSection } from "@/components/settings/EmpresaConfigSection";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +49,6 @@ import {
     Building2,
     Edit,
     Loader2,
-    MoreVertical,
     Plus,
     Power,
     PowerOff,
@@ -448,13 +448,7 @@ const Settings = () => {
                                 {formatLastAccess(usuario.ultimo_acesso)}
                               </TableCell>
                               <TableCell>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
+                                <TableRowActionsMenu>
                                     <DropdownMenuItem onClick={() => handleOpenUserDialog(usuario)}>
                                       <Edit className="h-4 w-4 mr-2" />
                                       Editar
@@ -481,8 +475,7 @@ const Settings = () => {
                                       <Trash2 className="h-4 w-4 mr-2" />
                                       Deletar
                                     </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                </TableRowActionsMenu>
                               </TableCell>
                             </TableRow>
                           );

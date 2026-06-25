@@ -1,5 +1,6 @@
 import { CampoCnpjComConsulta } from '@/components/CampoCnpjComConsulta';
 import AppLayout from '@/components/layout/AppLayout';
+import { TableRowActionsMenu } from '@/components/TableRowActionsMenu';
 import {
   RocaEnderecoContatoFields,
   ROCA_ENDERECO_CONTATO_VAZIO,
@@ -3033,7 +3034,7 @@ export default function ControleRoca() {
                 </Button>
               </div>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
+            <div className="bg-card border rounded-xl overflow-x-auto min-w-0">
               {loadingProdutores ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -3070,13 +3071,7 @@ export default function ControleRoca() {
                             {p.endereco || '—'}
                           </TableCell>
                           <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                            <TableRowActionsMenu icon="horizontal">
                                 <DropdownMenuItem
                                   onClick={() => {
                                     setDetailProdutor(p);
@@ -3125,8 +3120,7 @@ export default function ControleRoca() {
                                   <UserX className="w-4 h-4 mr-2" />
                                   Deixar inativo
                                 </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            </TableRowActionsMenu>
                           </TableCell>
                         </TableRow>
                       ))
@@ -3260,7 +3254,7 @@ export default function ControleRoca() {
                 </Button>
               </div>
             </div>
-            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
+            <div className="bg-card border rounded-xl overflow-x-auto min-w-0">
               {loadingRocas ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -3319,13 +3313,7 @@ export default function ControleRoca() {
                               {formatPercentualColhido(r.percentualColhido)}
                             </TableCell>
                             <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                              <TableRowActionsMenu icon="horizontal">
                                   <DropdownMenuItem
                                     onClick={() => {
                                       setDetailRocaId(r.id);
@@ -3379,8 +3367,7 @@ export default function ControleRoca() {
                                       Desativar
                                     </DropdownMenuItem>
                                   )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              </TableRowActionsMenu>
                             </TableCell>
                           </TableRow>
                         );
@@ -3651,7 +3638,7 @@ export default function ControleRoca() {
                     </div>
                   </SheetContent>
                 </Sheet>
-                <DropdownMenu>
+                <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="outline" className="gap-2 shrink-0">
                       <ClipboardList className="w-4 h-4" />
@@ -3659,7 +3646,7 @@ export default function ControleRoca() {
                       <ChevronDown className="w-4 h-4 opacity-60" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
+                  <DropdownMenuContent align="start" side="bottom" className="z-[100]">
                     <DropdownMenuItem
                       onClick={() => {
                         setMeeiroIncompletoDialogOpen(true);
@@ -3845,13 +3832,7 @@ export default function ControleRoca() {
                             {formatCurrency(valorDeEmbaPadraoDeMeeiro(m))}
                           </TableCell>
                           <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                            <TableRowActionsMenu icon="horizontal">
                                                 <DropdownMenuItem
                                   onClick={() => {
                                     setDetailMeeiroId(m.id);
@@ -3908,8 +3889,7 @@ export default function ControleRoca() {
                                   <UserX className="w-4 h-4 mr-2" />
                                   Excluir
                                 </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            </TableRowActionsMenu>
                           </TableCell>
                         </TableRow>
                       ))
@@ -3942,7 +3922,7 @@ export default function ControleRoca() {
             <p className="text-sm text-muted-foreground">
               Todos os produtos do sistema em uma única lista (incluindo os cadastrados no Controle de Roça).
             </p>
-            <div className="bg-card border rounded-xl overflow-hidden min-w-0">
+            <div className="bg-card border rounded-xl overflow-x-auto min-w-0">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <div>
                   <h3 className="text-sm font-semibold">Catálogo de produtos</h3>
@@ -4718,13 +4698,7 @@ className={
                               {item != null ? formatCurrency(valorTotalItem) : formatCurrency(Number(l.total_geral))}
                             </TableCell>
                             <TableCell className="w-[72px] min-w-[72px] max-w-[72px] text-right p-2 sticky right-0 z-10 bg-card group-hover/lanc:bg-muted/50 align-middle border-l border-border">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                              <TableRowActionsMenu icon="horizontal">
                                   <DropdownMenuItem
                                     onClick={() => setDetalheLancamentoId(l.id)}
                                   >
@@ -4744,8 +4718,7 @@ className={
                                     <Trash2 className="w-4 h-4 mr-2" />
                                     Excluir
                                   </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              </TableRowActionsMenu>
                             </TableCell>
                           </TableRow>
                         );
@@ -7077,20 +7050,8 @@ className={
                                   </TableCell>
                                   <TableCell className="hidden min-[1200px]:table-cell w-[12%] min-w-[5.5rem] text-right sticky right-0 z-20 bg-card align-middle group-hover/pag-aberto:bg-muted/50">
                                     <div className="flex justify-end">
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            type="button"
-                                            className="h-8 w-8 shrink-0"
-                                            aria-label={`Ações de ${m.nome}`}
-                                          >
-                                            <MoreHorizontal className="h-4 w-4" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="min-w-[170px]">
-                                          <DropdownMenuItem
+                                      <TableRowActionsMenu icon="horizontal">
+                                        <DropdownMenuItem
                                             disabled={!podeRegistrarPagamentoMeeiro(m)}
                                             title={
                                               !podeRegistrarPagamentoMeeiro(m)
@@ -7134,8 +7095,7 @@ className={
                                             <Wallet className="w-4 h-4 mr-2" />
                                             Pagar
                                           </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
+                                      </TableRowActionsMenu>
                                     </div>
                                   </TableCell>
                             </TableRow>
@@ -10447,14 +10407,14 @@ className={
                                 </TableCell>
                                 <TableCell className="text-right">
                                   {emp.status === 'ABERTO' && (
-                                    <DropdownMenu>
+                                    <DropdownMenu modal={false}>
                                       <DropdownMenuTrigger asChild>
                                         <Button variant="outline" size="sm">
                                           <MoreHorizontal className="w-4 h-4 mr-1" />
                                           Ações
                                         </Button>
                                       </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
+                                      <DropdownMenuContent align="end" side="bottom" className="z-[100]">
                                         <DropdownMenuItem
                                           onClick={() => {
                                             setEmprestimoEditando({ id: emp.id, valor: Number(emp.valor) });

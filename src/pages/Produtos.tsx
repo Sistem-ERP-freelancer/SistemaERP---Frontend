@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -107,7 +108,6 @@ import {
     LayoutGrid,
     Loader2,
     MapPin,
-    MoreVertical,
     Package,
     Plus,
     RotateCcw,
@@ -2304,7 +2304,7 @@ const Produtos = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-md border overflow-hidden"
+          className="rounded-md border overflow-x-auto"
         >
           <Table>
             <TableHeader>
@@ -2444,13 +2444,7 @@ const Produtos = () => {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                          <TableRowActionsMenu>
                               <DropdownMenuItem onClick={() => {
                                 setSelectedProduto(produto);
                                 setViewDialogOpen(true);
@@ -2476,8 +2470,7 @@ const Produtos = () => {
                                 <Trash2 className="w-4 h-4 mr-2" />
                                 Excluir
                               </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          </TableRowActionsMenu>
                         </TableCell>
                       </TableRow>
                     );

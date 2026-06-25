@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { TableRowActionsMenu } from '@/components/TableRowActionsMenu';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -28,7 +29,7 @@ import type { ClienteComPedidos } from '@/services/contas-receber.service';
 import { financeiroService } from '@/services/financeiro.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { useQuery } from '@tanstack/react-query';
-import { DollarSign, FileText, Loader2, MoreVertical, Search } from 'lucide-react';
+import { DollarSign, FileText, Loader2, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -338,7 +339,7 @@ const ContasAReceberListaClientes = ({
         </div>
       </div>
 
-      <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+      <div className="rounded-xl border border-border overflow-x-auto bg-card shadow-sm">
         <p className="text-xs text-muted-foreground px-4 py-2 border-b bg-muted/30">
           {status === 'aberto'
             ? 'Totais por cliente (pedidos em aberto).'
@@ -392,13 +393,7 @@ const ContasAReceberListaClientes = ({
                       : '—'}
                   </TableCell>
                   <TableCell className="text-center">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                    <TableRowActionsMenu>
                         {row.primeiro_pedido_id && row.total_aberto > 0 && (
                           <DropdownMenuItem
                             onClick={() =>
@@ -439,8 +434,7 @@ const ContasAReceberListaClientes = ({
                             Recibo de pagamento
                           </DropdownMenuItem>
                         )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    </TableRowActionsMenu>
                   </TableCell>
                 </TableRow>
               ))
