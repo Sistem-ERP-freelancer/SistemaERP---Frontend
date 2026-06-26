@@ -890,39 +890,45 @@ const Dashboard = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 gap-2"
-                      disabled={loadingDre || drePdfLoading !== null}
-                      onClick={() => exportarDrePdf("download")}
-                    >
-                      {drePdfLoading === "download" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                      Baixar PDF
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 gap-2"
-                      disabled={loadingDre || drePdfLoading !== null}
-                      onClick={() => exportarDrePdf("print")}
-                    >
-                      {drePdfLoading === "print" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Printer className="h-4 w-4" />
-                      )}
-                      Imprimir
-                    </Button>
-                  </div>
                 </div>
               </div>
             </div>
+
+            <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[#003366]/20 bg-[#003366]/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Exporte o DRE com o período e a roça selecionados acima.
+              </p>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  className="h-10 gap-2 bg-[#003366] hover:bg-[#002244]"
+                  disabled={loadingDre || drePdfLoading !== null}
+                  onClick={() => exportarDrePdf("download")}
+                >
+                  {drePdfLoading === "download" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Baixar PDF do DRE
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 gap-2 border-[#003366]/30 bg-background"
+                  disabled={loadingDre || drePdfLoading !== null}
+                  onClick={() => exportarDrePdf("print")}
+                >
+                  {drePdfLoading === "print" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  Imprimir DRE
+                </Button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
               <div className="xl:col-span-8 overflow-x-auto rounded-xl border border-border/70 bg-background/70 dark:bg-background/40">
                 <Table>
