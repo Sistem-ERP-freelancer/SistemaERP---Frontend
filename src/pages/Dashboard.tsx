@@ -2,7 +2,9 @@ import AppLayout from "@/components/layout/AppLayout";
 import { ModuleStatCard } from "@/components/layout/ModuleStatCards";
 import { statTheme } from "@/components/layout/module-stat-themes";
 import { OrderStats } from "@/components/orders/OrderStats";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { downloadDrePdf, imprimirDrePdf } from "@/lib/dre-pdf";
 import { canAccessFinanceiro } from "@/lib/role-access";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -25,14 +27,17 @@ import { motion } from "framer-motion";
 import {
     BarChart3,
     Calendar,
+    Download,
     ListFilter,
     Loader2,
+    Printer,
     Scale,
     ShoppingCart,
     TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import {
     Select,
@@ -175,6 +180,9 @@ const Dashboard = () => {
   const [totaisGeraisModo, setTotaisGeraisModo] =
     useState<PainelTotaisGeraisModo>("pagos");
   const [dreMesAnoFiltro, setDreMesAnoFiltro] = useState<string>("");
+  const [drePdfLoading, setDrePdfLoading] = useState<"download" | "print" | null>(
+    null,
+  );
   /** Filtro de roça compartilhado: painel financeiro (3 faixas) e DRE. */
   const [rocaFiltro, setRocaFiltro] = useState<string>("all");
 
@@ -545,6 +553,52 @@ const Dashboard = () => {
     };
   }, [dreDadosReais]);
 
+  const rocaDreNome = useMemo(() => {
+    if (!rocaIdFiltro) return undefined;
+    const roca = rocasOpcoes.find((r) => r.id === rocaIdFiltro);
+    return roca?.nome ?? `Roça #${rocaIdFiltro}`;
+  }, [rocaIdFiltro, rocasOpcoes]);
+
+  const drePdfPayload = useMemo(
+    () => ({
+      periodoRotulo: parametrosDre.rotuloPeriodo,
+      rocaNome: rocaDreNome,
+      linhas: dreLinhas.map((l) => ({
+        descricao: l.descricao,
+        valor: l.valor,
+        percentual: l.percentual,
+        indent: l.indent,
+      })),
+      totais: dreTotais,
+    }),
+    [parametrosDre.rotuloPeriodo, rocaDreNome, dreLinhas, dreTotais],
+  );
+
+  const exportarDrePdf = useCallback(
+    async (acao: "download" | "print") => {
+      if (loadingDre) {
+        toast.error("Aguarde o carregamento do DRE.");
+        return;
+      }
+      setDrePdfLoading(acao);
+      try {
+        if (acao === "download") {
+          downloadDrePdf(drePdfPayload);
+          toast.success("PDF baixado.");
+        } else {
+          imprimirDrePdf(drePdfPayload);
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Não foi possível gerar o PDF do DRE.",
+        );
+      } finally {
+        setDrePdfLoading(null);
+      }
+    },
+    [drePdfPayload, loadingDre],
+  );
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -835,6 +889,36 @@ const Dashboard = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 gap-2"
+                      disabled={loadingDre || drePdfLoading !== null}
+                      onClick={() => exportarDrePdf("download")}
+                    >
+                      {drePdfLoading === "download" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      Baixar PDF
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 gap-2"
+                      disabled={loadingDre || drePdfLoading !== null}
+                      onClick={() => exportarDrePdf("print")}
+                    >
+                      {drePdfLoading === "print" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Printer className="h-4 w-4" />
+                      )}
+                      Imprimir
+                    </Button>
                   </div>
                 </div>
               </div>
