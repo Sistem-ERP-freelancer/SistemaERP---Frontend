@@ -6,9 +6,11 @@ import {
 } from '@/components/layout/ModuleStatCards';
 import { statTheme } from '@/components/layout/module-stat-themes';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -19,7 +21,7 @@ import {
 import { exportarFluxoCaixaExcel } from '@/lib/fluxo-caixa-export';
 import { fimDoMesYMD, toYMD } from '@/lib/contas-financeiras-listagem';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import {
   financeiroService,
@@ -38,6 +40,8 @@ import {
   Filter,
   LineChart,
   Loader2,
+  MapPin,
+  RotateCcw,
   Wallet,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
@@ -63,6 +67,48 @@ function periodoPadrao() {
     dataInicial: inicioDoMesYMD(hoje),
     dataFinal: fimDoMesYMD(hoje),
   };
+}
+
+type PeriodoPreset = 'mes-atual' | 'mes-anterior' | 'proximos-30' | 'personalizado';
+
+const PERIODO_PRESETS: { id: PeriodoPreset; label: string }[] = [
+  { id: 'mes-atual', label: 'Este mês' },
+  { id: 'mes-anterior', label: 'Mês anterior' },
+  { id: 'proximos-30', label: 'Próximos 30 dias' },
+];
+
+function calcularPeriodoPreset(preset: PeriodoPreset): {
+  dataInicial: string;
+  dataFinal: string;
+} {
+  const hoje = new Date();
+  if (preset === 'mes-anterior') {
+    const ref = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    return {
+      dataInicial: inicioDoMesYMD(ref),
+      dataFinal: fimDoMesYMD(ref),
+    };
+  }
+  if (preset === 'proximos-30') {
+    const fim = new Date(hoje);
+    fim.setDate(fim.getDate() + 29);
+    return { dataInicial: toYMD(hoje), dataFinal: toYMD(fim) };
+  }
+  return {
+    dataInicial: inicioDoMesYMD(hoje),
+    dataFinal: fimDoMesYMD(hoje),
+  };
+}
+
+function detectarPreset(
+  dataInicial: string,
+  dataFinal: string,
+): PeriodoPreset {
+  for (const { id } of PERIODO_PRESETS) {
+    const p = calcularPeriodoPreset(id);
+    if (p.dataInicial === dataInicial && p.dataFinal === dataFinal) return id;
+  }
+  return 'personalizado';
 }
 
 function formatValorCelula(value: number | null): string {
@@ -265,6 +311,7 @@ export default function FluxoDeCaixa() {
   const [formDataInicial, setFormDataInicial] = useState(padrao.dataInicial);
   const [formDataFinal, setFormDataFinal] = useState(padrao.dataFinal);
   const [formRocaId, setFormRocaId] = useState<string>('todas');
+  const [presetAtivo, setPresetAtivo] = useState<PeriodoPreset>('mes-atual');
 
   const [filtros, setFiltros] = useState({
     dataInicial: padrao.dataInicial,
@@ -367,12 +414,51 @@ export default function FluxoDeCaixa() {
       toast.error('Selecione uma roça válida.');
       return;
     }
+    setPresetAtivo(detectarPreset(formDataInicial, formDataFinal));
     setFiltros({
       dataInicial: formDataInicial,
       dataFinal: formDataFinal,
       rocaId: rocaId && rocaId > 0 ? rocaId : undefined,
     });
   }, [formDataInicial, formDataFinal, formRocaId]);
+
+  const aplicarPreset = useCallback(
+    (preset: PeriodoPreset) => {
+      const { dataInicial, dataFinal } = calcularPeriodoPreset(preset);
+      setPresetAtivo(preset);
+      setFormDataInicial(dataInicial);
+      setFormDataFinal(dataFinal);
+      const rocaId =
+        formRocaId !== 'todas' ? Number.parseInt(formRocaId, 10) : undefined;
+      setFiltros({
+        dataInicial,
+        dataFinal,
+        rocaId: rocaId && rocaId > 0 ? rocaId : undefined,
+      });
+    },
+    [formRocaId],
+  );
+
+  const restaurarPadrao = useCallback(() => {
+    const { dataInicial, dataFinal } = calcularPeriodoPreset('mes-atual');
+    setFormRocaId('todas');
+    setPresetAtivo('mes-atual');
+    setFormDataInicial(dataInicial);
+    setFormDataFinal(dataFinal);
+    setFiltros({
+      dataInicial,
+      dataFinal,
+      rocaId: undefined,
+    });
+  }, []);
+
+  const rocaAplicadaNome = useMemo(() => {
+    if (filtros.rocaId == null) return 'Todas as roças';
+    return (
+      rocasAtivas.find((r) => r.id === filtros.rocaId)?.nome ??
+      `Roça #${filtros.rocaId}`
+    );
+  }, [filtros.rocaId, rocasAtivas]);
 
   const exportarExcel = useCallback(() => {
     if (!fluxoData) {
@@ -402,39 +488,121 @@ export default function FluxoDeCaixa() {
           subtitle="Projeção diária — centros de custo x datas"
         />
 
-        <Card className="mb-6 border-slate-200 bg-white shadow-sm">
-          <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-[#003366]/[0.07] via-sky-50/40 to-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#003366] text-white shadow-sm">
+                <Calendar className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#003366]">
+                  Parâmetros da projeção
+                </p>
+                <p className="text-xs text-slate-500">
+                  Escolha um atalho ou defina datas e roça manualmente
+                </p>
+              </div>
+            </div>
+            {!isLoading && fluxoData && (
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <Badge
+                  variant="outline"
+                  className="border-sky-200 bg-white/80 font-normal text-slate-700"
+                >
+                  {formatDate(filtros.dataInicial)} — {formatDate(filtros.dataFinal)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="border-emerald-200 bg-white/80 font-normal text-slate-700"
+                >
+                  <MapPin className="mr-1 h-3 w-3 text-emerald-600" />
+                  {rocaAplicadaNome}
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-5 p-4 sm:p-5">
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Atalhos de período
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {PERIODO_PRESETS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => aplicarPreset(id)}
+                    className={cn(
+                      'rounded-full px-3.5 py-1.5 text-xs font-medium transition-all',
+                      presetAtivo === id
+                        ? 'bg-[#003366] text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {presetAtivo === 'personalizado' && (
+                  <span className="inline-flex items-center rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-xs text-slate-500">
+                    Período personalizado
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto] xl:items-end">
               <div className="space-y-1.5">
-                <Label htmlFor="fluxo-periodo-inicio">Período</Label>
-                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2">
-                  <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
+                <Label htmlFor="fluxo-data-inicio" className="text-slate-600">
+                  Data inicial
+                </Label>
+                <div className="relative">
+                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
-                    id="fluxo-periodo-inicio"
+                    id="fluxo-data-inicio"
                     type="date"
                     value={formDataInicial}
-                    onChange={(e) => setFormDataInicial(e.target.value)}
-                    className="h-8 min-w-[130px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
-                  />
-                  <span className="shrink-0 text-slate-400">—</span>
-                  <Input
-                    id="fluxo-periodo-fim"
-                    type="date"
-                    value={formDataFinal}
-                    onChange={(e) => setFormDataFinal(e.target.value)}
-                    className="h-8 min-w-[130px] border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+                    onChange={(e) => {
+                      setFormDataInicial(e.target.value);
+                      setPresetAtivo('personalizado');
+                    }}
+                    className="border-slate-200 bg-slate-50/40 pl-9"
                   />
                 </div>
               </div>
 
-              <div className="min-w-[160px] space-y-1.5">
-                <Label>Roça</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="fluxo-data-fim" className="text-slate-600">
+                  Data final
+                </Label>
+                <div className="relative">
+                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="fluxo-data-fim"
+                    type="date"
+                    value={formDataFinal}
+                    onChange={(e) => {
+                      setFormDataFinal(e.target.value);
+                      setPresetAtivo('personalizado');
+                    }}
+                    className="border-slate-200 bg-slate-50/40 pl-9"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-slate-600">Roça</Label>
                 <Select value={formRocaId} onValueChange={setFormRocaId}>
-                  <SelectTrigger className="border-slate-200 bg-white">
-                    <SelectValue placeholder="Selecione a roça" />
+                  <SelectTrigger className="border-slate-200 bg-slate-50/40">
+                    <span className="flex items-center gap-2 truncate">
+                      <MapPin className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <SelectValue placeholder="Selecione a roça" />
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todas">Todas</SelectItem>
+                    <SelectItem value="todas">Todas as roças</SelectItem>
                     {rocasAtivas.map((r) => (
                       <SelectItem key={r.id} value={String(r.id)}>
                         {r.nome}
@@ -443,35 +611,45 @@ export default function FluxoDeCaixa() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                className="gap-2 bg-[#003366] hover:bg-[#002244]"
-                onClick={aplicarFiltros}
-                disabled={isFetching}
-              >
-                {isFetching ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Filter className="h-4 w-4" />
-                )}
-                Filtrar
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2 border-slate-200 bg-white hover:bg-slate-50"
-                onClick={exportarExcel}
-                disabled={!fluxoData || isLoading}
-              >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                Exportar Excel
-              </Button>
+              <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-1 xl:flex-col xl:justify-end">
+                <Button
+                  type="button"
+                  className="min-w-[120px] flex-1 gap-2 bg-[#003366] hover:bg-[#002244] xl:flex-none"
+                  onClick={aplicarFiltros}
+                  disabled={isFetching}
+                >
+                  {isFetching ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Filter className="h-4 w-4" />
+                  )}
+                  Atualizar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-w-[120px] flex-1 gap-2 border-slate-200 bg-white hover:bg-slate-50 xl:flex-none"
+                  onClick={exportarExcel}
+                  disabled={!fluxoData || isLoading}
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                  Excel
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 text-slate-500 hover:text-[#003366] xl:self-end"
+                  onClick={restaurarPadrao}
+                  title="Restaurar padrão (mês atual, todas as roças)"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {erroMsg && (
           <Card className="mb-4 border-rose-200 bg-rose-50/50">
