@@ -55,6 +55,15 @@ export interface RelatorioFinanceiroFornecedorQuery {
   status?: string;
 }
 
+/** Filtros do relatório geral de contas a pagar. */
+export interface RelatorioGeralContasPagarQuery {
+  dataInicial?: string;
+  dataFinal?: string;
+  status?: string;
+  fornecedorId?: number;
+  rocaId?: number;
+}
+
 class RelatoriosClienteService {
   private getAuthToken(): string | null {
     return localStorage.getItem('access_token');
@@ -233,6 +242,73 @@ class RelatoriosClienteService {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const urlBlob = window.URL.createObjectURL(blob);
+    const printWindow = window.open(urlBlob, '_blank');
+
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
+
+    setTimeout(() => {
+      window.URL.revokeObjectURL(urlBlob);
+    }, 1000);
+  }
+
+  private buildRelatorioGeralContasPagarQuery(
+    filtros?: RelatorioGeralContasPagarQuery,
+  ): string {
+    const params = new URLSearchParams();
+    if (filtros?.dataInicial) params.append('data_inicial', filtros.dataInicial);
+    if (filtros?.dataFinal) params.append('data_final', filtros.dataFinal);
+    if (filtros?.status && filtros.status !== 'Todos') {
+      params.append('status', filtros.status);
+    }
+    if (filtros?.fornecedorId != null && filtros.fornecedorId > 0) {
+      params.append('fornecedor_id', String(filtros.fornecedorId));
+    }
+    if (filtros?.rocaId != null && filtros.rocaId > 0) {
+      params.append('roca_id', String(filtros.rocaId));
+    }
+    const q = params.toString();
+    return q ? `?${q}` : '';
+  }
+
+  async downloadRelatorioGeralContasPagar(
+    filtros?: RelatorioGeralContasPagarQuery,
+  ): Promise<void> {
+    const query = this.buildRelatorioGeralContasPagarQuery(filtros);
+    await this.downloadPDF(
+      `/relatorios/contas-pagar/geral/pdf${query}`,
+      `relatorio-geral-contas-pagar.pdf`,
+    );
+  }
+
+  async imprimirRelatorioGeralContasPagar(
+    filtros?: RelatorioGeralContasPagarQuery,
+  ): Promise<void> {
+    const token = this.getAuthToken();
+    if (!token) {
+      throw new Error('Token de autenticação não encontrado');
+    }
+
+    const query = this.buildRelatorioGeralContasPagarQuery(filtros);
+    const url = `${API_BASE_URL}/relatorios/contas-pagar/geral/imprimir${query}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
       },
     });
 

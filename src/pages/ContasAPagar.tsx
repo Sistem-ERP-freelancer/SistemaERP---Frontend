@@ -212,14 +212,20 @@ function ContasAPagar() {
   >("todos");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
+  const [relatorioGeralPdfOpen, setRelatorioGeralPdfOpen] = useState(false);
   const [relatorioEmDesenvolvimento, setRelatorioEmDesenvolvimento] = useState<string | null>(
     null,
   );
   const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState<string>("");
   const [relatorioFornecedorPdfLoading, setRelatorioFornecedorPdfLoading] = useState(false);
+  const [relatorioGeralPdfLoading, setRelatorioGeralPdfLoading] = useState(false);
   const [relatorioFornecedorDataInicial, setRelatorioFornecedorDataInicial] = useState("");
   const [relatorioFornecedorDataFinal, setRelatorioFornecedorDataFinal] = useState("");
+  const [relatorioGeralDataInicial, setRelatorioGeralDataInicial] = useState("");
+  const [relatorioGeralDataFinal, setRelatorioGeralDataFinal] = useState("");
   const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
+    useState<string>("Todos");
+  const [relatorioGeralStatusFiltro, setRelatorioGeralStatusFiltro] =
     useState<string>("Todos");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -372,6 +378,80 @@ function ContasAPagar() {
       relatorioFornecedorDataInicial,
       relatorioFornecedorDataFinal,
       relatorioFornecedorStatusFiltro,
+    ],
+  );
+
+  const relatorioGeralPreviewParams = useMemo(
+    () => ({
+      page: 1,
+      limit: 1,
+      tipo: "PAGAR" as const,
+      data_inicial: relatorioGeralDataInicial || undefined,
+      data_final: relatorioGeralDataFinal || undefined,
+      status:
+        relatorioGeralStatusFiltro !== "Todos"
+          ? relatorioGeralStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioGeralDataInicial,
+      relatorioGeralDataFinal,
+      relatorioGeralStatusFiltro,
+    ],
+  );
+
+  const {
+    data: relatorioGeralPreviewData,
+    isFetching: relatorioGeralPreviewFetching,
+    isError: relatorioGeralPreviewError,
+  } = useQuery({
+    queryKey: ["contas-pagar-relatorio-geral-preview", relatorioGeralPreviewParams],
+    queryFn: () => financeiroService.listar(relatorioGeralPreviewParams),
+    enabled: relatorioGeralPdfOpen,
+  });
+
+  const relatorioGeralTotalContas = useMemo(() => {
+    if (!relatorioGeralPreviewData) return 0;
+    if (typeof relatorioGeralPreviewData.total === "number") {
+      return relatorioGeralPreviewData.total;
+    }
+    if (Array.isArray(relatorioGeralPreviewData)) {
+      return relatorioGeralPreviewData.length;
+    }
+    if (Array.isArray(relatorioGeralPreviewData.data)) {
+      return relatorioGeralPreviewData.total ?? relatorioGeralPreviewData.data.length;
+    }
+    return 0;
+  }, [relatorioGeralPreviewData]);
+
+  const relatorioGeralTemDados =
+    !relatorioGeralPreviewError &&
+    relatorioGeralPreviewData != null &&
+    relatorioGeralTotalContas > 0;
+
+  const relatorioGeralMensagemSemDados = useMemo(() => {
+    if (relatorioGeralStatusFiltro !== "Todos") {
+      return "Não há contas a pagar com o status selecionado.";
+    }
+    if (relatorioGeralDataInicial || relatorioGeralDataFinal) {
+      return "Não há contas a pagar no período selecionado.";
+    }
+    return "Não há contas a pagar cadastradas.";
+  }, [relatorioGeralStatusFiltro, relatorioGeralDataInicial, relatorioGeralDataFinal]);
+
+  const relatorioGeralFiltrosForPdf = useMemo(
+    () => ({
+      dataInicial: relatorioGeralDataInicial || undefined,
+      dataFinal: relatorioGeralDataFinal || undefined,
+      status:
+        relatorioGeralStatusFiltro !== "Todos"
+          ? relatorioGeralStatusFiltro
+          : undefined,
+    }),
+    [
+      relatorioGeralDataInicial,
+      relatorioGeralDataFinal,
+      relatorioGeralStatusFiltro,
     ],
   );
 
@@ -2061,7 +2141,7 @@ function ContasAPagar() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setRelatorioEmDesenvolvimento("Relatório geral")}>
+                <DropdownMenuItem onClick={() => setRelatorioGeralPdfOpen(true)}>
                   Relatório geral
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setRelatorioFornecedorPdfOpen(true)}>
@@ -2644,6 +2724,159 @@ function ContasAPagar() {
                         toast.error(msg);
                       } finally {
                         setRelatorioFornecedorPdfLoading(false);
+                      }
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Abrir para imprimir
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={relatorioGeralPdfOpen}
+          onOpenChange={(open) => {
+            setRelatorioGeralPdfOpen(open);
+            if (open) {
+              setRelatorioGeralDataInicial(dataInicialFilter || "");
+              setRelatorioGeralDataFinal(dataFinalFilter || "");
+              setRelatorioGeralStatusFiltro(
+                statusFilter && statusFilter !== "" ? statusFilter : "Todos",
+              );
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório geral</DialogTitle>
+              <DialogDescription>
+                Inclui dados da empresa e todos os lançamentos de contas a pagar conforme os
+                filtros selecionados (período por data de vencimento e status).
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <Input
+                        type="date"
+                        className="rounded-lg border-border/80 bg-muted/50"
+                        value={relatorioGeralDataInicial}
+                        onChange={(e) => setRelatorioGeralDataInicial(e.target.value || "")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <Input
+                        type="date"
+                        className="rounded-lg border-border/80 bg-muted/50"
+                        value={relatorioGeralDataFinal}
+                        onChange={(e) => setRelatorioGeralDataFinal(e.target.value || "")}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Status</Label>
+                  <RadioGroup
+                    value={relatorioGeralStatusFiltro}
+                    onValueChange={setRelatorioGeralStatusFiltro}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="Todos" id="relatorio-geral-status-todos" /><Label htmlFor="relatorio-geral-status-todos" className="cursor-pointer">Todos</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PENDENTE" id="relatorio-geral-status-pendente" /><Label htmlFor="relatorio-geral-status-pendente" className="cursor-pointer">Pendente</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PAGO_PARCIAL" id="relatorio-geral-status-parcial" /><Label htmlFor="relatorio-geral-status-parcial" className="cursor-pointer">Pago Parcial</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PAGO_TOTAL" id="relatorio-geral-status-quitado" /><Label htmlFor="relatorio-geral-status-quitado" className="cursor-pointer">Quitada</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="VENCIDO" id="relatorio-geral-status-vencido" /><Label htmlFor="relatorio-geral-status-vencido" className="cursor-pointer">Vencido</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="CANCELADO" id="relatorio-geral-status-cancelado" /><Label htmlFor="relatorio-geral-status-cancelado" className="cursor-pointer">Cancelado</Label></div>
+                  </RadioGroup>
+                </div>
+              </div>
+
+              {relatorioGeralPreviewFetching && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando filtros…
+                </p>
+              )}
+
+              {relatorioGeralPreviewError && (
+                <p className="text-sm text-destructive">
+                  Não foi possível verificar os filtros. Tente novamente.
+                </p>
+              )}
+
+              {!relatorioGeralPreviewFetching &&
+                !relatorioGeralPreviewError &&
+                relatorioGeralTotalContas === 0 && (
+                  <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">
+                    {relatorioGeralMensagemSemDados}
+                  </p>
+                )}
+
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Button
+                    type="button"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioGeralPreviewFetching ||
+                      !relatorioGeralTemDados ||
+                      relatorioGeralPdfLoading
+                    }
+                    onClick={async () => {
+                      setRelatorioGeralPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.downloadRelatorioGeralContasPagar(
+                          relatorioGeralFiltrosForPdf,
+                        );
+                        toast.success("PDF baixado.");
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioGeralPdfLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioGeralPdfLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioGeralPreviewFetching ||
+                      !relatorioGeralTemDados ||
+                      relatorioGeralPdfLoading
+                    }
+                    onClick={async () => {
+                      setRelatorioGeralPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.imprimirRelatorioGeralContasPagar(
+                          relatorioGeralFiltrosForPdf,
+                        );
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioGeralPdfLoading(false);
                       }
                     }}
                   >
