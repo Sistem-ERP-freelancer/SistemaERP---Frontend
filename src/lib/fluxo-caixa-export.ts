@@ -1,29 +1,15 @@
 import type { FluxoCaixaResponse } from '@/services/financeiro.service';
+import * as XLSX from 'xlsx';
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+const FMT_MOEDA_BR = '"R$" #.##0,00';
+const FMT_NUMERO_BR = '#.##0,00';
 
-function fmtValor(v: number | null): string {
-  if (v === null) return '';
-  return v.toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+type GridCell = string | number;
+
+function downloadArrayBuffer(buffer: ArrayBuffer, filename: string): void {
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
-}
-
-function fmtMoeda(v: number): string {
-  return v.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-}
-
-function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -34,117 +20,142 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function classeLinha(tipo: string): string {
-  if (tipo === 'secao') return 'secao';
-  if (tipo === 'subtotal') return 'subtotal';
-  if (tipo === 'saldo-dia') return 'saldo-dia';
-  if (tipo === 'saldo-acumulado') return 'saldo-acumulado';
-  return '';
+function setCellNumber(
+  ws: XLSX.WorkSheet,
+  row: number,
+  col: number,
+  value: number,
+  numFmt: string,
+): void {
+  const ref = XLSX.utils.encode_cell({ r: row, c: col });
+  ws[ref] = { t: 'n', v: value, z: numFmt };
+}
+
+function setCellString(ws: XLSX.WorkSheet, row: number, col: number, value: string): void {
+  const ref = XLSX.utils.encode_cell({ r: row, c: col });
+  ws[ref] = { t: 's', v: value };
 }
 
 /**
- * Exporta fluxo de caixa em planilha Excel (.xls HTML).
- * Evita CSV com separador `;` que o Excel Online abre em coluna única.
+ * Exporta fluxo de caixa em .xlsx com colunas, larguras e números formatados.
  */
 export function exportarFluxoCaixaExcel(
   data: FluxoCaixaResponse,
   options?: { rocaNome?: string },
 ): void {
   const { periodo, cards, colunas, linhas: rows } = data;
-  const numCols = 1 + colunas.length;
+  const totalCols = 1 + colunas.length;
 
-  const metaRows: string[] = [
-    `<tr><td class="titulo" colspan="${numCols}">Fluxo de Caixa — ${escapeHtml(periodo.inicio)} a ${escapeHtml(periodo.fim)}</td></tr>`,
-  ];
+  const grid: GridCell[][] = [];
+  let titleRow = 0;
+  let rocaRow: number | null = null;
+  let headerRow = 0;
+
+  grid.push([`Fluxo de Caixa — ${periodo.inicio} a ${periodo.fim}`]);
+  titleRow = grid.length - 1;
+
   if (options?.rocaNome) {
-    metaRows.push(
-      `<tr><td class="meta" colspan="${numCols}">Roça: ${escapeHtml(options.rocaNome)}</td></tr>`,
-    );
+    grid.push([`Roça: ${options.rocaNome}`]);
+    rocaRow = grid.length - 1;
   }
-  metaRows.push('<tr><td colspan="' + numCols + '"></td></tr>');
-  metaRows.push(
-    `<tr><td class="meta">Saldo inicial</td><td class="num meta-valor" colspan="${numCols - 1}">${escapeHtml(fmtMoeda(cards.saldo_inicial))}</td></tr>`,
-    `<tr><td class="meta">Total a receber</td><td class="num meta-valor verde" colspan="${numCols - 1}">${escapeHtml(fmtMoeda(cards.total_a_receber))}</td></tr>`,
-    `<tr><td class="meta">Total a pagar</td><td class="num meta-valor vermelho" colspan="${numCols - 1}">${escapeHtml(fmtMoeda(cards.total_a_pagar))}</td></tr>`,
-    `<tr><td class="meta">Saldo projetado</td><td class="num meta-valor" colspan="${numCols - 1}">${escapeHtml(fmtMoeda(cards.saldo_projetado))}</td></tr>`,
-    `<tr><td colspan="${numCols}"></td></tr>`,
-  );
 
-  const cabecalhoCols = colunas
-    .map(
-      (c) =>
-        `<th>${escapeHtml(c.label)}<br/><span class="weekday">${escapeHtml(c.weekday)}</span></th>`,
-    )
-    .join('');
-  const cabecalho = `<tr><th class="col-label">Centro de custo / Categoria</th>${cabecalhoCols}</tr>`;
+  grid.push([]);
 
-  const bodyRows = rows
-    .map((row) => {
-      const cls = classeLinha(row.tipo);
-      const indent = row.indent ? ' indent' : '';
-      const label = escapeHtml(row.label);
+  const resumoStart = grid.length;
+  grid.push(['Saldo inicial', cards.saldo_inicial]);
+  grid.push(['Total a receber', cards.total_a_receber]);
+  grid.push(['Total a pagar', cards.total_a_pagar]);
+  grid.push(['Saldo projetado', cards.saldo_projetado]);
 
-      if (row.tipo === 'secao') {
-        return `<tr class="${cls}"><td class="col-label" colspan="${numCols}">${label}</td></tr>`;
+  grid.push([]);
+
+  headerRow = grid.length;
+  grid.push([
+    'Centro de custo / Categoria',
+    ...colunas.map((c) => `${c.label} (${c.weekday})`),
+  ]);
+
+  const dataStartRow = grid.length;
+  const sectionRows: number[] = [];
+
+  for (const row of rows) {
+    if (row.tipo === 'secao') {
+      grid.push([row.label]);
+      sectionRows.push(grid.length - 1);
+      continue;
+    }
+
+    const label = row.indent ? `  ${row.label}` : row.label;
+    grid.push([
+      label,
+      ...row.valores.map((v) => (v == null ? '' : v)),
+    ]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(grid);
+
+  // Larguras: coluna A larga, demais colunas de data uniformes
+  ws['!cols'] = [
+    { wch: 30 },
+    ...colunas.map(() => ({ wch: 12 })),
+  ];
+
+  // Mesclar título e linhas de seção na largura total
+  const merges: XLSX.Range[] = [
+    { s: { r: titleRow, c: 0 }, e: { r: titleRow, c: totalCols - 1 } },
+  ];
+  if (rocaRow != null) {
+    merges.push({ s: { r: rocaRow, c: 0 }, e: { r: rocaRow, c: totalCols - 1 } });
+  }
+  for (const r of sectionRows) {
+    merges.push({ s: { r, c: 0 }, e: { r, c: totalCols - 1 } });
+  }
+  ws['!merges'] = merges;
+
+  // Congelar painéis: coluna A + linha do cabeçalho da grade
+  ws['!views'] = [
+    {
+      state: 'frozen',
+      xSplit: 1,
+      ySplit: headerRow + 1,
+      topLeftCell: XLSX.utils.encode_cell({ r: headerRow + 1, c: 1 }),
+      activePane: 'bottomRight',
+    },
+  ];
+
+  // Formato moeda no resumo (coluna B)
+  for (let r = resumoStart; r < resumoStart + 4; r++) {
+    const valores = [
+      cards.saldo_inicial,
+      cards.total_a_receber,
+      cards.total_a_pagar,
+      cards.saldo_projetado,
+    ];
+    setCellNumber(ws, r, 1, valores[r - resumoStart], FMT_MOEDA_BR);
+  }
+
+  // Formato numérico nas células de valores da grade
+  for (let r = dataStartRow; r < grid.length; r++) {
+    if (sectionRows.includes(r)) continue;
+    for (let c = 1; c < totalCols; c++) {
+      const ref = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[ref];
+      if (cell && cell.t === 'n') {
+        cell.z = FMT_NUMERO_BR;
       }
+    }
+  }
 
-      const cells = row.valores
-        .map((v) => `<td class="num">${escapeHtml(fmtValor(v))}</td>`)
-        .join('');
-
-      return `<tr class="${cls}"><td class="col-label${indent}">${label}</td>${cells}</tr>`;
-    })
-    .join('');
-
-  const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:x="urn:schemas-microsoft-com:office:excel"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="utf-8"/>
-<!--[if gte mso 9]><xml>
-<x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>Fluxo de Caixa</x:Name>
-<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
-</xml><![endif]-->
-<style>
-  table { border-collapse: collapse; font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
-  td, th { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: middle; white-space: nowrap; }
-  th { background: #003366; color: #ffffff; font-weight: bold; text-align: center; }
-  th .weekday { font-size: 9pt; font-weight: normal; opacity: 0.9; }
-  .col-label { min-width: 220px; width: 220px; text-align: left; background: #f8fafc; }
-  .col-label.indent { padding-left: 24px; }
-  td.num, th:not(.col-label) { min-width: 88px; width: 88px; text-align: right; }
-  .titulo { font-size: 14pt; font-weight: bold; color: #003366; border: none; padding: 8px 4px 12px; }
-  .meta { font-weight: 600; color: #334155; border: none; background: transparent; }
-  .meta-valor { font-weight: 600; border: none; background: transparent; }
-  .meta-valor.verde { color: #047857; }
-  .meta-valor.vermelho { color: #be123c; }
-  tr.secao td { background: #e2e8f0; font-weight: bold; color: #1e293b; }
-  tr.subtotal td { background: #fff1f2; font-weight: bold; color: #be123c; }
-  tr.saldo-dia td { background: #f1f5f9; font-weight: bold; }
-  tr.saldo-acumulado td { background: #e0f2fe; font-weight: bold; color: #003366; }
-</style>
-</head>
-<body>
-<table>
-<colgroup>
-<col style="width:220px"/>
-${colunas.map(() => '<col style="width:88px"/>').join('')}
-</colgroup>
-<tbody>
-${metaRows.join('\n')}
-${cabecalho}
-${bodyRows}
-</tbody>
-</table>
-</body>
-</html>`;
-
-  const blob = new Blob([html], {
-    type: 'application/vnd.ms-excel;charset=utf-8',
+  // Reforçar cabeçalho da grade como texto
+  setCellString(ws, headerRow, 0, 'Centro de custo / Categoria');
+  colunas.forEach((c, i) => {
+    setCellString(ws, headerRow, i + 1, `${c.label} (${c.weekday})`);
   });
-  const nomeArquivo = `fluxo-caixa_${periodo.inicio}_${periodo.fim}.xls`;
-  downloadBlob(blob, nomeArquivo);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Fluxo de Caixa');
+
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+  const nomeArquivo = `fluxo-caixa_${periodo.inicio}_${periodo.fim}.xlsx`;
+  downloadArrayBuffer(buffer, nomeArquivo);
 }
