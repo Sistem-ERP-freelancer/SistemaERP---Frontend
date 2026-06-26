@@ -64,6 +64,14 @@ export interface RelatorioGeralContasPagarQuery {
   rocaId?: number;
 }
 
+/** Filtros do relatório por centro de custo. */
+export interface RelatorioCentroCustoContasPagarQuery {
+  dataInicial?: string;
+  dataFinal?: string;
+  status?: string;
+  tipoDespesaId?: number;
+}
+
 class RelatoriosClienteService {
   private getAuthToken(): string | null {
     return localStorage.getItem('access_token');
@@ -304,6 +312,97 @@ class RelatoriosClienteService {
 
     const query = this.buildRelatorioGeralContasPagarQuery(filtros);
     const url = `${API_BASE_URL}/relatorios/contas-pagar/geral/imprimir${query}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const urlBlob = window.URL.createObjectURL(blob);
+    const printWindow = window.open(urlBlob, '_blank');
+
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
+
+    setTimeout(() => {
+      window.URL.revokeObjectURL(urlBlob);
+    }, 1000);
+  }
+
+  private buildRelatorioCentroCustoContasPagarQuery(
+    filtros?: RelatorioCentroCustoContasPagarQuery,
+  ): string {
+    const params = new URLSearchParams();
+    if (filtros?.dataInicial) params.append('data_inicial', filtros.dataInicial);
+    if (filtros?.dataFinal) params.append('data_final', filtros.dataFinal);
+    if (filtros?.status && filtros.status !== 'Todos') {
+      params.append('status', filtros.status);
+    }
+    if (filtros?.tipoDespesaId != null && filtros.tipoDespesaId > 0) {
+      params.append('tipo_despesa_id', String(filtros.tipoDespesaId));
+    }
+    const q = params.toString();
+    return q ? `?${q}` : '';
+  }
+
+  async contarRelatorioCentroCustoContasPagar(
+    filtros?: RelatorioCentroCustoContasPagarQuery,
+  ): Promise<number> {
+    const token = this.getAuthToken();
+    if (!token) {
+      throw new Error('Token de autenticação não encontrado');
+    }
+
+    const query = this.buildRelatorioCentroCustoContasPagarQuery(filtros);
+    const url = `${API_BASE_URL}/relatorios/contas-pagar/centro-custo/contagem${query}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}`);
+    }
+
+    const data = (await response.json()) as { total?: number };
+    return typeof data.total === 'number' ? data.total : 0;
+  }
+
+  async downloadRelatorioCentroCustoContasPagar(
+    filtros?: RelatorioCentroCustoContasPagarQuery,
+  ): Promise<void> {
+    const query = this.buildRelatorioCentroCustoContasPagarQuery(filtros);
+    await this.downloadPDF(
+      `/relatorios/contas-pagar/centro-custo/pdf${query}`,
+      `relatorio-centro-custo.pdf`,
+    );
+  }
+
+  async imprimirRelatorioCentroCustoContasPagar(
+    filtros?: RelatorioCentroCustoContasPagarQuery,
+  ): Promise<void> {
+    const token = this.getAuthToken();
+    if (!token) {
+      throw new Error('Token de autenticação não encontrado');
+    }
+
+    const query = this.buildRelatorioCentroCustoContasPagarQuery(filtros);
+    const url = `${API_BASE_URL}/relatorios/contas-pagar/centro-custo/imprimir${query}`;
 
     const response = await fetch(url, {
       method: 'GET',

@@ -1,5 +1,4 @@
 import AppLayout from "@/components/layout/AppLayout";
-import { EmDesenvolvimentoDialog } from "@/components/EmDesenvolvimentoDialog";
 import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
@@ -105,6 +104,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { relatoriosClienteService } from "@/services/relatorios-cliente.service";
+import { centroCustoService } from "@/services/centro-custo.service";
 import { toast } from "sonner";
 import { contaEhDespesaSemPedido } from "@/pages/contas-a-pagar/despesaContaUtils";
 import { calcularResumoCardsPagar } from "@/lib/contas-financeiras-listagem";
@@ -213,19 +213,23 @@ function ContasAPagar() {
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
   const [relatorioGeralPdfOpen, setRelatorioGeralPdfOpen] = useState(false);
-  const [relatorioEmDesenvolvimento, setRelatorioEmDesenvolvimento] = useState<string | null>(
-    null,
-  );
+  const [relatorioCentroCustoPdfOpen, setRelatorioCentroCustoPdfOpen] = useState(false);
   const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState<string>("");
   const [relatorioFornecedorPdfLoading, setRelatorioFornecedorPdfLoading] = useState(false);
   const [relatorioGeralPdfLoading, setRelatorioGeralPdfLoading] = useState(false);
+  const [relatorioCentroCustoPdfLoading, setRelatorioCentroCustoPdfLoading] = useState(false);
   const [relatorioFornecedorDataInicial, setRelatorioFornecedorDataInicial] = useState("");
   const [relatorioFornecedorDataFinal, setRelatorioFornecedorDataFinal] = useState("");
   const [relatorioGeralDataInicial, setRelatorioGeralDataInicial] = useState("");
   const [relatorioGeralDataFinal, setRelatorioGeralDataFinal] = useState("");
+  const [relatorioCentroCustoDataInicial, setRelatorioCentroCustoDataInicial] = useState("");
+  const [relatorioCentroCustoDataFinal, setRelatorioCentroCustoDataFinal] = useState("");
+  const [relatorioCentroCustoTipoSelect, setRelatorioCentroCustoTipoSelect] = useState("");
   const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
     useState<string>("Todos");
   const [relatorioGeralStatusFiltro, setRelatorioGeralStatusFiltro] =
+    useState<string>("Todos");
+  const [relatorioCentroCustoStatusFiltro, setRelatorioCentroCustoStatusFiltro] =
     useState<string>("Todos");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -453,6 +457,89 @@ function ContasAPagar() {
       relatorioGeralDataFinal,
       relatorioGeralStatusFiltro,
     ],
+  );
+
+  const { data: relatorioCentroCustoTipos = [] } = useQuery({
+    queryKey: ["contas-pagar-relatorio-centro-custo-tipos"],
+    queryFn: () => centroCustoService.listarTiposOpcoes(),
+    enabled: relatorioCentroCustoPdfOpen,
+    retry: false,
+  });
+
+  const relatorioCentroCustoTipoIdParsed = useMemo(() => {
+    if (!relatorioCentroCustoTipoSelect || relatorioCentroCustoTipoSelect === "todos") {
+      return null;
+    }
+    const n = parseInt(relatorioCentroCustoTipoSelect, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [relatorioCentroCustoTipoSelect]);
+
+  const relatorioCentroCustoPreviewParams = useMemo(
+    () => ({
+      dataInicial: relatorioCentroCustoDataInicial || undefined,
+      dataFinal: relatorioCentroCustoDataFinal || undefined,
+      status:
+        relatorioCentroCustoStatusFiltro !== "Todos"
+          ? relatorioCentroCustoStatusFiltro
+          : undefined,
+      tipoDespesaId: relatorioCentroCustoTipoIdParsed ?? undefined,
+    }),
+    [
+      relatorioCentroCustoDataInicial,
+      relatorioCentroCustoDataFinal,
+      relatorioCentroCustoStatusFiltro,
+      relatorioCentroCustoTipoIdParsed,
+    ],
+  );
+
+  const {
+    data: relatorioCentroCustoPreviewTotal,
+    isFetching: relatorioCentroCustoPreviewFetching,
+    isError: relatorioCentroCustoPreviewError,
+  } = useQuery({
+    queryKey: [
+      "contas-pagar-relatorio-centro-custo-preview",
+      relatorioCentroCustoPreviewParams,
+    ],
+    queryFn: () =>
+      relatoriosClienteService.contarRelatorioCentroCustoContasPagar(
+        relatorioCentroCustoPreviewParams,
+      ),
+    enabled: relatorioCentroCustoPdfOpen,
+  });
+
+  const relatorioCentroCustoTemDados =
+    !relatorioCentroCustoPreviewError &&
+    relatorioCentroCustoPreviewTotal != null &&
+    relatorioCentroCustoPreviewTotal > 0;
+
+  const relatorioCentroCustoMensagemSemDados = useMemo(() => {
+    if (relatorioCentroCustoTipoIdParsed != null) {
+      if (relatorioCentroCustoStatusFiltro !== "Todos") {
+        return "Não há despesas desse tipo com o status selecionado.";
+      }
+      if (relatorioCentroCustoDataInicial || relatorioCentroCustoDataFinal) {
+        return "Não há despesas desse tipo no período selecionado.";
+      }
+      return "Não há despesas cadastradas para esse tipo.";
+    }
+    if (relatorioCentroCustoStatusFiltro !== "Todos") {
+      return "Não há despesas de centro de custo com o status selecionado.";
+    }
+    if (relatorioCentroCustoDataInicial || relatorioCentroCustoDataFinal) {
+      return "Não há despesas de centro de custo no período selecionado.";
+    }
+    return "Não há despesas de centro de custo cadastradas.";
+  }, [
+    relatorioCentroCustoTipoIdParsed,
+    relatorioCentroCustoStatusFiltro,
+    relatorioCentroCustoDataInicial,
+    relatorioCentroCustoDataFinal,
+  ]);
+
+  const relatorioCentroCustoFiltrosForPdf = useMemo(
+    () => relatorioCentroCustoPreviewParams,
+    [relatorioCentroCustoPreviewParams],
   );
 
   // Buscar dados do dashboard de contas a pagar (respeitando período selecionado)
@@ -2148,7 +2235,7 @@ function ContasAPagar() {
                   Relatório financeiro por fornecedor
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setRelatorioEmDesenvolvimento("Relatório por centro de custo")}
+                  onClick={() => setRelatorioCentroCustoPdfOpen(true)}
                 >
                   Relatório por centro de custo
                 </DropdownMenuItem>
@@ -2888,13 +2975,184 @@ function ContasAPagar() {
             </div>
           </DialogContent>
         </Dialog>
-        <EmDesenvolvimentoDialog
-          open={relatorioEmDesenvolvimento !== null}
+        <Dialog
+          open={relatorioCentroCustoPdfOpen}
           onOpenChange={(open) => {
-            if (!open) setRelatorioEmDesenvolvimento(null);
+            setRelatorioCentroCustoPdfOpen(open);
+            if (open) {
+              setRelatorioCentroCustoDataInicial(dataInicialFilter || "");
+              setRelatorioCentroCustoDataFinal(dataFinalFilter || "");
+              setRelatorioCentroCustoStatusFiltro(
+                statusFilter && statusFilter !== "" ? statusFilter : "Todos",
+              );
+              setRelatorioCentroCustoTipoSelect("todos");
+            }
           }}
-          title={relatorioEmDesenvolvimento ?? "Em desenvolvimento"}
-        />
+        >
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório por centro de custo</DialogTitle>
+              <DialogDescription>
+                Despesas do centro de custo espelhadas em contas a pagar. Filtre por tipo de
+                despesa, período (vencimento) e status.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="relatorio-centro-custo-tipo">Tipo de despesa</Label>
+                <Select
+                  value={relatorioCentroCustoTipoSelect || "todos"}
+                  onValueChange={setRelatorioCentroCustoTipoSelect}
+                >
+                  <SelectTrigger id="relatorio-centro-custo-tipo">
+                    <SelectValue placeholder="Todos os tipos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os tipos</SelectItem>
+                    {relatorioCentroCustoTipos.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <Input
+                        type="date"
+                        className="rounded-lg border-border/80 bg-muted/50"
+                        value={relatorioCentroCustoDataInicial}
+                        onChange={(e) =>
+                          setRelatorioCentroCustoDataInicial(e.target.value || "")
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <Input
+                        type="date"
+                        className="rounded-lg border-border/80 bg-muted/50"
+                        value={relatorioCentroCustoDataFinal}
+                        onChange={(e) =>
+                          setRelatorioCentroCustoDataFinal(e.target.value || "")
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Status</Label>
+                  <RadioGroup
+                    value={relatorioCentroCustoStatusFiltro}
+                    onValueChange={setRelatorioCentroCustoStatusFiltro}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="Todos" id="relatorio-cc-status-todos" /><Label htmlFor="relatorio-cc-status-todos" className="cursor-pointer">Todos</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PENDENTE" id="relatorio-cc-status-pendente" /><Label htmlFor="relatorio-cc-status-pendente" className="cursor-pointer">Pendente</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PAGO_PARCIAL" id="relatorio-cc-status-parcial" /><Label htmlFor="relatorio-cc-status-parcial" className="cursor-pointer">Pago Parcial</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="PAGO_TOTAL" id="relatorio-cc-status-quitado" /><Label htmlFor="relatorio-cc-status-quitado" className="cursor-pointer">Quitada</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="VENCIDO" id="relatorio-cc-status-vencido" /><Label htmlFor="relatorio-cc-status-vencido" className="cursor-pointer">Vencido</Label></div>
+                    <div className="flex items-center space-x-2"><RadioGroupItem value="CANCELADO" id="relatorio-cc-status-cancelado" /><Label htmlFor="relatorio-cc-status-cancelado" className="cursor-pointer">Cancelado</Label></div>
+                  </RadioGroup>
+                </div>
+              </div>
+
+              {relatorioCentroCustoPreviewFetching && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando filtros…
+                </p>
+              )}
+
+              {relatorioCentroCustoPreviewError && (
+                <p className="text-sm text-destructive">
+                  Não foi possível verificar os filtros. Tente novamente.
+                </p>
+              )}
+
+              {!relatorioCentroCustoPreviewFetching &&
+                !relatorioCentroCustoPreviewError &&
+                relatorioCentroCustoPreviewTotal === 0 && (
+                  <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">
+                    {relatorioCentroCustoMensagemSemDados}
+                  </p>
+                )}
+
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                  <Button
+                    type="button"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioCentroCustoPreviewFetching ||
+                      !relatorioCentroCustoTemDados ||
+                      relatorioCentroCustoPdfLoading
+                    }
+                    onClick={async () => {
+                      setRelatorioCentroCustoPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.downloadRelatorioCentroCustoContasPagar(
+                          relatorioCentroCustoFiltrosForPdf,
+                        );
+                        toast.success("PDF baixado.");
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioCentroCustoPdfLoading(false);
+                      }
+                    }}
+                  >
+                    {relatorioCentroCustoPdfLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
+                    disabled={
+                      relatorioCentroCustoPreviewFetching ||
+                      !relatorioCentroCustoTemDados ||
+                      relatorioCentroCustoPdfLoading
+                    }
+                    onClick={async () => {
+                      setRelatorioCentroCustoPdfLoading(true);
+                      try {
+                        await relatoriosClienteService.imprimirRelatorioCentroCustoContasPagar(
+                          relatorioCentroCustoFiltrosForPdf,
+                        );
+                      } catch (e: unknown) {
+                        const msg =
+                          e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        toast.error(msg);
+                      } finally {
+                        setRelatorioCentroCustoPdfLoading(false);
+                      }
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Abrir para imprimir
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );
