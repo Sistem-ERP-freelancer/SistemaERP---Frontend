@@ -21,6 +21,7 @@ import {
 import { BRAZILIAN_UFS, isValidBrazilUf } from '@/lib/brazil-uf';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { formatCurrency } from '@/lib/utils';
+import { cepService } from '@/services/cep.service';
 import {
   formatTelefone,
   telefoneArmazenadoParaCampo,
@@ -237,6 +238,14 @@ function calcularFaltantesLocal(data: {
         secao: 'endereco',
       });
     }
+    if (!codigoIbgeValido(data.endereco.codigo_ibge)) {
+      faltantes.push({
+        campo: 'endereco.codigo_ibge',
+        label:
+          'Código IBGE do município (7 dígitos) — obrigatório para NF-e',
+        secao: 'endereco',
+      });
+    }
   }
   for (const item of data.itens) {
     if (campoVazio(item.ncm) || !ncmValido(item.ncm)) {
@@ -249,6 +258,10 @@ function calcularFaltantesLocal(data: {
     }
   }
   return faltantes;
+}
+
+function codigoIbgeValido(codigo?: string | null): boolean {
+  return /^\d{7}$/.test(String(codigo || '').replace(/\D/g, ''));
 }
 
 function campoFaltando(faltantes: CampoFaltanteNotaFiscal[], campo: string): boolean {
@@ -289,6 +302,30 @@ export function EmitirNotaFiscalDialog({
   });
   const [ncmPorProduto, setNcmPorProduto] = useState<Record<number, string>>({});
   const [erroEmissao, setErroEmissao] = useState<string | null>(null);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  const buscarCep = async (cepRaw: string) => {
+    const limpo = cepRaw.replace(/\D/g, '');
+    if (limpo.length !== 8) return;
+    setBuscandoCep(true);
+    try {
+      const res = await cepService.buscar(limpo);
+      setEndereco((p) => ({
+        ...p,
+        cep: res.cep,
+        logradouro: res.logradouro || p.logradouro,
+        bairro: res.bairro || p.bairro,
+        cidade: res.cidade || p.cidade,
+        estado: res.estado || p.estado,
+        codigo_ibge: res.codigoIbge || p.codigo_ibge,
+        complemento: p.complemento || res.complemento || '',
+      }));
+    } catch (err) {
+      toast.error(extractApiErrorMessage(err));
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) setErroEmissao(null);
@@ -655,6 +692,9 @@ export function EmitirNotaFiscalDialog({
                       className={`h-11 ${inputClass('endereco.cep') ?? ''}`}
                       value={endereco.cep}
                       onChange={(e) => setEndereco((p) => ({ ...p, cep: e.target.value }))}
+                      onBlur={(e) => buscarCep(e.target.value)}
+                      disabled={buscandoCep}
+                      placeholder="00000-000"
                     />
                   </FormField>
                   <FormField label="Logradouro" htmlFor="nf-log" required>
@@ -733,15 +773,18 @@ export function EmitirNotaFiscalDialog({
                       </p>
                     )}
                   </FormField>
-                  <FormField label="Código IBGE" htmlFor="nf-ibge">
+                  <FormField label="Código IBGE" htmlFor="nf-ibge" required>
                     <Input
                       id="nf-ibge"
-                      className="h-11"
+                      className={`h-11 ${inputClass('endereco.codigo_ibge') ?? ''}`}
                       value={endereco.codigo_ibge || ''}
                       onChange={(e) =>
-                        setEndereco((p) => ({ ...p, codigo_ibge: e.target.value }))
+                        setEndereco((p) => ({
+                          ...p,
+                          codigo_ibge: e.target.value.replace(/\D/g, '').slice(0, 7),
+                        }))
                       }
-                      placeholder="Opcional"
+                      placeholder="7 dígitos (preenchido ao buscar CEP)"
                     />
                   </FormField>
                 </div>
