@@ -67,6 +67,7 @@ export const EnderecoForm = ({
                 bairro: dados.bairro || endereco.bairro,
                 cidade: dados.cidade,
                 estado: dados.estado,
+                codigo_ibge: dados.codigoIbge || endereco.codigo_ibge,
               })
             }
           />

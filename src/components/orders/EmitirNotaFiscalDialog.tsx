@@ -1,4 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { CepInputWithLookup } from '@/components/common/CepInputWithLookup';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +25,7 @@ import { formatCurrency } from '@/lib/utils';
 import { cepService } from '@/services/cep.service';
 import {
   formatTelefone,
+  formatCEP,
   telefoneArmazenadoParaCampo,
 } from '@/lib/validators';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
@@ -160,8 +162,17 @@ function formatEndereco(end?: NotaFiscalPreEmissaoEndereco | null): string {
   return partes.length ? partes.join(', ') : '—';
 }
 
+const NCM_PLACEHOLDERS = new Set([
+  '00000000',
+  '11111111',
+  '88888888',
+  '99999999',
+  '12345678',
+]);
+
 function ncmValido(ncm: string): boolean {
-  return ncm.replace(/\D/g, '').length === 8;
+  const digits = ncm.replace(/\D/g, '');
+  return digits.length === 8 && !NCM_PLACEHOLDERS.has(digits);
 }
 
 function calcularFaltantesLocal(data: {
@@ -251,7 +262,7 @@ function calcularFaltantesLocal(data: {
     if (campoVazio(item.ncm) || !ncmValido(item.ncm)) {
       faltantes.push({
         campo: `produto.${item.produto_id}.ncm`,
-        label: `NCM válido (8 dígitos) — ${item.nome}`,
+        label: `NCM válido da tabela TIPI (8 dígitos) — ${item.nome}`,
         secao: 'produto',
         produto_id: item.produto_id,
       });
@@ -312,7 +323,7 @@ export function EmitirNotaFiscalDialog({
       const res = await cepService.buscar(limpo);
       setEndereco((p) => ({
         ...p,
-        cep: res.cep,
+        cep: formatCEP(res.cep),
         logradouro: res.logradouro || p.logradouro,
         bairro: res.bairro || p.bairro,
         cidade: res.cidade || p.cidade,
@@ -358,6 +369,13 @@ export function EmitirNotaFiscalDialog({
     }
     setNcmPorProduto(ncms);
   }, [data]);
+
+  useEffect(() => {
+    if (!open || !data?.cliente?.endereco?.cep) return;
+    const ibge = data.cliente.endereco.codigo_ibge;
+    if (codigoIbgeValido(ibge)) return;
+    void buscarCep(data.cliente.endereco.cep);
+  }, [open, data?.cliente?.endereco?.cep, data?.cliente?.endereco?.codigo_ibge]);
 
   const faltantes = useMemo(() => {
     if (!data || !order) return [];
@@ -687,14 +705,23 @@ export function EmitirNotaFiscalDialog({
               <SectionCard title="Endereço do cliente" description="Endereço de entrega/faturamento">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   <FormField label="CEP" htmlFor="nf-cep" required>
-                    <Input
+                    <CepInputWithLookup
                       id="nf-cep"
-                      className={`h-11 ${inputClass('endereco.cep') ?? ''}`}
                       value={endereco.cep}
-                      onChange={(e) => setEndereco((p) => ({ ...p, cep: e.target.value }))}
-                      onBlur={(e) => buscarCep(e.target.value)}
+                      onChange={(cep) => setEndereco((p) => ({ ...p, cep }))}
+                      onAddressFound={(dados) =>
+                        setEndereco((p) => ({
+                          ...p,
+                          cep: formatCEP(dados.cep),
+                          logradouro: dados.logradouro || p.logradouro,
+                          bairro: dados.bairro || p.bairro,
+                          cidade: dados.cidade || p.cidade,
+                          estado: dados.estado || p.estado,
+                          codigo_ibge: dados.codigoIbge || p.codigo_ibge,
+                          complemento: p.complemento || dados.complemento || '',
+                        }))
+                      }
                       disabled={buscandoCep}
-                      placeholder="00000-000"
                     />
                   </FormField>
                   <FormField label="Logradouro" htmlFor="nf-log" required>

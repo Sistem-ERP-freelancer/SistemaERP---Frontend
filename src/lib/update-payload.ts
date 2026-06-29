@@ -86,6 +86,11 @@ function prepararEndereco(endereco: EnderecoFormState): UpdateEndereco {
       payload.referencia = endereco.referencia.trim();
     }
   }
+
+  if (endereco.codigo_ibge !== undefined) {
+    const ibge = String(endereco.codigo_ibge || '').replace(/\D/g, '').slice(0, 7);
+    payload.codigo_ibge = ibge || null;
+  }
   
   if (import.meta.env.DEV) {
     console.log('[prepararEndereco] Endereço processado:', {

@@ -10,6 +10,7 @@ export interface Endereco {
   cidade: string;
   estado: string;
   referencia?: string;
+  codigo_ibge?: string;
   clienteId?: number;
   fornecedorId?: number;
 }
@@ -23,6 +24,7 @@ export interface CreateEnderecoDto {
   cidade: string;
   estado: string;
   referencia?: string;
+  codigo_ibge?: string;
   clienteId?: number;
   fornecedorId?: number;
 }
@@ -36,6 +38,7 @@ export interface UpdateEnderecoDto {
   cidade?: string;
   estado?: string;
   referencia?: string;
+  codigo_ibge?: string;
 }
 
 class EnderecosService {
@@ -154,6 +157,13 @@ class EnderecosService {
         typeof data.referencia === "string"
           ? data.referencia.trim()
           : data.referencia;
+    }
+
+    if (data.codigo_ibge !== undefined) {
+      payload.codigo_ibge =
+        typeof data.codigo_ibge === "string"
+          ? data.codigo_ibge.replace(/\D/g, "").slice(0, 7)
+          : data.codigo_ibge;
     }
 
     // Query params para validação de permissão (opcional)

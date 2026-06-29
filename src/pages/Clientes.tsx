@@ -146,6 +146,7 @@ const Clientes = () => {
       cidade: string;
       estado: string;
       referencia: string;
+      codigo_ibge?: string;
     }>
   >([]);
   const [editContatos, setEditContatos] = useState<
@@ -1345,6 +1346,7 @@ const Clientes = () => {
       cidade: endereco.cidade || "",
       estado: endereco.estado || "",
       referencia: endereco.referencia || "",
+      codigo_ibge: endereco.codigo_ibge || "",
     });
     setEditEnderecoDialogOpen(true);
   };
@@ -1452,6 +1454,7 @@ const Clientes = () => {
             cidade: end.cidade || "",
             estado: end.estado || "",
             referencia: end.referencia || "",
+            codigo_ibge: end.codigo_ibge || "",
           }))
         );
       } else {
@@ -3093,6 +3096,7 @@ const Clientes = () => {
                             cidade: "",
                             estado: "",
                             referencia: "",
+                            codigo_ibge: "",
                           },
                         ])
                       }
@@ -3153,6 +3157,7 @@ const Clientes = () => {
                                 bairro: dados.bairro || newEnderecos[index].bairro,
                                 cidade: dados.cidade,
                                 estado: dados.estado,
+                                codigo_ibge: dados.codigoIbge || newEnderecos[index].codigo_ibge,
                               };
                               setEditEnderecos(newEnderecos);
                             }}
@@ -3756,6 +3761,7 @@ const Clientes = () => {
                       bairro: dados.bairro || prev.bairro,
                       cidade: dados.cidade,
                       estado: dados.estado,
+                      codigo_ibge: dados.codigoIbge || prev.codigo_ibge,
                     }))
                   }
                 />

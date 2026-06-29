@@ -12,6 +12,7 @@ export interface EnderecoFormData {
   cidade: string;
   estado: string;
   referencia: string;
+  codigo_ibge?: string;
 }
 
 export interface ContatoFormData {

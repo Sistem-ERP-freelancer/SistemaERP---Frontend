@@ -14,6 +14,7 @@ export interface UpdateEndereco {
   cidade?: string | null;
   estado?: string | null;
   referencia?: string | null;
+  codigo_ibge?: string | null;
 }
 
 export interface UpdateContato {
@@ -72,6 +73,7 @@ export interface EnderecoFormState {
   cidade?: string;
   estado?: string;
   referencia?: string;
+  codigo_ibge?: string;
   isNew?: boolean; // Flag para identificar novos endereços no frontend
 }
 

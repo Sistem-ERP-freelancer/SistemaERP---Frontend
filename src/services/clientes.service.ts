@@ -33,6 +33,7 @@ export interface Cliente {
     cidade: string;
     estado: string;
     referencia?: string;
+    codigo_ibge?: string;
   }>;
   contato?: Array<{
     id?: number;
@@ -78,6 +79,7 @@ export interface CreateClienteDto {
     cidade: string;
     estado: string;
     referencia?: string;
+    codigo_ibge?: string;
   }>;
   condicoes_pagamento?: CondicaoPagamento[];
 }

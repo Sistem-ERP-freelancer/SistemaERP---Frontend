@@ -26,6 +26,7 @@ interface EditFormData {
     cidade?: string;
     estado?: string;
     referencia?: string;
+    codigo_ibge?: string;
   }>;
   contatos?: Array<{
     id?: number;
@@ -156,6 +157,7 @@ export function prepararAtualizacaoCliente(
         cidade: end.cidade || '',
         estado: end.estado || '',
         referencia: end.referencia || '',
+        codigo_ibge: end.codigo_ibge || '',
         isNew: !end.id, // Se não tem ID, é novo
       }));
     
@@ -191,6 +193,7 @@ export function prepararAtualizacaoCliente(
       cidade: end.cidade || '',
       estado: end.estado || '',
       referencia: end.referencia || '',
+      codigo_ibge: end.codigo_ibge || '',
       isNew: false,
     }));
   }
