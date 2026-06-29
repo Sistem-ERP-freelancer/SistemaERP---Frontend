@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { CepInputWithLookup } from "@/components/common/CepInputWithLookup";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
 import {
     AlertDialog,
@@ -3135,16 +3136,26 @@ const Clientes = () => {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>CEP</Label>
-                          <Input
-                            placeholder="00000-000"
+                          <CepInputWithLookup
                             value={endereco.cep || ""}
-                            onChange={(e) => {
-                              const formatted = formatCEP(e.target.value);
+                            onChange={(cep) => {
                               const newEnderecos = [...editEnderecos];
-                              newEnderecos[index].cep = formatted;
+                              newEnderecos[index].cep = cep;
                               setEditEnderecos(newEnderecos);
                             }}
-                            maxLength={9}
+                            onAddressFound={(dados) => {
+                              const newEnderecos = [...editEnderecos];
+                              newEnderecos[index] = {
+                                ...newEnderecos[index],
+                                cep: formatCEP(dados.cep),
+                                logradouro: dados.logradouro || newEnderecos[index].logradouro,
+                                complemento: dados.complemento || newEnderecos[index].complemento,
+                                bairro: dados.bairro || newEnderecos[index].bairro,
+                                cidade: dados.cidade,
+                                estado: dados.estado,
+                              };
+                              setEditEnderecos(newEnderecos);
+                            }}
                           />
                         </div>
                         <div className="space-y-2">
@@ -3727,18 +3738,26 @@ const Clientes = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-cep">CEP</Label>
-                <Input
+                <CepInputWithLookup
                   id="edit-cep"
                   value={editingEndereco.cep || ""}
-                  onChange={(e) => {
-                    const formatted = formatCEP(e.target.value);
+                  onChange={(cep) =>
                     setEditingEndereco({
                       ...editingEndereco,
-                      cep: formatted,
-                    });
-                  }}
-                  placeholder="00000-000"
-                  maxLength={9}
+                      cep,
+                    })
+                  }
+                  onAddressFound={(dados) =>
+                    setEditingEndereco((prev) => ({
+                      ...prev,
+                      cep: formatCEP(dados.cep),
+                      logradouro: dados.logradouro || prev.logradouro,
+                      complemento: dados.complemento || prev.complemento,
+                      bairro: dados.bairro || prev.bairro,
+                      cidade: dados.cidade,
+                      estado: dados.estado,
+                    }))
+                  }
                 />
               </div>
               <div className="space-y-2">

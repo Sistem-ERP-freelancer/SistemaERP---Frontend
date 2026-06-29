@@ -2,6 +2,7 @@
  * Componente reutilizável para formulário de endereço
  */
 
+import { CepInputWithLookup } from "@/components/common/CepInputWithLookup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,14 +55,20 @@ export const EnderecoForm = ({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>CEP *</Label>
-          <Input
-            placeholder="00000-000"
+          <CepInputWithLookup
             value={endereco.cep}
-            onChange={(e) => {
-              const formatted = formatCEP(e.target.value);
-              handleChange("cep", formatted);
-            }}
-            maxLength={9}
+            onChange={(cep) => handleChange("cep", cep)}
+            onAddressFound={(dados) =>
+              onChange({
+                ...endereco,
+                cep: formatCEP(dados.cep),
+                logradouro: dados.logradouro || endereco.logradouro,
+                complemento: dados.complemento || endereco.complemento,
+                bairro: dados.bairro || endereco.bairro,
+                cidade: dados.cidade,
+                estado: dados.estado,
+              })
+            }
           />
         </div>
         <div className="space-y-2">
