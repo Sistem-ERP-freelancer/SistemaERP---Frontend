@@ -18,12 +18,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Download,
   FileCheck2,
+  FileJson,
   Loader2,
   RefreshCw,
   Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmitirNotaFiscalDialog } from './EmitirNotaFiscalDialog';
+import { NotaFiscalDiagnosticoDialog } from './NotaFiscalDiagnosticoDialog';
 import { useState } from 'react';
 
 interface PedidoNotaFiscalSectionProps {
@@ -72,6 +74,7 @@ export function PedidoNotaFiscalSection({
   const queryClient = useQueryClient();
   const podeGerenciar = canManageNotaFiscal(user?.role);
   const [emitirDialogOpen, setEmitirDialogOpen] = useState(false);
+  const [diagnosticoOpen, setDiagnosticoOpen] = useState(false);
   const isVenda = tipo === 'VENDA';
   const pedidoCancelado = status === 'CANCELADO';
 
@@ -180,6 +183,17 @@ export function PedidoNotaFiscalSection({
                     <RefreshCw className="w-4 h-4 mr-2" />
                   )}
                   Consultar status
+                </Button>
+              )}
+              {nota && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setDiagnosticoOpen(true)}
+                >
+                  <FileJson className="w-4 h-4 mr-2" />
+                  Ver payload
                 </Button>
               )}
               {temNotaNaSpedy && (
@@ -301,6 +315,12 @@ export function PedidoNotaFiscalSection({
         queryClient.setQueryData(queryKey, result);
         invalidate();
       }}
+    />
+    <NotaFiscalDiagnosticoDialog
+      open={diagnosticoOpen}
+      onOpenChange={setDiagnosticoOpen}
+      pedidoId={pedidoId}
+      numeroPedido={numeroPedido}
     />
     </>
   );

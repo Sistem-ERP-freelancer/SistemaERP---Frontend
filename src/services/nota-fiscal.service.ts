@@ -4,6 +4,7 @@ import type {
   ListarNotasFiscaisFiltros,
   ListarNotasFiscaisResponse,
   NotaFiscal,
+  NotaFiscalDiagnostico,
   NotaFiscalPreEmissao,
 } from '@/types/nota-fiscal';
 
@@ -73,6 +74,12 @@ class NotaFiscalService {
     const blob = await apiClient.getBlob(`/pedidos/${pedidoId}/nota-fiscal/xml`);
     const safe = numeroPedido?.replace(/[^\w-]+/g, '_') || String(pedidoId);
     downloadBlob(blob, `nfe-${safe}.xml`);
+  }
+
+  async obterDiagnostico(pedidoId: number): Promise<NotaFiscalDiagnostico> {
+    return apiClient.get<NotaFiscalDiagnostico>(
+      `/pedidos/${pedidoId}/nota-fiscal/diagnostico`,
+    );
   }
 }
 

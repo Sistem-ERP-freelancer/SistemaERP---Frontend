@@ -193,3 +193,24 @@ export interface ListarNotasFiscaisFiltros {
   busca?: string;
   status?: StatusNotaFiscal;
 }
+
+export interface NotaFiscalDiagnostico {
+  pedido_id: number;
+  numero_pedido: string;
+  nota_local: Record<string, unknown>;
+  rejeicao: {
+    status: string | null;
+    mensagem: string | null;
+    codigo: string | null;
+  } | null;
+  spedy: {
+    ambiente: string;
+    spedy_order_id: string | null;
+    spedy_invoice_id: string | null;
+    pedido: Record<string, unknown> | null;
+    nota: Record<string, unknown> | null;
+    erro_pedido?: string;
+    erro_nota?: string;
+  };
+  payload_emissao: Record<string, unknown>;
+}

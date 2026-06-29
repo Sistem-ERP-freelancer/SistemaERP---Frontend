@@ -33,6 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { NotaFiscalDiagnosticoDialog } from '@/components/orders/NotaFiscalDiagnosticoDialog';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
@@ -41,7 +42,7 @@ import {
   type StatusNotaFiscal,
 } from '@/types/nota-fiscal';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, FileCode2, Loader2, Receipt, RefreshCw, Search } from 'lucide-react';
+import { Download, FileCode2, FileJson, Loader2, Receipt, RefreshCw, Search } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -107,6 +108,10 @@ export default function NotasFiscais() {
 
   const [baixandoPdf, setBaixandoPdf] = useState<number | null>(null);
   const [baixandoXml, setBaixandoXml] = useState<number | null>(null);
+  const [diagnosticoPedido, setDiagnosticoPedido] = useState<{
+    id: number;
+    numero: string;
+  } | null>(null);
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
 
@@ -286,6 +291,26 @@ export default function NotasFiscais() {
                                   </TooltipTrigger>
                                   <TooltipContent>Atualizar status na Spedy</TooltipContent>
                                 </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() =>
+                                        setDiagnosticoPedido({
+                                          id: item.pedido_id,
+                                          numero: item.numero_pedido,
+                                        })
+                                      }
+                                    >
+                                      <FileJson className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Ver payload / diagnóstico Spedy
+                                  </TooltipContent>
+                                </Tooltip>
                                 {podeBaixar && (
                                   <>
                                     <Tooltip>
@@ -378,6 +403,15 @@ export default function NotasFiscais() {
           </Pagination>
         )}
       </div>
+
+      <NotaFiscalDiagnosticoDialog
+        open={!!diagnosticoPedido}
+        onOpenChange={(open) => {
+          if (!open) setDiagnosticoPedido(null);
+        }}
+        pedidoId={diagnosticoPedido?.id ?? 0}
+        numeroPedido={diagnosticoPedido?.numero}
+      />
     </AppLayout>
   );
 }
