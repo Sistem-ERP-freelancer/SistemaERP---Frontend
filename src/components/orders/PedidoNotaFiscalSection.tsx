@@ -88,7 +88,7 @@ export function PedidoNotaFiscalSection({
     retry: false,
     refetchInterval: (query) =>
       query.state.data?.status && isStatusNotaEmProcessamento(query.state.data.status)
-        ? 5000
+        ? 30_000
         : false,
   });
 

@@ -97,7 +97,7 @@ export default function NotasFiscais() {
     refetchInterval: (query) => {
       const items = query.state.data?.items ?? [];
       return items.some((item) => isStatusNotaEmProcessamento(item.status))
-        ? 5000
+        ? 30_000
         : false;
     },
   });

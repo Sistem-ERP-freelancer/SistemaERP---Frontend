@@ -403,11 +403,8 @@ export function EmitirNotaFiscalDialog({
 
   const emitirMutation = useMutation({
     mutationFn: async (payload: EmitirNotaFiscalPayload) => {
-      const nota = await notaFiscalService.emitir(pedidoId!, payload);
-      if (isStatusNotaEmProcessamento(nota.status)) {
-        return notaFiscalService.aguardarProcessamento(pedidoId!);
-      }
-      return nota;
+      // Backend já faz polling pós-emissão — evita consultar duplicado (rate limit Spedy).
+      return notaFiscalService.emitir(pedidoId!, payload);
     },
     onSuccess: (nota) => {
       queryClient.invalidateQueries({ queryKey: ['pedidos', pedidoId, 'nota-fiscal'] });
