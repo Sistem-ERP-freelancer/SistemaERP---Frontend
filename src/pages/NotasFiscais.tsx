@@ -39,6 +39,7 @@ import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { notaFiscalService } from '@/services/nota-fiscal.service';
 import {
   STATUS_NOTA_FISCAL_LABELS,
+  isStatusNotaEmProcessamento,
   type StatusNotaFiscal,
 } from '@/types/nota-fiscal';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -93,6 +94,12 @@ export default function NotasFiscais() {
         busca: busca || undefined,
         status: statusFiltro === 'all' ? undefined : statusFiltro,
       }),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      return items.some((item) => isStatusNotaEmProcessamento(item.status))
+        ? 5000
+        : false;
+    },
   });
 
   const consultarMutation = useMutation({

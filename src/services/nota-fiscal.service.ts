@@ -7,6 +7,11 @@ import type {
   NotaFiscalDiagnostico,
   NotaFiscalPreEmissao,
 } from '@/types/nota-fiscal';
+import { isStatusNotaFinal } from '@/types/nota-fiscal';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -62,6 +67,25 @@ class NotaFiscalService {
 
   async consultar(pedidoId: number): Promise<NotaFiscal> {
     return apiClient.post<NotaFiscal>(`/pedidos/${pedidoId}/nota-fiscal/consultar`, {});
+  }
+
+  /**
+   * Consulta a Spedy (GET) até status final ou timeout — complementa polling do backend.
+   */
+  async aguardarProcessamento(
+    pedidoId: number,
+    opts?: { maxTentativas?: number; intervaloMs?: number },
+  ): Promise<NotaFiscal> {
+    const maxTentativas = opts?.maxTentativas ?? 15;
+    const intervaloMs = opts?.intervaloMs ?? 2000;
+    let nota = await this.consultar(pedidoId);
+
+    for (let i = 1; i < maxTentativas && !isStatusNotaFinal(nota.status); i++) {
+      await sleep(intervaloMs);
+      nota = await this.consultar(pedidoId);
+    }
+
+    return nota;
   }
 
   async baixarPdf(pedidoId: number, numeroPedido?: string): Promise<void> {

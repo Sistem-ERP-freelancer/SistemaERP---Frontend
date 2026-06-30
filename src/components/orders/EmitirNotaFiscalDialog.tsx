@@ -31,6 +31,7 @@ import {
 import { notaFiscalService } from '@/services/nota-fiscal.service';
 import {
   STATUS_NOTA_FISCAL_LABELS,
+  isStatusNotaEmProcessamento,
   type CampoFaltanteNotaFiscal,
   type EmitirNotaFiscalPayload,
   type NotaFiscal,
@@ -401,8 +402,13 @@ export function EmitirNotaFiscalDialog({
   const podeEmitir = faltantes.length === 0;
 
   const emitirMutation = useMutation({
-    mutationFn: (payload: EmitirNotaFiscalPayload) =>
-      notaFiscalService.emitir(pedidoId!, payload),
+    mutationFn: async (payload: EmitirNotaFiscalPayload) => {
+      const nota = await notaFiscalService.emitir(pedidoId!, payload);
+      if (isStatusNotaEmProcessamento(nota.status)) {
+        return notaFiscalService.aguardarProcessamento(pedidoId!);
+      }
+      return nota;
+    },
     onSuccess: (nota) => {
       queryClient.invalidateQueries({ queryKey: ['pedidos', pedidoId, 'nota-fiscal'] });
       queryClient.invalidateQueries({ queryKey: ['notas-fiscais'] });
@@ -411,7 +417,13 @@ export function EmitirNotaFiscalDialog({
       const description = motivo ? `${statusLabel} — ${motivo}` : statusLabel;
 
       if (nota.status === 'rejected' || nota.status === 'denied') {
-        toast.warning('Nota enviada à Spedy', { description });
+        toast.warning('NF-e processada', { description });
+      } else if (nota.status === 'authorized') {
+        toast.success('NF-e autorizada', { description });
+      } else if (isStatusNotaEmProcessamento(nota.status)) {
+        toast.info('NF-e ainda em processamento', {
+          description: `${statusLabel} — atualize o status na lista de notas fiscais.`,
+        });
       } else {
         toast.success('Nota enviada à Spedy', { description });
       }

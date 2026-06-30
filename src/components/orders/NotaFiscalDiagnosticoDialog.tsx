@@ -78,6 +78,13 @@ export function NotaFiscalDiagnosticoDialog({
                     Código: {data.rejeicao.codigo}
                   </p>
                 )}
+                {data.rejeicao.orientacao && data.rejeicao.orientacao.length > 0 && (
+                  <ul className="mt-2 list-disc pl-4 space-y-1 text-muted-foreground">
+                    {data.rejeicao.orientacao.map((dica) => (
+                      <li key={dica}>{dica}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 

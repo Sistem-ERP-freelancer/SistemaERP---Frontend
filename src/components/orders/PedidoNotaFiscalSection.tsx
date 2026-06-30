@@ -9,6 +9,7 @@ import { notaFiscalService } from '@/services/nota-fiscal.service';
 import {
   STATUS_NOTA_BLOQUEIA_REEMISSAO,
   STATUS_NOTA_FISCAL_LABELS,
+  isStatusNotaEmProcessamento,
   type NotaFiscal,
   type StatusNotaFiscal,
 } from '@/types/nota-fiscal';
@@ -85,6 +86,10 @@ export function PedidoNotaFiscalSection({
     queryFn: () => notaFiscalService.obterPorPedido(pedidoId),
     enabled: dialogOpen && isVenda,
     retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.status && isStatusNotaEmProcessamento(query.state.data.status)
+        ? 5000
+        : false,
   });
 
   const invalidate = () => {

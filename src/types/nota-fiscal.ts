@@ -61,6 +61,29 @@ export const STATUS_NOTA_BLOQUEIA_REEMISSAO: StatusNotaFiscal[] = [
   'inContingent',
 ];
 
+/** Ainda aguardando resposta da SEFAZ/Spedy. */
+export const STATUS_NOTA_EM_PROCESSAMENTO: StatusNotaFiscal[] = [
+  'created',
+  'enqueued',
+  'received',
+  'inContingent',
+];
+
+export function isStatusNotaEmProcessamento(status: StatusNotaFiscal): boolean {
+  return STATUS_NOTA_EM_PROCESSAMENTO.includes(status);
+}
+
+export function isStatusNotaFinal(status: StatusNotaFiscal): boolean {
+  return (
+    status === 'authorized' ||
+    status === 'rejected' ||
+    status === 'canceled' ||
+    status === 'denied' ||
+    status === 'disabled' ||
+    status === 'removed'
+  );
+}
+
 export type SecaoNotaFiscal =
   | 'empresa'
   | 'integracao'
@@ -202,6 +225,7 @@ export interface NotaFiscalDiagnostico {
     status: string | null;
     mensagem: string | null;
     codigo: string | null;
+    orientacao?: string[];
   } | null;
   spedy: {
     ambiente: string;
@@ -209,8 +233,12 @@ export interface NotaFiscalDiagnostico {
     spedy_invoice_id: string | null;
     pedido: Record<string, unknown> | null;
     nota: Record<string, unknown> | null;
+    empresa?: Record<string, unknown> | null;
+    config_nf_e?: Record<string, unknown> | null;
     erro_pedido?: string;
     erro_nota?: string;
+    erro_empresa?: string;
+    erro_config?: string;
   };
   payload_emissao: Record<string, unknown>;
 }
