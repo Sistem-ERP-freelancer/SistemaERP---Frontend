@@ -28,6 +28,7 @@ export interface CreateTenantDto {
   admin_senha?: string;
   admin_email?: string;
   telefone?: string;
+  inscricaoEstadual?: string;
 }
 
 export type UpdateTenantInfoDto = UpdateTenantEmpresaDto;
@@ -81,6 +82,7 @@ class TenantsService {
       cnpj: data.cnpj,
       email: data.email,
       telefone: data.telefone,
+      inscricaoEstadual: data.inscricaoEstadual,
       admin_email: data.admin_email ?? data.email,
       admin_senha: data.admin_senha ?? data.senha,
     };

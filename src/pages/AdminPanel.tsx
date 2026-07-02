@@ -20,7 +20,10 @@ import {
   XCircle,
   AlertCircle,
   Phone,
-  Hash
+  Hash,
+  Sprout,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +41,11 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { tenantsService, Tenant, CreateTenantDto } from "@/services/tenants.service";
@@ -58,6 +63,7 @@ const AdminPanel = () => {
   const [formData, setFormData] = useState<CreateTenantDto & { telefone?: string }>({
     nome: "",
     cnpj: "",
+    inscricaoEstadual: "",
     email: "",
     senha: "",
     telefone: "",
@@ -225,10 +231,22 @@ const AdminPanel = () => {
   });
 
   const resetForm = () => {
-    setFormData({ nome: "", cnpj: "", email: "", senha: "", telefone: "" });
+    setFormData({
+      nome: "",
+      cnpj: "",
+      inscricaoEstadual: "",
+      email: "",
+      senha: "",
+      telefone: "",
+    });
     setShowPassword(false);
-    setCnpjError(""); // Limpa erro ao resetar formulário
+    setCnpjError("");
   };
+
+  const documentoLimpo = cleanDocument(formData.cnpj);
+  const isCpfDocumento = documentoLimpo.length === 11;
+  const isCnpjDocumento = documentoLimpo.length === 14;
+  const documentoCompleto = isCpfDocumento || isCnpjDocumento;
 
   const handleView = (tenant: Tenant) => {
     setSelectedTenantId(tenant.id);
@@ -308,13 +326,17 @@ const AdminPanel = () => {
       toast.error("O email é obrigatório");
       return;
     }
-    
+
     // Prepara dados para envio - GARANTE que CNPJ é apenas números
     const dataToSend: CreateTenantDto & { telefone?: string } = {
       nome: formData.nome.trim(),
-      cnpj: cleanedCnpj, // SEMPRE apenas números, sem formatação
+      cnpj: cleanedCnpj,
       email: formData.email.trim(),
     };
+
+    if (formData.inscricaoEstadual?.trim()) {
+      dataToSend.inscricaoEstadual = formData.inscricaoEstadual.replace(/\D/g, "");
+    }
     
     // Adiciona telefone se foi preenchido (remove formatação antes de enviar)
     if (formData.telefone && formData.telefone.trim() !== '') {
@@ -463,120 +485,205 @@ const AdminPanel = () => {
             }
             setDialogOpen(open);
           }}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>
-                  Nova Empresa
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nome">Nome da Empresa</Label>
-                  <Input
-                    id="nome"
-                    value={formData.nome}
-                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                    placeholder="Digite o nome da empresa"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cnpj">
-                    CNPJ ou CPF
-                    {cleanDocument(formData.cnpj).length === 11 && (
-                      <span className="ml-2 text-xs text-muted-foreground font-normal">(CPF detectado)</span>
-                    )}
-                    {cleanDocument(formData.cnpj).length === 14 && (
-                      <span className="ml-2 text-xs text-muted-foreground font-normal">(CNPJ detectado)</span>
-                    )}
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="cnpj"
-                      type="text"
-                      inputMode="numeric"
-                      value={formData.cnpj}
-                      onChange={(e) => handleCnpjChange(e.target.value)}
-                      placeholder="Digite o CNPJ ou CPF"
-                      required
-                      maxLength={18}
-                      className={cnpjError ? "border-destructive pr-20" : cleanDocument(formData.cnpj).length === 11 || cleanDocument(formData.cnpj).length === 14 ? "border-green-500 pr-20" : "pr-20"}
-                    />
-                    {formData.cnpj.length > 0 && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        {cleanDocument(formData.cnpj).length} {cleanDocument(formData.cnpj).length === 1 ? 'dígito' : 'dígitos'}
-                      </span>
+            <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden border-border/60 shadow-xl">
+              <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-6 pt-6 pb-5 border-b border-border/60">
+                <DialogHeader className="space-y-3">
+                  <div className="flex items-start gap-3 pr-8">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/20">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <DialogTitle className="text-xl">Nova Empresa</DialogTitle>
+                      <DialogDescription className="text-sm leading-relaxed">
+                        Cadastre um tenant com CPF (produtor rural) ou CNPJ. A Inscrição Estadual é opcional e pode ser informada depois.
+                      </DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+              </div>
+
+              <form onSubmit={handleSubmit} className="px-6 py-5 space-y-6">
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold tracking-wide text-foreground">
+                      Identificação
+                    </h3>
+                  </div>
+
+                  <div className="rounded-xl border border-border/70 bg-muted/20 p-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="nome">Nome da empresa</Label>
+                      <Input
+                        id="nome"
+                        value={formData.nome}
+                        onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                        placeholder="Ex.: Fazenda São João ou Empresa LTDA"
+                        className="bg-background"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Label htmlFor="cnpj">CPF ou CNPJ</Label>
+                        {isCpfDocumento && (
+                          <Badge variant="secondary" className="gap-1 text-xs font-normal">
+                            <Sprout className="h-3 w-3" />
+                            Produtor rural
+                          </Badge>
+                        )}
+                        {isCnpjDocumento && (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            Pessoa jurídica
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="cnpj"
+                          type="text"
+                          inputMode="numeric"
+                          value={formData.cnpj}
+                          onChange={(e) => handleCnpjChange(e.target.value)}
+                          placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                          required
+                          maxLength={18}
+                          className={`bg-background pl-10 pr-20 ${
+                            cnpjError
+                              ? "border-destructive"
+                              : documentoCompleto
+                                ? "border-emerald-500/70 focus-visible:ring-emerald-500/30"
+                                : ""
+                          }`}
+                        />
+                        {formData.cnpj.length > 0 && (
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                            {documentoLimpo.length} dígitos
+                          </span>
+                        )}
+                      </div>
+                      {cnpjError ? (
+                        <p className="text-xs text-destructive flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          {cnpjError}
+                        </p>
+                      ) : documentoCompleto ? (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {isCpfDocumento ? "CPF válido" : "CNPJ válido"}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {documentoCompleto && (
+                      <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Label htmlFor="inscricaoEstadual" className="flex items-center gap-1.5">
+                            <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                            Inscrição Estadual (IE)
+                          </Label>
+                          <span className="text-xs text-muted-foreground">
+                            Opcional — recomendada para emissão de NF-e
+                          </span>
+                        </div>
+                        <Input
+                          id="inscricaoEstadual"
+                          type="text"
+                          inputMode="numeric"
+                          value={formData.inscricaoEstadual || ""}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              inscricaoEstadual: e.target.value.replace(/\D/g, "").slice(0, 14),
+                            })
+                          }
+                          placeholder="Somente números da IE (opcional)"
+                          className="bg-background"
+                          maxLength={14}
+                        />
+                      </div>
                     )}
                   </div>
-                  {cnpjError ? (
-                    <p className="text-xs text-destructive flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      {cnpjError}
-                    </p>
-                  ) : formData.cnpj.length > 0 && (cleanDocument(formData.cnpj).length === 11 || cleanDocument(formData.cnpj).length === 14) ? (
-                    <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {cleanDocument(formData.cnpj).length === 11 ? "CPF válido ✓" : "CNPJ válido ✓"}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="empresa@exemplo.com"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="telefone" className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-muted-foreground" />
-                    Telefone
-                  </Label>
-                  <Input
-                    id="telefone"
-                    type="text"
-                    inputMode="tel"
-                    value={formData.telefone || ""}
-                    onChange={(e) => {
-                      const formatted = formatTelefone(e.target.value);
-                      setFormData({ ...formData, telefone: formatted });
-                    }}
-                    placeholder="(00) 00000-0000"
-                    maxLength={15}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="senha">
-                    Senha (obrigatória)
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="senha"
-                      type={showPassword ? "text" : "password"}
-                      value={formData.senha || ""}
-                      onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                      placeholder="Digite a senha"
-                      required
-                      className="pr-12"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
+                </section>
+
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold tracking-wide text-foreground">
+                      Contato e acesso
+                    </h3>
                   </div>
-                </div>
-                <div className="flex gap-2 pt-4">
+
+                  <div className="rounded-xl border border-border/70 bg-muted/20 p-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="email" className="flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                          E-mail
+                        </Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          placeholder="empresa@exemplo.com"
+                          className="bg-background"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="telefone" className="flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                          Telefone
+                        </Label>
+                        <Input
+                          id="telefone"
+                          type="text"
+                          inputMode="tel"
+                          value={formData.telefone || ""}
+                          onChange={(e) => {
+                            const formatted = formatTelefone(e.target.value);
+                            setFormData({ ...formData, telefone: formatted });
+                          }}
+                          placeholder="(00) 00000-0000"
+                          maxLength={15}
+                          className="bg-background"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="senha">Senha do admin</Label>
+                        <div className="relative">
+                          <Input
+                            id="senha"
+                            type={showPassword ? "text" : "password"}
+                            value={formData.senha || ""}
+                            onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                            placeholder="Mínimo 6 caracteres"
+                            required
+                            className="bg-background pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="flex gap-3 pt-1 border-t border-border/60">
                   <Button
                     type="button"
                     variant="outline"
@@ -592,9 +699,12 @@ const AdminPanel = () => {
                     disabled={createMutation.isPending}
                   >
                     {createMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Criando...
+                      </>
                     ) : (
-                      "Criar"
+                      "Criar empresa"
                     )}
                   </Button>
                 </div>
@@ -820,6 +930,17 @@ const AdminPanel = () => {
                       </Label>
                       <p className="text-sm font-medium">{formatDocument(selectedTenant.cnpj)}</p>
                     </div>
+                    {selectedTenant.configuracoes?.empresa?.inscricaoEstadual && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                          <ShieldCheck className="w-3 h-3" />
+                          Inscrição Estadual
+                        </Label>
+                        <p className="text-sm font-medium">
+                          {selectedTenant.configuracoes.empresa.inscricaoEstadual}
+                        </p>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground flex items-center gap-2">
                         <Mail className="w-3 h-3" />
