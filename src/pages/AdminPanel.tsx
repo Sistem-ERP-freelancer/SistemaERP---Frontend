@@ -327,11 +327,6 @@ const AdminPanel = () => {
       return;
     }
 
-    if (isCpfDocumento && !formData.inscricaoEstadual?.trim()) {
-      toast.error("Inscrição Estadual é obrigatória para produtor rural (CPF)");
-      return;
-    }
-    
     // Prepara dados para envio - GARANTE que CNPJ é apenas números
     const dataToSend: CreateTenantDto & { telefone?: string } = {
       nome: formData.nome.trim(),
@@ -500,7 +495,7 @@ const AdminPanel = () => {
                     <div className="space-y-1">
                       <DialogTitle className="text-xl">Nova Empresa</DialogTitle>
                       <DialogDescription className="text-sm leading-relaxed">
-                        Cadastre um tenant com CPF (produtor rural) ou CNPJ. Produtores rurais precisam de CPF e Inscrição Estadual.
+                        Cadastre um tenant com CPF (produtor rural) ou CNPJ. A Inscrição Estadual é opcional e pode ser informada depois.
                       </DialogDescription>
                     </div>
                   </div>
@@ -589,16 +584,9 @@ const AdminPanel = () => {
                             <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
                             Inscrição Estadual (IE)
                           </Label>
-                          {isCpfDocumento && (
-                            <span className="text-xs text-amber-600 dark:text-amber-400">
-                              Obrigatória para produtor rural
-                            </span>
-                          )}
-                          {isCnpjDocumento && (
-                            <span className="text-xs text-muted-foreground">
-                              Recomendada para emissão de NF-e
-                            </span>
-                          )}
+                          <span className="text-xs text-muted-foreground">
+                            Opcional — recomendada para emissão de NF-e
+                          </span>
                         </div>
                         <Input
                           id="inscricaoEstadual"
@@ -611,9 +599,8 @@ const AdminPanel = () => {
                               inscricaoEstadual: e.target.value.replace(/\D/g, "").slice(0, 14),
                             })
                           }
-                          placeholder="Somente números da IE"
+                          placeholder="Somente números da IE (opcional)"
                           className="bg-background"
-                          required={isCpfDocumento}
                           maxLength={14}
                         />
                       </div>
