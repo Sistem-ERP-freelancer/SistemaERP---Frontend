@@ -1,7 +1,7 @@
 import OrderForm from '@/components/orders/OrderForm';
 import AppLayout from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Cliente, clientesService } from '@/services/clientes.service';
+import { Cliente, clientesService, extractClientesFromResponse } from '@/services/clientes.service';
 import { Fornecedor, fornecedoresService } from '@/services/fornecedores.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { Produto, produtosService } from '@/services/produtos.service';
@@ -29,11 +29,7 @@ export default function NovoPedido() {
     queryKey: ['clientes', 'ativos'],
     queryFn: async () => {
       const response = await clientesService.listar({ limit: 100, statusCliente: 'ATIVO' });
-      if (Array.isArray(response)) return response;
-      if (Array.isArray((response as { data?: Cliente[] })?.data)) {
-        return (response as { data: Cliente[] }).data;
-      }
-      return [];
+      return extractClientesFromResponse(response);
     },
   });
 
@@ -42,9 +38,8 @@ export default function NovoPedido() {
     queryFn: async () => {
       const response = await fornecedoresService.listar({ limit: 100, statusFornecedor: 'ATIVO' });
       if (Array.isArray(response)) return response;
-      if (Array.isArray((response as { data?: Fornecedor[] })?.data)) {
-        return (response as { data: Fornecedor[] }).data;
-      }
+      if (Array.isArray(response?.data)) return response.data;
+      if (Array.isArray(response?.fornecedores)) return response.fornecedores;
       return [];
     },
   });
@@ -54,9 +49,8 @@ export default function NovoPedido() {
     queryFn: async () => {
       const response = await produtosService.listar({ limit: 500, statusProduto: 'ATIVO' });
       if (Array.isArray(response)) return response;
-      if (Array.isArray((response as { data?: Produto[] })?.data)) {
-        return (response as { data: Produto[] }).data;
-      }
+      if (Array.isArray(response?.data)) return response.data;
+      if (Array.isArray(response?.produtos)) return response.produtos;
       return [];
     },
   });
