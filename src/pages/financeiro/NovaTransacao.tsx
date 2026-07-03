@@ -1,0 +1,849 @@
+import AppLayout from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn, formatCurrency } from "@/lib/utils";
+import { Cliente, clientesService } from "@/services/clientes.service";
+import {
+  centroCustoService,
+  type ApiCentroCustoTipo,
+} from "@/services/centro-custo.service";
+import { controleRocaService } from "@/services/controle-roca.service";
+import {
+  CreateContaFinanceiraDto,
+  financeiroService,
+} from "@/services/financeiro.service";
+import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
+import { pedidosService } from "@/services/pedidos.service";
+import type { Roca } from "@/types/roca";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Calendar,
+  CreditCard,
+  FileText,
+  Info,
+  Loader2,
+  ShoppingCart,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
+type NovaTransacaoForm = CreateContaFinanceiraDto & {
+  data_emissao: string;
+  centro_custo_tipo_id?: number;
+};
+
+const FORMAS_PAGAMENTO = [
+  { value: "DINHEIRO", label: "Dinheiro" },
+  { value: "PIX", label: "PIX" },
+  { value: "CARTAO_CREDITO", label: "Cartão de Crédito" },
+  { value: "CARTAO_DEBITO", label: "Cartão de Débito" },
+  { value: "BOLETO", label: "Boleto" },
+  { value: "TRANSFERENCIA", label: "Transferência" },
+  { value: "CHEQUE", label: "Cheque" },
+] as const;
+
+function FormSection({
+  icon: Icon,
+  title,
+  description,
+  children,
+  className,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={cn("overflow-hidden border-border/60 shadow-sm", className)}>
+      <CardHeader className="border-b border-border/40 bg-muted/20 pb-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Icon className="h-4 w-4 text-primary" aria-hidden />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-base font-semibold">{title}</CardTitle>
+            {description ? (
+              <CardDescription className="text-xs leading-relaxed">
+                {description}
+              </CardDescription>
+            ) : null}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-6">{children}</CardContent>
+    </Card>
+  );
+}
+
+const initialForm = (): NovaTransacaoForm => ({
+  tipo: "RECEBER",
+  descricao: "",
+  valor_original: 0,
+  data_emissao: new Date().toISOString().split("T")[0],
+  data_vencimento: "",
+  roca_id: undefined,
+  centro_custo_tipo_id: undefined,
+});
+
+const NovaTransacao = () => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
+  const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
+
+  const { data: clientesData } = useQuery({
+    queryKey: ["clientes"],
+    queryFn: async () => {
+      try {
+        const response = await clientesService.listar({
+          limit: 100,
+          statusCliente: "ATIVO",
+        });
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as { data?: Cliente[] })?.data))
+          return (response as { data: Cliente[] }).data;
+        return [];
+      } catch {
+        return [];
+      }
+    },
+    retry: false,
+  });
+
+  const clientes: Cliente[] = Array.isArray(clientesData) ? clientesData : [];
+
+  const { data: fornecedoresData } = useQuery({
+    queryKey: ["fornecedores"],
+    queryFn: async () => {
+      try {
+        const response = await fornecedoresService.listar({
+          limit: 100,
+          statusFornecedor: "ATIVO",
+        });
+        if (Array.isArray(response)) return response;
+        if (Array.isArray((response as { data?: Fornecedor[] })?.data))
+          return (response as { data: Fornecedor[] }).data;
+        return [];
+      } catch {
+        return [];
+      }
+    },
+    retry: false,
+  });
+
+  const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData)
+    ? fornecedoresData
+    : [];
+
+  const { data: tiposDespesaCc = [] } = useQuery({
+    queryKey: ["centro-custo", "tipos-opcoes", "financeiro-nova-transacao"],
+    queryFn: () => centroCustoService.listarTiposOpcoes(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const tiposDespesaLista: ApiCentroCustoTipo[] = Array.isArray(tiposDespesaCc)
+    ? tiposDespesaCc
+    : [];
+
+  const { data: rocasData } = useQuery({
+    queryKey: ["financeiro", "rocas-ativas"],
+    queryFn: () => controleRocaService.listarRocas(undefined, false),
+    retry: false,
+  });
+
+  const rocasLista: Roca[] = Array.isArray(rocasData)
+    ? rocasData
+    : ((rocasData as { rocas?: Roca[] })?.rocas ?? []);
+
+  const { data: pedidosData } = useQuery({
+    queryKey: ["pedidos", "financeiro"],
+    queryFn: async () => {
+      try {
+        const response = await pedidosService.listar({ page: 1, limit: 500 });
+        if (Array.isArray(response)) return response;
+        if (response?.data && Array.isArray(response.data)) return response.data;
+        if (
+          (response as { pedidos?: unknown[] })?.pedidos &&
+          Array.isArray((response as { pedidos: unknown[] }).pedidos)
+        ) {
+          return (response as { pedidos: unknown[] }).pedidos;
+        }
+        return [];
+      } catch {
+        return [];
+      }
+    },
+    retry: false,
+  });
+
+  const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
+
+  const createContaMutation = useMutation({
+    mutationFn: (data: CreateContaFinanceiraDto) => financeiroService.criar(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
+      queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
+      toast.success("Transação registrada com sucesso!");
+      navigate("/financeiro");
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error?.response?.data?.message || "Erro ao registrar transação");
+    },
+  });
+
+  const resumo = useMemo(() => {
+    const cliente = clientes.find((c) => c.id === form.cliente_id);
+    const fornecedor = fornecedores.find((f) => f.id === form.fornecedor_id);
+    const roca = rocasLista.find((r) => r.id === form.roca_id);
+    const pedido = pedidos.find((p) => {
+      const pid = (p as { pedido_id?: number; id?: number }).pedido_id ?? (p as { id?: number }).id;
+      return pid === form.pedido_id;
+    });
+    return {
+      clienteNome: cliente?.nome,
+      fornecedorNome: fornecedor?.nome_fantasia,
+      rocaNome: roca?.nome,
+      pedidoNumero:
+        (pedido as { numero_pedido?: string })?.numero_pedido ??
+        (form.pedido_id ? `PED-${form.pedido_id}` : undefined),
+    };
+  }, [form, clientes, fornecedores, rocasLista, pedidos]);
+
+  const ehReceita = form.tipo === "RECEBER";
+  const salvando = createContaMutation.isPending || salvandoDespesaCc;
+
+  const handleSubmit = async () => {
+    if (!form.descricao || !form.valor_original || !form.data_vencimento) {
+      toast.error("Preencha os campos obrigatórios (Descrição, Valor e Data de Vencimento)");
+      return;
+    }
+
+    const ehDespesaCentroCusto =
+      form.tipo === "PAGAR" && form.centro_custo_tipo_id != null;
+
+    if (ehDespesaCentroCusto) {
+      if (!form.roca_id) {
+        toast.error("Selecione a roça (centro de custo) para esta despesa");
+        return;
+      }
+      setSalvandoDespesaCc(true);
+      try {
+        await centroCustoService.criarDespesa({
+          tipoId: form.centro_custo_tipo_id!,
+          rocaId: form.roca_id,
+          descricao: form.descricao.trim(),
+          valor: Number(form.valor_original),
+          data: form.data_emissao,
+          observacoes: form.observacoes?.trim() || undefined,
+          fornecedorId: form.fornecedor_id || undefined,
+        });
+        queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+        queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
+        toast.success("Despesa de centro de custo registrada com sucesso!");
+        navigate("/financeiro");
+      } catch (error: unknown) {
+        const msg =
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Erro ao registrar despesa de centro de custo";
+        toast.error(msg);
+      } finally {
+        setSalvandoDespesaCc(false);
+      }
+      return;
+    }
+
+    createContaMutation.mutate({
+      tipo: form.tipo,
+      descricao: form.descricao,
+      valor_original: Number(form.valor_original),
+      data_emissao: form.data_emissao,
+      data_vencimento: form.data_vencimento,
+      cliente_id: form.cliente_id || undefined,
+      fornecedor_id: form.fornecedor_id || undefined,
+      pedido_id: form.pedido_id || undefined,
+      roca_id: form.roca_id || undefined,
+      forma_pagamento: form.forma_pagamento || undefined,
+      data_pagamento: form.data_pagamento || undefined,
+      observacoes: form.observacoes || undefined,
+    });
+  };
+
+  return (
+    <AppLayout>
+      <div className="flex min-h-[calc(100dvh-4rem)] flex-col bg-gradient-to-b from-muted/30 via-background to-background">
+        <div className="sticky top-0 z-20 border-b border-border/60 bg-background/90 backdrop-blur-md">
+          <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-xl"
+                onClick={() => navigate("/financeiro")}
+                aria-label="Voltar para Financeiro"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">
+                  Nova Transação
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Registre receitas e despesas com todos os vínculos necessários
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => navigate("/financeiro")}
+                disabled={salvando}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="gradient"
+                className="rounded-xl gap-2"
+                onClick={handleSubmit}
+                disabled={salvando}
+              >
+                {salvando ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  "Registrar Transação"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+            <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((prev) => ({
+                    ...prev,
+                    tipo: "RECEBER",
+                    centro_custo_tipo_id: undefined,
+                  }))
+                }
+                className={cn(
+                  "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
+                  ehReceita
+                    ? "border-emerald-500/60 bg-emerald-500/10 shadow-sm"
+                    : "border-border/60 bg-card hover:border-emerald-500/30 hover:bg-emerald-500/5",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                    ehReceita ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-emerald-500/15 group-hover:text-emerald-600",
+                  )}
+                >
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Receita</p>
+                  <p className="text-xs text-muted-foreground">Entrada de recursos</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, tipo: "PAGAR" }))}
+                className={cn(
+                  "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
+                  !ehReceita
+                    ? "border-rose-500/60 bg-rose-500/10 shadow-sm"
+                    : "border-border/60 bg-card hover:border-rose-500/30 hover:bg-rose-500/5",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                    !ehReceita ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-rose-500/15 group-hover:text-rose-600",
+                  )}
+                >
+                  <TrendingDown className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Despesa</p>
+                  <p className="text-xs text-muted-foreground">Saída de recursos</p>
+                </div>
+              </button>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
+              <div className="space-y-6">
+                <FormSection
+                  icon={FileText}
+                  title="Informações básicas"
+                  description="Dados principais do lançamento financeiro."
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="descricao">Descrição *</Label>
+                    <Input
+                      id="descricao"
+                      placeholder="Ex: Pagamento de venda, compra de insumos..."
+                      className="h-11 rounded-xl"
+                      value={form.descricao}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, descricao: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor">Valor original *</Label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                        R$
+                      </span>
+                      <Input
+                        id="valor"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0,00"
+                        className="h-11 rounded-xl pl-10"
+                        value={form.valor_original || ""}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            valor_original: e.target.value ? Number(e.target.value) : 0,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </FormSection>
+
+                <FormSection
+                  icon={ShoppingCart}
+                  title="Relacionamentos"
+                  description="Vincule cliente, fornecedor, pedido ou roça quando aplicável."
+                >
+                  {!ehReceita ? (
+                    <div className="rounded-xl border border-border/60 bg-muted/25 p-4 space-y-4">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Para despesa vinculada ao{" "}
+                        <strong className="font-medium text-foreground">centro de custo</strong>,
+                        selecione o tipo de despesa cadastrado e a roça. O lançamento aparece em
+                        Centro de Custos e em Contas a pagar.
+                      </p>
+                      <div className="space-y-2">
+                        <Label>
+                          Tipo de despesa (cadastrado)
+                          {form.centro_custo_tipo_id != null ? " *" : ""}
+                        </Label>
+                        <Select
+                          value={
+                            form.centro_custo_tipo_id != null
+                              ? String(form.centro_custo_tipo_id)
+                              : "none"
+                          }
+                          onValueChange={(value) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              centro_custo_tipo_id:
+                                value && value !== "none" ? Number(value) : undefined,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Selecione o tipo de despesa" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum (conta avulsa)</SelectItem>
+                            {tiposDespesaLista.map((tipo) => (
+                              <SelectItem key={tipo.id} value={String(tipo.id)}>
+                                {tipo.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {tiposDespesaLista.length === 0 ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            Nenhum tipo cadastrado. Cadastre em Centro de Custos → Tipos.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Cliente</Label>
+                      <Select
+                        value={form.cliente_id != null ? String(form.cliente_id) : "none"}
+                        onValueChange={(value) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            cliente_id:
+                              value && value !== "none" ? Number(value) : undefined,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue placeholder="Selecione um cliente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {clientes.map((cliente) => (
+                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
+                              {cliente.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fornecedor</Label>
+                      <Select
+                        value={
+                          form.fornecedor_id != null ? String(form.fornecedor_id) : "none"
+                        }
+                        onValueChange={(value) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            fornecedor_id:
+                              value && value !== "none" ? Number(value) : undefined,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue placeholder="Selecione um fornecedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {fornecedores.map((fornecedor) => (
+                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                              {fornecedor.nome_fantasia}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Pedido</Label>
+                      <Select
+                        value={form.pedido_id != null ? String(form.pedido_id) : "none"}
+                        onValueChange={(value) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            pedido_id:
+                              value && value !== "none" ? Number(value) : undefined,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue placeholder="Selecione um pedido" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {pedidos
+                            .filter((pedido) => {
+                              const pedidoId =
+                                (pedido as { pedido_id?: number; id?: number }).pedido_id ??
+                                (pedido as { id?: number }).id;
+                              return pedidoId != null;
+                            })
+                            .map((pedido) => {
+                              const pedidoId =
+                                (pedido as { pedido_id?: number; id?: number }).pedido_id ??
+                                (pedido as { id?: number }).id!;
+                              return (
+                                <SelectItem key={pedidoId} value={pedidoId.toString()}>
+                                  {(pedido as { numero_pedido?: string }).numero_pedido ||
+                                    `PED-${pedidoId}`}
+                                </SelectItem>
+                              );
+                            })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>
+                        {!ehReceita ? "Roça (centro de custo)" : "Roça"}
+                        {!ehReceita && form.centro_custo_tipo_id != null ? " *" : ""}
+                      </Label>
+                      <Select
+                        value={form.roca_id != null ? String(form.roca_id) : "none"}
+                        onValueChange={(value) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            roca_id:
+                              value && value !== "none" ? Number(value) : undefined,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue
+                            placeholder={
+                              !ehReceita
+                                ? "Selecione a roça (centro de custo)"
+                                : "Selecione uma roça"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {rocasLista
+                            .filter((r) => r.ativo !== false)
+                            .map((roca) => (
+                              <SelectItem key={roca.id} value={String(roca.id)}>
+                                {roca.nome}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </FormSection>
+
+                <FormSection
+                  icon={Calendar}
+                  title="Datas"
+                  description="Emissão, vencimento e pagamento do lançamento."
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="data-emissao">Data de emissão *</Label>
+                      <Input
+                        id="data-emissao"
+                        type="date"
+                        className="h-11 rounded-xl"
+                        value={form.data_emissao}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, data_emissao: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="data-vencimento">Data de vencimento *</Label>
+                      <Input
+                        id="data-vencimento"
+                        type="date"
+                        className="h-11 rounded-xl"
+                        value={form.data_vencimento}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, data_vencimento: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="data-pagamento">Data de pagamento</Label>
+                      <Input
+                        id="data-pagamento"
+                        type="date"
+                        className="h-11 rounded-xl"
+                        value={form.data_pagamento || ""}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            data_pagamento: e.target.value || undefined,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </FormSection>
+
+                <FormSection
+                  icon={CreditCard}
+                  title="Pagamento"
+                  description="Forma de pagamento utilizada, se já definida."
+                >
+                  <div className="space-y-2">
+                    <Label>Forma de pagamento</Label>
+                    <Select
+                      value={form.forma_pagamento ?? "none"}
+                      onValueChange={(value) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          forma_pagamento:
+                            value === "none"
+                              ? undefined
+                              : (value as CreateContaFinanceiraDto["forma_pagamento"]),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue placeholder="Selecione a forma de pagamento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhuma</SelectItem>
+                        {FORMAS_PAGAMENTO.map((fp) => (
+                          <SelectItem key={fp.value} value={fp.value}>
+                            {fp.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </FormSection>
+
+                <FormSection
+                  icon={Info}
+                  title="Observações"
+                  description="Informações complementares sobre este lançamento."
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="observacoes">Observações</Label>
+                    <Textarea
+                      id="observacoes"
+                      placeholder="Detalhes adicionais, referências internas ou acordos..."
+                      className="min-h-[120px] resize-y rounded-xl"
+                      value={form.observacoes || ""}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          observacoes: e.target.value || undefined,
+                        }))
+                      }
+                    />
+                  </div>
+                </FormSection>
+              </div>
+
+              <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
+                <Card className="overflow-hidden border-border/60 shadow-md">
+                  <div
+                    className={cn(
+                      "px-5 py-4 text-white",
+                      ehReceita
+                        ? "bg-gradient-to-br from-emerald-600 to-emerald-700"
+                        : "bg-gradient-to-br from-rose-600 to-rose-700",
+                    )}
+                  >
+                    <p className="text-xs font-medium uppercase tracking-wider opacity-90">
+                      Resumo
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {ehReceita ? "Receita" : "Despesa"}
+                    </p>
+                    <p className="mt-3 text-3xl font-bold tracking-tight">
+                      {form.valor_original > 0
+                        ? formatCurrency(form.valor_original)
+                        : "R$ 0,00"}
+                    </p>
+                  </div>
+                  <CardContent className="space-y-3 p-5 pt-4">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                        <span className="text-muted-foreground">Descrição</span>
+                        <span className="max-w-[55%] truncate text-right font-medium">
+                          {form.descricao || "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                        <span className="text-muted-foreground">Vencimento</span>
+                        <span className="font-medium">
+                          {form.data_vencimento
+                            ? new Date(form.data_vencimento + "T12:00:00").toLocaleDateString(
+                                "pt-BR",
+                              )
+                            : "—"}
+                        </span>
+                      </div>
+                      {resumo.clienteNome ? (
+                        <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                          <span className="text-muted-foreground">Cliente</span>
+                          <span className="max-w-[55%] truncate text-right font-medium">
+                            {resumo.clienteNome}
+                          </span>
+                        </div>
+                      ) : null}
+                      {resumo.fornecedorNome ? (
+                        <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                          <span className="text-muted-foreground">Fornecedor</span>
+                          <span className="max-w-[55%] truncate text-right font-medium">
+                            {resumo.fornecedorNome}
+                          </span>
+                        </div>
+                      ) : null}
+                      {resumo.pedidoNumero ? (
+                        <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                          <span className="text-muted-foreground">Pedido</span>
+                          <span className="font-medium">{resumo.pedidoNumero}</span>
+                        </div>
+                      ) : null}
+                      {resumo.rocaNome ? (
+                        <div className="flex justify-between gap-2">
+                          <span className="text-muted-foreground">Roça</span>
+                          <span className="max-w-[55%] truncate text-right font-medium">
+                            {resumo.rocaNome}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="gradient"
+                      className="mt-2 w-full rounded-xl"
+                      onClick={handleSubmit}
+                      disabled={salvando}
+                    >
+                      {salvando ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Registrando...
+                        </>
+                      ) : (
+                        "Registrar Transação"
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+                  Campos marcados com * são obrigatórios. Use o menu lateral para navegar entre
+                  outras áreas do sistema a qualquer momento.
+                </p>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
+};
+
+export default NovaTransacao;
