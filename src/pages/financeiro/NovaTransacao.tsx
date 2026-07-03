@@ -38,6 +38,7 @@ import {
   CreditCard,
   FileText,
   Info,
+  Layers,
   Loader2,
   ShoppingCart,
   TrendingDown,
@@ -48,6 +49,8 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+
+type ModoLancamento = "RECEBER" | "PAGAR" | "CENTRO_CUSTO";
 
 type NovaTransacaoForm = CreateContaFinanceiraDto & {
   data_emissao: string;
@@ -112,6 +115,7 @@ const initialForm = (): NovaTransacaoForm => ({
 const NovaTransacao = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [modo, setModo] = useState<ModoLancamento>("RECEBER");
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
 
@@ -227,31 +231,48 @@ const NovaTransacao = () => {
       const pid = (p as { pedido_id?: number; id?: number }).pedido_id ?? (p as { id?: number }).id;
       return pid === form.pedido_id;
     });
+    const tipoDespesa = tiposDespesaLista.find((t) => t.id === form.centro_custo_tipo_id);
     return {
       clienteNome: cliente?.nome,
       fornecedorNome: fornecedor?.nome_fantasia,
       rocaNome: roca?.nome,
+      tipoDespesaNome: tipoDespesa?.nome,
       pedidoNumero:
         (pedido as { numero_pedido?: string })?.numero_pedido ??
         (form.pedido_id ? `PED-${form.pedido_id}` : undefined),
     };
-  }, [form, clientes, fornecedores, rocasLista, pedidos]);
+  }, [form, clientes, fornecedores, rocasLista, pedidos, tiposDespesaLista]);
 
-  const ehReceita = form.tipo === "RECEBER";
+  const ehReceita = modo === "RECEBER";
+  const ehCentroCusto = modo === "CENTRO_CUSTO";
   const salvando = createContaMutation.isPending || salvandoDespesaCc;
 
+  const selecionarModo = (novoModo: ModoLancamento) => {
+    setModo(novoModo);
+    setForm((prev) => ({
+      ...prev,
+      tipo: novoModo === "RECEBER" ? "RECEBER" : "PAGAR",
+      centro_custo_tipo_id:
+        novoModo === "CENTRO_CUSTO" ? prev.centro_custo_tipo_id : undefined,
+      cliente_id: novoModo === "CENTRO_CUSTO" ? undefined : prev.cliente_id,
+      pedido_id: novoModo === "CENTRO_CUSTO" ? undefined : prev.pedido_id,
+      forma_pagamento: novoModo === "CENTRO_CUSTO" ? undefined : prev.forma_pagamento,
+      data_pagamento: novoModo === "CENTRO_CUSTO" ? undefined : prev.data_pagamento,
+    }));
+  };
+
   const handleSubmit = async () => {
-    if (!form.descricao || !form.valor_original || !form.data_vencimento) {
-      toast.error("Preencha os campos obrigatórios (Descrição, Valor e Data de Vencimento)");
-      return;
-    }
-
-    const ehDespesaCentroCusto =
-      form.tipo === "PAGAR" && form.centro_custo_tipo_id != null;
-
-    if (ehDespesaCentroCusto) {
+    if (ehCentroCusto) {
+      if (!form.descricao || !form.valor_original || !form.data_emissao) {
+        toast.error("Preencha os campos obrigatórios (Descrição, Valor e Data de Emissão)");
+        return;
+      }
+      if (!form.centro_custo_tipo_id) {
+        toast.error("Selecione o tipo de despesa do centro de custo");
+        return;
+      }
       if (!form.roca_id) {
-        toast.error("Selecione a roça (centro de custo) para esta despesa");
+        toast.error("Selecione a roça (centro de custo)");
         return;
       }
       setSalvandoDespesaCc(true);
@@ -283,8 +304,13 @@ const NovaTransacao = () => {
       return;
     }
 
+    if (!form.descricao || !form.valor_original || !form.data_vencimento) {
+      toast.error("Preencha os campos obrigatórios (Descrição, Valor e Data de Vencimento)");
+      return;
+    }
+
     createContaMutation.mutate({
-      tipo: form.tipo,
+      tipo: modo === "RECEBER" ? "RECEBER" : "PAGAR",
       descricao: form.descricao,
       valor_original: Number(form.valor_original),
       data_emissao: form.data_emissao,
@@ -320,7 +346,7 @@ const NovaTransacao = () => {
                   Nova Transação
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Registre receitas e despesas com todos os vínculos necessários
+                  Registre receitas, despesas ou lançamentos de centro de custo
                 </p>
               </div>
             </div>
@@ -356,16 +382,10 @@ const NovaTransacao = () => {
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-            <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 type="button"
-                onClick={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    tipo: "RECEBER",
-                    centro_custo_tipo_id: undefined,
-                  }))
-                }
+                onClick={() => selecionarModo("RECEBER")}
                 className={cn(
                   "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
                   ehReceita
@@ -388,10 +408,10 @@ const NovaTransacao = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setForm((prev) => ({ ...prev, tipo: "PAGAR" }))}
+                onClick={() => selecionarModo("PAGAR")}
                 className={cn(
                   "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
-                  !ehReceita
+                  modo === "PAGAR"
                     ? "border-rose-500/60 bg-rose-500/10 shadow-sm"
                     : "border-border/60 bg-card hover:border-rose-500/30 hover:bg-rose-500/5",
                 )}
@@ -399,14 +419,37 @@ const NovaTransacao = () => {
                 <div
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
-                    !ehReceita ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-rose-500/15 group-hover:text-rose-600",
+                    modo === "PAGAR" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-rose-500/15 group-hover:text-rose-600",
                   )}
                 >
                   <TrendingDown className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="font-semibold text-foreground">Despesa</p>
-                  <p className="text-xs text-muted-foreground">Saída de recursos</p>
+                  <p className="text-xs text-muted-foreground">Conta avulsa a pagar</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => selecionarModo("CENTRO_CUSTO")}
+                className={cn(
+                  "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
+                  ehCentroCusto
+                    ? "border-amber-500/60 bg-amber-500/10 shadow-sm"
+                    : "border-border/60 bg-card hover:border-amber-500/30 hover:bg-amber-500/5",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                    ehCentroCusto ? "bg-amber-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-amber-500/15 group-hover:text-amber-600",
+                  )}
+                >
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Centro de Custo</p>
+                  <p className="text-xs text-muted-foreground">Despesa vinculada à roça</p>
                 </div>
               </button>
             </div>
@@ -456,23 +499,18 @@ const NovaTransacao = () => {
                 </FormSection>
 
                 <FormSection
-                  icon={ShoppingCart}
-                  title="Relacionamentos"
-                  description="Vincule cliente, fornecedor, pedido ou roça quando aplicável."
+                  icon={ehCentroCusto ? Layers : ShoppingCart}
+                  title={ehCentroCusto ? "Centro de custo" : "Relacionamentos"}
+                  description={
+                    ehCentroCusto
+                      ? "Selecione o tipo de despesa cadastrado e a roça. O lançamento aparece em Centro de Custos e em Contas a pagar."
+                      : "Vincule cliente, fornecedor, pedido ou roça quando aplicável."
+                  }
                 >
-                  {!ehReceita ? (
-                    <div className="rounded-xl border border-border/60 bg-muted/25 p-4 space-y-4">
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        Para despesa vinculada ao{" "}
-                        <strong className="font-medium text-foreground">centro de custo</strong>,
-                        selecione o tipo de despesa cadastrado e a roça. O lançamento aparece em
-                        Centro de Custos e em Contas a pagar.
-                      </p>
-                      <div className="space-y-2">
-                        <Label>
-                          Tipo de despesa (cadastrado)
-                          {form.centro_custo_tipo_id != null ? " *" : ""}
-                        </Label>
+                  {ehCentroCusto ? (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Tipo de despesa *</Label>
                         <Select
                           value={
                             form.centro_custo_tipo_id != null
@@ -491,7 +529,9 @@ const NovaTransacao = () => {
                             <SelectValue placeholder="Selecione o tipo de despesa" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">Nenhum (conta avulsa)</SelectItem>
+                            <SelectItem value="none" disabled>
+                              Selecione um tipo
+                            </SelectItem>
                             {tiposDespesaLista.map((tipo) => (
                               <SelectItem key={tipo.id} value={String(tipo.id)}>
                                 {tipo.nome}
@@ -505,9 +545,62 @@ const NovaTransacao = () => {
                           </p>
                         ) : null}
                       </div>
+                      <div className="space-y-2">
+                        <Label>Roça *</Label>
+                        <Select
+                          value={form.roca_id != null ? String(form.roca_id) : "none"}
+                          onValueChange={(value) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              roca_id:
+                                value && value !== "none" ? Number(value) : undefined,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Selecione a roça" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhuma</SelectItem>
+                            {rocasLista
+                              .filter((r) => r.ativo !== false)
+                              .map((roca) => (
+                                <SelectItem key={roca.id} value={String(roca.id)}>
+                                  {roca.nome}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Fornecedor</Label>
+                        <Select
+                          value={
+                            form.fornecedor_id != null ? String(form.fornecedor_id) : "none"
+                          }
+                          onValueChange={(value) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              fornecedor_id:
+                                value && value !== "none" ? Number(value) : undefined,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Selecione um fornecedor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum</SelectItem>
+                            {fornecedores.map((fornecedor) => (
+                              <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                                {fornecedor.nome_fantasia}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  ) : null}
-
+                  ) : (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Cliente</Label>
@@ -600,10 +693,7 @@ const NovaTransacao = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>
-                        {!ehReceita ? "Roça (centro de custo)" : "Roça"}
-                        {!ehReceita && form.centro_custo_tipo_id != null ? " *" : ""}
-                      </Label>
+                      <Label>Roça</Label>
                       <Select
                         value={form.roca_id != null ? String(form.roca_id) : "none"}
                         onValueChange={(value) =>
@@ -615,13 +705,7 @@ const NovaTransacao = () => {
                         }
                       >
                         <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue
-                            placeholder={
-                              !ehReceita
-                                ? "Selecione a roça (centro de custo)"
-                                : "Selecione uma roça"
-                            }
-                          />
+                          <SelectValue placeholder="Selecione uma roça" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
@@ -636,14 +720,24 @@ const NovaTransacao = () => {
                       </Select>
                     </div>
                   </div>
+                  )}
                 </FormSection>
 
                 <FormSection
                   icon={Calendar}
                   title="Datas"
-                  description="Emissão, vencimento e pagamento do lançamento."
+                  description={
+                    ehCentroCusto
+                      ? "Data em que a despesa foi registrada."
+                      : "Emissão, vencimento e pagamento do lançamento."
+                  }
                 >
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div
+                    className={cn(
+                      "grid grid-cols-1 gap-4",
+                      ehCentroCusto ? "sm:grid-cols-1" : "sm:grid-cols-3",
+                    )}
+                  >
                     <div className="space-y-2">
                       <Label htmlFor="data-emissao">Data de emissão *</Label>
                       <Input
@@ -656,36 +750,41 @@ const NovaTransacao = () => {
                         }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="data-vencimento">Data de vencimento *</Label>
-                      <Input
-                        id="data-vencimento"
-                        type="date"
-                        className="h-11 rounded-xl"
-                        value={form.data_vencimento}
-                        onChange={(e) =>
-                          setForm((prev) => ({ ...prev, data_vencimento: e.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="data-pagamento">Data de pagamento</Label>
-                      <Input
-                        id="data-pagamento"
-                        type="date"
-                        className="h-11 rounded-xl"
-                        value={form.data_pagamento || ""}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            data_pagamento: e.target.value || undefined,
-                          }))
-                        }
-                      />
-                    </div>
+                    {!ehCentroCusto ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="data-vencimento">Data de vencimento *</Label>
+                          <Input
+                            id="data-vencimento"
+                            type="date"
+                            className="h-11 rounded-xl"
+                            value={form.data_vencimento}
+                            onChange={(e) =>
+                              setForm((prev) => ({ ...prev, data_vencimento: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="data-pagamento">Data de pagamento</Label>
+                          <Input
+                            id="data-pagamento"
+                            type="date"
+                            className="h-11 rounded-xl"
+                            value={form.data_pagamento || ""}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                data_pagamento: e.target.value || undefined,
+                              }))
+                            }
+                          />
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 </FormSection>
 
+                {!ehCentroCusto ? (
                 <FormSection
                   icon={CreditCard}
                   title="Pagamento"
@@ -719,6 +818,7 @@ const NovaTransacao = () => {
                     </Select>
                   </div>
                 </FormSection>
+                ) : null}
 
                 <FormSection
                   icon={Info}
@@ -750,14 +850,16 @@ const NovaTransacao = () => {
                       "px-5 py-4 text-white",
                       ehReceita
                         ? "bg-gradient-to-br from-emerald-600 to-emerald-700"
-                        : "bg-gradient-to-br from-rose-600 to-rose-700",
+                        : ehCentroCusto
+                          ? "bg-gradient-to-br from-amber-500 to-amber-600"
+                          : "bg-gradient-to-br from-rose-600 to-rose-700",
                     )}
                   >
                     <p className="text-xs font-medium uppercase tracking-wider opacity-90">
                       Resumo
                     </p>
                     <p className="mt-1 text-lg font-semibold">
-                      {ehReceita ? "Receita" : "Despesa"}
+                      {ehReceita ? "Receita" : ehCentroCusto ? "Centro de Custo" : "Despesa"}
                     </p>
                     <p className="mt-3 text-3xl font-bold tracking-tight">
                       {form.valor_original > 0
@@ -774,15 +876,31 @@ const NovaTransacao = () => {
                         </span>
                       </div>
                       <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
-                        <span className="text-muted-foreground">Vencimento</span>
+                        <span className="text-muted-foreground">
+                          {ehCentroCusto ? "Emissão" : "Vencimento"}
+                        </span>
                         <span className="font-medium">
-                          {form.data_vencimento
-                            ? new Date(form.data_vencimento + "T12:00:00").toLocaleDateString(
-                                "pt-BR",
-                              )
-                            : "—"}
+                          {ehCentroCusto
+                            ? form.data_emissao
+                              ? new Date(form.data_emissao + "T12:00:00").toLocaleDateString(
+                                  "pt-BR",
+                                )
+                              : "—"
+                            : form.data_vencimento
+                              ? new Date(form.data_vencimento + "T12:00:00").toLocaleDateString(
+                                  "pt-BR",
+                                )
+                              : "—"}
                         </span>
                       </div>
+                      {resumo.tipoDespesaNome ? (
+                        <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                          <span className="text-muted-foreground">Tipo de despesa</span>
+                          <span className="max-w-[55%] truncate text-right font-medium">
+                            {resumo.tipoDespesaNome}
+                          </span>
+                        </div>
+                      ) : null}
                       {resumo.clienteNome ? (
                         <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
                           <span className="text-muted-foreground">Cliente</span>
