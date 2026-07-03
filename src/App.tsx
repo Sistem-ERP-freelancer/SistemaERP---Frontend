@@ -28,6 +28,7 @@ import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
 import EmDesenvolvimentoPage from "./pages/EmDesenvolvimentoPage";
 import Financeiro from "./pages/Financeiro";
+import NovaTransacao from "./pages/financeiro/NovaTransacao";
 import FluxoDeCaixa from "./pages/FluxoDeCaixa";
 import RelatorioComprasCliente from "./pages/RelatorioComprasCliente";
 import Fornecedores from "./pages/Fornecedores";
@@ -149,6 +150,14 @@ const App = () => (
                   <Financeiro />
                 </ProtectedFinanceRoute>
               } 
+            />
+            <Route
+              path="/financeiro/nova-transacao"
+              element={
+                <ProtectedFinanceRoute>
+                  <NovaTransacao />
+                </ProtectedFinanceRoute>
+              }
             />
             <Route
               path="/financeiro/bancos-contas"
