@@ -122,7 +122,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const CARD_STATS = [
@@ -1307,7 +1307,6 @@ export default function CentroCustos() {
     adicionarTipo,
     atualizarTipo,
     excluirTipo,
-    adicionarDespesa,
     atualizarDespesa,
     excluirDespesa,
     resumo,
@@ -1349,7 +1348,15 @@ export default function CentroCustos() {
   const nomeTipoDespesa = (d: CentroCustoDespesa) =>
     d.tipoNome ?? tiposOpcoes.find((t) => t.id === d.tipoId)?.nome ?? '—';
 
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState('visao');
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'despesas' || t === 'tipos' || t === 'visao') {
+      setTab(t);
+    }
+  }, [searchParams]);
 
   /** Tipos */
   const [tipoDialogOpen, setTipoDialogOpen] = useState(false);
@@ -1364,10 +1371,6 @@ export default function CentroCustos() {
   const [observacoes, setObservacoes] = useState('');
   const [tipoIdSel, setTipoIdSel] = useState<string>('');
   const [rocaSel, setRocaSel] = useState<Roca | null>(null);
-  const [tipoPopOpen, setTipoPopOpen] = useState(false);
-  const [rocaPopOpen, setRocaPopOpen] = useState(false);
-  const [quickTipoOpen, setQuickTipoOpen] = useState(false);
-  const [quickTipoNome, setQuickTipoNome] = useState('');
 
   /** Despesa dialogs */
   const [editDesp, setEditDesp] = useState<CentroCustoDespesa | null>(null);
@@ -1398,24 +1401,6 @@ export default function CentroCustos() {
     }
   };
 
-  const salvarQuickTipo = async () => {
-    const n = quickTipoNome.trim();
-    if (!n) {
-      toast.error('Informe o nome.');
-      return;
-    }
-    try {
-      const t = await adicionarTipo(n);
-      setTipoIdSel(t.id);
-      setQuickTipoNome('');
-      setQuickTipoOpen(false);
-      setTipoPopOpen(false);
-      toast.success('Tipo cadastrado.');
-    } catch (e) {
-      toast.error(msgErro(e, 'Não foi possível cadastrar o tipo.'));
-    }
-  };
-
   const parseValor = (s: string): number => {
     const n = parseValorMonetarioEntrada(s);
     return n === null || !Number.isFinite(n) ? NaN : n;
@@ -1428,44 +1413,6 @@ export default function CentroCustos() {
     const n = parseValorMonetarioEntrada(s);
     if (n === null || !Number.isFinite(n)) return;
     setValorStr(formatValorMonetarioBr(n));
-  };
-
-  const salvarDespesa = async () => {
-    const v = parseValor(valorStr);
-    if (!descricao.trim()) {
-      toast.error('Informe a descrição da despesa.');
-      return;
-    }
-    if (!tipoIdSel) {
-      toast.error('Selecione o tipo de custo.');
-      return;
-    }
-    if (!rocaSel) {
-      toast.error('Selecione a roça.');
-      return;
-    }
-    if (!Number.isFinite(v) || v <= 0) {
-      toast.error('Informe um valor válido.');
-      return;
-    }
-    try {
-      await adicionarDespesa({
-        descricao: descricao.trim(),
-        tipoId: tipoIdSel,
-        rocaId: rocaSel.id,
-        rocaNome: rocaSel.nome,
-        tipoNome: tiposOpcoes.find((t) => t.id === tipoIdSel)?.nome,
-        valor: v,
-        data: dataDesp,
-        observacoes: observacoes.trim() || undefined,
-      });
-      toast.success('Despesa cadastrada.');
-      setDescricao('');
-      setValorStr('');
-      setObservacoes('');
-    } catch (e) {
-      toast.error(msgErro(e, 'Não foi possível cadastrar a despesa.'));
-    }
   };
 
   const despesaNomeTipo = nomeTipoDespesa;
@@ -1782,154 +1729,16 @@ export default function CentroCustos() {
           </TabsContent>
 
           <TabsContent value="despesas" className="space-y-6">
-            <div className="rounded-xl border border-border/70 bg-card/80 p-4 sm:p-5 space-y-4">
-              <h2 className="text-base font-semibold">Nova despesa</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
-                  <Input
-                    value={descricao}
-                    onChange={(e) => setDescricao(e.target.value)}
-                    placeholder="Ex.: Abastecimento trator"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tipo de custo</Label>
-                  <Popover open={tipoPopOpen} onOpenChange={setTipoPopOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className="w-full justify-between font-normal"
-                      >
-                        <span className="truncate">
-                          {tipoIdSel
-                            ? tiposOpcoes.find((t) => t.id === tipoIdSel)?.nome ?? 'Selecione…'
-                            : 'Buscar ou selecionar tipo…'}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Pesquisar tipo…" />
-                        <CommandList>
-                          <CommandEmpty>Nenhum tipo encontrado.</CommandEmpty>
-                          <CommandGroup>
-                            {tiposOpcoes.map((t) => (
-                              <CommandItem
-                                key={t.id}
-                                value={t.nome}
-                                onSelect={() => {
-                                  setTipoIdSel(t.id);
-                                  setTipoPopOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    tipoIdSel === t.id ? 'opacity-100' : 'opacity-0',
-                                  )}
-                                />
-                                {t.nome}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                          <CommandSeparator />
-                          <CommandGroup>
-                            <CommandItem
-                              onSelect={() => {
-                                setQuickTipoOpen(true);
-                              }}
-                            >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Cadastrar novo tipo…
-                            </CommandItem>
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Roça (ativas)</Label>
-                  <Popover open={rocaPopOpen} onOpenChange={setRocaPopOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        disabled={loadingRocas}
-                        className="w-full justify-between font-normal"
-                      >
-                        <span className="truncate">
-                          {rocaSel ? `${rocaSel.nome}` : loadingRocas ? 'Carregando…' : 'Buscar roça por nome…'}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Pesquisar roça…" />
-                        <CommandList>
-                          <CommandEmpty>
-                            {loadingRocas ? 'Carregando roças…' : 'Nenhuma roça ativa encontrada.'}
-                          </CommandEmpty>
-                          <CommandGroup>
-                            {rocasAtivas.map((r) => (
-                              <CommandItem
-                                key={r.id}
-                                value={`${r.nome} ${r.codigo ?? ''}`}
-                                onSelect={() => {
-                                  setRocaSel(r);
-                                  setRocaPopOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    rocaSel?.id === r.id ? 'opacity-100' : 'opacity-0',
-                                  )}
-                                />
-                                <span className="truncate">{r.nome}</span>
-                                {r.codigo ? (
-                                  <span className="text-muted-foreground text-xs ml-1">({r.codigo})</span>
-                                ) : null}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-2">
-                  <Label>Valor (R$)</Label>
-                  <Input
-                    value={valorStr}
-                    onChange={(e) => setValorStr(e.target.value)}
-                    onBlur={onBlurFormatarValorDespesa}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    className="tabular-nums"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Data (competência)</Label>
-                  <Input type="date" value={dataDesp} onChange={(e) => setDataDesp(e.target.value)} />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Observações</Label>
-                  <Textarea
-                    value={observacoes}
-                    onChange={(e) => setObservacoes(e.target.value)}
-                    placeholder="Opcional"
-                    rows={2}
-                  />
-                </div>
-              </div>
-              <Button onClick={salvarDespesa} className="w-full sm:w-auto">
-                <Plus className="w-4 h-4 mr-2" />
-                Salvar despesa
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground max-w-xl">
+                Despesas por roça e tipo de custo, sincronizadas com Contas a pagar.
+              </p>
+              <Button
+                className="shrink-0 rounded-xl gap-2"
+                onClick={() => navigate('/centro-custos/nova-despesa')}
+              >
+                <Plus className="w-4 h-4" />
+                Nova despesa
               </Button>
             </div>
 
@@ -1973,26 +1782,6 @@ export default function CentroCustos() {
                 Cancelar
               </Button>
               <Button onClick={salvarTipo}>Salvar</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={quickTipoOpen} onOpenChange={setQuickTipoOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Cadastro rápido de tipo</DialogTitle>
-            </DialogHeader>
-            <Input
-              value={quickTipoNome}
-              onChange={(e) => setQuickTipoNome(e.target.value)}
-              placeholder="Nome do tipo"
-              onKeyDown={(e) => e.key === 'Enter' && salvarQuickTipo()}
-            />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setQuickTipoOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={salvarQuickTipo}>Cadastrar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

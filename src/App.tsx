@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AdminPanel from "./pages/AdminPanel";
 import CentroCustos from "./pages/CentroCustos";
+import NovaDespesa from "./pages/centro-custos/NovaDespesa";
 import Clientes from "./pages/Clientes";
 import ContasAPagarContaFinanceiraPagamentos from "./pages/contas-a-pagar/ContasAPagarContaFinanceiraPagamentos";
 import ContasAPagarDespesaDetalhes from "./pages/contas-a-pagar/ContasAPagarDespesaDetalhes";
@@ -37,6 +38,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import NotasFiscais from "./pages/NotasFiscais";
 import Pedidos from "./pages/Pedidos";
+import NovoPedido from "./pages/pedidos/NovoPedido";
 import Produtos from "./pages/Produtos";
 import Settings from "./pages/Settings";
 import Transportadoras from "./pages/Transportadoras";
@@ -132,6 +134,22 @@ const App = () => (
                   <Pedidos />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/pedidos/novo"
+              element={
+                <ProtectedRoute>
+                  <NovoPedido />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pedidos/:id/editar"
+              element={
+                <ProtectedRoute>
+                  <NovoPedido />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="/notas-fiscais"
@@ -346,6 +364,14 @@ const App = () => (
                   <CentroCustos />
                 </ProtectedFinanceRoute>
               } 
+            />
+            <Route
+              path="/centro-custos/nova-despesa"
+              element={
+                <ProtectedFinanceRoute>
+                  <NovaDespesa />
+                </ProtectedFinanceRoute>
+              }
             />
             <Route 
               path="/controle-roca" 

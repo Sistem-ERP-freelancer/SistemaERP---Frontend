@@ -1,5 +1,8 @@
+import { FormSection } from '@/components/forms/FormSection';
+import { ResumoScrollFollower } from '@/components/forms/ResumoScrollFollower';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
     Dialog,
     DialogContent,
@@ -16,14 +19,6 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
@@ -40,7 +35,16 @@ import {
 } from '@/types/pedido';
 import type { Roca } from '@/types/roca';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, FileDown, Info, Loader2, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import {
+  CreditCard,
+  FileDown,
+  Info,
+  Loader2,
+  Package,
+  Plus,
+  ShoppingCart,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -64,6 +68,7 @@ function usePrevious<T>(value: T): T | undefined {
 }
 
 interface OrderFormProps {
+  layout?: 'dialog' | 'page';
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: CreatePedidoDto) => void;
@@ -85,6 +90,7 @@ interface OrderItemForm {
 }
 
 export function OrderForm({
+  layout = 'dialog',
   isOpen,
   onClose,
   onSubmit,
@@ -95,6 +101,7 @@ export function OrderForm({
   produtos,
   transportadoras,
 }: OrderFormProps) {
+  const formActive = layout === 'page' || isOpen;
   const [tipo, setTipo] = useState<TipoPedido>('VENDA');
   const [clienteId, setClienteId] = useState<number | undefined>(undefined);
   const [fornecedorId, setFornecedorId] = useState<number | undefined>(undefined);
@@ -135,26 +142,25 @@ export function OrderForm({
   const [produtoSearch, setProdutoSearch] = useState('');
 
   const itensSectionRef = useRef<HTMLDivElement>(null);
-  const resumoItensRef = useRef<HTMLDivElement>(null);
   const addItemButtonRef = useRef<HTMLDivElement>(null);
 
   // Buscar dados do cliente para pedido (GET /clientes/:id/dados-pedido) conforme guia
   const { data: dadosClientePedido, refetch: refetchDadosPedido, isLoading: isLoadingDadosPedido } = useQuery({
     queryKey: ['clientes', clienteId, 'dados-pedido'],
     queryFn: () => clientesService.buscarDadosParaPedido(clienteId!),
-    enabled: !!clienteId && tipo === 'VENDA' && isOpen,
+    enabled: !!clienteId && tipo === 'VENDA' && formActive,
   });
 
   const { data: limiteCredito } = useQuery({
     queryKey: ['clientes', clienteId, 'limite-credito'],
     queryFn: () => clientesService.buscarLimiteCredito(clienteId!),
-    enabled: !!clienteId && tipo === 'VENDA' && isOpen,
+    enabled: !!clienteId && tipo === 'VENDA' && formActive,
   });
 
   const { data: rocasData } = useQuery({
     queryKey: ['pedidos', 'rocas-ativas'],
     queryFn: () => controleRocaService.listarRocas(undefined, false),
-    enabled: isOpen,
+    enabled: formActive,
     retry: false,
   });
   const rocasLista: Roca[] = Array.isArray(rocasData)
@@ -459,6 +465,25 @@ export function OrderForm({
     (typeof frete === 'number' ? frete : 0) +
     (typeof outrasTaxas === 'number' ? outrasTaxas : 0);
 
+  const subtotalItens = itens.reduce((acc, item) => {
+    const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 0;
+    const precoUnitario = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
+    const desconto = typeof item.desconto === 'number' ? item.desconto : 0;
+    return acc + quantidade * precoUnitario - desconto;
+  }, 0);
+
+  const itensValidos = itens.filter((i) => i.produto_id && i.produto_id !== 0);
+
+  const parceiroNome =
+    tipo === 'VENDA'
+      ? clientes.find((c) => c.id === clienteId)?.nome_fantasia ||
+        clientes.find((c) => c.id === clienteId)?.nome_razao ||
+        clientes.find((c) => c.id === clienteId)?.nome
+      : fornecedores.find((f) => f.id === fornecedorId)?.nome_fantasia ||
+        fornecedores.find((f) => f.id === fornecedorId)?.nome_razao;
+
+  const inputClass = 'h-11 rounded-xl';
+
   const qtdParcelasNum = quantidadeParcelas === '' ? 1 : quantidadeParcelas;
   const valorPorParcela =
     formaPagamento && qtdParcelasNum >= 1
@@ -637,63 +662,63 @@ export function OrderForm({
     onSubmit(pedidoData);
   };
 
-  return (
-    <>
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
-            {order ? 'Editar Pedido' : 'Novo Pedido'}
-          </DialogTitle>
-          <DialogDescription className="mt-1">
-            {order
-              ? 'Atualize as informações do pedido no sistema'
-              : 'Preencha os dados para criar um novo pedido'}
-          </DialogDescription>
-        </DialogHeader>
+  if (layout === 'page' && !formActive) return null;
 
-        <form onSubmit={handleSubmit} className="space-y-8 pt-6">
-          <div className="bg-card border rounded-lg p-6 space-y-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                {tipo === 'VENDA' ? (
-                  <ShoppingCart className="w-5 h-5 text-orange-500" />
-                ) : (
-                  <Package className="w-5 h-5 text-orange-500" />
-                )}
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Informações Básicas</h3>
-              </div>
+  const formInner = (
+    <form
+      id={layout === 'page' ? 'order-form-page' : undefined}
+      onSubmit={handleSubmit}
+      className={cn('space-y-6', layout === 'dialog' && 'space-y-8 pt-6')}
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {(['VENDA', 'COMPRA'] as TipoPedido[]).map((tipoOption) => (
+          <button
+            key={tipoOption}
+            type="button"
+            onClick={() => setTipo(tipoOption)}
+            className={cn(
+              'group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all',
+              tipo === tipoOption
+                ? tipoOption === 'VENDA'
+                  ? 'border-emerald-500/60 bg-emerald-500/10 shadow-sm'
+                  : 'border-blue-500/60 bg-blue-500/10 shadow-sm'
+                : 'border-border/60 bg-card hover:border-primary/30',
+            )}
+          >
+            <div
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-xl transition-colors',
+                tipo === tipoOption
+                  ? tipoOption === 'VENDA'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-blue-500 text-white'
+                  : 'bg-muted text-muted-foreground group-hover:bg-primary/15',
+              )}
+            >
+              {tipoOption === 'VENDA' ? (
+                <ShoppingCart className="h-5 w-5" />
+              ) : (
+                <Package className="h-5 w-5" />
+              )}
             </div>
+            <div>
+              <p className="font-semibold text-foreground">{tipoOption}</p>
+              <p className="text-xs text-muted-foreground">
+                {tipoOption === 'VENDA' ? 'Saída de mercadorias' : 'Entrada de insumos'}
+              </p>
+            </div>
+          </button>
+        ))}
+      </div>
 
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Tipo de Pedido</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  {(['VENDA', 'COMPRA'] as TipoPedido[]).map((tipoOption) => (
-                    <button
-                      key={tipoOption}
-                      type="button"
-                      onClick={() => setTipo(tipoOption)}
-                      className={cn(
-                        'flex items-center gap-3 p-4 rounded-lg border-2 transition-all',
-                        tipo === tipoOption
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border bg-card hover:border-primary/50'
-                      )}
-                    >
-                      {tipoOption === 'VENDA' ? (
-                        <ShoppingCart className="w-5 h-5 text-green-500" />
-                      ) : (
-                        <Package className="w-5 h-5 text-blue-500" />
-                      )}
-                      <span className="font-medium">{tipoOption}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
+        <div className="min-w-0 flex-1 space-y-6 pb-8">
+          <FormSection
+            icon={ShoppingCart}
+            title="Informações básicas"
+            description="Cliente ou fornecedor, roça e data do pedido."
+          >
+            <div className="space-y-4">
               {tipo === 'VENDA' ? (
                 <div className="space-y-2">
                   <Label>Cliente</Label>
@@ -701,7 +726,7 @@ export function OrderForm({
                     value={clienteId?.toString() || ''}
                     onValueChange={(value) => setClienteId(Number(value))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={inputClass}>
                       <SelectValue placeholder="Selecione um cliente" />
                     </SelectTrigger>
                     <SelectContent>
@@ -754,7 +779,7 @@ export function OrderForm({
                     value={fornecedorId?.toString() || ''}
                     onValueChange={(value) => setFornecedorId(Number(value))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={inputClass}>
                       <SelectValue placeholder="Selecione um fornecedor" />
                     </SelectTrigger>
                     <SelectContent>
@@ -781,7 +806,7 @@ export function OrderForm({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Roça (opcional)</Label>
                   <Select
@@ -790,7 +815,7 @@ export function OrderForm({
                       setRocaId(value && value !== 'none' ? Number(value) : undefined)
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={inputClass}>
                       <SelectValue placeholder="Selecione uma roça" />
                     </SelectTrigger>
                     <SelectContent>
@@ -809,6 +834,7 @@ export function OrderForm({
                   <Label>Data do Pedido</Label>
                   <Input
                     type="date"
+                    className={inputClass}
                     value={dataPedido}
                     onChange={(e) => setDataPedido(e.target.value)}
                     required
@@ -816,36 +842,23 @@ export function OrderForm({
                 </div>
               </div>
             </div>
-          </div>
+          </FormSection>
 
-          <div ref={itensSectionRef} className="bg-card border rounded-lg p-6 space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold">Itens do Pedido</h3>
-                {itens.length <= 2 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'auto' })}
-                    title="Ir para resumo dos itens"
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-              {itens.length <= 2 && (
-                <Button type="button" onClick={handleAddItem} variant="outline" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar Item
-                </Button>
-              )}
-            </div>
-
+          <FormSection
+            icon={Package}
+            title="Itens do pedido"
+            description="Produtos, quantidades e valores unitários."
+            action={
+              <Button type="button" onClick={handleAddItem} variant="outline" size="sm" className="rounded-xl">
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar item
+              </Button>
+            }
+          >
+          <div ref={itensSectionRef} className="space-y-4">
             <div className="space-y-4">
               {itens.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-4 p-4 border rounded-lg">
+                <div key={index} className="grid grid-cols-12 gap-4 rounded-xl border border-border/60 p-4">
                   <div className="col-span-4 space-y-2">
                     <Label>Produto</Label>
                     <Select
@@ -987,28 +1000,22 @@ export function OrderForm({
                 </div>
               ))}
               {itens.length > 2 && (
-                <div ref={addItemButtonRef} className="pt-2 flex items-center gap-2">
-                  <Button type="button" onClick={handleAddItem} variant="outline" size="sm">
+                <div ref={addItemButtonRef} className="pt-2">
+                  <Button type="button" onClick={handleAddItem} variant="outline" size="sm" className="rounded-xl">
                     <Plus className="w-4 h-4 mr-2" />
-                    Adicionar Item
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    onClick={() => resumoItensRef.current?.scrollIntoView({ behavior: 'auto' })}
-                    title="Ir para resumo dos itens"
-                  >
-                    <ChevronDown className="w-4 h-4" />
+                    Adicionar item
                   </Button>
                 </div>
               )}
             </div>
           </div>
+          </FormSection>
 
-          <div className="bg-card border rounded-lg p-6 space-y-6">
-                <h3 className="text-lg font-semibold">Pagamento e Entrega</h3>
+          <FormSection
+            icon={CreditCard}
+            title="Pagamento e entrega"
+            description="Forma de pagamento, transportadora, frete e prazos."
+          >
             <div className="space-y-6">
               {/* Forma de Pagamento: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */}
               <div className="space-y-2">
@@ -1242,140 +1249,115 @@ export function OrderForm({
                 );
               })()}
             </div>
-          </div>
+          </FormSection>
 
-          <div className="bg-card border rounded-lg p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Resumo Financeiro</h3>
-            <div className="grid grid-cols-2 gap-4">
+          <FormSection
+            icon={Info}
+            title="Observações"
+            description="Informações internas ou mensagens para o cliente."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Subtotal</Label>
-                <div className="text-lg font-semibold">
-                  {formatCurrency(
-                    itens.reduce((acc, item) => {
-                      const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 0;
-                      const precoUnitario = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
-                      const desconto = typeof item.desconto === 'number' ? item.desconto : 0;
-                      return acc + (quantidade * precoUnitario - desconto);
-                    }, 0)
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Frete</Label>
-                <div className="text-lg font-semibold">
-                  {formatCurrency(typeof frete === 'number' ? frete : 0)}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Outras Taxas</Label>
-                <div className="text-lg font-semibold">
-                  {formatCurrency(typeof outrasTaxas === 'number' ? outrasTaxas : 0)}
-                </div>
-              </div>
-              <div className="col-span-2 pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xl font-bold">Total</Label>
-                  <div className="text-2xl font-bold text-primary">
-                    {formatCurrency(
-                      itens.reduce((acc, item) => {
-                        const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 0;
-                        const precoUnitario = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
-                        const desconto = typeof item.desconto === 'number' ? item.desconto : 0;
-                        return acc + (quantidade * precoUnitario - desconto);
-                      }, 0) +
-                      (typeof frete === 'number' ? frete : 0) +
-                      (typeof outrasTaxas === 'number' ? outrasTaxas : 0)
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card border rounded-lg p-6 space-y-6">
-                <h3 className="text-lg font-semibold">Observações</h3>
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label>Observações Internas</Label>
+                <Label>Observações internas</Label>
                 <Textarea
                   value={observacoesInternas}
                   onChange={(e) => setObservacoesInternas(e.target.value)}
                   rows={3}
+                  className="min-h-[100px] resize-y rounded-xl"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Observações do Cliente</Label>
+                <Label>Observações do cliente</Label>
                 <Textarea
                   value={observacoesCliente}
                   onChange={(e) => setObservacoesCliente(e.target.value)}
                   rows={3}
+                  className="min-h-[100px] resize-y rounded-xl"
                 />
               </div>
             </div>
-          </div>
+          </FormSection>
+        </div>
 
-          <div ref={resumoItensRef} className="bg-card border rounded-lg p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Resumo dos itens</h3>
-            {itens.filter((i) => i.produto_id && i.produto_id !== 0).length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum produto adicionado.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="text-right w-24">Quantidade</TableHead>
-                    <TableHead className="text-right w-28">Preço</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {itens
-                    .filter((item) => item.produto_id && item.produto_id !== 0)
-                    .map((item, index) => {
-                      const produto = produtos.find((p) => Number(p.id) === Number(item.produto_id));
-                      const nomeProduto = item.nome_produto ?? produto?.nome ?? '—';
-                      const qtd = typeof item.quantidade === 'number' ? item.quantidade : 0;
-                      const preco = typeof item.preco_unitario === 'number' ? item.preco_unitario : 0;
-                      return (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{nomeProduto}</TableCell>
-                          <TableCell className="text-right">{qtd}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(preco)}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => itensSectionRef.current?.scrollIntoView({ behavior: 'auto' })}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Adicionar mais produtos
-            </Button>
-          </div>
+        <aside className="w-full shrink-0 lg:w-[280px] lg:self-stretch xl:w-[320px]">
+          <ResumoScrollFollower>
+            <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
+              <div
+                className={cn(
+                  'px-5 py-4 text-white',
+                  tipo === 'VENDA'
+                    ? 'bg-gradient-to-br from-emerald-600 to-emerald-700'
+                    : 'bg-gradient-to-br from-blue-600 to-blue-700',
+                )}
+              >
+                <p className="text-xs font-medium uppercase tracking-wider opacity-90">Resumo</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {tipo === 'VENDA' ? 'Venda' : 'Compra'}
+                </p>
+                <p className="mt-3 text-3xl font-bold tracking-tight">
+                  {formatCurrency(valorTotalPedido)}
+                </p>
+              </div>
+              <CardContent className="space-y-3 p-5 pt-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                    <span className="text-muted-foreground">Parceiro</span>
+                    <span className="max-w-[55%] truncate text-right font-medium">
+                      {parceiroNome || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                    <span className="text-muted-foreground">Itens</span>
+                    <span className="font-medium">{itensValidos.length}</span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="font-medium">{formatCurrency(subtotalItens)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
+                    <span className="text-muted-foreground">Frete</span>
+                    <span className="font-medium">
+                      {formatCurrency(typeof frete === 'number' ? frete : 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Pagamento</span>
+                    <span className="max-w-[55%] truncate text-right font-medium">
+                      {formaPagamentoSelecionada || '—'}
+                    </span>
+                  </div>
+                </div>
+                {layout === 'dialog' ? (
+                  <Button
+                    type="submit"
+                    variant="gradient"
+                    className="mt-2 w-full rounded-xl"
+                    disabled={isPending}
+                  >
+                    {isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {order ? 'Atualizando...' : 'Criando...'}
+                      </>
+                    ) : order ? (
+                      'Atualizar Pedido'
+                    ) : (
+                      'Criar Pedido'
+                    )}
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+            <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+              Campos marcados com * são obrigatórios. Revise os itens antes de salvar.
+            </p>
+          </ResumoScrollFollower>
+        </aside>
+      </div>
+    </form>
+  );
 
-          <Button
-            type="submit"
-            className="w-full"
-            variant="gradient"
-            disabled={isPending}
-          >
-            {isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {order ? 'Atualizando...' : 'Criando...'}
-              </>
-            ) : (
-              order ? 'Atualizar Pedido' : 'Criar Pedido'
-            )}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-
+  const condicaoDialog = (
     <Dialog open={dialogEscolherCondicaoOpen} onOpenChange={setDialogEscolherCondicaoOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -1406,7 +1388,36 @@ export function OrderForm({
         </div>
       </DialogContent>
     </Dialog>
-  </>
+  );
+
+  if (layout === 'page') {
+    return (
+      <>
+        {formInner}
+        {condicaoDialog}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">
+              {order ? 'Editar Pedido' : 'Novo Pedido'}
+            </DialogTitle>
+            <DialogDescription className="mt-1">
+              {order
+                ? 'Atualize as informações do pedido no sistema'
+                : 'Preencha os dados para criar um novo pedido'}
+            </DialogDescription>
+          </DialogHeader>
+          {formInner}
+        </DialogContent>
+      </Dialog>
+      {condicaoDialog}
+    </>
   );
 }
 

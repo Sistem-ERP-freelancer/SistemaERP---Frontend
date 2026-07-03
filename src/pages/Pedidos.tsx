@@ -1,7 +1,6 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { ModulePageHeader } from '@/components/layout/ModulePageHeader';
 import { EmitirNotaFiscalDialog } from '@/components/orders/EmitirNotaFiscalDialog';
-import OrderForm from '@/components/orders/OrderForm';
 import { OrderList } from '@/components/orders/OrderList';
 import { OrderStats, type PedidoCardFilterKey } from '@/components/orders/OrderStats';
 import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
@@ -47,14 +46,16 @@ import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
-import { CreatePedidoDto, FiltrosPedidos, Pedido, StatusPedido, TipoPedido } from '@/types/pedido';
+import { FiltrosPedidos, Pedido, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export default function Pedidos() {
+  const navigate = useNavigate();
   const {
     orders,
     totalOrders,
@@ -64,32 +65,23 @@ export default function Pedidos() {
     setItemsPerPage,
     filters,
     isLoading,
-    isFormOpen,
     isViewDialogOpen,
     isCancelDialogOpen,
     selectedOrder,
-    selectedOrderForEdit,
     orderToCancel,
     clientes,
     fornecedores,
     produtos,
     transportadoras,
-    isCreating,
-    isUpdating,
     isCanceling,
     updatingStatusId,
     handleStatusChange,
     setCurrentPage,
     updateFilters,
     clearFilters,
-    openCreateForm,
-    openEditForm,
     openViewDialog,
     openCancelDialog,
-    createOrder,
-    updateOrder,
     cancelOrder,
-    closeForm,
     closeViewDialog,
     closeCancelDialog,
   } = useOrders();
@@ -572,14 +564,6 @@ export default function Pedidos() {
     setNotaFiscalDialogOpen(true);
   };
 
-  const handleOrderSubmit = (data: CreatePedidoDto) => {
-    if (selectedOrder) {
-      updateOrder(selectedOrder.id, data);
-    } else {
-      createOrder(data);
-    }
-  };
-
   return (
     <AppLayout>
       <div className="w-full min-w-0 p-3 sm:p-4 md:p-6 pb-8 gap-3 sm:gap-4 md:gap-5 flex flex-col">
@@ -598,7 +582,7 @@ export default function Pedidos() {
                 Relatórios
               </Button>
               <Button
-                onClick={openCreateForm}
+                onClick={() => navigate('/pedidos/novo')}
                 variant="gradient"
                 className="gap-2 shadow-sm flex-1 sm:flex-none"
               >
@@ -905,7 +889,7 @@ export default function Pedidos() {
               orders={orders}
               isLoading={isLoading}
               onView={openViewDialog}
-              onEdit={openEditForm}
+              onEdit={(order) => navigate(`/pedidos/${order.id}/editar`)}
               onCancel={handleOpenDeleteDialog}
               onReport={abrirDialogRelatorioIndividual}
               onEmitNotaFiscal={handleOpenNotaFiscal}
@@ -1241,19 +1225,6 @@ export default function Pedidos() {
             />
           </RelatorioModalShell>
         </Dialog>
-
-        {/* Modal de Formulário */}
-        <OrderForm
-          isOpen={isFormOpen}
-          onClose={closeForm}
-          onSubmit={handleOrderSubmit}
-          order={selectedOrderForEdit}
-          isPending={isCreating || isUpdating}
-          clientes={clientes}
-          fornecedores={fornecedores}
-          produtos={produtos}
-          transportadoras={transportadoras}
-        />
 
         {/* Modal de Visualização */}
         <OrderViewDialog
