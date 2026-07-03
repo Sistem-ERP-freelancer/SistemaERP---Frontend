@@ -327,8 +327,8 @@ const NovaTransacao = () => {
 
   return (
     <AppLayout>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-to-b from-muted/30 via-background to-background">
-        <div className="z-20 shrink-0 border-b border-border/60 bg-background/90 backdrop-blur-md">
+      <div className="min-w-0 bg-gradient-to-b from-muted/30 via-background to-background">
+        <div className="border-b border-border/60 bg-background/90 backdrop-blur-md">
           <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <Button
@@ -380,9 +380,8 @@ const NovaTransacao = () => {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-          <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => selecionarModo("RECEBER")}
@@ -957,7 +956,6 @@ const NovaTransacao = () => {
                 </p>
               </aside>
             </div>
-          </div>
         </div>
       </div>
     </AppLayout>
