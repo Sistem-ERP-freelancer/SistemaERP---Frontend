@@ -45,8 +45,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import type { ReactNode, RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -112,12 +112,106 @@ const initialForm = (): NovaTransacaoForm => ({
   centro_custo_tipo_id: undefined,
 });
 
+function useSmoothStickySidebar(
+  scrollRef: RefObject<HTMLDivElement | null>,
+  asideRef: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  resetDeps: unknown[] = [],
+) {
+  useEffect(() => {
+    if (!enabled) return;
+
+    const scrollEl = scrollRef.current;
+    const asideEl = asideRef.current;
+    if (!scrollEl || !asideEl) return;
+
+    const offset = 24;
+    const ease = 0.14;
+    let currentY = 0;
+    let raf = 0;
+    let ticking = false;
+
+    const getMetrics = () => {
+      const grid = asideEl.parentElement;
+      const formCol = grid?.firstElementChild as HTMLElement | null;
+      if (!formCol) return null;
+      return {
+        cellTop: asideEl.offsetTop,
+        maxY: Math.max(0, formCol.offsetHeight - asideEl.offsetHeight),
+      };
+    };
+
+    const apply = () => {
+      const metrics = getMetrics();
+      if (!metrics) {
+        ticking = false;
+        return;
+      }
+
+      const target = Math.min(
+        Math.max(0, scrollEl.scrollTop + offset - metrics.cellTop),
+        metrics.maxY,
+      );
+
+      currentY += (target - currentY) * ease;
+      if (Math.abs(target - currentY) < 0.25) currentY = target;
+
+      asideEl.style.transform =
+        currentY > 0.01
+          ? `translate3d(0, ${Math.round(currentY * 100) / 100}px, 0)`
+          : "none";
+
+      if (Math.abs(target - currentY) > 0.25) {
+        raf = requestAnimationFrame(apply);
+      } else {
+        ticking = false;
+      }
+    };
+
+    const schedule = () => {
+      if (!ticking) {
+        ticking = true;
+        raf = requestAnimationFrame(apply);
+      }
+    };
+
+    const onResize = () => {
+      currentY = 0;
+      schedule();
+    };
+
+    scrollEl.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", onResize);
+    schedule();
+
+    return () => {
+      scrollEl.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", onResize);
+      cancelAnimationFrame(raf);
+      asideEl.style.transform = "none";
+    };
+  }, [scrollRef, asideRef, enabled, ...resetDeps]);
+}
+
 const NovaTransacao = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<ModoLancamento>("RECEBER");
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const resumoRef = useRef<HTMLElement>(null);
+  const [stickyResumoAtivo, setStickyResumoAtivo] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setStickyResumoAtivo(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useSmoothStickySidebar(scrollRef, resumoRef, stickyResumoAtivo, [modo]);
 
   const { data: clientesData } = useQuery({
     queryKey: ["clientes"],
@@ -380,7 +474,7 @@ const NovaTransacao = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-smooth overscroll-y-contain">
           <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
@@ -454,7 +548,7 @@ const NovaTransacao = () => {
               </button>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
+            <div className="grid items-start gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
               <div className="space-y-6">
                 <FormSection
                   icon={FileText}
@@ -843,8 +937,11 @@ const NovaTransacao = () => {
                 </FormSection>
               </div>
 
-              <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
-                <Card className="overflow-hidden border-border/60 shadow-md">
+              <aside
+                ref={resumoRef}
+                className="space-y-4 lg:will-change-transform motion-reduce:transform-none"
+              >
+                <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
                   <div
                     className={cn(
                       "px-5 py-4 text-white",
