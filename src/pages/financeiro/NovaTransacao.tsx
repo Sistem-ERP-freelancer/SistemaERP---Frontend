@@ -45,8 +45,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -99,6 +99,99 @@ function FormSection({
       </CardHeader>
       <CardContent className="space-y-4 pt-6">{children}</CardContent>
     </Card>
+  );
+}
+
+/** Mantém o painel de resumo visível ao rolar (desktop). */
+function ResumoScrollFollower({
+  children,
+  topOffset = 80,
+}: {
+  children: ReactNode;
+  topOffset?: number;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const [spacerHeight, setSpacerHeight] = useState(0);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+
+    const update = () => {
+      const anchor = anchorRef.current;
+      const panel = panelRef.current;
+      if (!anchor || !panel || !mq.matches) {
+        setPanelStyle({});
+        setSpacerHeight(0);
+        return;
+      }
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const panelHeight = panel.offsetHeight;
+      const panelWidth = anchor.offsetWidth;
+
+      if (anchorRect.top > topOffset) {
+        setPanelStyle({});
+        setSpacerHeight(0);
+        return;
+      }
+
+      const bottomLimit = anchorRect.bottom - panelHeight;
+      const top = Math.min(topOffset, bottomLimit);
+
+      setSpacerHeight(panelHeight);
+
+      if (bottomLimit <= topOffset) {
+        setPanelStyle({
+          position: "fixed",
+          top: bottomLimit,
+          left: anchorRect.left,
+          width: panelWidth,
+          zIndex: 30,
+        });
+        return;
+      }
+
+      setPanelStyle({
+        position: "fixed",
+        top,
+        left: anchorRect.left,
+        width: panelWidth,
+        zIndex: 30,
+      });
+    };
+
+    const onScroll = () => requestAnimationFrame(update);
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => requestAnimationFrame(update))
+        : null;
+
+    mq.addEventListener("change", update);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", update);
+    if (panelRef.current && ro) ro.observe(panelRef.current);
+    if (anchorRef.current && ro) ro.observe(anchorRef.current);
+    update();
+
+    return () => {
+      mq.removeEventListener("change", update);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", update);
+      ro?.disconnect();
+    };
+  }, [topOffset]);
+
+  return (
+    <div ref={anchorRef} className="relative w-full">
+      {spacerHeight > 0 ? (
+        <div style={{ height: spacerHeight }} aria-hidden="true" className="hidden lg:block" />
+      ) : null}
+      <div ref={panelRef} style={panelStyle} className="space-y-4">
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -453,8 +546,8 @@ const NovaTransacao = () => {
               </button>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
-              <div className="space-y-6 min-w-0">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
+              <div className="min-w-0 flex-1 space-y-6">
                 <FormSection
                   icon={FileText}
                   title="Informações básicas"
@@ -842,8 +935,8 @@ const NovaTransacao = () => {
                 </FormSection>
               </div>
 
-              <aside className="min-w-0">
-                <div className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto">
+              <aside className="w-full shrink-0 lg:w-[280px] xl:w-[320px]">
+                <ResumoScrollFollower>
                   <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
                   <div
                     className={cn(
@@ -955,7 +1048,7 @@ const NovaTransacao = () => {
                   Campos marcados com * são obrigatórios. Use o menu lateral para navegar entre
                   outras áreas do sistema a qualquer momento.
                 </p>
-                </div>
+                </ResumoScrollFollower>
               </aside>
             </div>
         </div>
