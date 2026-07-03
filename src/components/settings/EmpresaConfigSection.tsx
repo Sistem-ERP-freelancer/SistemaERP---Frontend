@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { formatCEP, formatTelefone, telefoneArmazenadoParaCampo } from '@/lib/validators';
+import { formatCEP, formatDocument, formatTelefone, telefoneArmazenadoParaCampo } from '@/lib/validators';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
 import { cepService } from '@/services/cep.service';
 import { ConsultaCnpjResponse } from '@/services/cnpj.service';
@@ -144,10 +144,18 @@ export function EmpresaConfigSection({
 
   const disabled = !canEdit || saving;
 
+  const docEmitente = (form.cnpj || '').replace(/\D/g, '');
+  const emitenteCpf = docEmitente.length === 11;
+  const emitenteCnpj = docEmitente.length === 14;
+
   const validarFormularioEmpresa = (): string | null => {
     if (!form.nome?.trim()) return 'Informe a razão social.';
     if (!form.nomeFantasia?.trim()) return 'Informe o nome fantasia.';
-    if (!form.cnpj?.replace(/\D/g, '')) return 'Informe o CNPJ.';
+    const doc = form.cnpj?.replace(/\D/g, '') || '';
+    if (!doc) return 'Informe o CPF ou CNPJ.';
+    if (doc.length !== 11 && doc.length !== 14) {
+      return 'CPF deve ter 11 dígitos ou CNPJ 14 dígitos.';
+    }
     if (!form.cep?.replace(/\D/g, '')) return 'Informe o CEP.';
     if (!form.logradouro?.trim()) return 'Informe o logradouro.';
     if (!form.numero?.trim()) return 'Informe o número.';
@@ -336,8 +344,25 @@ export function EmpresaConfigSection({
             />
           </div>
           <div className="space-y-2">
-            <Label>CNPJ</Label>
-            {canEdit ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Label>CPF/CNPJ</Label>
+              {emitenteCpf && (
+                <Badge variant="secondary" className="text-xs font-normal">
+                  Pessoa física
+                </Badge>
+              )}
+              {emitenteCnpj && (
+                <Badge variant="secondary" className="text-xs font-normal">
+                  Pessoa jurídica
+                </Badge>
+              )}
+              {emitenteCpf && form.inscricaoEstadual?.replace(/\D/g, '') && (
+                <Badge variant="outline" className="text-xs font-normal">
+                  Produtor rural / PF com IE
+                </Badge>
+              )}
+            </div>
+            {canEdit && emitenteCnpj ? (
               <CampoCnpjComConsulta
                 value={form.cnpj || ''}
                 onChange={(v) => setField('cnpj', v)}
@@ -345,16 +370,28 @@ export function EmpresaConfigSection({
                 tipoConsulta="geral"
               />
             ) : (
-              <Input value={form.cnpj || '—'} disabled />
+              <Input
+                value={form.cnpj || ''}
+                onChange={(e) => setField('cnpj', formatDocument(e.target.value))}
+                disabled={disabled}
+                placeholder="000.000.000-00 ou 00.000.000/0000-00"
+              />
             )}
           </div>
           <div className="space-y-2">
-            <Label>Inscrição estadual (IE)</Label>
+            <Label>Inscrição estadual (IE) do emitente</Label>
             <Input
               value={form.inscricaoEstadual}
               onChange={(e) => setField('inscricaoEstadual', e.target.value)}
               disabled={disabled}
+              placeholder="Obrigatória para emitir NF-e"
             />
+            <p className="text-xs text-muted-foreground">
+              Enviada à Spedy como stateTaxNumber. A SEFAZ exige IE válida do emitente
+              (CPF ou CNPJ) para autorizar NF-e de produto.
+              {emitenteCpf &&
+                ' Produtores rurais e pessoa física com IE usam o mesmo endpoint product-invoices.'}
+            </p>
           </div>
           <div className="space-y-2">
             <Label>CNAE</Label>
@@ -610,7 +647,8 @@ export function EmpresaConfigSection({
                   <p className="text-sm font-medium">Ativar emissão de NF-e na Spedy</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Cadastra automaticamente o emissor (POST /companies), habilita NF-e de
-                    produto e grava a API Key desta empresa. Em homologação o certificado é
+                    produto e grava a API Key desta empresa. Para CPF, habilita
+                    allowNaturalPersonCompany antes do cadastro. Em homologação o certificado é
                     opcional; em produção é obrigatório.
                   </p>
                 </div>
@@ -656,8 +694,8 @@ export function EmpresaConfigSection({
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {form.spedyAmbiente === 'producao'
-                      ? 'Obrigatório em produção.'
-                      : 'Opcional em homologação (notas podem ficar rejeitadas sem certificado válido).'}
+                      ? `Obrigatório em produção. Use certificado ${emitenteCpf ? 'e-CPF' : 'e-CNPJ'} do emitente.`
+                      : `Opcional em homologação (notas podem ficar rejeitadas sem certificado válido). Use ${emitenteCpf ? 'e-CPF' : 'e-CNPJ'} quando informado.`}
                   </p>
                 </div>
                 <div className="space-y-2">
