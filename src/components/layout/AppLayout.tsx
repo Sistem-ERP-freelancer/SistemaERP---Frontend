@@ -430,7 +430,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </header>
 
-        <div className="min-w-0 flex-1 flex flex-col">{children}</div>
+        <div className="min-w-0 min-h-0 flex flex-1 flex-col">{children}</div>
       </main>
     </div>
   );
