@@ -453,8 +453,8 @@ const NovaTransacao = () => {
               </button>
             </div>
 
-            <div className="grid items-start gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
-              <div className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_320px]">
+              <div className="space-y-6 min-w-0">
                 <FormSection
                   icon={FileText}
                   title="Informações básicas"
@@ -842,8 +842,9 @@ const NovaTransacao = () => {
                 </FormSection>
               </div>
 
-              <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-                <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
+              <aside className="min-w-0">
+                <div className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto">
+                  <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
                   <div
                     className={cn(
                       "px-5 py-4 text-white",
@@ -954,6 +955,7 @@ const NovaTransacao = () => {
                   Campos marcados com * são obrigatórios. Use o menu lateral para navegar entre
                   outras áreas do sistema a qualquer momento.
                 </p>
+                </div>
               </aside>
             </div>
         </div>
