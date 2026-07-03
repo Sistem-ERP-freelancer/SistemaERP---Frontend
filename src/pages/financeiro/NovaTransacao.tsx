@@ -297,6 +297,7 @@ const NovaTransacao = () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-unificado-financeiro"] });
       queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
       toast.success("Transação registrada com sucesso!");
       navigate("/financeiro");
@@ -374,6 +375,7 @@ const NovaTransacao = () => {
         queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-unificado-financeiro"] });
         toast.success("Despesa de centro de custo registrada com sucesso!");
         navigate("/financeiro");
       } catch (error: unknown) {

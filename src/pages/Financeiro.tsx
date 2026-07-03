@@ -901,10 +901,17 @@ const Financeiro = () => {
       const categoria = String(t.categoria || "").toLowerCase();
       if (secaoTipoFilter === "contas_receber") return t.tipo === "Receita";
       if (secaoTipoFilter === "despesas") {
-        return t.tipo === "Despesa" && categoria.includes("despesa");
+        return (
+          t.tipo === "Despesa" &&
+          (categoria.includes("centro de custo") || categoria.includes("despesa"))
+        );
       }
       if (secaoTipoFilter === "contas_pagar") {
-        return t.tipo === "Despesa" && !categoria.includes("despesa");
+        return (
+          t.tipo === "Despesa" &&
+          !categoria.includes("centro de custo") &&
+          !categoria.includes("despesa")
+        );
       }
       return true;
     });
