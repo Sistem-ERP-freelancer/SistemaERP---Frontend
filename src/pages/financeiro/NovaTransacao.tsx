@@ -137,25 +137,15 @@ function ResumoScrollFollower({
         return;
       }
 
-      const bottomLimit = anchorRect.bottom - panelHeight;
-      const top = Math.min(topOffset, bottomLimit);
-
       setSpacerHeight(panelHeight);
 
-      if (bottomLimit <= topOffset) {
-        setPanelStyle({
-          position: "fixed",
-          top: bottomLimit,
-          left: anchorRect.left,
-          width: panelWidth,
-          zIndex: 30,
-        });
-        return;
-      }
+      const bottomLimit = anchorRect.bottom - panelHeight;
+      const fixedTop =
+        bottomLimit < topOffset ? bottomLimit : topOffset;
 
       setPanelStyle({
         position: "fixed",
-        top,
+        top: fixedTop,
         left: anchorRect.left,
         width: panelWidth,
         zIndex: 30,
@@ -169,7 +159,7 @@ function ResumoScrollFollower({
         : null;
 
     mq.addEventListener("change", update);
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
     window.addEventListener("resize", update);
     if (panelRef.current && ro) ro.observe(panelRef.current);
     if (anchorRef.current && ro) ro.observe(anchorRef.current);
@@ -177,14 +167,14 @@ function ResumoScrollFollower({
 
     return () => {
       mq.removeEventListener("change", update);
-      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScroll, { capture: true });
       window.removeEventListener("resize", update);
       ro?.disconnect();
     };
   }, [topOffset]);
 
   return (
-    <div ref={anchorRef} className="relative w-full">
+    <div ref={anchorRef} className="relative h-full w-full lg:min-h-full">
       {spacerHeight > 0 ? (
         <div style={{ height: spacerHeight }} aria-hidden="true" className="hidden lg:block" />
       ) : null}
@@ -547,7 +537,7 @@ const NovaTransacao = () => {
             </div>
 
             <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
-              <div className="min-w-0 flex-1 space-y-6">
+              <div className="min-w-0 flex-1 space-y-6 pb-8">
                 <FormSection
                   icon={FileText}
                   title="Informações básicas"
@@ -935,7 +925,7 @@ const NovaTransacao = () => {
                 </FormSection>
               </div>
 
-              <aside className="w-full shrink-0 lg:w-[280px] xl:w-[320px]">
+              <aside className="w-full shrink-0 lg:w-[280px] lg:self-stretch xl:w-[320px]">
                 <ResumoScrollFollower>
                   <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
                   <div
