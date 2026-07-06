@@ -1,4 +1,5 @@
 import { FormSection } from '@/components/forms/FormSection';
+import { ResumoCardSubmitButton, resumoHeaderClass } from '@/components/forms/ResumoCardSubmitButton';
 import { ResumoScrollFollower } from '@/components/forms/ResumoScrollFollower';
 import { Card, CardContent } from '@/components/ui/card';
 import { FornecedorFormStep1 } from '@/features/fornecedores/components/FornecedorFormStep1';
@@ -27,6 +28,7 @@ export interface FornecedorFormSubmitData {
 
 interface FornecedorFormProps {
   onSubmit: (data: FornecedorFormSubmitData) => void;
+  isPending?: boolean;
 }
 
 const initialFormData: FornecedorFormData = {
@@ -37,12 +39,13 @@ const initialFormData: FornecedorFormData = {
   inscricao_estadual: '',
 };
 
-export default function FornecedorForm({ onSubmit }: FornecedorFormProps) {
+export default function FornecedorForm({ onSubmit, isPending = false }: FornecedorFormProps) {
   const [formData, setFormData] = useState<FornecedorFormData>(initialFormData);
   const [enderecos, setEnderecos] = useState<EnderecoFormData[]>([]);
   const [contatos, setContatos] = useState<ContatoFormData[]>([]);
 
   const tipo = formData.tipoFornecedor || 'PESSOA_JURIDICA';
+  const statusAtivo = (formData.statusFornecedor || 'ATIVO') === 'ATIVO';
   const nomeExibicao = useMemo(
     () => formData.nome_fantasia?.trim() || '—',
     [formData.nome_fantasia],
@@ -143,14 +146,7 @@ export default function FornecedorForm({ onSubmit }: FornecedorFormProps) {
         <aside className="w-full shrink-0 lg:w-[280px] lg:self-stretch xl:w-[320px]">
           <ResumoScrollFollower>
             <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
-              <div
-                className={cn(
-                  'px-5 py-4 text-white',
-                  tipo === 'PESSOA_JURIDICA'
-                    ? 'bg-gradient-to-br from-blue-600 to-blue-700'
-                    : 'bg-gradient-to-br from-emerald-600 to-emerald-700',
-                )}
-              >
+              <div className={cn('px-5 py-4 text-white', resumoHeaderClass(statusAtivo))}>
                 <p className="text-xs font-medium uppercase tracking-wider opacity-90">Resumo</p>
                 <p className="mt-1 text-lg font-semibold">
                   {tipo === 'PESSOA_JURIDICA' ? 'Pessoa Jurídica' : 'Pessoa Física'}
@@ -178,6 +174,11 @@ export default function FornecedorForm({ onSubmit }: FornecedorFormProps) {
                     <span className="font-medium">{contatos.length}</span>
                   </div>
                 </div>
+                <ResumoCardSubmitButton
+                  label="Criar Fornecedor"
+                  pendingLabel="Cadastrando..."
+                  isPending={isPending}
+                />
               </CardContent>
             </Card>
             <p className="px-1 text-xs leading-relaxed text-muted-foreground">

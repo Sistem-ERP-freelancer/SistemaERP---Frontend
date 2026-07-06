@@ -1,4 +1,5 @@
 import { FormSection } from '@/components/forms/FormSection';
+import { ResumoCardSubmitButton, resumoHeaderClass } from '@/components/forms/ResumoCardSubmitButton';
 import { ResumoScrollFollower } from '@/components/forms/ResumoScrollFollower';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -69,9 +70,15 @@ interface ProdutoFormProps {
   categorias: Categoria[];
   fornecedores: Fornecedor[];
   onSubmit: (data: ProdutoFormData) => void;
+  isPending?: boolean;
 }
 
-export default function ProdutoForm({ categorias, fornecedores, onSubmit }: ProdutoFormProps) {
+export default function ProdutoForm({
+  categorias,
+  fornecedores,
+  onSubmit,
+  isPending = false,
+}: ProdutoFormProps) {
   const [form, setForm] = useState<ProdutoFormData>(initialForm);
   const [fornecedorPopoverOpen, setFornecedorPopoverOpen] = useState(false);
   const [fornecedorSearchTerm, setFornecedorSearchTerm] = useState('');
@@ -79,6 +86,7 @@ export default function ProdutoForm({ categorias, fornecedores, onSubmit }: Prod
   const patch = (data: Partial<ProdutoFormData>) => setForm((prev) => ({ ...prev, ...data }));
 
   const status = form.statusProduto || 'ATIVO';
+  const statusAtivo = status === 'ATIVO';
   const categoriaNome = useMemo(
     () => categorias.find((c) => c.id === form.categoriaId)?.nome || '—',
     [categorias, form.categoriaId],
@@ -518,14 +526,7 @@ export default function ProdutoForm({ categorias, fornecedores, onSubmit }: Prod
         <aside className="w-full shrink-0 lg:w-[280px] lg:self-stretch xl:w-[320px]">
           <ResumoScrollFollower>
             <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
-              <div
-                className={cn(
-                  'px-5 py-4 text-white',
-                  status === 'ATIVO'
-                    ? 'bg-gradient-to-br from-emerald-600 to-emerald-700'
-                    : 'bg-gradient-to-br from-slate-600 to-slate-700',
-                )}
-              >
+              <div className={cn('px-5 py-4 text-white', resumoHeaderClass(statusAtivo))}>
                 <p className="text-xs font-medium uppercase tracking-wider opacity-90">Resumo</p>
                 <p className="mt-1 text-lg font-semibold">{status === 'ATIVO' ? 'Ativo' : 'Inativo'}</p>
                 <p className="mt-3 truncate text-xl font-bold tracking-tight">
@@ -561,6 +562,11 @@ export default function ProdutoForm({ categorias, fornecedores, onSubmit }: Prod
                     </span>
                   </div>
                 </div>
+                <ResumoCardSubmitButton
+                  label="Criar Produto"
+                  pendingLabel="Cadastrando..."
+                  isPending={isPending}
+                />
               </CardContent>
             </Card>
             <p className="px-1 text-xs leading-relaxed text-muted-foreground">

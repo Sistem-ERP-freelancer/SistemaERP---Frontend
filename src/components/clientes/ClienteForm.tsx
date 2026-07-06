@@ -1,4 +1,5 @@
 import { FormSection } from '@/components/forms/FormSection';
+import { ResumoCardSubmitButton, resumoHeaderClass } from '@/components/forms/ResumoCardSubmitButton';
 import { ResumoScrollFollower } from '@/components/forms/ResumoScrollFollower';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -50,6 +51,7 @@ export default function ClienteForm({ onSubmit, isPending = false }: ClienteForm
   const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
 
   const tipo = formData.tipoPessoa || 'PESSOA_FISICA';
+  const statusAtivo = (formData.statusCliente || 'ATIVO') === 'ATIVO';
   const nomeExibicao = useMemo(() => {
     if (tipo === 'PESSOA_JURIDICA') {
       return formData.nome_fantasia?.trim() || formData.nome_razao?.trim() || '—';
@@ -181,14 +183,7 @@ export default function ClienteForm({ onSubmit, isPending = false }: ClienteForm
         <aside className="w-full shrink-0 lg:w-[280px] lg:self-stretch xl:w-[320px]">
           <ResumoScrollFollower>
             <Card className="overflow-hidden border-border/60 shadow-md transition-shadow duration-300 hover:shadow-lg">
-              <div
-                className={cn(
-                  'px-5 py-4 text-white',
-                  tipo === 'PESSOA_JURIDICA'
-                    ? 'bg-gradient-to-br from-blue-600 to-blue-700'
-                    : 'bg-gradient-to-br from-emerald-600 to-emerald-700',
-                )}
-              >
+              <div className={cn('px-5 py-4 text-white', resumoHeaderClass(statusAtivo))}>
                 <p className="text-xs font-medium uppercase tracking-wider opacity-90">Resumo</p>
                 <p className="mt-1 text-lg font-semibold">
                   {tipo === 'PESSOA_JURIDICA' ? 'Pessoa Jurídica' : 'Pessoa Física'}
@@ -228,6 +223,11 @@ export default function ClienteForm({ onSubmit, isPending = false }: ClienteForm
                     </span>
                   </div>
                 </div>
+                <ResumoCardSubmitButton
+                  label="Criar Cliente"
+                  pendingLabel="Cadastrando..."
+                  isPending={isPending}
+                />
               </CardContent>
             </Card>
             <p className="px-1 text-xs leading-relaxed text-muted-foreground">

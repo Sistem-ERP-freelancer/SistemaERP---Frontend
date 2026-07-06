@@ -1,4 +1,5 @@
 import { FormSection } from '@/components/forms/FormSection';
+import { ResumoCardSubmitButton, resumoHeaderClass } from '@/components/forms/ResumoCardSubmitButton';
 import { ResumoScrollFollower } from '@/components/forms/ResumoScrollFollower';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -1285,9 +1286,7 @@ export function OrderForm({
               <div
                 className={cn(
                   'px-5 py-4 text-white',
-                  tipo === 'VENDA'
-                    ? 'bg-gradient-to-br from-emerald-600 to-emerald-700'
-                    : 'bg-gradient-to-br from-blue-600 to-blue-700',
+                  tipo === 'VENDA' ? resumoHeaderClass(true) : 'bg-gradient-to-br from-blue-600 to-blue-700',
                 )}
               >
                 <p className="text-xs font-medium uppercase tracking-wider opacity-90">Resumo</p>
@@ -1327,25 +1326,11 @@ export function OrderForm({
                     </span>
                   </div>
                 </div>
-                {layout === 'dialog' ? (
-                  <Button
-                    type="submit"
-                    variant="gradient"
-                    className="mt-2 w-full rounded-xl"
-                    disabled={isPending}
-                  >
-                    {isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {order ? 'Atualizando...' : 'Criando...'}
-                      </>
-                    ) : order ? (
-                      'Atualizar Pedido'
-                    ) : (
-                      'Criar Pedido'
-                    )}
-                  </Button>
-                ) : null}
+                <ResumoCardSubmitButton
+                  label={order ? (layout === 'dialog' ? 'Atualizar Pedido' : 'Salvar Pedido') : 'Criar Pedido'}
+                  pendingLabel={order ? (layout === 'dialog' ? 'Atualizando...' : 'Salvando...') : 'Criando...'}
+                  isPending={isPending}
+                />
               </CardContent>
             </Card>
             <p className="px-1 text-xs leading-relaxed text-muted-foreground">
