@@ -7,8 +7,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -36,10 +45,11 @@ import {
   ArrowLeft,
   Calendar,
   CalendarClock,
+  Check,
+  ChevronsUpDown,
   CreditCard,
   FileText,
   Info,
-  Layers,
   Loader2,
   ShoppingCart,
   TrendingDown,
@@ -52,7 +62,6 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 type ModoLancamento = "RECEBER" | "PAGAR";
-type TipoDespesa = "AVULSA" | "CENTRO_CUSTO";
 
 type NovaTransacaoForm = CreateContaFinanceiraDto & {
   data_emissao: string;
@@ -202,8 +211,8 @@ const NovaTransacao = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<ModoLancamento>("RECEBER");
-  const [tipoDespesa, setTipoDespesa] = useState<TipoDespesa>("AVULSA");
   const [previsao, setPrevisao] = useState(false);
+  const [centroCustoPopOpen, setCentroCustoPopOpen] = useState(false);
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
 
@@ -334,56 +343,38 @@ const NovaTransacao = () => {
 
   const ehReceita = modo === "RECEBER";
   const ehDespesa = modo === "PAGAR";
-  const ehCentroCusto = ehDespesa && tipoDespesa === "CENTRO_CUSTO";
+  const temCentroCusto =
+    ehDespesa &&
+    form.centro_custo_tipo_id != null &&
+    form.centro_custo_tipo_id > 0;
   const salvando = createContaMutation.isPending || salvandoDespesaCc;
 
   const selecionarModo = (novoModo: ModoLancamento) => {
     setModo(novoModo);
     if (novoModo === "RECEBER") {
-      setTipoDespesa("AVULSA");
+      setPrevisao(false);
     }
     setForm((prev) => ({
       ...prev,
       tipo: novoModo === "RECEBER" ? "RECEBER" : "PAGAR",
-      centro_custo_tipo_id:
-        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
-          ? prev.centro_custo_tipo_id
-          : undefined,
+      centro_custo_tipo_id: novoModo === "PAGAR" ? prev.centro_custo_tipo_id : undefined,
       cliente_id: novoModo === "PAGAR" ? undefined : prev.cliente_id,
-      pedido_id:
-        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
-          ? undefined
-          : prev.pedido_id,
-      forma_pagamento:
-        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
-          ? undefined
-          : prev.forma_pagamento,
-      data_pagamento:
-        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
-          ? undefined
-          : prev.data_pagamento,
     }));
   };
 
-  const selecionarTipoDespesa = (novoTipo: TipoDespesa) => {
-    if (novoTipo === "CENTRO_CUSTO") {
+  const selecionarCentroCustoTipo = (tipoId: number | undefined) => {
+    if (tipoId != null) {
       setPrevisao(false);
     }
-    setTipoDespesa(novoTipo);
     setForm((prev) => ({
       ...prev,
-      tipo: "PAGAR",
-      centro_custo_tipo_id:
-        novoTipo === "CENTRO_CUSTO" ? prev.centro_custo_tipo_id : undefined,
-      cliente_id: undefined,
-      pedido_id: novoTipo === "CENTRO_CUSTO" ? undefined : prev.pedido_id,
-      forma_pagamento: novoTipo === "CENTRO_CUSTO" ? undefined : prev.forma_pagamento,
-      data_pagamento: novoTipo === "CENTRO_CUSTO" ? undefined : prev.data_pagamento,
+      centro_custo_tipo_id: tipoId,
     }));
+    setCentroCustoPopOpen(false);
   };
 
   const handleSubmit = async () => {
-    if (ehCentroCusto) {
+    if (temCentroCusto) {
       if (!form.descricao || !form.valor_original || !form.data_emissao) {
         toast.error("Preencha os campos obrigatórios (Descrição, Valor e Data de Emissão)");
         return;
@@ -579,48 +570,7 @@ const NovaTransacao = () => {
               </button>
             </div>
 
-            {ehDespesa ? (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => selecionarTipoDespesa("AVULSA")}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition-all",
-                    tipoDespesa === "AVULSA"
-                      ? "border-rose-400/60 bg-rose-500/5 font-medium text-foreground shadow-sm"
-                      : "border-border/60 bg-card text-muted-foreground hover:border-rose-400/30 hover:bg-rose-500/5",
-                  )}
-                >
-                  <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>
-                    <span className="block font-semibold">Conta avulsa</span>
-                    <span className="text-xs font-normal opacity-80">
-                      Despesa geral a pagar
-                    </span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selecionarTipoDespesa("CENTRO_CUSTO")}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition-all",
-                    tipoDespesa === "CENTRO_CUSTO"
-                      ? "border-amber-500/60 bg-amber-500/10 font-medium text-foreground shadow-sm"
-                      : "border-border/60 bg-card text-muted-foreground hover:border-amber-500/30 hover:bg-amber-500/5",
-                  )}
-                >
-                  <Layers className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>
-                    <span className="block font-semibold">Centro de custo</span>
-                    <span className="text-xs font-normal opacity-80">
-                      Despesa vinculada à roça
-                    </span>
-                  </span>
-                </button>
-              </div>
-            ) : null}
-
-            {!ehCentroCusto ? (
+            {ehDespesa && !temCentroCusto ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
@@ -689,109 +639,94 @@ const NovaTransacao = () => {
                 </FormSection>
 
                 <FormSection
-                  icon={ehCentroCusto ? Layers : ShoppingCart}
-                  title={ehCentroCusto ? "Centro de custo" : "Relacionamentos"}
+                  icon={ShoppingCart}
+                  title="Relacionamentos"
                   description={
-                    ehCentroCusto
-                      ? "Selecione o tipo de despesa cadastrado e a roça. O lançamento aparece em Centro de Custos e em Contas a pagar."
+                    ehDespesa
+                      ? "Vincule fornecedor, pedido, roça ou centro de custo quando aplicável."
                       : "Vincule cliente, fornecedor, pedido ou roça quando aplicável."
                   }
                 >
-                  {ehCentroCusto ? (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {ehDespesa ? (
                       <div className="space-y-2 sm:col-span-2">
-                        <Label>Tipo de despesa *</Label>
-                        <Select
-                          value={
-                            form.centro_custo_tipo_id != null
-                              ? String(form.centro_custo_tipo_id)
-                              : "none"
-                          }
-                          onValueChange={(value) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              centro_custo_tipo_id:
-                                value && value !== "none" ? Number(value) : undefined,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Selecione o tipo de despesa" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none" disabled>
-                              Selecione um tipo
-                            </SelectItem>
-                            {tiposDespesaLista.map((tipo) => (
-                              <SelectItem key={tipo.id} value={String(tipo.id)}>
-                                {tipo.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Label>Centro de custo</Label>
+                        <Popover open={centroCustoPopOpen} onOpenChange={setCentroCustoPopOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              role="combobox"
+                              className="h-11 w-full justify-between rounded-xl font-normal"
+                            >
+                              <span className="truncate">
+                                {form.centro_custo_tipo_id != null
+                                  ? (tiposDespesaLista.find(
+                                      (t) => t.id === form.centro_custo_tipo_id,
+                                    )?.nome ?? "Selecione…")
+                                  : "Buscar ou selecionar tipo…"}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-[var(--radix-popover-trigger-width)] p-0"
+                            align="start"
+                          >
+                            <Command>
+                              <CommandInput placeholder="Pesquisar tipo…" />
+                              <CommandList>
+                                <CommandEmpty>Nenhum tipo encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="nenhum"
+                                    onSelect={() => selecionarCentroCustoTipo(undefined)}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        form.centro_custo_tipo_id == null
+                                          ? "opacity-100"
+                                          : "opacity-0",
+                                      )}
+                                    />
+                                    Nenhum
+                                  </CommandItem>
+                                  {tiposDespesaLista.map((tipo) => (
+                                    <CommandItem
+                                      key={tipo.id}
+                                      value={tipo.nome}
+                                      onSelect={() => selecionarCentroCustoTipo(tipo.id)}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          form.centro_custo_tipo_id === tipo.id
+                                            ? "opacity-100"
+                                            : "opacity-0",
+                                        )}
+                                      />
+                                      {tipo.nome}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                         {tiposDespesaLista.length === 0 ? (
                           <p className="text-xs text-amber-600 dark:text-amber-400">
                             Nenhum tipo cadastrado. Cadastre em Centro de Custos → Tipos.
                           </p>
-                        ) : null}
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Opcional. Se selecionar, informe também a roça — a despesa entra em
+                            Centro de Custos e Contas a pagar.
+                          </p>
+                        )}
                       </div>
-                      <div className="space-y-2">
-                        <Label>Roça *</Label>
-                        <Select
-                          value={form.roca_id != null ? String(form.roca_id) : "none"}
-                          onValueChange={(value) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              roca_id:
-                                value && value !== "none" ? Number(value) : undefined,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Selecione a roça" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhuma</SelectItem>
-                            {rocasLista
-                              .filter((r) => r.ativo !== false)
-                              .map((roca) => (
-                                <SelectItem key={roca.id} value={String(roca.id)}>
-                                  {roca.nome}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Fornecedor</Label>
-                        <Select
-                          value={
-                            form.fornecedor_id != null ? String(form.fornecedor_id) : "none"
-                          }
-                          onValueChange={(value) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              fornecedor_id:
-                                value && value !== "none" ? Number(value) : undefined,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Selecione um fornecedor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhum</SelectItem>
-                            {fornecedores.map((fornecedor) => (
-                              <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                                {fornecedor.nome_fantasia}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    ) : null}
+                    {!ehDespesa ? (
                     <div className="space-y-2">
                       <Label>Cliente</Label>
                       <Select
@@ -817,6 +752,7 @@ const NovaTransacao = () => {
                         </SelectContent>
                       </Select>
                     </div>
+                    ) : null}
                     <div className="space-y-2">
                       <Label>Fornecedor</Label>
                       <Select
@@ -883,7 +819,7 @@ const NovaTransacao = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Roça</Label>
+                      <Label>Roça{temCentroCusto ? " *" : ""}</Label>
                       <Select
                         value={form.roca_id != null ? String(form.roca_id) : "none"}
                         onValueChange={(value) =>
@@ -910,14 +846,13 @@ const NovaTransacao = () => {
                       </Select>
                     </div>
                   </div>
-                  )}
                 </FormSection>
 
                 <FormSection
                   icon={Calendar}
                   title="Datas"
                   description={
-                    ehCentroCusto
+                    temCentroCusto
                       ? "Data em que a despesa foi registrada."
                       : previsao
                         ? "Data prevista e, se quiser, emissão, vencimento ou pagamento."
@@ -927,14 +862,14 @@ const NovaTransacao = () => {
                   <div
                     className={cn(
                       "grid grid-cols-1 gap-4",
-                      ehCentroCusto
+                      temCentroCusto
                         ? "sm:grid-cols-1"
                         : previsao
                           ? "sm:grid-cols-2 lg:grid-cols-4"
                           : "sm:grid-cols-3",
                     )}
                   >
-                    {!ehCentroCusto && previsao ? (
+                    {!temCentroCusto && previsao ? (
                       <div className="space-y-2">
                         <Label htmlFor="data-prevista">Data prevista *</Label>
                         <Input
@@ -953,7 +888,7 @@ const NovaTransacao = () => {
                     ) : null}
                     <div className="space-y-2">
                       <Label htmlFor="data-emissao">
-                        Data de emissão{!previsao || ehCentroCusto ? " *" : ""}
+                        Data de emissão{!previsao || temCentroCusto ? " *" : ""}
                       </Label>
                       <Input
                         id="data-emissao"
@@ -965,7 +900,7 @@ const NovaTransacao = () => {
                         }
                       />
                     </div>
-                    {!ehCentroCusto ? (
+                    {!temCentroCusto ? (
                       <>
                         <div className="space-y-2">
                           <Label htmlFor="data-vencimento">
@@ -1001,7 +936,7 @@ const NovaTransacao = () => {
                   </div>
                 </FormSection>
 
-                {!ehCentroCusto ? (
+                {!temCentroCusto ? (
                 <FormSection
                   icon={CreditCard}
                   title="Pagamento"
@@ -1068,7 +1003,7 @@ const NovaTransacao = () => {
                       "px-5 py-4 text-white",
                       ehReceita
                         ? "bg-gradient-to-br from-emerald-600 to-emerald-700"
-                        : ehCentroCusto
+                        : temCentroCusto
                           ? "bg-gradient-to-br from-amber-500 to-amber-600"
                           : "bg-gradient-to-br from-rose-600 to-rose-700",
                     )}
@@ -1079,7 +1014,7 @@ const NovaTransacao = () => {
                     <p className="mt-1 text-lg font-semibold">
                       {ehReceita
                         ? "Receita"
-                        : ehCentroCusto
+                        : temCentroCusto
                           ? "Despesa · Centro de Custo"
                           : "Despesa"}
                       {previsao ? " · Previsão" : ""}
@@ -1100,10 +1035,10 @@ const NovaTransacao = () => {
                       </div>
                       <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
                         <span className="text-muted-foreground">
-                          {ehCentroCusto ? "Emissão" : previsao ? "Data prevista" : "Vencimento"}
+                          {temCentroCusto ? "Emissão" : previsao ? "Data prevista" : "Vencimento"}
                         </span>
                         <span className="font-medium">
-                          {ehCentroCusto
+                          {temCentroCusto
                             ? form.data_emissao
                               ? new Date(form.data_emissao + "T12:00:00").toLocaleDateString(
                                   "pt-BR",
@@ -1124,7 +1059,7 @@ const NovaTransacao = () => {
                       </div>
                       {resumo.tipoDespesaNome ? (
                         <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
-                          <span className="text-muted-foreground">Tipo de despesa</span>
+                          <span className="text-muted-foreground">Centro de custo</span>
                           <span className="max-w-[55%] truncate text-right font-medium">
                             {resumo.tipoDespesaNome}
                           </span>
