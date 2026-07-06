@@ -93,6 +93,7 @@ import {
     TrendingDown,
     TrendingUp,
     Wallet,
+    CalendarClock,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -460,6 +461,39 @@ const Financeiro = () => {
   const contasReceberStats = dashboardUnificado?.contas_receber ?? resumoFinanceiro?.contas_receber;
   const contasPagarStats = dashboardUnificado?.contas_pagar ?? resumoFinanceiro?.contas_pagar;
 
+  const { data: contasPrevisaoEntrada = [] } = useQuery({
+    queryKey: [
+      "contas-financeiras",
+      "financeiro",
+      "previsao-entrada",
+      clienteFilterId,
+      fornecedorFilterId,
+      dataInicialFilter,
+      dataFinalFilter,
+    ],
+    queryFn: () =>
+      listarContasTodasAsPaginas({
+        tipo: "RECEBER",
+        status: "PREVISAO",
+        cliente_id: clienteFilterId,
+        fornecedor_id: fornecedorFilterId,
+        data_inicial: dataInicialFilter || undefined,
+        data_final: dataFinalFilter || undefined,
+      }),
+    refetchInterval: 30000,
+    retry: false,
+  });
+
+  const totalPrevisaoEntrada = useMemo(
+    () =>
+      Number(
+        contasPrevisaoEntrada
+          .reduce((s, c) => s + (Number(c.valor_original) || 0), 0)
+          .toFixed(2),
+      ),
+    [contasPrevisaoEntrada],
+  );
+
   // Buscar pedidos apenas para uso na UI (seleção de pedidos em formulários)
   // NÃO usado para cálculos financeiros - os valores vêm do resumoFinanceiro
   const { data: pedidosData } = useQuery({
@@ -699,6 +733,16 @@ const Financeiro = () => {
         cardFilter: "PAGAR" as const,
       },
       {
+        key: "previsao_entrada",
+        label: "Previsão de entrada",
+        value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+          totalPrevisaoEntrada,
+        ),
+        Icon: CalendarClock,
+        ...statTheme.violet,
+        cardFilter: "PREVISAO" as const,
+      },
+      {
         key: "saldo_atual",
         label: "Saldo Atual",
         value: new Intl.NumberFormat("pt-BR", {
@@ -712,11 +756,12 @@ const Financeiro = () => {
         cardFilter: "todos" as const,
       },
     ];
-  }, [contasReceberStats, contasPagarStats, statsFiltrados]);
+  }, [contasReceberStats, contasPagarStats, statsFiltrados, totalPrevisaoEntrada]);
 
   const statsCardItems = useMemo((): ModuleStatCardItem[] => {
     return stats.map((stat) => {
       const cardFilter = stat.cardFilter ?? "todos";
+      const isPrevisaoCard = cardFilter === "PREVISAO";
       return {
         key: stat.key,
         label: stat.label,
@@ -725,8 +770,16 @@ const Financeiro = () => {
         iconClass: stat.iconClass,
         valueClass: stat.valueClass,
         Icon: stat.Icon,
-        active: cardFilter !== "todos" && cardTipoFilter === cardFilter,
+        active: isPrevisaoCard
+          ? activeTab === "PREVISAO"
+          : cardFilter !== "todos" && cardTipoFilter === cardFilter,
         onClick: () => {
+          if (isPrevisaoCard) {
+            setActiveTab((prev) => (prev === "PREVISAO" ? "Todos" : "PREVISAO"));
+            setCardTipoFilter("RECEBER");
+            setPage(1);
+            return;
+          }
           setCardTipoFilter((prev) =>
             cardFilter !== "todos" && prev === cardFilter ? "todos" : cardFilter,
           );
@@ -734,7 +787,7 @@ const Financeiro = () => {
         },
       };
     });
-  }, [stats, cardTipoFilter]);
+  }, [stats, cardTipoFilter, activeTab]);
 
   // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -997,7 +1050,7 @@ const Financeiro = () => {
           </div>
         </div>
 
-        <ModuleStatCards columns={3} className="mb-6" items={statsCardItems} />
+        <ModuleStatCards columns={4} className="mb-6" items={statsCardItems} />
 
         {/* Filtros e busca — barra tipo Centro de Custos */}
         <div className="mb-6 rounded-2xl border border-border/60 bg-muted/40 p-3 sm:p-4 dark:bg-muted/25">
