@@ -297,7 +297,7 @@ const NovaTransacao = () => {
 
   const createContaMutation = useMutation({
     mutationFn: (data: CreateContaFinanceiraDto) => financeiroService.criar(data),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
@@ -305,7 +305,7 @@ const NovaTransacao = () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard-unificado-financeiro"] });
       queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
       toast.success("Transação registrada com sucesso!");
-      navigate("/financeiro");
+      navigate(variables.tipo === "PAGAR" ? "/contas-a-pagar" : "/contas-a-receber");
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
       toast.error(error?.response?.data?.message || "Erro ao registrar transação");
@@ -414,7 +414,7 @@ const NovaTransacao = () => {
         queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard-unificado-financeiro"] });
         toast.success("Despesa de centro de custo registrada com sucesso!");
-        navigate("/financeiro");
+        navigate("/contas-a-pagar");
       } catch (error: unknown) {
         const msg =
           (error as { response?: { data?: { message?: string } } })?.response?.data

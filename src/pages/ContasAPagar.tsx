@@ -607,7 +607,7 @@ function ContasAPagar() {
           else if (["ABERTO", "PARCIAL", "QUITADO"].includes(filtro))
             status = filtro;
           else if (
-            ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "CANCELADO"].includes(filtro)
+            ["PENDENTE", "PREVISAO", "PAGO_PARCIAL", "PAGO_TOTAL", "CANCELADO"].includes(filtro)
           )
             status = filtro;
         }
@@ -881,7 +881,7 @@ function ContasAPagar() {
     } else if (["ABERTO", "PARCIAL", "QUITADO"].includes(filtroTabOuStatus)) {
       status = filtroTabOuStatus;
     } else if (
-      ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "CANCELADO"].includes(
+      ["PENDENTE", "PREVISAO", "PAGO_PARCIAL", "PAGO_TOTAL", "CANCELADO"].includes(
         filtroTabOuStatus,
       )
     ) {

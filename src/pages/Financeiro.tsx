@@ -511,6 +511,7 @@ const Financeiro = () => {
 
   const statusTabsFinanceiro = [
     "PENDENTE",
+    "PREVISAO",
     "PAGO_PARCIAL",
     "PAGO_TOTAL",
     "VENCIDO",
@@ -610,7 +611,7 @@ const Financeiro = () => {
     queryFn: async () => {
       try {
         const tipo = tipoFiltroEfetivo;
-        const statusTabs = ["PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
+        const statusTabs = ["PENDENTE", "PREVISAO", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"];
         const status = statusTabs.includes(activeTab) ? activeTab : undefined;
 
         const response = await financeiroService.listarAgrupado({
@@ -723,7 +724,9 @@ const Financeiro = () => {
         Icon: stat.Icon,
         active: cardFilter !== "todos" && cardTipoFilter === cardFilter,
         onClick: () => {
-          setCardTipoFilter(cardFilter);
+          setCardTipoFilter((prev) =>
+            cardFilter !== "todos" && prev === cardFilter ? "todos" : cardFilter,
+          );
           setPage(1);
         },
       };
@@ -842,6 +845,8 @@ const Financeiro = () => {
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "pendente": return "bg-amber-500/10 text-amber-500";
+      case "previsão":
+      case "previsao": return "bg-violet-500/10 text-violet-600";
       case "pago parcial": return "bg-blue-500/10 text-blue-500";
       case "pago total": return "bg-green-500/10 text-green-500";
       case "vencido": return "bg-red-500/10 text-red-500";
@@ -854,6 +859,7 @@ const Financeiro = () => {
   const transacoesDisplay = useMemo(() => {
     const statusMap: Record<string, string> = {
       "PENDENTE": "Pendente",
+      "PREVISAO": "Previsão",
       "PAGO_PARCIAL": "Pago Parcial",
       "PAGO_TOTAL": "Pago Total",
       "VENCIDO": "Vencido",
@@ -898,20 +904,9 @@ const Financeiro = () => {
   const filteredTransacoesComSecao = useMemo(() => {
     if (secaoTipoFilter === "todos") return filteredTransacoes;
     return filteredTransacoes.filter((t) => {
-      const categoria = String(t.categoria || "").toLowerCase();
       if (secaoTipoFilter === "contas_receber") return t.tipo === "Receita";
-      if (secaoTipoFilter === "despesas") {
-        return (
-          t.tipo === "Despesa" &&
-          (categoria.includes("centro de custo") || categoria.includes("despesa"))
-        );
-      }
-      if (secaoTipoFilter === "contas_pagar") {
-        return (
-          t.tipo === "Despesa" &&
-          !categoria.includes("centro de custo") &&
-          !categoria.includes("despesa")
-        );
+      if (secaoTipoFilter === "despesas" || secaoTipoFilter === "contas_pagar") {
+        return t.tipo === "Despesa";
       }
       return true;
     });
@@ -1218,7 +1213,7 @@ const Financeiro = () => {
                   <div className="space-y-3">
                     <Label className="text-sm font-semibold">Status</Label>
                     <RadioGroup
-                      value={["Todos", "PENDENTE", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].includes(activeTab) ? activeTab : "Todos"}
+                      value={["Todos", "PENDENTE", "PREVISAO", "PAGO_PARCIAL", "PAGO_TOTAL", "VENCIDO", "CANCELADO"].includes(activeTab) ? activeTab : "Todos"}
                       onValueChange={(v) => {
                         setActiveTab(v);
                         setPage(1);
@@ -1237,6 +1232,13 @@ const Financeiro = () => {
                         <Label htmlFor="status-pendente" className="flex items-center gap-2 cursor-pointer flex-1">
                           <Circle className="w-3 h-3 text-amber-500" />
                           <span>Pendente</span>
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="PREVISAO" id="status-previsao" />
+                        <Label htmlFor="status-previsao" className="flex items-center gap-2 cursor-pointer flex-1">
+                          <Circle className="w-3 h-3 text-violet-500" />
+                          <span>Previsão</span>
                         </Label>
                       </div>
                       <div className="flex items-center space-x-2">

@@ -72,13 +72,17 @@ export function contaTemSaldoAberto(c: ContaFinanceira): boolean {
       0,
   );
   if (aberto > 0.009) return true;
-  return (
+  if (
     st === 'PENDENTE' ||
     st === 'ABERTO' ||
+    st === 'PREVISAO' ||
     st === 'PARCIAL' ||
     st === 'PAGO_PARCIAL' ||
     st === 'VENCIDO'
-  );
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function contaEstaPaga(c: ContaFinanceira): boolean {
