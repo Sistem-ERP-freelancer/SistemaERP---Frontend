@@ -145,9 +145,13 @@ class TenantsService {
     } as Tenant;
   }
 
-  async excluir(id: string): Promise<{ message: string; schema_name: string; id: string }> {
+  async excluir(
+    id: string,
+    senhaConfirmacao: string,
+  ): Promise<{ message: string; schema_name: string; id: string }> {
     return apiClient.delete<{ message: string; schema_name: string; id: string }>(
       `/tenants/${id}`,
+      { senha_confirmacao: senhaConfirmacao },
     );
   }
 }

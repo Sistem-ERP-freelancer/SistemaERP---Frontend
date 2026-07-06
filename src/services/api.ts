@@ -266,7 +266,11 @@ class ApiClient {
             break;
           
           case 401: {
+            const method = (options.method || 'GET').toUpperCase();
             const isLoginRequest = /\/usuarios\/login$/i.test(endpoint);
+            const isTenantDeleteConfirm =
+              method === 'DELETE' && /\/tenants\/[^/]+$/i.test(endpoint);
+
             if (isLoginRequest) {
               errorMessage =
                 (typeof errorMessage === 'string' &&
@@ -275,6 +279,16 @@ class ApiClient {
                   : null) || 'E-mail ou senha incorretos.';
               break;
             }
+
+            if (isTenantDeleteConfirm) {
+              errorMessage =
+                (typeof errorMessage === 'string' &&
+                errorMessage !== 'Unauthorized'
+                  ? errorMessage
+                  : null) || 'Senha de administrador incorreta.';
+              break;
+            }
+
             // Unauthorized - Token inválido ou expirado (requisições autenticadas)
             errorMessage = 'Sessão expirada. Faça login novamente.';
             localStorage.removeItem('access_token');
@@ -523,8 +537,12 @@ class ApiClient {
     });
   }
 
-  delete<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
+  delete<T>(endpoint: string, data?: unknown, options?: RequestInit): Promise<T> {
+    return this.request<T>(endpoint, {
+      ...options,
+      method: 'DELETE',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   }
 
   /** POST multipart/form-data (ex.: upload de certificado Spedy). */

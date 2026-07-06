@@ -58,6 +58,8 @@ const AdminPanel = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [deleteConfirmPassword, setDeleteConfirmPassword] = useState("");
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [cnpjError, setCnpjError] = useState<string>("");
   const [formData, setFormData] = useState<CreateTenantDto & { telefone?: string }>({
@@ -207,7 +209,8 @@ const AdminPanel = () => {
   });
 
   const excluirMutation = useMutation({
-    mutationFn: (id: string) => tenantsService.excluir(id),
+    mutationFn: ({ id, senha }: { id: string; senha: string }) =>
+      tenantsService.excluir(id, senha),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -216,6 +219,8 @@ const AdminPanel = () => {
         setSelectedTenantId(null);
       }
       setTenantToDelete(null);
+      setDeleteConfirmPassword("");
+      setShowDeletePassword(false);
       toast.success(
         result?.message ||
           `Empresa e schema ${result?.schema_name || ""} excluídos permanentemente.`,
@@ -855,6 +860,8 @@ const AdminPanel = () => {
           onOpenChange={(open) => {
             if (!open && !excluirMutation.isPending) {
               setTenantToDelete(null);
+              setDeleteConfirmPassword("");
+              setShowDeletePassword(false);
             }
           }}
         >
@@ -871,19 +878,76 @@ const AdminPanel = () => {
                   </>
                 )}
                 , incluindo todos os dados (usuários, pedidos, estoque, financeiro, etc.).
+                Digite a senha do administrador do sistema para confirmar.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <div className="space-y-2 py-2">
+              <label
+                htmlFor="delete-admin-password"
+                className="text-sm font-medium flex items-center gap-2"
+              >
+                <KeyRound className="w-4 h-4" />
+                Senha do administrador do sistema
+              </label>
+              <div className="relative">
+                <Input
+                  id="delete-admin-password"
+                  type={showDeletePassword ? "text" : "password"}
+                  placeholder="Digite sua senha para confirmar"
+                  value={deleteConfirmPassword}
+                  onChange={(e) => setDeleteConfirmPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === "Enter" &&
+                      tenantToDelete &&
+                      deleteConfirmPassword.trim() &&
+                      !excluirMutation.isPending
+                    ) {
+                      e.preventDefault();
+                      excluirMutation.mutate({
+                        id: tenantToDelete.id,
+                        senha: deleteConfirmPassword,
+                      });
+                    }
+                  }}
+                  disabled={excluirMutation.isPending}
+                  autoComplete="current-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowDeletePassword((v) => !v)}
+                  disabled={excluirMutation.isPending}
+                  tabIndex={-1}
+                >
+                  {showDeletePassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={excluirMutation.isPending}>
                 Cancelar
               </AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={excluirMutation.isPending || !tenantToDelete}
+                disabled={
+                  excluirMutation.isPending ||
+                  !tenantToDelete ||
+                  !deleteConfirmPassword.trim()
+                }
                 onClick={(e) => {
                   e.preventDefault();
-                  if (tenantToDelete) {
-                    excluirMutation.mutate(tenantToDelete.id);
+                  if (tenantToDelete && deleteConfirmPassword.trim()) {
+                    excluirMutation.mutate({
+                      id: tenantToDelete.id,
+                      senha: deleteConfirmPassword,
+                    });
                   }
                 }}
               >
