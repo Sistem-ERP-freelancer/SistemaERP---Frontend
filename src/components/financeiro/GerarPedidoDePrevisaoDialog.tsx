@@ -123,7 +123,7 @@ export function GerarPedidoDePrevisaoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto p-0">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-[90rem] overflow-y-auto p-0 sm:w-[calc(100vw-2rem)]">
         <div className="border-b border-border/60 bg-background/95 px-6 py-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">

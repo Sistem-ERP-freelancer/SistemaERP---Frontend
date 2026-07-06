@@ -1041,8 +1041,8 @@ export function OrderForm({
                   key={index}
                   className="rounded-xl border border-border/60 p-4"
                 >
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-12 lg:items-start lg:gap-4">
-                    <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12 xl:items-start xl:gap-4">
+                    <div className="space-y-2 sm:col-span-2 xl:col-span-4">
                       <Label>Produto</Label>
                       <div className="flex gap-2">
                         <Select
@@ -1106,7 +1106,7 @@ export function OrderForm({
                         )}
                     </div>
 
-                    <div className="space-y-2 lg:col-span-2">
+                    <div className="space-y-2 xl:col-span-2">
                       <Label>Quantidade</Label>
                       <Input
                         type="number"
@@ -1165,7 +1165,7 @@ export function OrderForm({
                       )}
                     </div>
 
-                    <div className="space-y-2 lg:col-span-2">
+                    <div className="space-y-2 xl:col-span-2">
                       <Label>Preço Unitário</Label>
                       <Input
                         type="number"
@@ -1179,7 +1179,7 @@ export function OrderForm({
                       />
                     </div>
 
-                    <div className="space-y-2 lg:col-span-2">
+                    <div className="space-y-2 xl:col-span-2">
                       <Label>Desconto</Label>
                       <Input
                         type="number"
@@ -1193,7 +1193,7 @@ export function OrderForm({
                       />
                     </div>
 
-                    <div className="space-y-2 sm:col-span-2 lg:col-span-2">
+                    <div className="space-y-2 sm:col-span-2 xl:col-span-2">
                       <Label>Subtotal</Label>
                       <div className="flex items-center gap-2">
                         <div className="flex h-10 min-w-0 flex-1 items-center text-sm font-medium text-primary">
@@ -1619,7 +1619,7 @@ export function OrderForm({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-[90rem] overflow-y-auto sm:w-[calc(100vw-2rem)]">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">
               {order ? 'Editar Pedido' : 'Novo Pedido'}

@@ -120,7 +120,7 @@ export default function NovoPedido() {
     <AppLayout>
       <div className="min-w-0 bg-gradient-to-b from-muted/30 via-background to-background">
         <div className="border-b border-border/60 bg-background/90 backdrop-blur-md">
-          <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="mx-auto flex max-w-[90rem] flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <Button
                 type="button"
@@ -175,7 +175,7 @@ export default function NovoPedido() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mx-auto max-w-[90rem] px-4 py-6 sm:px-6 sm:py-8">
           <OrderForm
             layout="page"
             isOpen
