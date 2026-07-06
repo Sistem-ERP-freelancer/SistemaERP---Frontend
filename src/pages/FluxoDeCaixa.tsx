@@ -124,8 +124,8 @@ function FiltroPeriodoDateInput({
 function formatValorCelula(value: number | null): string {
   if (value === null) return '-';
   const abs = Math.abs(value).toLocaleString('pt-BR', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
   return value < 0 ? `-${abs}` : abs;
 }
