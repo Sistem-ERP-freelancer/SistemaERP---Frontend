@@ -65,7 +65,7 @@ import {
   saldoAbertoConta,
   toYMD,
 } from "@/lib/contas-financeiras-listagem";
-import { formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
+import { cn, formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { controleRocaService } from "@/services/controle-roca.service";
@@ -1099,6 +1099,7 @@ const ContasAReceber = () => {
   };
 
   const getVencimentoStatus = (dias: number | null, status: string): { texto: string; cor: string; bgColor: string } => {
+    if (status === "PREVISAO" || status === "Previsão") return { texto: "", cor: "", bgColor: "" };
     if (status === "QUITADO" || status === "PAGO_TOTAL" || status === "CANCELADO") return { texto: "", cor: "", bgColor: "" };
     if (dias === null) return { texto: "Data inválida", cor: "text-gray-500", bgColor: "bg-gray-100" };
     if (dias < 0) return { texto: "Vencida", cor: "text-red-600", bgColor: "bg-red-100" };
@@ -1111,6 +1112,7 @@ const ContasAReceber = () => {
 
   const getStatusColor = (status: string) => {
     const s = status.toLowerCase();
+    if (s === "previsão" || s === "previsao") return "bg-violet-500/10 text-violet-600";
     if (s === "pendente") return "bg-amber-500/10 text-amber-500";
     if (s === "em aberto" || s === "aberto") return "bg-blue-500/10 text-blue-500";
     if (s === "pago parcial" || s.includes("parcial")) return "bg-blue-500/10 text-blue-500";
@@ -1154,6 +1156,9 @@ const ContasAReceber = () => {
       return '';
     }
   };
+
+  const contaEhPrevisao = (conta: { status?: string; previsao?: boolean }) =>
+    conta.previsao === true || conta.status === "PREVISAO";
 
   // Modelo sem parcelas: descrição simples (GUIA_MIGRACAO_SEM_PARCELAS)
   const formatarDescricao = (conta: any): string => conta?.descricao || '';
@@ -1298,12 +1303,19 @@ const ContasAReceber = () => {
         currency: 'BRL'
       }).format(conta.valor_original || 0);
 
-      const dataFormatada = conta.data_vencimento
-        ? formatDate(conta.data_vencimento)
-        : "N/A";
+      const ehPrevisao = contaEhPrevisao(conta);
+
+      const dataFormatada = ehPrevisao
+        ? conta.data_prevista
+          ? formatDate(conta.data_prevista)
+          : "—"
+        : conta.data_vencimento
+          ? formatDate(conta.data_vencimento)
+          : "N/A";
 
       const statusMap: Record<string, string> = {
         "PENDENTE": "Pendente",
+        "PREVISAO": "Previsão",
         "PAGO_PARCIAL": "Pago Parcial",
         "PAGO_TOTAL": "Pago Total",
         "VENCIDO": "Vencido",
@@ -1319,8 +1331,8 @@ const ContasAReceber = () => {
       // Se o backend forneceu status_vencimento e proximidade_vencimento, usar eles
       let vencimentoStatus: { texto: string; cor: string; bgColor: string };
       
-      // Não exibir vencimento se a conta estiver paga ou cancelada
-      if (conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") {
+      // Não exibir vencimento se for previsão, paga ou cancelada
+      if (ehPrevisao || conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") {
         vencimentoStatus = { texto: "", cor: "", bgColor: "" };
       } else if (conta.status_vencimento && conta.proximidade_vencimento) {
         // Mapear proximidade_vencimento do backend para cores
@@ -1352,7 +1364,10 @@ const ContasAReceber = () => {
         };
       } else {
         // Fallback: calcular no frontend
-        vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
+        vencimentoStatus = getVencimentoStatus(
+          diasAteVencimento,
+          ehPrevisao ? "PREVISAO" : conta.status,
+        );
       }
 
       return {
@@ -1368,6 +1383,7 @@ const ContasAReceber = () => {
         diasAteVencimento,
         vencimentoStatus,
         roca_nome: conta.roca_nome ?? null,
+        ehPrevisao,
       };
     });
   }, [contasExibir, clientes]);
@@ -1426,6 +1442,8 @@ const ContasAReceber = () => {
     categoria: string;
     primeira_vencimento?: string;
     statusConsolidado: string;
+    ehPrevisao: boolean;
+    data_prevista?: string | null;
   };
 
   const gruposContas = useMemo(() => {
@@ -1462,7 +1480,9 @@ const ContasAReceber = () => {
         ?.data_vencimento;
 
       let statusConsolidado = "Pendente";
-      if (pagas === total) statusConsolidado = "Pago Total";
+      const ehPrevisao = parcelas.some((p) => contaEhPrevisao(p));
+      if (ehPrevisao) statusConsolidado = "Previsão";
+      else if (pagas === total) statusConsolidado = "Pago Total";
       else if (pagas > 0) statusConsolidado = "Pago Parcial";
 
       result.push({
@@ -1478,6 +1498,8 @@ const ContasAReceber = () => {
         categoria: primeira?.pedido_id ? "Vendas" : "Avulso",
         primeira_vencimento: primeiraVenc,
         statusConsolidado,
+        ehPrevisao,
+        data_prevista: primeira?.data_prevista ?? null,
       });
     });
 
@@ -1595,8 +1617,17 @@ const ContasAReceber = () => {
 
   const transacoesDisplayGrupos = useMemo(() => {
     return filteredGruposContas.map((g) => {
-      const diasAteVencimento = calcularDiasAteVencimento(g.primeira_vencimento ?? undefined);
-      const vencimentoStatus = getVencimentoStatus(diasAteVencimento, g.statusConsolidado === "Pago Total" ? "QUITADO" : "ABERTO");
+      const diasAteVencimento = calcularDiasAteVencimento(
+        g.ehPrevisao ? (g.data_prevista ?? undefined) : (g.primeira_vencimento ?? undefined),
+      );
+      const vencimentoStatus = getVencimentoStatus(
+        diasAteVencimento,
+        g.ehPrevisao
+          ? "PREVISAO"
+          : g.statusConsolidado === "Pago Total"
+            ? "QUITADO"
+            : "ABERTO",
+      );
       const totalGrupo = g.parcelas.reduce((s, p) => s + (p.valor_original ?? 0), 0);
       const valorPagoGrupo = Math.max(0, totalGrupo - g.valor_aberto);
       const primeiraParcela = g.parcelas[0];
@@ -1616,11 +1647,19 @@ const ContasAReceber = () => {
         categoria: g.categoria,
         valor: formatarMoeda(totalGrupo),
         valorPago: formatarMoeda(valorPagoGrupo),
-        data: g.primeira_vencimento ? formatDate(g.primeira_vencimento) : "—",
+        data: g.ehPrevisao
+          ? g.data_prevista
+            ? formatDate(g.data_prevista)
+            : "—"
+          : g.primeira_vencimento
+            ? formatDate(g.primeira_vencimento)
+            : "—",
         vencimentoStatus,
         status: g.statusConsolidado,
         pedidoId: g.pedido_id,
         grupoKey: g.key,
+        ehPrevisao: g.ehPrevisao,
+        contaId: primeiraParcela?.id,
       };
     });
   }, [filteredGruposContas]);
@@ -1654,31 +1693,41 @@ const ContasAReceber = () => {
 
         const statusMap: Record<string, string> = {
           "PENDENTE": "Pendente",
+          "PREVISAO": "Previsão",
           "PAGO_PARCIAL": "Pago Parcial",
           "PAGO_TOTAL": "Pago Total",
           "VENCIDO": "Vencido",
           "CANCELADO": "Cancelado",
         };
         const statusFormatado = statusMap[conta.status] || conta.status;
+        const ehPrevisao = contaEhPrevisao(conta);
 
         const diasAteVencimento = conta.dias_ate_vencimento !== undefined 
           ? conta.dias_ate_vencimento 
           : calcularDiasAteVencimento(conta.data_vencimento);
         
-        const vencimentoStatus = getVencimentoStatus(diasAteVencimento, conta.status);
+        const vencimentoStatus = getVencimentoStatus(
+          diasAteVencimento,
+          ehPrevisao ? "PREVISAO" : conta.status,
+        );
 
         return [{
           id: conta.numero_conta || `CONTA-${conta.id}`,
           descricao: formatarDescricao(conta),
           categoria: categoria,
           valor: valorFormatado,
-          data: dataFormatada,
+          data: ehPrevisao
+            ? conta.data_prevista
+              ? formatDate(conta.data_prevista)
+              : "—"
+            : dataFormatada,
           status: statusFormatado,
           statusOriginal: conta.status,
           contaId: conta.id,
           cliente: nomeCliente,
           diasAteVencimento,
           vencimentoStatus,
+          ehPrevisao,
         }];
       }
     }
@@ -2556,9 +2605,22 @@ const ContasAReceber = () => {
                 transacoesDisplayGrupos.map((transacao) => {
                   const grupo = gruposContas.find((g) => g.key === (transacao as any).grupoKey);
                   return (
-                    <TableRow key={(transacao as any).grupoKey}>
+                    <TableRow
+                      key={(transacao as any).grupoKey}
+                      className={cn(
+                        (transacao as { ehPrevisao?: boolean }).ehPrevisao &&
+                          "border-l-4 border-l-violet-500 bg-violet-500/[0.03]",
+                      )}
+                    >
                       <TableCell>
-                        <span className="font-medium">{transacao.id}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{transacao.id}</span>
+                          {(transacao as { ehPrevisao?: boolean }).ehPrevisao ? (
+                            <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
+                              Previsão
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground">{transacao.cliente}</span>
@@ -2577,7 +2639,9 @@ const ContasAReceber = () => {
                         <span className="text-sm text-muted-foreground">{transacao.valorPago}</span>
                       </TableCell>
                       <TableCell>
-                        {transacao.status === "Pago Total" || transacao.status === "Cancelado" ? (
+                        {(transacao as { ehPrevisao?: boolean }).ehPrevisao ? (
+                          <span className="text-sm text-muted-foreground">{transacao.data}</span>
+                        ) : transacao.status === "Pago Total" || transacao.status === "Cancelado" ? (
                           <span className="text-sm text-muted-foreground">—</span>
                         ) : (
                           <span className="text-sm text-muted-foreground">{transacao.data}</span>
