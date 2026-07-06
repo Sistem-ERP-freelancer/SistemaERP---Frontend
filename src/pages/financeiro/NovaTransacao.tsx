@@ -51,7 +51,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-type ModoLancamento = "RECEBER" | "PAGAR" | "CENTRO_CUSTO";
+type ModoLancamento = "RECEBER" | "PAGAR";
+type TipoDespesa = "AVULSA" | "CENTRO_CUSTO";
 
 type NovaTransacaoForm = CreateContaFinanceiraDto & {
   data_emissao: string;
@@ -201,6 +202,7 @@ const NovaTransacao = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<ModoLancamento>("RECEBER");
+  const [tipoDespesa, setTipoDespesa] = useState<TipoDespesa>("AVULSA");
   const [previsao, setPrevisao] = useState(false);
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
@@ -331,23 +333,52 @@ const NovaTransacao = () => {
   }, [form, clientes, fornecedores, rocasLista, pedidos, tiposDespesaLista]);
 
   const ehReceita = modo === "RECEBER";
-  const ehCentroCusto = modo === "CENTRO_CUSTO";
+  const ehDespesa = modo === "PAGAR";
+  const ehCentroCusto = ehDespesa && tipoDespesa === "CENTRO_CUSTO";
   const salvando = createContaMutation.isPending || salvandoDespesaCc;
 
   const selecionarModo = (novoModo: ModoLancamento) => {
-    if (novoModo === "CENTRO_CUSTO") {
-      setPrevisao(false);
-    }
     setModo(novoModo);
+    if (novoModo === "RECEBER") {
+      setTipoDespesa("AVULSA");
+    }
     setForm((prev) => ({
       ...prev,
       tipo: novoModo === "RECEBER" ? "RECEBER" : "PAGAR",
       centro_custo_tipo_id:
-        novoModo === "CENTRO_CUSTO" ? prev.centro_custo_tipo_id : undefined,
-      cliente_id: novoModo === "CENTRO_CUSTO" ? undefined : prev.cliente_id,
-      pedido_id: novoModo === "CENTRO_CUSTO" ? undefined : prev.pedido_id,
-      forma_pagamento: novoModo === "CENTRO_CUSTO" ? undefined : prev.forma_pagamento,
-      data_pagamento: novoModo === "CENTRO_CUSTO" ? undefined : prev.data_pagamento,
+        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
+          ? prev.centro_custo_tipo_id
+          : undefined,
+      cliente_id: novoModo === "PAGAR" ? undefined : prev.cliente_id,
+      pedido_id:
+        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
+          ? undefined
+          : prev.pedido_id,
+      forma_pagamento:
+        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
+          ? undefined
+          : prev.forma_pagamento,
+      data_pagamento:
+        novoModo === "PAGAR" && tipoDespesa === "CENTRO_CUSTO"
+          ? undefined
+          : prev.data_pagamento,
+    }));
+  };
+
+  const selecionarTipoDespesa = (novoTipo: TipoDespesa) => {
+    if (novoTipo === "CENTRO_CUSTO") {
+      setPrevisao(false);
+    }
+    setTipoDespesa(novoTipo);
+    setForm((prev) => ({
+      ...prev,
+      tipo: "PAGAR",
+      centro_custo_tipo_id:
+        novoTipo === "CENTRO_CUSTO" ? prev.centro_custo_tipo_id : undefined,
+      cliente_id: undefined,
+      pedido_id: novoTipo === "CENTRO_CUSTO" ? undefined : prev.pedido_id,
+      forma_pagamento: novoTipo === "CENTRO_CUSTO" ? undefined : prev.forma_pagamento,
+      data_pagamento: novoTipo === "CENTRO_CUSTO" ? undefined : prev.data_pagamento,
     }));
   };
 
@@ -462,7 +493,7 @@ const NovaTransacao = () => {
                   Nova Transação
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Registre receitas, despesas ou lançamentos de centro de custo
+                  Registre receitas ou despesas do financeiro
                 </p>
               </div>
             </div>
@@ -499,7 +530,7 @@ const NovaTransacao = () => {
         </div>
 
         <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => selecionarModo("RECEBER")}
@@ -528,7 +559,7 @@ const NovaTransacao = () => {
                 onClick={() => selecionarModo("PAGAR")}
                 className={cn(
                   "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
-                  modo === "PAGAR"
+                  ehDespesa
                     ? "border-rose-500/60 bg-rose-500/10 shadow-sm"
                     : "border-border/60 bg-card hover:border-rose-500/30 hover:bg-rose-500/5",
                 )}
@@ -536,40 +567,58 @@ const NovaTransacao = () => {
                 <div
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
-                    modo === "PAGAR" ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-rose-500/15 group-hover:text-rose-600",
+                    ehDespesa ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-rose-500/15 group-hover:text-rose-600",
                   )}
                 >
                   <TrendingDown className="h-5 w-5" />
                 </div>
                 <div>
                   <p className="font-semibold text-foreground">Despesa</p>
-                  <p className="text-xs text-muted-foreground">Conta avulsa a pagar</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => selecionarModo("CENTRO_CUSTO")}
-                className={cn(
-                  "group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all",
-                  ehCentroCusto
-                    ? "border-amber-500/60 bg-amber-500/10 shadow-sm"
-                    : "border-border/60 bg-card hover:border-amber-500/30 hover:bg-amber-500/5",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
-                    ehCentroCusto ? "bg-amber-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-amber-500/15 group-hover:text-amber-600",
-                  )}
-                >
-                  <Layers className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">Centro de Custo</p>
-                  <p className="text-xs text-muted-foreground">Despesa vinculada à roça</p>
+                  <p className="text-xs text-muted-foreground">Saída de recursos</p>
                 </div>
               </button>
             </div>
+
+            {ehDespesa ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => selecionarTipoDespesa("AVULSA")}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition-all",
+                    tipoDespesa === "AVULSA"
+                      ? "border-rose-400/60 bg-rose-500/5 font-medium text-foreground shadow-sm"
+                      : "border-border/60 bg-card text-muted-foreground hover:border-rose-400/30 hover:bg-rose-500/5",
+                  )}
+                >
+                  <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>
+                    <span className="block font-semibold">Conta avulsa</span>
+                    <span className="text-xs font-normal opacity-80">
+                      Despesa geral a pagar
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => selecionarTipoDespesa("CENTRO_CUSTO")}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition-all",
+                    tipoDespesa === "CENTRO_CUSTO"
+                      ? "border-amber-500/60 bg-amber-500/10 font-medium text-foreground shadow-sm"
+                      : "border-border/60 bg-card text-muted-foreground hover:border-amber-500/30 hover:bg-amber-500/5",
+                  )}
+                >
+                  <Layers className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>
+                    <span className="block font-semibold">Centro de custo</span>
+                    <span className="text-xs font-normal opacity-80">
+                      Despesa vinculada à roça
+                    </span>
+                  </span>
+                </button>
+              </div>
+            ) : null}
 
             {!ehCentroCusto ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1028,7 +1077,11 @@ const NovaTransacao = () => {
                       Resumo
                     </p>
                     <p className="mt-1 text-lg font-semibold">
-                      {ehReceita ? "Receita" : ehCentroCusto ? "Centro de Custo" : "Despesa"}
+                      {ehReceita
+                        ? "Receita"
+                        : ehCentroCusto
+                          ? "Despesa · Centro de Custo"
+                          : "Despesa"}
                       {previsao ? " · Previsão" : ""}
                     </p>
                     <p className="mt-3 text-3xl font-bold tracking-tight">
