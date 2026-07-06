@@ -964,15 +964,52 @@ export function OrderForm({
           <div ref={itensSectionRef} className="space-y-4">
             <div className="space-y-4">
               {itens.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-4 rounded-xl border border-border/60 p-4">
-                  <div className="col-span-4 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label>Produto</Label>
+                <div
+                  key={index}
+                  className="rounded-xl border border-border/60 p-4 space-y-4 lg:grid lg:grid-cols-12 lg:gap-4 lg:space-y-0 lg:items-start"
+                >
+                  <div className="lg:col-span-4 space-y-2">
+                    <Label>Produto</Label>
+                    <div className="flex gap-2">
+                      <Select
+                        value={item.produto_id && item.produto_id !== 0 ? item.produto_id.toString() : ''}
+                        onValueChange={(value) => handleItemChange(index, 'produto_id', Number(value))}
+                        disabled={produtoSelectDesabilitado}
+                      >
+                        <SelectTrigger className="min-w-0 flex-1">
+                          <SelectValue placeholder={produtoSelectPlaceholder} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <div className="px-2 py-2">
+                            <Input
+                              placeholder="Buscar produto..."
+                              value={produtoSearch}
+                              onChange={(e) => setProdutoSearch(e.target.value)}
+                              onPointerDown={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          {produtosParaExibir.length === 0 ? (
+                            <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                              Nenhum produto cadastrado
+                            </div>
+                          ) : produtosFiltrados.length === 0 ? (
+                            <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                              Nenhum produto encontrado
+                            </div>
+                          ) : (
+                            produtosFiltrados.map((produto) => (
+                              <SelectItem key={produto.id} value={produto.id.toString()}>
+                                {produto.nome}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 shrink-0 rounded-lg"
+                        className="h-10 w-10 shrink-0 rounded-lg"
                         title="Cadastro rápido de produto"
                         onClick={() =>
                           setCadastroRapidoAtivo((prev) =>
@@ -985,47 +1022,6 @@ export function OrderForm({
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
-                    <Select
-                      value={item.produto_id && item.produto_id !== 0 ? item.produto_id.toString() : ''}
-                      onValueChange={(value) => handleItemChange(index, 'produto_id', Number(value))}
-                      disabled={produtoSelectDesabilitado}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={produtoSelectPlaceholder}
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <div className="px-2 py-2">
-                          <Input
-                            placeholder="Buscar produto..."
-                            value={produtoSearch}
-                            onChange={(e) => setProdutoSearch(e.target.value)}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                        {produtosParaExibir.length === 0 ? (
-                          <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                            Nenhum produto cadastrado
-                          </div>
-                        ) : (
-                          produtosFiltrados.length === 0 ? (
-                            <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                              Nenhum produto encontrado
-                            </div>
-                          ) : (
-                            produtosFiltrados.map((produto) => (
-                              <SelectItem
-                                key={produto.id}
-                                value={produto.id.toString()}
-                              >
-                                {produto.nome}
-                              </SelectItem>
-                            ))
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
                     {cadastroRapidoAtivo?.tipo === 'produto' &&
                       cadastroRapidoAtivo.produtoIndex === index && (
                         <CadastroRapidoEntidade
@@ -1036,98 +1032,115 @@ export function OrderForm({
                       )}
                   </div>
 
-                  <div className="col-span-2 space-y-2">
-                    <Label>Quantidade</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={item.quantidade}
-                      onChange={(e) => handleItemChange(index, 'quantidade', e.target.value ? Number(e.target.value) : '')}
-                      className={cn(
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:col-span-8 lg:grid-cols-8 lg:gap-4">
+                    <div className="space-y-2 sm:col-span-1 lg:col-span-2">
+                      <Label>Quantidade</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={item.quantidade}
+                        onChange={(e) =>
+                          handleItemChange(index, 'quantidade', e.target.value ? Number(e.target.value) : '')
+                        }
+                        className={cn(
+                          (() => {
+                            if (tipo !== 'VENDA' || !item.produto_id) return false;
+                            const produtoItem = produtosLista.find((p) => p.id === item.produto_id);
+                            const estoque =
+                              item.estoque_disponivel ??
+                              (produtoItem
+                                ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual)
+                                : undefined);
+                            const qtd = Number(item.quantidade) || 0;
+                            return estoque !== undefined && qtd > estoque;
+                          })() && 'border-destructive',
+                        )}
+                      />
+                      {item.produto_id ? (
                         (() => {
-                          if (tipo !== 'VENDA' || !item.produto_id) return false;
                           const produtoItem = produtosLista.find((p) => p.id === item.produto_id);
-                          const estoque =
+                          const estoqueDisponivel =
                             item.estoque_disponivel ??
-                            (produtoItem ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual) : undefined);
+                            (produtoItem
+                              ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual)
+                              : undefined);
                           const qtd = Number(item.quantidade) || 0;
-                          return estoque !== undefined && qtd > estoque;
-                        })() && 'border-destructive'
-                      )}
-                    />
-                    {item.produto_id ? (
-                      (() => {
-                        const produtoItem = produtosLista.find((p) => p.id === item.produto_id);
-                        const estoqueDisponivel =
-                          item.estoque_disponivel ??
-                          (produtoItem ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual) : undefined);
-                        const qtd = Number(item.quantidade) || 0;
-                        const excedeEstoque =
-                          tipo === 'VENDA' &&
-                          estoqueDisponivel !== undefined &&
-                          qtd > estoqueDisponivel;
-                        return (
-                          <div className="flex flex-col gap-0.5 mt-1">
-                            <p className="text-xs text-muted-foreground">
-                              Estoque disponível: <span className="font-medium text-foreground">{estoqueDisponivel ?? '—'}</span>
-                            </p>
-                            {excedeEstoque && (
-                              <p className="text-xs text-destructive font-medium">
-                                Quantidade superior ao estoque
+                          const excedeEstoque =
+                            tipo === 'VENDA' &&
+                            estoqueDisponivel !== undefined &&
+                            qtd > estoqueDisponivel;
+                          return (
+                            <div className="mt-1 flex flex-col gap-0.5">
+                              <p className="text-xs text-muted-foreground">
+                                Estoque:{' '}
+                                <span className="font-medium text-foreground">
+                                  {estoqueDisponivel ?? '—'}
+                                </span>
                               </p>
-                            )}
-                          </div>
-                        );
-                      })()
-                    ) : null}
-                  </div>
-
-                  <div className="col-span-2 space-y-2">
-                    <Label>Preço Unitário</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={item.preco_unitario}
-                      onChange={(e) => handleItemChange(index, 'preco_unitario', e.target.value ? Number(e.target.value) : '')}
-                    />
-                  </div>
-
-                  <div className="col-span-2 space-y-2">
-                    <Label>Desconto</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={item.desconto}
-                      onChange={(e) => handleItemChange(index, 'desconto', e.target.value ? Number(e.target.value) : '')}
-                    />
-                  </div>
-
-                  <div className="col-span-1 space-y-2">
-                    <Label>Subtotal</Label>
-                    <div className="h-10 flex items-center text-sm font-medium">
-                      {formatCurrency(
-                        Math.max(0, 
-                          (typeof item.quantidade === 'number' ? item.quantidade : 0) * 
-                          (typeof item.preco_unitario === 'number' ? item.preco_unitario : 0) - 
-                          (typeof item.desconto === 'number' ? item.desconto : 0)
-                        )
-                      )}
+                              {excedeEstoque && (
+                                <p className="text-xs font-medium text-destructive">
+                                  Acima do estoque
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()
+                      ) : null}
                     </div>
-                  </div>
 
-                  <div className="col-span-1 flex items-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveItem(index)}
-                      disabled={itens.length === 1}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <div className="space-y-2 sm:col-span-1 lg:col-span-2">
+                      <Label>Preço Unitário</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.preco_unitario}
+                        onChange={(e) =>
+                          handleItemChange(index, 'preco_unitario', e.target.value ? Number(e.target.value) : '')
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2 sm:col-span-1 lg:col-span-2">
+                      <Label>Desconto</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.desconto}
+                        onChange={(e) =>
+                          handleItemChange(index, 'desconto', e.target.value ? Number(e.target.value) : '')
+                        }
+                      />
+                    </div>
+
+                    <div className="col-span-2 flex items-end justify-between gap-2 sm:col-span-1 lg:col-span-2 lg:flex-row lg:items-end">
+                      <div className="min-w-0 flex-1 space-y-2 lg:flex-none">
+                        <Label>Subtotal</Label>
+                        <div className="flex h-10 items-center text-sm font-medium text-primary">
+                          {formatCurrency(
+                            Math.max(
+                              0,
+                              (typeof item.quantidade === 'number' ? item.quantidade : 0) *
+                                (typeof item.preco_unitario === 'number' ? item.preco_unitario : 0) -
+                                (typeof item.desconto === 'number' ? item.desconto : 0),
+                            ),
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 shrink-0 lg:self-end"
+                        onClick={() => handleRemoveItem(index)}
+                        disabled={itens.length === 1}
+                        aria-label="Remover item"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
