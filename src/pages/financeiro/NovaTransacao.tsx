@@ -35,6 +35,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Calendar,
+  CalendarClock,
   CreditCard,
   FileText,
   Info,
@@ -54,6 +55,7 @@ type ModoLancamento = "RECEBER" | "PAGAR" | "CENTRO_CUSTO";
 
 type NovaTransacaoForm = CreateContaFinanceiraDto & {
   data_emissao: string;
+  data_prevista?: string;
   centro_custo_tipo_id?: number;
 };
 
@@ -199,6 +201,7 @@ const NovaTransacao = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<ModoLancamento>("RECEBER");
+  const [previsao, setPrevisao] = useState(false);
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
 
@@ -332,6 +335,9 @@ const NovaTransacao = () => {
   const salvando = createContaMutation.isPending || salvandoDespesaCc;
 
   const selecionarModo = (novoModo: ModoLancamento) => {
+    if (novoModo === "CENTRO_CUSTO") {
+      setPrevisao(false);
+    }
     setModo(novoModo);
     setForm((prev) => ({
       ...prev,
@@ -386,6 +392,31 @@ const NovaTransacao = () => {
       } finally {
         setSalvandoDespesaCc(false);
       }
+      return;
+    }
+
+    if (previsao) {
+      if (!form.descricao || !form.valor_original || !form.data_prevista) {
+        toast.error("Preencha descrição, valor e data prevista");
+        return;
+      }
+
+      createContaMutation.mutate({
+        tipo: modo === "RECEBER" ? "RECEBER" : "PAGAR",
+        previsao: true,
+        descricao: form.descricao,
+        valor_original: Number(form.valor_original),
+        data_prevista: form.data_prevista,
+        data_emissao: form.data_emissao || undefined,
+        data_vencimento: form.data_vencimento || undefined,
+        cliente_id: form.cliente_id || undefined,
+        fornecedor_id: form.fornecedor_id || undefined,
+        pedido_id: form.pedido_id || undefined,
+        roca_id: form.roca_id || undefined,
+        forma_pagamento: form.forma_pagamento || undefined,
+        data_pagamento: form.data_pagamento || undefined,
+        observacoes: form.observacoes || undefined,
+      });
       return;
     }
 
@@ -457,6 +488,8 @@ const NovaTransacao = () => {
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Registrando...
                   </>
+                ) : previsao ? (
+                  "Registrar Previsão"
                 ) : (
                   "Registrar Transação"
                 )}
@@ -537,6 +570,30 @@ const NovaTransacao = () => {
                 </div>
               </button>
             </div>
+
+            {!ehCentroCusto ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  type="button"
+                  onClick={() => setPrevisao((ativo) => !ativo)}
+                  className={cn(
+                    "inline-flex w-full items-center justify-center gap-2 rounded-2xl border-2 px-4 py-3 text-sm font-semibold transition-all sm:w-auto",
+                    previsao
+                      ? "border-violet-500/60 bg-violet-500/10 text-violet-700 shadow-sm dark:text-violet-300"
+                      : "border-border/60 bg-card text-muted-foreground hover:border-violet-500/30 hover:bg-violet-500/5 hover:text-foreground",
+                  )}
+                >
+                  <CalendarClock className="h-4 w-4" aria-hidden />
+                  Previsão
+                </button>
+                {previsao ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground sm:max-w-md">
+                    Lançamento estimado: pedido, forma de pagamento e datas de emissão/vencimento
+                    são opcionais. Informe a data prevista.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-8">
               <div className="min-w-0 flex-1 space-y-6 pb-8">
@@ -813,17 +870,42 @@ const NovaTransacao = () => {
                   description={
                     ehCentroCusto
                       ? "Data em que a despesa foi registrada."
-                      : "Emissão, vencimento e pagamento do lançamento."
+                      : previsao
+                        ? "Data prevista e, se quiser, emissão, vencimento ou pagamento."
+                        : "Emissão, vencimento e pagamento do lançamento."
                   }
                 >
                   <div
                     className={cn(
                       "grid grid-cols-1 gap-4",
-                      ehCentroCusto ? "sm:grid-cols-1" : "sm:grid-cols-3",
+                      ehCentroCusto
+                        ? "sm:grid-cols-1"
+                        : previsao
+                          ? "sm:grid-cols-2 lg:grid-cols-4"
+                          : "sm:grid-cols-3",
                     )}
                   >
+                    {!ehCentroCusto && previsao ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="data-prevista">Data prevista *</Label>
+                        <Input
+                          id="data-prevista"
+                          type="date"
+                          className="h-11 rounded-xl"
+                          value={form.data_prevista || ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              data_prevista: e.target.value || undefined,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
-                      <Label htmlFor="data-emissao">Data de emissão *</Label>
+                      <Label htmlFor="data-emissao">
+                        Data de emissão{!previsao || ehCentroCusto ? " *" : ""}
+                      </Label>
                       <Input
                         id="data-emissao"
                         type="date"
@@ -837,7 +919,9 @@ const NovaTransacao = () => {
                     {!ehCentroCusto ? (
                       <>
                         <div className="space-y-2">
-                          <Label htmlFor="data-vencimento">Data de vencimento *</Label>
+                          <Label htmlFor="data-vencimento">
+                            Data de vencimento{!previsao ? " *" : ""}
+                          </Label>
                           <Input
                             id="data-vencimento"
                             type="date"
@@ -945,6 +1029,7 @@ const NovaTransacao = () => {
                     </p>
                     <p className="mt-1 text-lg font-semibold">
                       {ehReceita ? "Receita" : ehCentroCusto ? "Centro de Custo" : "Despesa"}
+                      {previsao ? " · Previsão" : ""}
                     </p>
                     <p className="mt-3 text-3xl font-bold tracking-tight">
                       {form.valor_original > 0
@@ -962,7 +1047,7 @@ const NovaTransacao = () => {
                       </div>
                       <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
                         <span className="text-muted-foreground">
-                          {ehCentroCusto ? "Emissão" : "Vencimento"}
+                          {ehCentroCusto ? "Emissão" : previsao ? "Data prevista" : "Vencimento"}
                         </span>
                         <span className="font-medium">
                           {ehCentroCusto
@@ -971,11 +1056,17 @@ const NovaTransacao = () => {
                                   "pt-BR",
                                 )
                               : "—"
-                            : form.data_vencimento
-                              ? new Date(form.data_vencimento + "T12:00:00").toLocaleDateString(
-                                  "pt-BR",
-                                )
-                              : "—"}
+                            : previsao
+                              ? form.data_prevista
+                                ? new Date(form.data_prevista + "T12:00:00").toLocaleDateString(
+                                    "pt-BR",
+                                  )
+                                : "—"
+                              : form.data_vencimento
+                                ? new Date(form.data_vencimento + "T12:00:00").toLocaleDateString(
+                                    "pt-BR",
+                                  )
+                                : "—"}
                         </span>
                       </div>
                       {resumo.tipoDespesaNome ? (
@@ -1030,7 +1121,7 @@ const NovaTransacao = () => {
                           Registrando...
                         </>
                       ) : (
-                        "Registrar Transação"
+                        previsao ? "Registrar Previsão" : "Registrar Transação"
                       )}
                     </Button>
                   </CardContent>

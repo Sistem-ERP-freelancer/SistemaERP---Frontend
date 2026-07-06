@@ -16,10 +16,12 @@ export interface ContaFinanceira {
   valor_restante: number;
   /** Modelo por saldo: pode vir preenchido quando `valor_restante` estiver 0 desatualizado. */
   valor_em_aberto?: number;
-  data_emissao: string;
-  data_vencimento: string;
+  data_emissao?: string | null;
+  data_vencimento?: string | null;
+  data_prevista?: string | null;
+  previsao?: boolean;
   data_pagamento?: string;
-  status: 'PENDENTE' | 'PAGO_PARCIAL' | 'PAGO_TOTAL' | 'VENCIDO' | 'CANCELADO';
+  status: 'PENDENTE' | 'PAGO_PARCIAL' | 'PAGO_TOTAL' | 'VENCIDO' | 'CANCELADO' | 'PREVISAO';
   forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
   observacoes?: string;
   created_at?: string;
@@ -38,8 +40,10 @@ export interface CreateContaFinanceiraDto {
   roca_id?: number;
   descricao: string;
   valor_original: number;
-  data_emissao: string;
-  data_vencimento: string;
+  previsao?: boolean;
+  data_prevista?: string;
+  data_emissao?: string;
+  data_vencimento?: string;
   data_pagamento?: string;
   forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
   observacoes?: string;
