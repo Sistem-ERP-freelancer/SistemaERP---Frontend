@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
+import { toYMD } from "@/lib/contas-financeiras-listagem";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import {
   centroCustoService,
@@ -201,7 +202,7 @@ const initialForm = (): NovaTransacaoForm => ({
   tipo: "RECEBER",
   descricao: "",
   valor_original: 0,
-  data_emissao: new Date().toISOString().split("T")[0],
+  data_emissao: toYMD(new Date()),
   data_vencimento: "",
   roca_id: undefined,
   centro_custo_tipo_id: undefined,
@@ -440,7 +441,7 @@ const NovaTransacao = () => {
         descricao: form.descricao,
         valor_original: Number(form.valor_original),
         data_prevista: form.data_prevista,
-        data_emissao: form.data_emissao || undefined,
+        data_emissao: form.data_emissao || toYMD(new Date()),
         data_vencimento: form.data_vencimento || undefined,
         cliente_id: form.cliente_id || undefined,
         fornecedor_id: form.fornecedor_id || undefined,
