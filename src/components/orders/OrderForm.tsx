@@ -35,7 +35,12 @@ import {
     TipoPedido,
 } from '@/types/pedido';
 import type { Roca } from '@/types/roca';
-import { useQuery } from '@tanstack/react-query';
+import {
+  CadastroRapidoEntidade,
+  CadastroRapidoTipo,
+} from '@/components/orders/cadastro-rapido/CadastroRapidoEntidade';
+import { CampoSelectComCadastroRapido } from '@/components/orders/cadastro-rapido/CampoSelectComCadastroRapido';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CreditCard,
   FileDown,
@@ -46,7 +51,7 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 /** Interpreta string YYYY-MM-DD como data local (evita dia anterior em UTC). */
@@ -102,7 +107,29 @@ export function OrderForm({
   produtos,
   transportadoras,
 }: OrderFormProps) {
+  const queryClient = useQueryClient();
   const formActive = layout === 'page' || isOpen;
+  const [clientesLista, setClientesLista] = useState(clientes);
+  const [fornecedoresLista, setFornecedoresLista] = useState(fornecedores);
+  const [produtosLista, setProdutosLista] = useState(produtos);
+  const [transportadorasLista, setTransportadorasLista] = useState(transportadoras);
+  const [cadastroRapidoAtivo, setCadastroRapidoAtivo] = useState<{
+    tipo: CadastroRapidoTipo;
+    produtoIndex?: number;
+  } | null>(null);
+
+  useEffect(() => {
+    setClientesLista(clientes);
+  }, [clientes]);
+  useEffect(() => {
+    setFornecedoresLista(fornecedores);
+  }, [fornecedores]);
+  useEffect(() => {
+    setProdutosLista(produtos);
+  }, [produtos]);
+  useEffect(() => {
+    setTransportadorasLista(transportadoras);
+  }, [transportadoras]);
   const [tipo, setTipo] = useState<TipoPedido>('VENDA');
   const [clienteId, setClienteId] = useState<number | undefined>(undefined);
   const [fornecedorId, setFornecedorId] = useState<number | undefined>(undefined);
@@ -111,6 +138,14 @@ export function OrderForm({
   const [dataPedido, setDataPedido] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+  const minDataVencimento = useMemo(() => {
+    const hojeStr = new Date().toISOString().split('T')[0];
+    const hoje = parseDataLocal(hojeStr);
+    hoje.setHours(0, 0, 0, 0);
+    const pedido = parseDataLocal(dataPedido);
+    pedido.setHours(0, 0, 0, 0);
+    return pedido.getTime() < hoje.getTime() ? dataPedido : hojeStr;
+  }, [dataPedido]);
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento | undefined>(undefined);
   const [formaPagamentoEstrutural, setFormaPagamentoEstrutural] = useState<FormaPagamentoEstrutural | undefined>(undefined);
   /** Forma de pagamento exibida no dropdown: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */
@@ -170,7 +205,7 @@ export function OrderForm({
 
   // Conforme GUIA_PRODUTOS_PEDIDO_COMPRA.md: vínculo fornecedor no produto é apenas informativo.
   // Mostrar TODOS os produtos no pedido de compra - NÃO filtrar pelo fornecedor selecionado.
-  const produtosParaExibir = produtos;
+  const produtosParaExibir = produtosLista;
 
   const produtoSelectDesabilitado = tipo === 'COMPRA' && !fornecedorId;
   const produtoSelectPlaceholder =
@@ -383,7 +418,7 @@ export function OrderForm({
         if (order.itens && order.itens.length > 0) {
           setItens(
             order.itens.map((item) => {
-              const produtoItem = produtos.find((p) => p.id === item.produto_id);
+              const produtoItem = produtosLista.find((p) => p.id === item.produto_id);
               const estoque =
                 produtoItem
                   ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual)
@@ -456,6 +491,48 @@ export function OrderForm({
     setItens([...newItens]);
   };
 
+  const handleCadastroCriado = async (result: {
+    tipo: CadastroRapidoTipo;
+    id: number;
+    label: string;
+    produto?: Produto;
+    cliente?: Cliente;
+    fornecedor?: Fornecedor;
+    transportadora?: { id: number; nome: string };
+  }) => {
+    if (result.tipo === 'cliente' && result.cliente) {
+      setClientesLista((prev) =>
+        prev.some((c) => c.id === result.id) ? prev : [...prev, result.cliente!],
+      );
+      setClienteId(result.id);
+      void queryClient.invalidateQueries({ queryKey: ['clientes'] });
+    } else if (result.tipo === 'fornecedor' && result.fornecedor) {
+      setFornecedoresLista((prev) =>
+        prev.some((f) => f.id === result.id) ? prev : [...prev, result.fornecedor!],
+      );
+      setFornecedorId(result.id);
+      void queryClient.invalidateQueries({ queryKey: ['fornecedores'] });
+    } else if (result.tipo === 'transportadora' && result.transportadora) {
+      setTransportadorasLista((prev) =>
+        prev.some((t) => t.id === result.id)
+          ? prev
+          : [...prev, { id: result.transportadora!.id, nome: result.transportadora!.nome }],
+      );
+      setTransportadoraId(result.id);
+      void queryClient.invalidateQueries({ queryKey: ['transportadoras'] });
+    } else if (result.tipo === 'produto' && result.produto) {
+      setProdutosLista((prev) =>
+        prev.some((p) => p.id === result.id) ? prev : [...prev, result.produto!],
+      );
+      const idx = cadastroRapidoAtivo?.produtoIndex;
+      if (idx !== undefined) {
+        await handleItemChange(idx, 'produto_id', result.id);
+      }
+      void queryClient.invalidateQueries({ queryKey: ['produtos'] });
+    }
+    setCadastroRapidoAtivo(null);
+  };
+
   const valorTotalPedido =
     itens.reduce((acc, item) => {
       const quantidade = typeof item.quantidade === 'number' ? item.quantidade : 0;
@@ -477,11 +554,11 @@ export function OrderForm({
 
   const parceiroNome =
     tipo === 'VENDA'
-      ? clientes.find((c) => c.id === clienteId)?.nome_fantasia ||
-        clientes.find((c) => c.id === clienteId)?.nome_razao ||
-        clientes.find((c) => c.id === clienteId)?.nome
-      : fornecedores.find((f) => f.id === fornecedorId)?.nome_fantasia ||
-        fornecedores.find((f) => f.id === fornecedorId)?.nome_razao;
+      ? clientesLista.find((c) => c.id === clienteId)?.nome_fantasia ||
+        clientesLista.find((c) => c.id === clienteId)?.nome_razao ||
+        clientesLista.find((c) => c.id === clienteId)?.nome
+      : fornecedoresLista.find((f) => f.id === fornecedorId)?.nome_fantasia ||
+        fornecedoresLista.find((f) => f.id === fornecedorId)?.nome_razao;
 
   const inputClass = 'h-11 rounded-xl';
 
@@ -497,11 +574,11 @@ export function OrderForm({
     // Se não existir cadastro para o tipo de pedido, avisar o usuário e evitar envio vazio.
     // (Para edição, mantemos a lógica atual, pois o pedido pode vir com IDs já preenchidos.)
     if (!order) {
-      if (tipo === 'VENDA' && clientes.length === 0) {
+      if (tipo === 'VENDA' && clientesLista.length === 0) {
         toast.error('Nenhum cliente cadastrado. Cadastre um cliente para criar uma venda.');
         return;
       }
-      if (tipo === 'COMPRA' && fornecedores.length === 0) {
+      if (tipo === 'COMPRA' && fornecedoresLista.length === 0) {
         toast.error('Nenhum fornecedor cadastrado. Cadastre um fornecedor para criar uma compra.');
         return;
       }
@@ -513,9 +590,12 @@ export function OrderForm({
       return;
     }
 
-    // Validação: data de vencimento obrigatória e >= hoje (exceto BOLETO_DESCONTADO, que usa data do pedido)
+    // Validação: data de vencimento obrigatória (exceto BOLETO_DESCONTADO, que usa data do pedido)
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
+    const dataPedidoDate = parseDataLocal(dataPedido);
+    dataPedidoDate.setHours(0, 0, 0, 0);
+    const pedidoRetrospectivo = dataPedidoDate.getTime() < hoje.getTime();
     if (formaPagamentoEstrutural !== 'BOLETO_DESCONTADO') {
       if (!dataVencimento?.trim()) {
         toast.error('Informe a Data de Vencimento inicial.');
@@ -523,8 +603,13 @@ export function OrderForm({
       }
       const dataVencimentoDate = parseDataLocal(dataVencimento);
       dataVencimentoDate.setHours(0, 0, 0, 0);
-      if (dataVencimentoDate.getTime() < hoje.getTime()) {
-        toast.error('A data de vencimento não pode ser anterior ao dia atual.');
+      const limiteMinimoVencimento = pedidoRetrospectivo ? dataPedidoDate : hoje;
+      if (dataVencimentoDate.getTime() < limiteMinimoVencimento.getTime()) {
+        toast.error(
+          pedidoRetrospectivo
+            ? 'A data de vencimento não pode ser anterior à data do pedido.'
+            : 'A data de vencimento não pode ser anterior ao dia atual.'
+        );
         return;
       }
     }
@@ -721,8 +806,18 @@ export function OrderForm({
           >
             <div className="space-y-4">
               {tipo === 'VENDA' ? (
-                <div className="space-y-2">
-                  <Label>Cliente</Label>
+                <CampoSelectComCadastroRapido
+                  label="Cliente"
+                  cadastroRapidoTipo="cliente"
+                  cadastroRapidoAberto={cadastroRapidoAtivo?.tipo === 'cliente'}
+                  onToggleCadastroRapido={() =>
+                    setCadastroRapidoAtivo((prev) =>
+                      prev?.tipo === 'cliente' ? null : { tipo: 'cliente' },
+                    )
+                  }
+                  onCloseCadastroRapido={() => setCadastroRapidoAtivo(null)}
+                  onCadastroCriado={handleCadastroCriado}
+                >
                   <Select
                     value={clienteId?.toString() || ''}
                     onValueChange={(value) => setClienteId(Number(value))}
@@ -731,12 +826,12 @@ export function OrderForm({
                       <SelectValue placeholder="Selecione um cliente" />
                     </SelectTrigger>
                     <SelectContent>
-                      {clientes.length === 0 ? (
+                      {clientesLista.length === 0 ? (
                         <div className="py-4 px-2 text-sm text-destructive text-center">
                           Nenhum cliente cadastrado
                         </div>
                       ) : (
-                        clientes.map((cliente) => (
+                        clientesLista.map((cliente) => (
                           <SelectItem key={cliente.id} value={cliente.id.toString()}>
                             {cliente.nome_fantasia || cliente.nome_razao || cliente.nome}
                           </SelectItem>
@@ -744,7 +839,7 @@ export function OrderForm({
                       )}
                     </SelectContent>
                   </Select>
-                  {clientes.length === 0 && (
+                  {clientesLista.length === 0 && (
                     <Alert className="mt-3 border-destructive/50 bg-destructive/5">
                       <AlertDescription>
                         Para criar um pedido de <b>VENDA</b>, é necessário cadastrar um cliente.
@@ -772,10 +867,20 @@ export function OrderForm({
                       </AlertDescription>
                     </Alert>
                   )}
-                </div>
+                </CampoSelectComCadastroRapido>
               ) : (
-                <div className="space-y-2">
-                  <Label>Fornecedor</Label>
+                <CampoSelectComCadastroRapido
+                  label="Fornecedor"
+                  cadastroRapidoTipo="fornecedor"
+                  cadastroRapidoAberto={cadastroRapidoAtivo?.tipo === 'fornecedor'}
+                  onToggleCadastroRapido={() =>
+                    setCadastroRapidoAtivo((prev) =>
+                      prev?.tipo === 'fornecedor' ? null : { tipo: 'fornecedor' },
+                    )
+                  }
+                  onCloseCadastroRapido={() => setCadastroRapidoAtivo(null)}
+                  onCadastroCriado={handleCadastroCriado}
+                >
                   <Select
                     value={fornecedorId?.toString() || ''}
                     onValueChange={(value) => setFornecedorId(Number(value))}
@@ -784,12 +889,12 @@ export function OrderForm({
                       <SelectValue placeholder="Selecione um fornecedor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {fornecedores.length === 0 ? (
+                      {fornecedoresLista.length === 0 ? (
                         <div className="py-4 px-2 text-sm text-destructive text-center">
                           Nenhum fornecedor cadastrado
                         </div>
                       ) : (
-                        fornecedores.map((fornecedor) => (
+                        fornecedoresLista.map((fornecedor) => (
                           <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
                             {fornecedor.nome_fantasia || fornecedor.nome_razao}
                           </SelectItem>
@@ -797,14 +902,14 @@ export function OrderForm({
                       )}
                     </SelectContent>
                   </Select>
-                  {fornecedores.length === 0 && (
+                  {fornecedoresLista.length === 0 && (
                     <Alert className="mt-3 border-destructive/50 bg-destructive/5">
                       <AlertDescription>
                         Para criar um pedido de <b>COMPRA</b>, é necessário cadastrar um fornecedor.
                       </AlertDescription>
                     </Alert>
                   )}
-                </div>
+                </CampoSelectComCadastroRapido>
               )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -861,7 +966,25 @@ export function OrderForm({
               {itens.map((item, index) => (
                 <div key={index} className="grid grid-cols-12 gap-4 rounded-xl border border-border/60 p-4">
                   <div className="col-span-4 space-y-2">
-                    <Label>Produto</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>Produto</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 rounded-lg"
+                        title="Cadastro rápido de produto"
+                        onClick={() =>
+                          setCadastroRapidoAtivo((prev) =>
+                            prev?.tipo === 'produto' && prev.produtoIndex === index
+                              ? null
+                              : { tipo: 'produto', produtoIndex: index },
+                          )
+                        }
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <Select
                       value={item.produto_id && item.produto_id !== 0 ? item.produto_id.toString() : ''}
                       onValueChange={(value) => handleItemChange(index, 'produto_id', Number(value))}
@@ -903,6 +1026,14 @@ export function OrderForm({
                         )}
                       </SelectContent>
                     </Select>
+                    {cadastroRapidoAtivo?.tipo === 'produto' &&
+                      cadastroRapidoAtivo.produtoIndex === index && (
+                        <CadastroRapidoEntidade
+                          tipo="produto"
+                          onClose={() => setCadastroRapidoAtivo(null)}
+                          onCreated={handleCadastroCriado}
+                        />
+                      )}
                   </div>
 
                   <div className="col-span-2 space-y-2">
@@ -916,7 +1047,7 @@ export function OrderForm({
                       className={cn(
                         (() => {
                           if (tipo !== 'VENDA' || !item.produto_id) return false;
-                          const produtoItem = produtos.find((p) => p.id === item.produto_id);
+                          const produtoItem = produtosLista.find((p) => p.id === item.produto_id);
                           const estoque =
                             item.estoque_disponivel ??
                             (produtoItem ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual) : undefined);
@@ -927,7 +1058,7 @@ export function OrderForm({
                     />
                     {item.produto_id ? (
                       (() => {
-                        const produtoItem = produtos.find((p) => p.id === item.produto_id);
+                        const produtoItem = produtosLista.find((p) => p.id === item.produto_id);
                         const estoqueDisponivel =
                           item.estoque_disponivel ??
                           (produtoItem ? ((produtoItem as any).estoque_disponivel ?? produtoItem.estoque_atual) : undefined);
@@ -1083,7 +1214,7 @@ export function OrderForm({
                     type="date"
                     value={dataVencimento}
                     onChange={(e) => setDataVencimento(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={minDataVencimento}
                     required
                   />
                 </div>
@@ -1117,7 +1248,7 @@ export function OrderForm({
                         type="date"
                         value={dataVencimento}
                         onChange={(e) => setDataVencimento(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={minDataVencimento}
                         required
                       />
                     </div>
@@ -1160,7 +1291,7 @@ export function OrderForm({
                         type="date"
                         value={dataAntecipacao}
                         onChange={(e) => setDataAntecipacao(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={minDataVencimento}
                       />
                     </div>
                   </div>
@@ -1186,25 +1317,35 @@ export function OrderForm({
                 return (
               <>
               <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Transportadora</Label>
+                <CampoSelectComCadastroRapido
+                  label="Transportadora"
+                  cadastroRapidoTipo="transportadora"
+                  cadastroRapidoAberto={cadastroRapidoAtivo?.tipo === 'transportadora'}
+                  onToggleCadastroRapido={() =>
+                    setCadastroRapidoAtivo((prev) =>
+                      prev?.tipo === 'transportadora' ? null : { tipo: 'transportadora' },
+                    )
+                  }
+                  onCloseCadastroRapido={() => setCadastroRapidoAtivo(null)}
+                  onCadastroCriado={handleCadastroCriado}
+                >
                   <Select
                     value={transportadoraId?.toString() || ''}
                     onValueChange={(value) => setTransportadoraId(Number(value))}
-                    disabled={transportadoras.length === 0}
+                    disabled={transportadorasLista.length === 0}
                   >
                     <SelectTrigger>
                       <SelectValue
                         placeholder={
-                          transportadoras.length === 0
+                          transportadorasLista.length === 0
                             ? 'Não há transportadora cadastrada'
                             : 'Selecione uma transportadora'
                         }
                       />
                     </SelectTrigger>
-                    {transportadoras.length > 0 && (
+                    {transportadorasLista.length > 0 && (
                       <SelectContent>
-                        {transportadoras.map((transportadora) => (
+                        {transportadorasLista.map((transportadora) => (
                           <SelectItem key={transportadora.id} value={transportadora.id.toString()}>
                             {transportadora.nome}
                           </SelectItem>
@@ -1212,7 +1353,7 @@ export function OrderForm({
                       </SelectContent>
                     )}
                   </Select>
-                </div>
+                </CampoSelectComCadastroRapido>
 
                 <div className="space-y-2">
                   <Label>Prazo de Entrega (dias)</Label>
