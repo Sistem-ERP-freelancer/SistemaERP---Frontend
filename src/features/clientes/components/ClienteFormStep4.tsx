@@ -11,11 +11,13 @@ import { CondicaoPagamentoForm } from "./CondicaoPagamentoForm";
 interface ClienteFormStep4Props {
   condicoesPagamento: CondicaoPagamento[];
   onCondicoesPagamentoChange: (condicoes: CondicaoPagamento[]) => void;
+  embedded?: boolean;
 }
 
 export const ClienteFormStep4 = ({
   condicoesPagamento,
   onCondicoesPagamentoChange,
+  embedded = false,
 }: ClienteFormStep4Props) => {
   const handleAddCondicao = () => {
     onCondicoesPagamentoChange([
@@ -48,6 +50,29 @@ export const ClienteFormStep4 = ({
     onCondicoesPagamentoChange(newCondicoes);
   };
 
+  const list =
+    condicoesPagamento.length > 0 ? (
+      <div className="space-y-4">
+        {condicoesPagamento.map((condicao, index) => (
+          <CondicaoPagamentoForm
+            key={index}
+            condicao={condicao}
+            index={index}
+            onChange={handleCondicaoChange}
+            onRemove={handleRemoveCondicao}
+            isPadrao={condicao.padrao}
+            onSetPadrao={handleSetPadrao}
+          />
+        ))}
+      </div>
+    ) : (
+      <p className="text-sm text-muted-foreground">
+        Nenhuma condição de pagamento. Adicione se desejar definir prazos padrão para pedidos.
+      </p>
+    );
+
+  if (embedded) return list;
+
   return (
     <div className="space-y-6">
       <div className="bg-card border rounded-lg p-6 space-y-6">
@@ -70,26 +95,22 @@ export const ClienteFormStep4 = ({
             Adicionar Condição
           </Button>
         </div>
-
-        {condicoesPagamento.length > 0 && (
-          <div className="space-y-4">
-            {condicoesPagamento.map((condicao, index) => (
-              <CondicaoPagamentoForm
-                key={index}
-                condicao={condicao}
-                index={index}
-                onChange={handleCondicaoChange}
-                onRemove={handleRemoveCondicao}
-                isPadrao={condicao.padrao}
-                onSetPadrao={handleSetPadrao}
-              />
-            ))}
-          </div>
-        )}
+        {list}
       </div>
     </div>
   );
 };
+
+export const ClienteFormStep4Actions = ({
+  onAdd,
+}: {
+  onAdd: () => void;
+}) => (
+  <Button type="button" onClick={onAdd} variant="outline" size="sm" className="rounded-xl">
+    <Plus className="mr-2 h-4 w-4" />
+    Adicionar condição
+  </Button>
+);
 
 
 

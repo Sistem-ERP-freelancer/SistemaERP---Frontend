@@ -11,11 +11,13 @@ import { EnderecoForm } from "./EnderecoForm";
 interface ClienteFormStep2Props {
   enderecos: EnderecoFormData[];
   onEnderecosChange: (enderecos: EnderecoFormData[]) => void;
+  embedded?: boolean;
 }
 
 export const ClienteFormStep2 = ({
   enderecos,
   onEnderecosChange,
+  embedded = false,
 }: ClienteFormStep2Props) => {
   const handleAddEndereco = () => {
     onEnderecosChange([
@@ -43,6 +45,28 @@ export const ClienteFormStep2 = ({
     onEnderecosChange(enderecos.filter((_, i) => i !== index));
   };
 
+  const list = (
+    <div className="space-y-4">
+      {enderecos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nenhum endereço adicionado. Clique em &quot;Adicionar endereço&quot; se desejar incluir.
+        </p>
+      ) : null}
+      {enderecos.map((endereco, index) => (
+        <EnderecoForm
+          key={index}
+          endereco={endereco}
+          index={index}
+          totalEnderecos={enderecos.length}
+          onChange={(updated) => handleEnderecoChange(index, updated)}
+          onRemove={() => handleRemoveEndereco(index)}
+        />
+      ))}
+    </div>
+  );
+
+  if (embedded) return list;
+
   return (
     <div className="space-y-6">
       <div className="bg-card border rounded-lg p-6 space-y-6">
@@ -68,19 +92,20 @@ export const ClienteFormStep2 = ({
             Adicionar Endereço
           </Button>
         </div>
-
-        {enderecos.map((endereco, index) => (
-          <EnderecoForm
-            key={index}
-            endereco={endereco}
-            index={index}
-            totalEnderecos={enderecos.length}
-            onChange={(updated) => handleEnderecoChange(index, updated)}
-            onRemove={() => handleRemoveEndereco(index)}
-          />
-        ))}
+        {list}
       </div>
     </div>
   );
 };
+
+export const ClienteFormStep2Actions = ({
+  onAdd,
+}: {
+  onAdd: () => void;
+}) => (
+  <Button type="button" onClick={onAdd} variant="outline" size="sm" className="rounded-xl">
+    <Plus className="mr-2 h-4 w-4" />
+    Adicionar endereço
+  </Button>
+);
 

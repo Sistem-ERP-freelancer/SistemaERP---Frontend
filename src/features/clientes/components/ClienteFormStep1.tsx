@@ -11,12 +11,16 @@ import { ConsultaCnpjResponse } from "@/services/cnpj.service";
 import { Building2, Check, Circle, DollarSign, FileText, Hash, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ClienteFormData, ContatoFormData, EnderecoFormData } from "../types/cliente.types";
+import { cn } from "@/lib/utils";
 
 interface ClienteFormStep1Props {
   formData: ClienteFormData;
   onFormDataChange: (data: Partial<ClienteFormData>) => void;
   onPreencherEnderecos?: (enderecos: EnderecoFormData[]) => void;
   onPreencherContatos?: (contatos: ContatoFormData[]) => void;
+  showTipoSelection?: boolean;
+  pageLayout?: boolean;
+  onlyTipoSelection?: boolean;
 }
 
 export const ClienteFormStep1 = ({
@@ -24,6 +28,9 @@ export const ClienteFormStep1 = ({
   onFormDataChange,
   onPreencherEnderecos,
   onPreencherContatos,
+  showTipoSelection = true,
+  pageLayout = false,
+  onlyTipoSelection = false,
 }: ClienteFormStep1Props) => {
   // Estado local para o valor do input de limite de crédito (permite digitação livre)
   const [limiteCreditoInput, setLimiteCreditoInput] = useState<string>('');
@@ -157,86 +164,85 @@ export const ClienteFormStep1 = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Tipo de Cliente */}
-      <div className="space-y-3">
-        <Label className="text-sm font-semibold">Tipo de Cliente</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            type="button"
-            onClick={() => handleTipoPessoaChange("PESSOA_JURIDICA")}
-            className={`relative p-6 rounded-lg border-2 transition-all ${
-              (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
-                ? "border-primary bg-primary/5"
-                : "border-border bg-card hover:border-primary/50"
-            }`}
-          >
-            {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
-              <div className="absolute top-3 right-3">
-                <Check className="w-5 h-5 text-primary" />
-              </div>
-            )}
-            <div className="flex flex-col items-center gap-3">
-              <Building2
-                className={`w-8 h-8 ${
-                  (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
-                    ? "text-primary"
-                    : "text-muted-foreground"
-                }`}
-              />
-              <div className="text-center">
-                <p
-                  className={`font-semibold ${
-                    (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA"
-                      ? "text-primary"
-                      : "text-foreground"
-                  }`}
-                >
-                  Pessoa Jurídica
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">CNPJ</p>
-              </div>
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTipoPessoaChange("PESSOA_FISICA")}
-            className={`relative p-6 rounded-lg border-2 transition-all ${
-              (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
-                ? "border-primary bg-primary/5"
-                : "border-border bg-card hover:border-primary/50"
-            }`}
-          >
-            {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA" && (
-              <div className="absolute top-3 right-3">
-                <Check className="w-5 h-5 text-primary" />
-              </div>
-            )}
-            <div className="flex flex-col items-center gap-3">
-              <User
-                className={`w-8 h-8 ${
-                  (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
-                    ? "text-primary"
-                    : "text-muted-foreground"
-                }`}
-              />
-              <div className="text-center">
-                <p
-                  className={`font-semibold ${
-                    (formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_FISICA"
-                      ? "text-primary"
-                      : "text-foreground"
-                  }`}
-                >
-                  Pessoa Física
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">CPF</p>
-              </div>
-            </div>
-          </button>
+    <div className="space-y-4">
+      {showTipoSelection && (
+        <div className={pageLayout ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'space-y-3'}>
+          {!pageLayout && (
+            <Label className="text-sm font-semibold">Tipo de Cliente</Label>
+          )}
+          <div className={pageLayout ? 'contents' : 'grid grid-cols-2 gap-4'}>
+          {(
+            [
+              { value: 'PESSOA_JURIDICA' as const, label: 'Pessoa Jurídica', sub: 'CNPJ', icon: Building2, color: 'blue' as const },
+              { value: 'PESSOA_FISICA' as const, label: 'Pessoa Física', sub: 'CPF', icon: User, color: 'emerald' as const },
+            ] as const
+          ).map(({ value, label, sub, icon: Icon, color }) => {
+            const selected = (formData.tipoPessoa || 'PESSOA_FISICA') === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => handleTipoPessoaChange(value)}
+                className={
+                  pageLayout
+                    ? cn(
+                        'group relative flex flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all',
+                        selected
+                          ? color === 'blue'
+                            ? 'border-blue-500/60 bg-blue-500/10 shadow-sm'
+                            : 'border-emerald-500/60 bg-emerald-500/10 shadow-sm'
+                          : 'border-border/60 bg-card hover:border-primary/30',
+                      )
+                    : cn(
+                        'relative rounded-lg border-2 p-6 transition-all',
+                        selected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-primary/50',
+                      )
+                }
+              >
+                {pageLayout ? (
+                  <>
+                    <div
+                      className={cn(
+                        'flex h-10 w-10 items-center justify-center rounded-xl transition-colors',
+                        selected
+                          ? color === 'blue'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-emerald-500 text-white'
+                          : 'bg-muted text-muted-foreground group-hover:bg-primary/15',
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">{label}</p>
+                      <p className="text-xs text-muted-foreground">{sub}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {selected && (
+                      <div className="absolute top-3 right-3">
+                        <Check className="w-5 h-5 text-primary" />
+                      </div>
+                    )}
+                    <div className="flex flex-col items-center gap-3">
+                      <Icon className={cn('w-8 h-8', selected ? 'text-primary' : 'text-muted-foreground')} />
+                      <div className="text-center">
+                        <p className={cn('font-semibold', selected ? 'text-primary' : 'text-foreground')}>{label}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </button>
+            );
+          })}
+          </div>
         </div>
-      </div>
+      )}
 
+      {onlyTipoSelection ? null : (
+        <>
       {/* Nome Fantasia - Apenas para Pessoa Jurídica (PRIMEIRO) - Obrigatório conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL.md */}
       {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
         <div className="space-y-2">
@@ -484,6 +490,8 @@ export const ClienteFormStep1 = ({
           </button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

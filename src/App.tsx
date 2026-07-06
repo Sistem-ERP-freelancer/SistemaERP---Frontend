@@ -13,6 +13,7 @@ import AdminPanel from "./pages/AdminPanel";
 import CentroCustos from "./pages/CentroCustos";
 import NovaDespesa from "./pages/centro-custos/NovaDespesa";
 import Clientes from "./pages/Clientes";
+import NovoCliente from "./pages/clientes/NovoCliente";
 import ContasAPagarContaFinanceiraPagamentos from "./pages/contas-a-pagar/ContasAPagarContaFinanceiraPagamentos";
 import ContasAPagarDespesaDetalhes from "./pages/contas-a-pagar/ContasAPagarDespesaDetalhes";
 import ContasAPagarPedidoDetalhes from "./pages/contas-a-pagar/ContasAPagarPedidoDetalhes";
@@ -33,6 +34,7 @@ import NovaTransacao from "./pages/financeiro/NovaTransacao";
 import FluxoDeCaixa from "./pages/FluxoDeCaixa";
 import RelatorioComprasCliente from "./pages/RelatorioComprasCliente";
 import Fornecedores from "./pages/Fornecedores";
+import NovoFornecedor from "./pages/fornecedores/NovoFornecedor";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -325,6 +327,14 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
+            <Route
+              path="/fornecedores/novo"
+              element={
+                <ProtectedRoute>
+                  <NovoFornecedor />
+                </ProtectedRoute>
+              }
+            />
             <Route 
               path="/clientes" 
               element={
@@ -332,6 +342,14 @@ const App = () => (
                   <Clientes />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/clientes/novo"
+              element={
+                <ProtectedRoute>
+                  <NovoCliente />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/produtos" 

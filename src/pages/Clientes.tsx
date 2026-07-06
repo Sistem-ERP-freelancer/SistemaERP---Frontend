@@ -43,7 +43,6 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import {
-    ClienteCreateDialog,
     ClienteStats,
     ClienteTable,
     RelatorioClienteDialog,
@@ -91,13 +90,14 @@ import {
     User as UserIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const Clientes = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(15); // Padrão do backend para clientes
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -376,92 +376,7 @@ const Clientes = () => {
     setCurrentPage(1);
   }, [searchTerm, filtrosAvancados]);
 
-  // Mutation para criar cliente
-  const createClienteMutation = useMutation({
-    mutationFn: async (data: CreateClienteDto) => {
-      return await clientesService.criar(data);
-    },
-    onSuccess: async () => {
-      // Invalidar todas as queries de clientes (sem exact para pegar todas as variações)
-      await queryClient.invalidateQueries({
-        queryKey: ["clientes"],
-        exact: false,
-      });
-
-      // Invalidar estatísticas para garantir atualização
-      await queryClient.invalidateQueries({
-        queryKey: ["clientes-estatisticas"],
-        exact: true,
-      });
-      
-      // Forçar refetch imediato para atualizar a tabela e estatísticas
-      await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: ["clientes"],
-          exact: false,
-        }),
-        queryClient.refetchQueries({
-          queryKey: ["clientes-estatisticas"],
-          exact: true,
-        }),
-      ]);
-      
-      toast.success("Cliente cadastrado com sucesso!");
-      setDialogOpen(false);
-    },
-    onError: (error: unknown) => {
-      // Type guard para erro com response
-      const isErrorWithResponse = (
-        err: unknown
-      ): err is {
-        response?: {
-          data?: {
-            message?: string | string[];
-            error?: string | { message?: string };
-          };
-        };
-      } => {
-        return typeof err === "object" && err !== null;
-      };
-
-      if (isErrorWithResponse(error)) {
-        const errorResponse = error.response?.data;
-
-        // Tenta extrair mensagem de erro de diferentes formatos
-        let errorMessage = "";
-
-        if (Array.isArray(errorResponse?.message)) {
-          // Se for array, junta todas as mensagens
-          errorMessage = errorResponse.message.join(". ");
-        } else if (typeof errorResponse?.message === "string") {
-          errorMessage = errorResponse.message;
-        } else if (
-          typeof errorResponse?.error === "object" &&
-          errorResponse.error?.message
-        ) {
-          errorMessage = errorResponse.error.message;
-        } else if (typeof errorResponse?.error === "string") {
-          errorMessage = errorResponse.error;
-        } else {
-          errorMessage = "Erro ao cadastrar cliente";
-        }
-
-        // Mensagem mais amigável quando condicoes_pagamento é rejeitado
-        // (ex.: backend pode não suportar CHEQUE ainda no enum de forma_pagamento)
-        if (
-          errorMessage?.toLowerCase().includes("condicoes_pagamento") &&
-          errorMessage?.toLowerCase().includes("inválido")
-        ) {
-          errorMessage =
-            "Condições de pagamento inválidas. Se estiver usando 'Cheque', verifique se o backend suporta essa forma. Caso contrário, use outra forma de pagamento ou revise os dados das parcelas.";
-        }
-
-        toast.error(errorMessage);
-      } else {
-        toast.error("Erro ao cadastrar cliente");
-      }
-    },
-  });
+  // Mutation para criar cliente — movida para /clientes/novo
 
   // Query para buscar cliente por ID (para visualização e edição)
   const { data: selectedCliente, isLoading: isLoadingCliente } = useQuery({
@@ -1328,7 +1243,6 @@ const Clientes = () => {
   // IMPORTANTE: Deve ser definido APÓS todas as mutations serem criadas
   const isAnyOperationPending = 
     isSavingCliente ||
-    createClienteMutation.isPending ||
     deleteClienteMutation.isPending ||
     removerEnderecoMutation.isPending ||
     removerContatoMutation.isPending ||
@@ -1541,158 +1455,14 @@ const Clientes = () => {
           subtitle="Cadastro e gestão de clientes, com indicadores de status e inadimplência."
           loadingHint={isLoadingEstatisticas ? "Carregando resumo…" : undefined}
           actions={
-            <ClienteCreateDialog
-            open={dialogOpen}
-            onOpenChange={setDialogOpen}
-            onCreate={({
-              cliente,
-              enderecos: enderecosData,
-              contatos: contatosData,
-              condicoesPagamento,
-            }) => {
-              // Validação final antes de criar
-              // Conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL copy.md: PJ = só Nome Fantasia obrigatório; não exigir "nome" para PJ
-              // Se for PJ (ou tiver só Nome Fantasia preenchido), validar apenas nome_fantasia
-              const ehPessoaJuridica = cliente.tipoPessoa === "PESSOA_JURIDICA" ||
-                (!!(cliente.nome_fantasia?.trim()) && !(cliente.nome?.trim()));
-              if (ehPessoaJuridica) {
-                if (!cliente.nome_fantasia || cliente.nome_fantasia.trim() === '') {
-                  toast.error("Nome Fantasia é obrigatório para Pessoa Jurídica.");
-                  return;
-                }
-                // Para PJ não exige "nome"; backend usa nome_fantasia como nome
-              } else {
-                // Para PF: nome é obrigatório
-                if (!cliente.nome || cliente.nome.trim() === '') {
-                  toast.error("Nome é obrigatório");
-                  return;
-                }
-              }
-
-              // CPF/CNPJ é opcional - validar apenas se informado
-              let formattedDoc: string | undefined = undefined;
-              if (cliente.cpf_cnpj && cliente.cpf_cnpj.trim() !== '') {
-                const cleanedDoc = cleanDocument(cliente.cpf_cnpj);
-                const tipoPessoa = cliente.tipoPessoa || "PESSOA_FISICA"; // Default se não informado
-
-                // Valida o documento apenas se informado
-                if (tipoPessoa === "PESSOA_FISICA") {
-                  if (cleanedDoc.length !== 11) {
-                    toast.error("CPF deve ter 11 dígitos");
-                    return;
-                  }
-                  formattedDoc = formatCPF(cleanedDoc);
-                } else {
-                  if (cleanedDoc.length !== 14) {
-                    toast.error("CNPJ deve ter 14 dígitos");
-                    return;
-                  }
-                  formattedDoc = formatCNPJ(cleanedDoc);
-                }
-              }
-
-              // Cria o objeto com o documento formatado
-              // Conforme GUIA_FRONTEND_NOME_FANTASIA_RAZAO_SOCIAL copy.md (Opção A): PJ envia apenas nome_fantasia; backend preenche nome com nome_fantasia
-              const clienteToCreate: CreateClienteDto = {
-                // PJ: enviar apenas nome_fantasia (e nome_razao se preenchido). Não enviar "nome"; backend usa nome_fantasia.
-                ...(cliente.tipoPessoa === "PESSOA_JURIDICA" 
-                  ? {
-                      tipoPessoa: "PESSOA_JURIDICA",
-                      statusCliente: cliente.statusCliente || "ATIVO",
-                      nome_fantasia: cliente.nome_fantasia?.trim() || "",
-                      ...(cliente.nome_razao?.trim() ? { nome_razao: cliente.nome_razao.trim() } : {}),
-                    }
-                  : {
-                      // PF: nome obrigatório
-                      nome: cliente.nome || "",
-                    }),
-                // Campos opcionais - só enviar se informados
-                ...(cliente.tipoPessoa ? { tipoPessoa: cliente.tipoPessoa } : {}),
-                ...(cliente.statusCliente ? { statusCliente: cliente.statusCliente } : {}),
-                ...(cliente.inscricao_estadual && cliente.inscricao_estadual.trim() ? { inscricao_estadual: cliente.inscricao_estadual } : {}),
-                ...(formattedDoc ? { cpf_cnpj: formattedDoc } : {}),
-                // Limite de crédito: null se não informado (sem limite), número se informado
-                ...(cliente.limite_credito !== undefined && cliente.limite_credito !== null && cliente.limite_credito >= 0
-                  ? { limite_credito: cliente.limite_credito } 
-                  : cliente.limite_credito === null 
-                    ? { limite_credito: null }
-                    : {}),
-                // Endereços e contatos apenas se tiverem dados válidos
-                ...(enderecosData.filter((end) => end.cep || end.logradouro || end.cidade).length > 0
-                  ? { enderecos: enderecosData.filter((end) => end.cep || end.logradouro || end.cidade) }
-                  : {}),
-                ...(contatosData.filter((cont) => cont.telefone || cont.email || cont.nomeContato).length > 0
-                  ? { contatos: contatosData.filter((cont) => cont.telefone || cont.email || cont.nomeContato) }
-                  : {}),
-                ...(condicoesPagamento && condicoesPagamento.length > 0
-                  ? {
-                      condicoes_pagamento: condicoesPagamento.map((cp) => {
-                        // Validação prévia
-                        const descricaoLabel = cp.descricao?.trim() || '(sem descrição)';
-                        if (cp.parcelado) {
-                          if (!cp.numero_parcelas || cp.numero_parcelas < 1) {
-                            toast.error(`Condição "${descricaoLabel}": Número de parcelas inválido. Por favor, informe um número válido de parcelas.`);
-                            throw new Error(`Número de parcelas inválido para condição: ${descricaoLabel}`);
-                          }
-                          
-                          if (!cp.parcelas || cp.parcelas.length === 0) {
-                            toast.error(`Condição "${descricaoLabel}": Parcelas não foram criadas. Por favor, verifique o número de parcelas.`);
-                            throw new Error(`Parcelas não criadas para condição: ${descricaoLabel}`);
-                          }
-
-                          if (cp.parcelas.length !== cp.numero_parcelas) {
-                            toast.error(`Condição "${descricaoLabel}": O número de parcelas (${cp.parcelas.length}) não corresponde ao informado (${cp.numero_parcelas}).`);
-                            throw new Error(`Número de parcelas inconsistente para condição: ${descricaoLabel}`);
-                          }
-                        }
-
-                        // Construir objeto (descricao opcional)
-                        const condicaoPagamento: any = {
-                          ...(cp.descricao != null && cp.descricao !== '' ? { descricao: cp.descricao.trim() } : {}),
-                          forma_pagamento: cp.forma_pagamento,
-                          parcelado: cp.parcelado,
-                          padrao: cp.padrao,
-                        };
-
-                        // Se parcelado, enviar numero_parcelas e parcelas
-                        if (cp.parcelado) {
-                          // Se parcelado, enviar numero_parcelas e parcelas (garantir que são números válidos)
-                          condicaoPagamento.numero_parcelas = Number(cp.numero_parcelas);
-                          condicaoPagamento.parcelas = cp.parcelas.map(p => ({
-                            numero_parcela: Number(p.numero_parcela),
-                            dias_vencimento: Number(p.dias_vencimento),
-                            percentual: Number(p.percentual),
-                          }));
-                        } else {
-                          // Se não parcelado, enviar prazo_dias como 0 (campo removido do formulário)
-                          condicaoPagamento.prazo_dias = cp.prazo_dias ?? 0;
-                        }
-
-                        if (import.meta.env.DEV) {
-                          console.log('[Clientes] Condição de pagamento preparada:', {
-                            descricao: condicaoPagamento.descricao,
-                            parcelado: condicaoPagamento.parcelado,
-                            numero_parcelas: condicaoPagamento.numero_parcelas,
-                            quantidade_parcelas: condicaoPagamento.parcelas?.length,
-                            primeira_parcela: condicaoPagamento.parcelas?.[0],
-                            ultima_parcela: condicaoPagamento.parcelas?.[condicaoPagamento.parcelas?.length - 1],
-                          });
-                        }
-
-                        return condicaoPagamento;
-                      }),
-                    }
-                  : {}),
-              };
-
-              if (import.meta.env.DEV) {
-                console.log('[Clientes] Payload completo antes de enviar:', JSON.stringify(clienteToCreate, null, 2));
-              }
-
-              createClienteMutation.mutate(clienteToCreate);
-            }}
-            isPending={createClienteMutation.isPending}
-          />
+            <Button
+              variant="gradient"
+              className="gap-2"
+              onClick={() => navigate("/clientes/novo")}
+            >
+              <Plus className="w-4 h-4" />
+              Criar Cliente
+            </Button>
           }
         />
 
@@ -4354,14 +4124,12 @@ const Clientes = () => {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-sm font-medium text-foreground">
               {isSavingCliente && "Salvando cliente..."}
-              {createClienteMutation.isPending && "Criando cliente..."}
               {deleteClienteMutation.isPending && "Excluindo cliente..."}
               {removerEnderecoMutation.isPending && "Removendo endereço..."}
               {removerContatoMutation.isPending && "Removendo contato..."}
               {updateEnderecoMutation.isPending && "Atualizando endereço..."}
               {updateContatoMutation.isPending && "Atualizando contato..."}
               {!isSavingCliente && 
-               !createClienteMutation.isPending && 
                !deleteClienteMutation.isPending &&
                !removerEnderecoMutation.isPending &&
                !removerContatoMutation.isPending &&

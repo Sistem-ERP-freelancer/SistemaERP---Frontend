@@ -12,12 +12,14 @@ interface FornecedorFormStep3Props {
   contatos: ContatoFormData[];
   onContatosChange: (contatos: ContatoFormData[]) => void;
   totalEnderecos: number;
+  embedded?: boolean;
 }
 
 export const FornecedorFormStep3 = ({
   contatos,
   onContatosChange,
   totalEnderecos,
+  embedded = false,
 }: FornecedorFormStep3Props) => {
   const handleAddContato = () => {
     onContatosChange([
@@ -44,6 +46,30 @@ export const FornecedorFormStep3 = ({
     onContatosChange(contatos.filter((_, i) => i !== index));
   };
 
+  const list = (
+    <div className="space-y-4">
+      {contatos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nenhum contato adicionado. Clique em &quot;Adicionar contato&quot; se desejar incluir.
+        </p>
+      ) : null}
+      {contatos.map((contato, index) => (
+        <ContatoForm
+          key={index}
+          contato={contato}
+          index={index}
+          totalContatos={contatos.length}
+          onChange={(updated) => handleContatoChange(index, updated)}
+          onRemove={() => handleRemoveContato(index)}
+          showAtivoSwitch={false}
+          showOutroTelefone={totalEnderecos > 1}
+        />
+      ))}
+    </div>
+  );
+
+  if (embedded) return list;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -61,19 +87,18 @@ export const FornecedorFormStep3 = ({
           Adicionar Contato
         </Button>
       </div>
-
-      {contatos.map((contato, index) => (
-        <ContatoForm
-          key={index}
-          contato={contato}
-          index={index}
-          totalContatos={contatos.length}
-          onChange={(updated) => handleContatoChange(index, updated)}
-          onRemove={() => handleRemoveContato(index)}
-          showAtivoSwitch={false}
-          showOutroTelefone={totalEnderecos > 1}
-        />
-      ))}
+      {list}
     </div>
   );
 };
+
+export const FornecedorFormStep3Actions = ({
+  onAdd,
+}: {
+  onAdd: () => void;
+}) => (
+  <Button type="button" onClick={onAdd} variant="outline" size="sm" className="rounded-xl">
+    <Plus className="mr-2 h-4 w-4" />
+    Adicionar contato
+  </Button>
+);
