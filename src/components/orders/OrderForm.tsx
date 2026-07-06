@@ -35,6 +35,7 @@ import {
     TipoPedido,
 } from '@/types/pedido';
 import type { Roca } from '@/types/roca';
+import type { PedidoDraftFromPrevisao } from '@/types/pedido-draft-previsao';
 import {
   CadastroRapidoEntidade,
   CadastroRapidoTipo,
@@ -84,6 +85,8 @@ interface OrderFormProps {
   fornecedores: Fornecedor[];
   produtos: Produto[];
   transportadoras: Array<{ id: number; nome: string }>;
+  /** Pré-preenche o formulário ao gerar pedido a partir de uma previsão de receita. */
+  draftFromPrevisao?: PedidoDraftFromPrevisao | null;
 }
 
 interface OrderItemForm {
@@ -106,6 +109,7 @@ export function OrderForm({
   fornecedores,
   produtos,
   transportadoras,
+  draftFromPrevisao = null,
 }: OrderFormProps) {
   const queryClient = useQueryClient();
   const formActive = layout === 'page' || isOpen;
@@ -341,6 +345,7 @@ export function OrderForm({
   // Só preencher o form a partir do `order` quando abrimos o dialog para este pedido (ou trocamos de pedido).
   // Evita que, após erro ao salvar, um refetch do mesmo pedido sobrescreva as alterações (ex.: "Quero parcelar" desmarcando).
   const lastSyncedOrderIdRef = useRef<number | null>(null);
+  const lastSyncedDraftKeyRef = useRef<string | null>(null);
 
   // Função para resetar o formulário completamente
   const resetForm = () => {
@@ -375,6 +380,7 @@ export function OrderForm({
   useEffect(() => {
     if (!isOpen) {
       lastSyncedOrderIdRef.current = null;
+      lastSyncedDraftKeyRef.current = null;
       // Limpar formulário quando fechar o modal E não houver pedido sendo editado
       if (!order) {
         resetForm();
@@ -455,11 +461,48 @@ export function OrderForm({
           );
         }
       }
-    } else if (!order && prevIsOpen === false) {
+    } else if (!order && !draftFromPrevisao && prevIsOpen === false) {
       // Reset completo quando abrir modal para criar novo pedido
       resetForm();
     }
-  }, [order, isOpen, prevIsOpen]);
+  }, [order, isOpen, prevIsOpen, draftFromPrevisao]);
+
+  useEffect(() => {
+    if (!isOpen || order || !draftFromPrevisao) return;
+    if (lastSyncedDraftKeyRef.current === draftFromPrevisao.draftKey) return;
+    lastSyncedDraftKeyRef.current = draftFromPrevisao.draftKey;
+    resetForm();
+    setTipo('VENDA');
+    if (draftFromPrevisao.cliente_id) {
+      setClienteId(draftFromPrevisao.cliente_id);
+    }
+    if (draftFromPrevisao.roca_id) {
+      setRocaId(draftFromPrevisao.roca_id);
+    }
+    const dataPrev = draftFromPrevisao.data_prevista?.split('T')[0]?.split(' ')[0];
+    const hoje = new Date().toISOString().split('T')[0];
+    if (dataPrev) {
+      setDataPedido(dataPrev);
+      setDataVencimento(dataPrev);
+    } else {
+      setDataPedido(hoje);
+    }
+    const fp = draftFromPrevisao.forma_pagamento;
+    if (fp) {
+      setFormaPagamento(fp);
+      const formasUi = ['PIX', 'BOLETO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'] as const;
+      if (formasUi.includes(fp as (typeof formasUi)[number])) {
+        setFormaPagamentoSelecionada(fp as (typeof formasUi)[number]);
+      }
+      setFormaPagamentoEstrutural('AVISTA');
+    }
+    const obs = [draftFromPrevisao.descricao, draftFromPrevisao.observacoes]
+      .filter((v) => v != null && String(v).trim() !== '')
+      .join(' — ');
+    if (obs) {
+      setObservacoesInternas(obs);
+    }
+  }, [isOpen, order, draftFromPrevisao]);
 
   const handleAddItem = () => {
     const hadTwoOrMore = itens.length >= 2;

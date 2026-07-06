@@ -1,4 +1,5 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
+import { GerarPedidoDePrevisaoDialog } from "@/components/financeiro/GerarPedidoDePrevisaoDialog";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   ModuleStatCards,
@@ -91,7 +92,7 @@ import {
     Trash2,
     TrendingDown,
     TrendingUp,
-    Wallet
+    Wallet,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -183,6 +184,8 @@ const Financeiro = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [gerarPedidoOpen, setGerarPedidoOpen] = useState(false);
+  const [gerarPedidoContaId, setGerarPedidoContaId] = useState<number | null>(null);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const limit = 15;
@@ -814,10 +817,17 @@ const Financeiro = () => {
     });
   };
 
+  const abrirGerarPedidoDePrevisao = (contaId: number) => {
+    setViewDialogOpen(false);
+    setGerarPedidoContaId(contaId);
+    setGerarPedidoOpen(true);
+  };
+
   // Função para obter cor do status ativo
   const getActiveTabColor = (tab: string) => {
     switch (tab.toUpperCase()) {
       case "PENDENTE": return "bg-amber-500 text-white";
+      case "PREVISAO": return "bg-violet-500 text-white";
       case "PAGO_PARCIAL": return "bg-blue-500 text-white";
       case "PAGO_TOTAL": return "bg-green-500 text-white";
       case "VENCIDO": return "bg-red-500 text-white";
@@ -832,6 +842,7 @@ const Financeiro = () => {
   const getInactiveTabColor = (tab: string) => {
     switch (tab.toUpperCase()) {
       case "PENDENTE": return "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20";
+      case "PREVISAO": return "bg-violet-500/10 text-violet-600 hover:bg-violet-500/20";
       case "PAGO_PARCIAL": return "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20";
       case "PAGO_TOTAL": return "bg-green-500/10 text-green-500 hover:bg-green-500/20";
       case "VENCIDO": return "bg-red-500/10 text-red-500 hover:bg-red-500/20";
@@ -883,6 +894,7 @@ const Financeiro = () => {
       valor: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total ?? 0),
       status: statusMap[item.status] || item.status,
       statusOriginal: item.status,
+      ehPrevisao: item.status === "PREVISAO",
       contaId: item.id,
       pedido_id: item.pedido_id,
       roca_nome: item.roca_nome,
@@ -918,6 +930,7 @@ const Financeiro = () => {
     try {
       await financeiroService.deletar(contaId);
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+      queryClient.invalidateQueries({ queryKey: ["fluxo-caixa"] });
       toast.success("Transação excluída!");
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Erro ao excluir transação");
@@ -1325,12 +1338,25 @@ const Financeiro = () => {
                 </TableRow>
               ) : (
                 filteredTransacoesComSecao.map((transacao) => (
-                  <TableRow key={transacao.contaId}>
+                  <TableRow
+                    key={transacao.contaId}
+                    className={cn(
+                      transacao.ehPrevisao &&
+                        "border-l-4 border-l-violet-500 bg-violet-500/[0.03]",
+                    )}
+                  >
                     <TableCell>
                       <span className="font-medium">{transacao.cliente_nome || "—"}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{transacao.descricao}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{transacao.descricao}</span>
+                        {transacao.ehPrevisao ? (
+                          <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
+                            Previsão
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${
@@ -1363,6 +1389,14 @@ const Financeiro = () => {
                             <Eye className="w-4 h-4 mr-2" />
                             Visualizar
                           </DropdownMenuItem>
+                          {transacao.ehPrevisao && transacao.tipo === "Receita" ? (
+                            <DropdownMenuItem
+                              onClick={() => abrirGerarPedidoDePrevisao(transacao.contaId)}
+                            >
+                              <ShoppingCart className="w-4 h-4 mr-2" />
+                              Gerar pedido
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem
                             onClick={() => {
                               setEditConta(null);
@@ -1447,6 +1481,12 @@ const Financeiro = () => {
               <DialogTitle className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5" />
                 {contaDetalhe ? `Conta ${contaDetalhe.numero_conta || `#${contaDetalhe.id}`}` : 'Detalhes da Conta Financeira'}
+                {contaDetalhe?.status_original === 'PREVISAO' ||
+                contaDetalhe?.status?.toLowerCase() === 'previsão' ? (
+                  <span className="rounded-full bg-violet-500/10 px-2.5 py-0.5 text-xs font-semibold text-violet-600">
+                    Previsão
+                  </span>
+                ) : null}
               </DialogTitle>
               <DialogDescription>
                 Visualização detalhada da conta financeira
@@ -1579,6 +1619,17 @@ const Financeiro = () => {
                         {contaDetalhe.datas?.data_vencimento ? formatDate(contaDetalhe.datas.data_vencimento) : 'N/A'}
                       </div>
                     </div>
+                    {(contaDetalhe.status_original === 'PREVISAO' ||
+                      contaDetalhe.status?.toLowerCase() === 'previsão') && (
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground">Data prevista</Label>
+                        <div className="text-sm font-medium text-violet-700">
+                          {contaDetalhe.data_prevista
+                            ? formatDate(contaDetalhe.data_prevista)
+                            : 'N/A'}
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Data de pagamento</Label>
                       <div className="text-sm font-medium">
@@ -1614,6 +1665,29 @@ const Financeiro = () => {
                     </div>
                   </div>
                 </div>
+
+                {(contaDetalhe.status_original === 'PREVISAO' ||
+                  contaDetalhe.status?.toLowerCase() === 'previsão') &&
+                contaDetalhe.tipo === 'Receber' ? (
+                  <div className="flex flex-wrap gap-2 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-violet-800">
+                        Previsão de entrada
+                      </p>
+                      <p className="text-xs text-violet-700/80">
+                        Gere um pedido de venda com estes dados ou exclua a previsão manualmente.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      className="gap-2 bg-violet-600 hover:bg-violet-700"
+                      onClick={() => abrirGerarPedidoDePrevisao(contaDetalhe.id)}
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                      Gerar pedido
+                    </Button>
+                  </div>
+                ) : null}
 
               </div>
             ) : (
@@ -2468,6 +2542,19 @@ const Financeiro = () => {
           onOpenChange={setRelatorioProdutosClienteOpen}
           clientes={clientes}
           defaultClienteId={clienteFilterId ?? null}
+        />
+
+        <GerarPedidoDePrevisaoDialog
+          contaId={gerarPedidoContaId}
+          open={gerarPedidoOpen}
+          onOpenChange={(open) => {
+            setGerarPedidoOpen(open);
+            if (!open) setGerarPedidoContaId(null);
+          }}
+          onSuccess={() => {
+            setSelectedContaId(null);
+            queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+          }}
         />
       </div>
     </AppLayout>

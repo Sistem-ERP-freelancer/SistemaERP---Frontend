@@ -308,13 +308,24 @@ const NovaTransacao = () => {
     mutationFn: (data: CreateContaFinanceiraDto) => financeiroService.criar(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+      queryClient.invalidateQueries({ queryKey: ["fluxo-caixa"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-unificado-financeiro"] });
       queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
-      toast.success("Transação registrada com sucesso!");
-      navigate(variables.tipo === "PAGAR" ? "/contas-a-pagar" : "/contas-a-receber");
+      toast.success(
+        variables.previsao
+          ? "Previsão registrada com sucesso!"
+          : "Transação registrada com sucesso!",
+      );
+      navigate(
+        variables.previsao
+          ? "/financeiro"
+          : variables.tipo === "PAGAR"
+            ? "/contas-a-pagar"
+            : "/contas-a-receber",
+      );
     },
     onError: (error: { response?: { data?: { message?: string } } }) => {
       toast.error(error?.response?.data?.message || "Erro ao registrar transação");
@@ -351,6 +362,9 @@ const NovaTransacao = () => {
 
   const selecionarModo = (novoModo: ModoLancamento) => {
     setModo(novoModo);
+    if (novoModo === "PAGAR") {
+      setPrevisao(false);
+    }
     setForm((prev) => ({
       ...prev,
       tipo: novoModo === "RECEBER" ? "RECEBER" : "PAGAR",
@@ -567,7 +581,7 @@ const NovaTransacao = () => {
               </button>
             </div>
 
-            {!temCentroCusto ? (
+            {ehReceita && !temCentroCusto ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
@@ -584,8 +598,8 @@ const NovaTransacao = () => {
                 </button>
                 {previsao ? (
                   <p className="text-xs leading-relaxed text-muted-foreground sm:max-w-md">
-                    Lançamento estimado: pedido, forma de pagamento e datas de emissão/vencimento
-                    são opcionais. Informe a data prevista.
+                    Entrada estimada para o fluxo de caixa. Informe a data prevista; pedido e
+                    vencimento são opcionais até gerar o pedido de venda.
                   </p>
                 ) : null}
               </div>

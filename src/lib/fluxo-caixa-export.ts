@@ -64,6 +64,7 @@ export function exportarFluxoCaixaExcel(
   const resumoStart = grid.length;
   grid.push(['Saldo inicial', cards.saldo_inicial]);
   grid.push(['Total a receber', cards.total_a_receber]);
+  grid.push(['Previsão de entrada', cards.previsao_entrada]);
   grid.push(['Total a pagar', cards.total_a_pagar]);
   grid.push(['Saldo projetado', cards.saldo_projetado]);
 
@@ -124,10 +125,11 @@ export function exportarFluxoCaixaExcel(
   ];
 
   // Formato moeda no resumo (coluna B)
-  for (let r = resumoStart; r < resumoStart + 4; r++) {
+  for (let r = resumoStart; r < resumoStart + 5; r++) {
     const valores = [
       cards.saldo_inicial,
       cards.total_a_receber,
+      cards.previsao_entrada,
       cards.total_a_pagar,
       cards.saldo_projetado,
     ];

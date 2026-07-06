@@ -40,6 +40,7 @@ import {
   ArrowUpRight,
   Calculator,
   Calendar,
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
@@ -132,8 +133,10 @@ function formatValorCelula(value: number | null): string {
 function corValorCelula(
   value: number | null,
   tipo: LinhaTabela['tipo'],
+  linhaId?: string,
 ): string {
   if (value === null) return 'text-slate-400';
+  if (linhaId === 'entrada-prevista') return 'font-medium text-violet-600';
   if (tipo === 'saldo-acumulado') {
     return 'font-bold text-[#003366]';
   }
@@ -279,6 +282,7 @@ function FluxoDeCaixaTabela({
               'sticky left-0 z-10 text-left text-slate-800',
               labelBg,
               linha.indent && 'pl-8',
+              linha.id === 'entrada-prevista' && 'font-medium text-violet-700',
               linha.tipo === 'subtotal' && 'font-semibold text-rose-700',
               linha.tipo === 'saldo-dia' && 'font-semibold text-slate-800',
               linha.tipo === 'saldo-acumulado' &&
@@ -294,7 +298,7 @@ function FluxoDeCaixaTabela({
                     className={cn(
                       celulaGrade,
                       'bg-white text-center tabular-nums',
-                      corValorCelula(valor, linha.tipo),
+                      corValorCelula(valor, linha.tipo, linha.id),
                       linha.tipo === 'subtotal' && 'bg-rose-50/30',
                       linha.tipo === 'saldo-dia' && 'bg-slate-50/50',
                       linha.tipo === 'saldo-acumulado' && 'bg-sky-50/40',
@@ -388,6 +392,13 @@ export default function FluxoDeCaixa() {
         value: formatCurrency(cards?.total_a_receber ?? 0),
         Icon: ArrowUpRight,
         ...statTheme.emerald,
+      },
+      {
+        key: 'previsao-entrada',
+        label: 'Previsão de entrada',
+        value: formatCurrency(cards?.previsao_entrada ?? 0),
+        Icon: CalendarClock,
+        ...statTheme.violet,
       },
       {
         key: 'total-pagar',
@@ -657,7 +668,7 @@ export default function FluxoDeCaixa() {
           </Card>
         )}
 
-        <ModuleStatCards columns={4} items={resumoCards} isLoading={isLoading} />
+        <ModuleStatCards columns={5} items={resumoCards} isLoading={isLoading} />
 
         <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
           <CardContent className="p-0">

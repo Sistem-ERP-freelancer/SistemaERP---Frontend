@@ -68,6 +68,12 @@ export interface ContaFinanceiraDetalhe {
   valor_em_aberto: number;
   status: string;
   status_original: string;
+  previsao?: boolean;
+  data_prevista?: string | null;
+  cliente_id?: number | null;
+  roca_id?: number | null;
+  forma_pagamento?: string | null;
+  observacoes?: string | null;
   relacionamentos: {
     cliente_nome: string | null;
     fornecedor_nome: string | null;
@@ -249,7 +255,7 @@ export interface FluxoCaixaLinha {
   secao?: 'entradas' | 'saidas';
   valores: (number | null)[];
   indent?: boolean;
-  origem?: 'pedido_venda' | 'pedido_compra' | 'centro_custo';
+  origem?: 'pedido_venda' | 'pedido_compra' | 'centro_custo' | 'previsao_entrada';
   tipo_id?: number;
 }
 
@@ -259,6 +265,7 @@ export interface FluxoCaixaResponse {
   cards: {
     saldo_inicial: number;
     total_a_receber: number;
+    previsao_entrada: number;
     total_a_pagar: number;
     saldo_projetado: number;
   };
