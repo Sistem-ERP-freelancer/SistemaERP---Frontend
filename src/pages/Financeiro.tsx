@@ -147,7 +147,7 @@ function pickOptionalId(...candidates: unknown[]): number | undefined {
 /** Normaliza GET /contas-financeiras/:id para o formulário (snake_case, camelCase, decimal como string, relações aninhadas). */
 function mapContaApiParaEdicao(
   raw: ContaFinanceira | Record<string, unknown>,
-): CreateContaFinanceiraDto & { data_emissao: string } {
+): CreateContaFinanceiraDto & { data_emissao: string; data_prevista?: string } {
   const r = raw as Record<string, unknown>;
   const cliente = r.cliente as { id?: number } | undefined;
   const fornecedor = r.fornecedor as { id?: number } | undefined;
@@ -155,10 +155,12 @@ function mapContaApiParaEdicao(
 
   return {
     tipo: (r.tipo as CreateContaFinanceiraDto["tipo"]) || "PAGAR",
+    previsao: r.previsao === true || r.previsao === "t",
     descricao: String(r.descricao ?? ""),
     valor_original: toEditValorOriginal(r.valor_original),
     data_emissao: toDateInputValue(r.data_emissao),
     data_vencimento: toDateInputValue(r.data_vencimento),
+    data_prevista: toDateInputValue(r.data_prevista),
     data_pagamento: r.data_pagamento
       ? toDateInputValue(r.data_pagamento)
       : undefined,
@@ -818,6 +820,7 @@ const Financeiro = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
+      queryClient.invalidateQueries({ queryKey: ["fluxo-caixa"] });
       queryClient.invalidateQueries({ queryKey: ["conta-financeira", selectedContaId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
@@ -833,7 +836,15 @@ const Financeiro = () => {
   });
 
   // Estado para edição
-  const [editConta, setEditConta] = useState<CreateContaFinanceiraDto & { data_emissao: string } | null>(null);
+  const [editConta, setEditConta] = useState<
+    (CreateContaFinanceiraDto & { data_emissao: string; data_prevista?: string }) | null
+  >(null);
+
+  const isEditPrevisao = Boolean(
+    contaSelecionada?.previsao ||
+      contaSelecionada?.status === "PREVISAO" ||
+      editConta?.previsao,
+  );
 
   // Quando a conta for carregada, preencher o formulário (evita exibir dados da edição anterior)
   useEffect(() => {
@@ -858,7 +869,28 @@ const Financeiro = () => {
 
   const handleUpdate = () => {
     if (!selectedContaId || !editConta) return;
-    
+
+    if (isEditPrevisao) {
+      if (!editConta.descricao?.trim() || !editConta.valor_original || !editConta.data_prevista) {
+        toast.error("Preencha descrição, valor e data prevista");
+        return;
+      }
+      updateContaMutation.mutate({
+        id: selectedContaId,
+        data: {
+          descricao: editConta.descricao,
+          valor_original: Number(editConta.valor_original),
+          data_prevista: editConta.data_prevista,
+          data_emissao: editConta.data_emissao || undefined,
+          cliente_id: editConta.cliente_id,
+          roca_id: editConta.roca_id,
+          forma_pagamento: editConta.forma_pagamento,
+          observacoes: editConta.observacoes,
+        },
+      });
+      return;
+    }
+
     if (!editConta.descricao || !editConta.valor_original || !editConta.data_vencimento) {
       toast.error("Preencha os campos obrigatórios");
       return;
@@ -1757,8 +1789,13 @@ const Financeiro = () => {
             <DialogHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <DialogTitle className="text-2xl font-bold">
+                  <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                     Editar Conta Financeira
+                    {isEditPrevisao ? (
+                      <span className="rounded-full bg-violet-500/10 px-2.5 py-0.5 text-xs font-semibold text-violet-600">
+                        Previsão
+                      </span>
+                    ) : null}
                   </DialogTitle>
                   <DialogDescription className="mt-1">
                     Edite os campos desejados da conta financeira
@@ -1816,25 +1853,29 @@ const Financeiro = () => {
                       />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {!isEditPrevisao ? (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold">Tipo *</Label>
+                          <Select
+                            value={editConta.tipo}
+                            onValueChange={(value: "RECEBER" | "PAGAR") =>
+                              setEditConta({ ...editConta, tipo: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="RECEBER">Receita</SelectItem>
+                              <SelectItem value="PAGAR">Despesa</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Tipo *</Label>
-                        <Select
-                          value={editConta.tipo}
-                          onValueChange={(value: "RECEBER" | "PAGAR") =>
-                            setEditConta({ ...editConta, tipo: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="RECEBER">Receita</SelectItem>
-                            <SelectItem value="PAGAR">Despesa</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Valor Original *</Label>
+                        <Label className="text-sm font-semibold">
+                          {isEditPrevisao ? "Valor previsto *" : "Valor Original *"}
+                        </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -2002,35 +2043,64 @@ const Financeiro = () => {
                         Datas
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Emissão, vencimento e pagamento
+                        {isEditPrevisao
+                          ? "Criação e data prevista de entrada"
+                          : "Emissão, vencimento e pagamento"}
                       </p>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Data de Emissão *</Label>
+                      <Label className="text-sm font-semibold">
+                        Data de Emissão{isEditPrevisao ? "" : " *"}
+                      </Label>
                       <Input
                         type="date"
                         value={editConta.data_emissao}
                         onChange={(e) => setEditConta({ ...editConta, data_emissao: e.target.value })}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Data de Vencimento *</Label>
-                      <Input
-                        type="date"
-                        value={editConta.data_vencimento}
-                        onChange={(e) => setEditConta({ ...editConta, data_vencimento: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Data de Pagamento</Label>
-                      <Input
-                        type="date"
-                        value={editConta.data_pagamento || ""}
-                        onChange={(e) => setEditConta({ ...editConta, data_pagamento: e.target.value || undefined })}
-                      />
-                    </div>
+                    {isEditPrevisao ? (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-violet-700">
+                          Data prevista *
+                        </Label>
+                        <Input
+                          type="date"
+                          className="border-violet-200 focus-visible:ring-violet-400"
+                          value={editConta.data_prevista || ""}
+                          onChange={(e) =>
+                            setEditConta({ ...editConta, data_prevista: e.target.value })
+                          }
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold">Data de Vencimento *</Label>
+                          <Input
+                            type="date"
+                            value={editConta.data_vencimento}
+                            onChange={(e) =>
+                              setEditConta({ ...editConta, data_vencimento: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-semibold">Data de Pagamento</Label>
+                          <Input
+                            type="date"
+                            value={editConta.data_pagamento || ""}
+                            onChange={(e) =>
+                              setEditConta({
+                                ...editConta,
+                                data_pagamento: e.target.value || undefined,
+                              })
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

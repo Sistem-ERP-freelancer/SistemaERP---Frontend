@@ -502,6 +502,17 @@ export function OrderForm({
     if (obs) {
       setObservacoesInternas(obs);
     }
+    const valorPrevisto = Number(draftFromPrevisao.valor ?? 0);
+    if (Number.isFinite(valorPrevisto) && valorPrevisto > 0) {
+      setItens([
+        {
+          produto_id: 0,
+          quantidade: 1,
+          preco_unitario: Number(valorPrevisto.toFixed(2)),
+          desconto: '',
+        },
+      ]);
+    }
   }, [isOpen, order, draftFromPrevisao]);
 
   const handleAddItem = () => {
