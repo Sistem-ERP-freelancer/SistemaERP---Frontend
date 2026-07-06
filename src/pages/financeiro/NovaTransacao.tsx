@@ -508,7 +508,7 @@ const NovaTransacao = () => {
                     Registrando...
                   </>
                 ) : previsao ? (
-                  "Registrar Previsão"
+                  "Registrar previsão"
                 ) : (
                   "Registrar Transação"
                 )}
@@ -580,7 +580,7 @@ const NovaTransacao = () => {
                   )}
                 >
                   <CalendarClock className="h-4 w-4" aria-hidden />
-                  Previsão
+                  {previsao ? "Desativar previsão" : "Criar previsão"}
                 </button>
                 {previsao ? (
                   <p className="text-xs leading-relaxed text-muted-foreground sm:max-w-md">
@@ -1106,7 +1106,7 @@ const NovaTransacao = () => {
                           Registrando...
                         </>
                       ) : (
-                        previsao ? "Registrar Previsão" : "Registrar Transação"
+                        previsao ? "Registrar previsão" : "Registrar Transação"
                       )}
                     </Button>
                   </CardContent>
