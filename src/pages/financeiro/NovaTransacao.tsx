@@ -351,9 +351,6 @@ const NovaTransacao = () => {
 
   const selecionarModo = (novoModo: ModoLancamento) => {
     setModo(novoModo);
-    if (novoModo === "RECEBER") {
-      setPrevisao(false);
-    }
     setForm((prev) => ({
       ...prev,
       tipo: novoModo === "RECEBER" ? "RECEBER" : "PAGAR",
@@ -570,7 +567,7 @@ const NovaTransacao = () => {
               </button>
             </div>
 
-            {ehDespesa && !temCentroCusto ? (
+            {!temCentroCusto ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
