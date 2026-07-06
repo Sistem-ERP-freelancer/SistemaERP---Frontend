@@ -42,6 +42,7 @@ import NotasFiscais from "./pages/NotasFiscais";
 import Pedidos from "./pages/Pedidos";
 import NovoPedido from "./pages/pedidos/NovoPedido";
 import Produtos from "./pages/Produtos";
+import NovoProduto from "./pages/produtos/NovoProduto";
 import Settings from "./pages/Settings";
 import Transportadoras from "./pages/Transportadoras";
 import { ArrowLeftRight, Building2, Scale } from "lucide-react";
@@ -358,6 +359,14 @@ const App = () => (
                   <Produtos />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/produtos/novo"
+              element={
+                <ProtectedRoute>
+                  <NovoProduto />
+                </ProtectedRoute>
+              }
             />
             <Route 
               path="/estoque" 
