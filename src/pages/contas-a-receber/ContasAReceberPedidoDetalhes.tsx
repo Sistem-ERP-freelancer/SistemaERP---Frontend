@@ -9,6 +9,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { formatCurrency, formatarDataBR, formatarFormaPagamento } from '@/lib/utils';
+import { financeiroService } from '@/services/financeiro.service';
 import { pedidosService } from '@/services/pedidos.service';
 import type { ItemHistoricoPagamento } from '@/types/pedido-financeiro.types';
 import { useQueries } from '@tanstack/react-query';
@@ -26,7 +27,7 @@ const ContasAReceberPedidoDetalhes = () => {
   const navigate = useNavigate();
   const id = pedidoId ? Number(pedidoId) : 0;
 
-  const [pedidoQuery, resumoQuery, pagamentosQuery] = useQueries({
+  const [pedidoQuery, resumoQuery, pagamentosQuery, contaDetalheQuery] = useQueries({
     queries: [
       {
         queryKey: ['pedidos', pedidoId],
@@ -45,12 +46,23 @@ const ContasAReceberPedidoDetalhes = () => {
         enabled: !!id,
         retry: false,
       },
+      {
+        queryKey: ['conta-financeira-detalhe-pedido', pedidoId],
+        queryFn: async () => {
+          const contaId = await financeiroService.getContaIdPorPedidoId(id, 'RECEBER');
+          if (!contaId) return null;
+          return financeiroService.buscarDetalhePorId(contaId);
+        },
+        enabled: !!id,
+        retry: false,
+      },
     ],
   });
 
   const pedido = pedidoQuery.data;
   const resumoRaw = resumoQuery.data;
   const pagamentosNovo = pagamentosQuery.data;
+  const contaDetalhe = contaDetalheQuery.data ?? null;
 
   const isLoading = pedidoQuery.isLoading || resumoQuery.isLoading;
   const error = pedidoQuery.error || resumoQuery.error;
@@ -131,9 +143,29 @@ const ContasAReceberPedidoDetalhes = () => {
   const formaPagamentoPedido = (pedido as any)?.forma_pagamento;
   const formaDisplay = formaEstrutural === 'BOLETO_DESCONTADO'
     ? 'Boleto Descontado'
-    : formaPagamentoPedido
-      ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
-      : (FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural);
+    : contaDetalhe?.pagamento?.forma_pagamento
+      ? formatarFormaPagamento(contaDetalhe.pagamento.forma_pagamento)
+      : formaPagamentoPedido
+        ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
+        : (FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural);
+
+  const valorTotal = contaDetalhe?.valor_total_pedido ?? resumoFinal!.valor_total;
+  const valorPago = contaDetalhe?.valor_pago ?? resumoFinal!.valor_pago;
+  const valorEmAberto = contaDetalhe?.valor_em_aberto ?? resumoFinal!.valor_em_aberto;
+  const statusExibicao = contaDetalhe?.status ?? resumoFinal!.status;
+  const dataVencimento =
+    contaDetalhe?.datas?.data_vencimento ?? resumoFinal!.data_vencimento ?? null;
+  const dataCriacao =
+    contaDetalhe?.datas?.data_criacao ??
+    (pedido!.data_pedido ? String(pedido!.data_pedido).slice(0, 10) : null);
+  const dataPagamento = contaDetalhe?.datas?.data_pagamento ?? null;
+  const clienteNome =
+    contaDetalhe?.relacionamentos?.cliente_nome ??
+    pedido!.cliente?.nome ??
+    pedido!.cliente_id ??
+    '—';
+  const descricaoConta =
+    contaDetalhe?.descricao_parcelas_quitadas || contaDetalhe?.descricao || null;
 
   return (
     <AppLayout>
@@ -159,48 +191,105 @@ const ContasAReceberPedidoDetalhes = () => {
         <div className="bg-card border rounded-lg p-6 space-y-6">
           <h2 className="text-lg font-semibold border-b pb-2">Informações do Pedido</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {contaDetalhe?.numero_conta && (
+              <div className="space-y-1">
+                <div className="text-sm text-muted-foreground">Número da Conta</div>
+                <div className="font-medium">{contaDetalhe.numero_conta}</div>
+              </div>
+            )}
+            {contaDetalhe?.tipo && (
+              <div className="space-y-1">
+                <div className="text-sm text-muted-foreground">Tipo</div>
+                <div className="font-medium">{contaDetalhe.tipo}</div>
+              </div>
+            )}
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground flex items-center gap-2">
                 <User className="w-4 h-4" />
                 Cliente
               </div>
-              <div className="font-medium">{pedido!.cliente?.nome || pedido!.cliente_id || '—'}</div>
+              <div className="font-medium">{clienteNome}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Nº Pedido
               </div>
-              <div className="font-medium">{pedido!.numero_pedido}</div>
+              <div className="font-medium">
+                {contaDetalhe?.relacionamentos?.pedido_numero ?? pedido!.numero_pedido}
+              </div>
             </div>
+            {descricaoConta && (
+              <div className="space-y-1 md:col-span-2">
+                <div className="text-sm text-muted-foreground">Descrição (parcelas quitadas)</div>
+                <div className="font-medium">{descricaoConta}</div>
+              </div>
+            )}
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Forma de Pagamento</div>
               <div className="font-medium">{formaDisplay}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Status financeiro</div>
-              <div className="font-medium">{resumoFinal!.status}</div>
+              <div className="font-medium">{statusExibicao}</div>
             </div>
           </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Fornecedor</div>
+              <div className="font-medium">
+                {contaDetalhe?.relacionamentos?.fornecedor_nome?.trim() || 'N/A'}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Roça</div>
+              <div className="font-medium">
+                {contaDetalhe?.relacionamentos?.roca_nome?.trim() || 'N/A'}
+              </div>
+            </div>
+            {contaDetalhe?.relacionamentos?.nome_produto && (
+              <div className="space-y-1 md:col-span-2">
+                <div className="text-sm text-muted-foreground">Produtos</div>
+                <div className="font-medium">{contaDetalhe.relacionamentos.nome_produto}</div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Valor Total</div>
-              <div className="text-xl font-bold text-primary">{formatCurrency(resumoFinal!.valor_total)}</div>
+              <div className="text-xl font-bold text-primary">{formatCurrency(valorTotal)}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Total Pago</div>
-              <div className="text-xl font-bold text-green-600">{formatCurrency(resumoFinal!.valor_pago)}</div>
+              <div className="text-xl font-bold text-green-600">{formatCurrency(valorPago)}</div>
             </div>
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Valor em Aberto</div>
-              <div className="text-xl font-bold text-amber-600">{formatCurrency(resumoFinal!.valor_em_aberto)}</div>
+              <div className="text-xl font-bold text-amber-600">{formatCurrency(valorEmAberto)}</div>
             </div>
-            {resumoFinal!.data_vencimento && (
-              <div className="space-y-1">
-                <div className="text-sm text-muted-foreground">Vencimento</div>
-                <div className="font-medium">{formatarDataBR(resumoFinal!.data_vencimento)}</div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t">
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Data de criação</div>
+              <div className="font-medium">
+                {dataCriacao ? formatarDataBR(dataCriacao) : 'N/A'}
               </div>
-            )}
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Vencimento</div>
+              <div className="font-medium">
+                {dataVencimento ? formatarDataBR(dataVencimento) : 'N/A'}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm text-muted-foreground">Data de pagamento</div>
+              <div className="font-medium">
+                {dataPagamento ? formatarDataBR(dataPagamento) : 'N/A'}
+              </div>
+            </div>
           </div>
         </div>
 
