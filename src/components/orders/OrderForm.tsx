@@ -158,6 +158,25 @@ export function OrderForm({
   const [condicoesPagamento, setCondicoesPagamento] = useState<CondicaoPagamento[]>([]);
   const [condicaoPagamentoId, setCondicaoPagamentoId] = useState<number | string>('');
   const [dataVencimento, setDataVencimento] = useState<string>('');
+
+  // Pedido retroativo: alinhar vencimento à data do pedido (evita financeiro com data de hoje)
+  useEffect(() => {
+    if (order) return;
+    const hojeStr = new Date().toISOString().split('T')[0];
+    const hoje = parseDataLocal(hojeStr);
+    hoje.setHours(0, 0, 0, 0);
+    const pedido = parseDataLocal(dataPedido);
+    pedido.setHours(0, 0, 0, 0);
+    if (pedido.getTime() >= hoje.getTime()) return;
+
+    setDataVencimento((atual) => {
+      if (!atual?.trim()) return dataPedido;
+      const venc = parseDataLocal(atual);
+      venc.setHours(0, 0, 0, 0);
+      return venc.getTime() >= hoje.getTime() ? dataPedido : atual;
+    });
+  }, [dataPedido, order]);
+
   // Campos para Boleto Descontado (sem parcelas: apenas valor adiantado)
   const [valorAdiantado, setValorAdiantado] = useState<number | ''>('');
   const [taxaDesconto, setTaxaDesconto] = useState<number | ''>('');
