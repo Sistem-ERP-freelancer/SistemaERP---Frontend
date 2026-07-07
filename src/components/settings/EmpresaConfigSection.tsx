@@ -696,6 +696,7 @@ export function EmpresaConfigSection({
                     {form.spedyAmbiente === 'producao'
                       ? `Obrigatório em produção. Use certificado ${emitenteCpf ? 'e-CPF' : 'e-CNPJ'} do emitente.`
                       : `Opcional em homologação (notas podem ficar rejeitadas sem certificado válido). Use ${emitenteCpf ? 'e-CPF' : 'e-CNPJ'} quando informado.`}
+                    {' '}O nome original do arquivo não importa; evite colocar a senha no nome do .pfx.
                   </p>
                 </div>
                 <div className="space-y-2">

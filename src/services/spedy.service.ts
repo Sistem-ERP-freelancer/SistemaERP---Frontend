@@ -60,6 +60,11 @@ function formParaAtivarSpedy(
   return fd;
 }
 
+/** Evita bloqueio de WAF/proxy por nomes de arquivo com "senha" ou caracteres especiais. */
+function anexarCertificadoSeguro(fd: FormData, certificado: File): void {
+  fd.append('certificado', certificado, 'certificado.pfx');
+}
+
 export const spedyService = {
   obterStatus(): Promise<SpedyTenantStatus> {
     return apiClient.get<SpedyTenantStatus>('/tenant/me/spedy/status');
@@ -72,14 +77,14 @@ export const spedyService = {
   ): Promise<SpedyAtivarResult> {
     const fd = formParaAtivarSpedy(form, senhaCertificado);
     if (certificado) {
-      fd.append('certificado', certificado);
+      anexarCertificadoSeguro(fd, certificado);
     }
     return apiClient.postForm<SpedyAtivarResult>('/tenant/me/spedy/ativar', fd);
   },
 
   atualizarCertificado(certificado: File, senhaCertificado: string): Promise<SpedyCertificadoResult> {
     const fd = new FormData();
-    fd.append('certificado', certificado);
+    anexarCertificadoSeguro(fd, certificado);
     fd.append('senhaCertificado', senhaCertificado.trim());
     return apiClient.postForm<SpedyCertificadoResult>('/tenant/me/spedy/certificado', fd);
   },

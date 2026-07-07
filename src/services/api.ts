@@ -558,12 +558,19 @@ class ApiClient {
     }
 
     const token = this.getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+      headers['X-Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetchWithOptionalRetry(
       url,
       {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers,
         body: formData,
+        credentials: 'include',
       },
       endpoint,
     );
@@ -575,11 +582,23 @@ class ApiClient {
       } catch {
         errorData = { message: response.statusText };
       }
-      const errorMessage =
+      let errorMessage =
         normalizeApiErrorMessage(errorData) ||
         `Erro ${response.status}: ${response.statusText}`;
+
+      if (response.status === 401) {
+        errorMessage =
+          errorMessage === 'Unauthorized'
+            ? 'Sessão expirada ou token não enviado. Faça login novamente e tente outra vez.'
+            : errorMessage;
+      } else if (response.status === 403) {
+        errorMessage =
+          errorMessage || 'Você não tem permissão para executar esta ação.';
+      }
+
       const error = new Error(errorMessage) as any;
       error.response = { status: response.status, data: errorData };
+      error.isAuthError = response.status === 401 || response.status === 403;
       throw error;
     }
 
