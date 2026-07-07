@@ -585,8 +585,8 @@ const AdminPanel = () => {
             }
             setDialogOpen(open);
           }}>
-            <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden border-border/60 shadow-xl">
-              <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-6 pt-6 pb-5 border-b border-border/60">
+            <DialogContent className="flex max-h-[min(90vh,720px)] max-w-xl flex-col gap-0 overflow-hidden border-border/60 p-0 shadow-xl">
+              <div className="shrink-0 border-b border-border/60 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-6 pt-6 pb-5">
                 <DialogHeader className="space-y-3">
                   <div className="flex items-start gap-3 pr-8">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/20">
@@ -606,7 +606,8 @@ const AdminPanel = () => {
                 </DialogHeader>
               </div>
 
-              <form onSubmit={handleSubmit} className="px-6 py-5 space-y-6">
+              <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
                 <section className="space-y-4">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-primary" />
@@ -857,7 +858,9 @@ const AdminPanel = () => {
                   </section>
                 )}
 
-                <div className="flex gap-3 pt-1 border-t border-border/60">
+                </div>
+
+                <div className="flex shrink-0 gap-3 border-t border-border/60 bg-background px-6 py-4">
                   <Button
                     type="button"
                     variant="outline"
