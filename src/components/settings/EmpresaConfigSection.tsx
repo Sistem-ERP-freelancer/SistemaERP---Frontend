@@ -236,6 +236,7 @@ export function EmpresaConfigSection({
 
   const podeMostrarAtivacao =
     canEdit &&
+    !integracaoAtiva &&
     spedyStatus?.cadastro_automatico_disponivel &&
     spedyStatus?.pode_ativar;
 
