@@ -4,21 +4,26 @@ import { getTokenInfo, validateToken } from '@/lib/token-utils';
 import { normalizeApiErrorMessage } from '@/lib/api-error-message';
 
 const PRODUCTION_API_DEFAULT =
-  'https://sistemaerp-3.onrender.com/api/v1';
+  'https://api.toperp.com.br/api/v1';
+
+/** URLs de API que apontam para o frontend (proxy Vercel) e quebram POST/login. */
+function isBrokenFrontendApiUrl(url: string): boolean {
+  if (!url) return true;
+  if (url === '/api/v1' || url === '/api') return true;
+  if (/^https?:\/\/(www\.)?toperp\.com\.br(\/api\/v1)?$/i.test(url)) return true;
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
+}
 
 /**
  * URL base da API. Em produção, ignora VITE_API_URL se apontar para localhost
- * (evita build na Vercel com .env local por engano).
+ * ou para o próprio domínio do frontend (/api/v1 na Vercel).
  */
 const getApiBaseUrl = (): string => {
   const raw = (import.meta.env.VITE_API_URL ?? '').trim();
   const normalized = raw.replace(/\/+$/, '');
 
   if (import.meta.env.PROD) {
-    if (
-      !normalized ||
-      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(normalized)
-    ) {
+    if (isBrokenFrontendApiUrl(normalized)) {
       return PRODUCTION_API_DEFAULT;
     }
     return normalized;
