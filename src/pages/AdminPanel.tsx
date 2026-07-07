@@ -47,14 +47,30 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { tenantsService, Tenant, CreateTenantDto } from "@/services/tenants.service";
 import { formatDate } from "@/lib/utils";
-import { formatDocument, cleanDocument, formatCNPJ, formatCPF, formatTelefone, cleanTelefone } from "@/lib/validators";
+import { formatDocument, cleanDocument, formatCNPJ, formatCPF, formatTelefone, cleanTelefone, telefoneArmazenadoParaCampo } from "@/lib/validators";
+
+type TenantFormData = CreateTenantDto & {
+  telefone?: string;
+  status?: Tenant["status"];
+  subdominio?: string;
+  data_expiracao?: string;
+};
 
 const AdminPanel = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
@@ -62,13 +78,16 @@ const AdminPanel = () => {
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [cnpjError, setCnpjError] = useState<string>("");
-  const [formData, setFormData] = useState<CreateTenantDto & { telefone?: string }>({
+  const [formData, setFormData] = useState<TenantFormData>({
     nome: "",
     cnpj: "",
     inscricaoEstadual: "",
     email: "",
     senha: "",
     telefone: "",
+    status: "ATIVO",
+    subdominio: "",
+    data_expiracao: "",
   });
   const queryClient = useQueryClient();
 
@@ -111,6 +130,37 @@ const AdminPanel = () => {
   );
 
   // Mutations
+  const resolveTenantErrorMessage = (error: any, fallback: string) => {
+    let errorMessage =
+      error?.response?.data?.message ||
+      error?.message ||
+      fallback;
+
+    if (error?.response?.status === 409) {
+      if (
+        errorMessage.toLowerCase().includes('dígitos verificadores') ||
+        errorMessage.toLowerCase().includes('digitos verificadores') ||
+        (errorMessage.toLowerCase().includes('inválido') &&
+          (errorMessage.toLowerCase().includes('cnpj') ||
+            errorMessage.toLowerCase().includes('cpf')))
+      ) {
+        errorMessage =
+          'O CNPJ/CPF informado é inválido. Verifique se os dígitos estão corretos.';
+      } else if (
+        errorMessage.toLowerCase().includes('já existe') ||
+        errorMessage.toLowerCase().includes('already exists') ||
+        errorMessage.toLowerCase().includes('duplicado')
+      ) {
+        errorMessage = 'Este CNPJ/CPF ou email já está cadastrado no sistema.';
+      } else {
+        errorMessage =
+          errorMessage || 'Este CNPJ/CPF ou email já está cadastrado no sistema';
+      }
+    }
+
+    return errorMessage;
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: CreateTenantDto) => tenantsService.criar(data),
     onSuccess: () => {
@@ -121,44 +171,28 @@ const AdminPanel = () => {
       resetForm();
     },
     onError: (error: any) => {
-      // Log detalhado do erro (apenas em desenvolvimento)
-      if (import.meta.env.DEV) {
-        console.error('❌ Erro completo:', error);
-        console.error('❌ Status:', error?.response?.status);
-        console.error('❌ Dados do erro:', error?.response?.data);
-      }
-      
-      // Extrai mensagem de erro de diferentes formatos
-      let errorMessage = 
-        error?.response?.data?.message || 
-        error?.message || 
-        "Erro ao criar empresa";
-      
-      // Tratamento específico para erro 409 (Conflict)
-      if (error?.response?.status === 409) {
-        // Se a mensagem menciona CNPJ/CPF inválido ou dígitos verificadores
-        if (errorMessage.toLowerCase().includes('dígitos verificadores') ||
-            errorMessage.toLowerCase().includes('digitos verificadores') ||
-            (errorMessage.toLowerCase().includes('inválido') && 
-             (errorMessage.toLowerCase().includes('cnpj') || errorMessage.toLowerCase().includes('cpf')))) {
-          errorMessage = "O CNPJ/CPF informado é inválido. Verifique se os dígitos estão corretos.";
-        } 
-        // Se menciona que já existe
-        else if (errorMessage.toLowerCase().includes('já existe') || 
-                 errorMessage.toLowerCase().includes('already exists') ||
-                 errorMessage.toLowerCase().includes('duplicado')) {
-          errorMessage = "Este CNPJ/CPF ou email já está cadastrado no sistema.";
-        } 
-        // Mensagem padrão para 409
-        else {
-          errorMessage = errorMessage || "Este CNPJ/CPF ou email já está cadastrado no sistema";
-        }
-      }
-      
-      toast.error(errorMessage);
+      toast.error(resolveTenantErrorMessage(error, 'Erro ao criar empresa'));
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      tenantsService.atualizar(id, data),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant', updated.id] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      toast.success('Empresa atualizada com sucesso!');
+      setDialogOpen(false);
+      resetForm();
+      if (selectedTenantId === updated.id) {
+        setSelectedTenantId(updated.id);
+      }
+    },
+    onError: (error: any) => {
+      toast.error(resolveTenantErrorMessage(error, 'Erro ao atualizar empresa'));
+    },
+  });
 
   const bloquearMutation = useMutation({
     mutationFn: (id: string) => tenantsService.bloquear(id),
@@ -243,7 +277,12 @@ const AdminPanel = () => {
       email: "",
       senha: "",
       telefone: "",
+      status: "ATIVO",
+      subdominio: "",
+      data_expiracao: "",
     });
+    setDialogMode("create");
+    setEditingTenant(null);
     setShowPassword(false);
     setCnpjError("");
   };
@@ -256,6 +295,36 @@ const AdminPanel = () => {
   const handleView = (tenant: Tenant) => {
     setSelectedTenantId(tenant.id);
     setViewDialogOpen(true);
+  };
+
+  const handleEdit = async (tenant: Tenant) => {
+    try {
+      const full = await tenantsService.buscarPorId(tenant.id);
+      setEditingTenant(full);
+      setDialogMode("edit");
+      setFormData({
+        nome: full.nome,
+        cnpj: formatDocument(full.cnpj),
+        inscricaoEstadual: full.configuracoes?.empresa?.inscricaoEstadual || "",
+        email: full.email,
+        senha: "",
+        telefone: full.telefone ? telefoneArmazenadoParaCampo(full.telefone) : "",
+        status: full.status,
+        subdominio: full.subdominio || "",
+        data_expiracao: full.data_expiracao
+          ? String(full.data_expiracao).split(/[T ]/)[0]
+          : "",
+      });
+      setCnpjError("");
+      setShowPassword(false);
+      setDialogOpen(true);
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Erro ao carregar empresa para edição",
+      );
+    }
   };
 
   const handleCnpjChange = (value: string) => {
@@ -312,16 +381,13 @@ const AdminPanel = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Remove QUALQUER caractere não numérico do CNPJ/CPF (garante apenas números)
     const cleanedCnpj = formData.cnpj.replace(/[^\d]/g, '');
     
-    // Validação básica: apenas verifica se tem 11 ou 14 dígitos (backend valida o resto)
     if (cleanedCnpj.length !== 11 && cleanedCnpj.length !== 14) {
       toast.error("CNPJ/CPF deve ter 11 dígitos (CPF) ou 14 dígitos (CNPJ)");
       return;
     }
     
-    // Validação de campos obrigatórios
     if (!formData.nome.trim()) {
       toast.error("O nome da empresa é obrigatório");
       return;
@@ -332,7 +398,38 @@ const AdminPanel = () => {
       return;
     }
 
-    // Prepara dados para envio - GARANTE que CNPJ é apenas números
+    if (dialogMode === "edit") {
+      if (!editingTenant) {
+        toast.error("Empresa não selecionada para edição");
+        return;
+      }
+
+      const baseConfig = editingTenant.configuracoes || {};
+      const baseEmpresa = baseConfig.empresa || {};
+      const dataToUpdate: Record<string, unknown> = {
+        nome: formData.nome.trim(),
+        cnpj: cleanedCnpj,
+        email: formData.email.trim(),
+        telefone:
+          formData.telefone && formData.telefone.trim() !== ''
+            ? cleanTelefone(formData.telefone)
+            : null,
+        status: formData.status || editingTenant.status,
+        subdominio: formData.subdominio?.trim() || null,
+        data_expiracao: formData.data_expiracao?.trim() || null,
+        configuracoes: {
+          ...baseConfig,
+          empresa: {
+            ...baseEmpresa,
+            inscricaoEstadual: formData.inscricaoEstadual?.replace(/\D/g, '') || null,
+          },
+        },
+      };
+
+      updateMutation.mutate({ id: editingTenant.id, data: dataToUpdate });
+      return;
+    }
+
     const dataToSend: CreateTenantDto & { telefone?: string } = {
       nome: formData.nome.trim(),
       cnpj: cleanedCnpj,
@@ -343,19 +440,16 @@ const AdminPanel = () => {
       dataToSend.inscricaoEstadual = formData.inscricaoEstadual.replace(/\D/g, "");
     }
     
-    // Adiciona telefone se foi preenchido (remove formatação antes de enviar)
     if (formData.telefone && formData.telefone.trim() !== '') {
       dataToSend.telefone = cleanTelefone(formData.telefone);
     }
     
-    // Na criação, senha é obrigatória
     if (!formData.senha || formData.senha.trim() === '') {
       toast.error("A senha é obrigatória para criar uma empresa");
       return;
     }
     dataToSend.senha = formData.senha;
     
-    // Log para debug (apenas em desenvolvimento)
     if (import.meta.env.DEV) {
       console.log('📤 Dados sendo enviados (criação):', { 
         nome: dataToSend.nome,
@@ -477,6 +571,7 @@ const AdminPanel = () => {
             className="gap-2"
             onClick={() => {
               resetForm();
+              setDialogMode("create");
               setDialogOpen(true);
             }}
           >
@@ -498,9 +593,13 @@ const AdminPanel = () => {
                       <Building2 className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">
-                      <DialogTitle className="text-xl">Nova Empresa</DialogTitle>
+                      <DialogTitle className="text-xl">
+                        {dialogMode === "edit" ? "Editar Empresa" : "Nova Empresa"}
+                      </DialogTitle>
                       <DialogDescription className="text-sm leading-relaxed">
-                        Cadastre um tenant com CPF (produtor rural) ou CNPJ. A Inscrição Estadual é opcional e pode ser informada depois.
+                        {dialogMode === "edit"
+                          ? "Atualize os dados cadastrais da empresa. Código e schema não podem ser alterados."
+                          : "Cadastre um tenant com CPF (produtor rural) ou CNPJ. A Inscrição Estadual é opcional e pode ser informada depois."}
                       </DialogDescription>
                     </div>
                   </div>
@@ -659,34 +758,104 @@ const AdminPanel = () => {
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="senha">Senha do admin</Label>
-                        <div className="relative">
-                          <Input
-                            id="senha"
-                            type={showPassword ? "text" : "password"}
-                            value={formData.senha || ""}
-                            onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                            placeholder="Mínimo 6 caracteres"
-                            required
-                            className="bg-background pr-10"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {showPassword ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
+                      {dialogMode === "create" ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="senha">Senha do admin</Label>
+                          <div className="relative">
+                            <Input
+                              id="senha"
+                              type={showPassword ? "text" : "password"}
+                              value={formData.senha || ""}
+                              onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                              placeholder="Mínimo 6 caracteres"
+                              required
+                              className="bg-background pr-10"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {showPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      ) : null}
                     </div>
                   </div>
                 </section>
+
+                {dialogMode === "edit" && (
+                  <section className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <h3 className="text-sm font-semibold tracking-wide text-foreground">
+                        Status e acesso
+                      </h3>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-muted/20 p-4 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="status">Status</Label>
+                          <Select
+                            value={formData.status || "ATIVO"}
+                            onValueChange={(value) =>
+                              setFormData({
+                                ...formData,
+                                status: value as Tenant["status"],
+                              })
+                            }
+                          >
+                            <SelectTrigger id="status" className="bg-background">
+                              <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ATIVO">Ativo</SelectItem>
+                              <SelectItem value="INATIVO">Inativo</SelectItem>
+                              <SelectItem value="SUSPENSO">Suspenso</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="data_expiracao">Data de expiração</Label>
+                          <Input
+                            id="data_expiracao"
+                            type="date"
+                            value={formData.data_expiracao || ""}
+                            onChange={(e) =>
+                              setFormData({ ...formData, data_expiracao: e.target.value })
+                            }
+                            className="bg-background"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="subdominio">Subdomínio</Label>
+                          <Input
+                            id="subdominio"
+                            value={formData.subdominio || ""}
+                            onChange={(e) =>
+                              setFormData({ ...formData, subdominio: e.target.value })
+                            }
+                            placeholder="Opcional"
+                            className="bg-background"
+                          />
+                        </div>
+                      </div>
+                      {editingTenant?.codigo && (
+                        <p className="text-xs text-muted-foreground">
+                          Código: <span className="font-medium">{editingTenant.codigo}</span>
+                          {editingTenant.schema_name
+                            ? ` · Schema: ${editingTenant.schema_name}`
+                            : null}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                )}
 
                 <div className="flex gap-3 pt-1 border-t border-border/60">
                   <Button
@@ -701,9 +870,22 @@ const AdminPanel = () => {
                     type="submit"
                     variant="gradient"
                     className="flex-1"
-                    disabled={createMutation.isPending}
+                    disabled={
+                      dialogMode === "edit"
+                        ? updateMutation.isPending
+                        : createMutation.isPending
+                    }
                   >
-                    {createMutation.isPending ? (
+                    {dialogMode === "edit" ? (
+                      updateMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Salvando...
+                        </>
+                      ) : (
+                        "Salvar alterações"
+                      )
+                    ) : createMutation.isPending ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
                         Criando...
@@ -787,6 +969,15 @@ const AdminPanel = () => {
                             title="Visualizar"
                           >
                             <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(tenant)}
+                            className="h-8 w-8 p-0"
+                            title="Editar"
+                          >
+                            <Edit className="w-4 h-4" />
                           </Button>
                           {tenant.status === "SUSPENSO" ? (
                             <Button
@@ -1114,19 +1305,34 @@ const AdminPanel = () => {
 
                 {/* Ações do dialog */}
                 <div className="flex justify-between pt-4 border-t">
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      if (selectedTenant) {
-                        setTenantToDelete(selectedTenant);
-                      }
-                    }}
-                    disabled={excluirMutation.isPending}
-                    className="gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Excluir empresa
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (selectedTenant) {
+                          setViewDialogOpen(false);
+                          void handleEdit(selectedTenant);
+                        }
+                      }}
+                      className="gap-2"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Editar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (selectedTenant) {
+                          setTenantToDelete(selectedTenant);
+                        }
+                      }}
+                      disabled={excluirMutation.isPending}
+                      className="gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Excluir empresa
+                    </Button>
+                  </div>
                   <Button
                     variant="outline"
                     onClick={() => {
