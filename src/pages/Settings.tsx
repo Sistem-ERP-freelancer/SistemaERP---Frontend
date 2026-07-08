@@ -171,9 +171,13 @@ const Settings = () => {
 
   const updateTenantMutation = useMutation({
     mutationFn: (data: UpdateTenantEmpresaDto) => tenantsService.atualizarMeuTenant(data),
-    onSuccess: () => {
+    onSuccess: (tenant: any) => {
       queryClient.invalidateQueries({ queryKey: ["tenant-me"] });
-      toast.success("Informações da empresa atualizadas com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["spedy-tenant-status"] });
+      const syncMsg = tenant?.spedy_sync?.message as string | undefined;
+      toast.success(
+        syncMsg || "Informações da empresa atualizadas com sucesso!",
+      );
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.message;
