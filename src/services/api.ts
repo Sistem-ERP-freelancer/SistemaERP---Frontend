@@ -275,6 +275,9 @@ class ApiClient {
             const isLoginRequest = /\/usuarios\/login$/i.test(endpoint);
             const isTenantDeleteConfirm =
               method === 'DELETE' && /\/tenants\/[^/]+$/i.test(endpoint);
+            const looksLikeIntegrationAuthError =
+              /spedy|api.?key|integra[cç][aã]o/i.test(errorMessage) ||
+              /nota-fiscal|\/spedy\//i.test(endpoint);
 
             if (isLoginRequest) {
               errorMessage =
@@ -291,6 +294,17 @@ class ApiClient {
                 errorMessage !== 'Unauthorized'
                   ? errorMessage
                   : null) || 'Senha de administrador incorreta.';
+              break;
+            }
+
+            // 401 de integração fiscal (ex.: API Key Spedy) NÃO é sessão expirada
+            if (looksLikeIntegrationAuthError) {
+              errorMessage =
+                (typeof errorMessage === 'string' &&
+                errorMessage !== 'Unauthorized'
+                  ? errorMessage
+                  : null) ||
+                'Falha na autenticação da integração fiscal (Spedy). Verifique a API Key em Sistema → Empresa.';
               break;
             }
 
@@ -382,7 +396,11 @@ class ApiClient {
         
         // Adiciona flag para identificar tipo de erro
         error.isConnectionError = false;
-        error.isAuthError = response.status === 401 || response.status === 403;
+        error.isAuthError =
+          (response.status === 401 || response.status === 403) &&
+          !/spedy|api.?key|integra[cç][aã]o|nota-fiscal|\/spedy\//i.test(
+            `${errorMessage} ${endpoint}`,
+          );
         error.isNotFoundError = response.status === 404;
         error.isServerError = response.status >= 500;
 
@@ -592,10 +610,20 @@ class ApiClient {
         `Erro ${response.status}: ${response.statusText}`;
 
       if (response.status === 401) {
-        errorMessage =
-          errorMessage === 'Unauthorized'
-            ? 'Sessão expirada ou token não enviado. Faça login novamente e tente outra vez.'
-            : errorMessage;
+        const looksLikeIntegrationAuthError =
+          /spedy|api.?key|integra[cç][aã]o/i.test(errorMessage) ||
+          /nota-fiscal|\/spedy\//i.test(endpoint);
+        if (looksLikeIntegrationAuthError) {
+          errorMessage =
+            errorMessage === 'Unauthorized'
+              ? 'Falha na autenticação da integração fiscal (Spedy). Verifique a API Key em Sistema → Empresa.'
+              : errorMessage;
+        } else {
+          errorMessage =
+            errorMessage === 'Unauthorized'
+              ? 'Sessão expirada ou token não enviado. Faça login novamente e tente outra vez.'
+              : errorMessage;
+        }
       } else if (response.status === 403) {
         errorMessage =
           errorMessage || 'Você não tem permissão para executar esta ação.';
@@ -603,7 +631,12 @@ class ApiClient {
 
       const error = new Error(errorMessage) as any;
       error.response = { status: response.status, data: errorData };
-      error.isAuthError = response.status === 401 || response.status === 403;
+      // Upload Spedy: 401 de API Key não deve ser tratado como logout de sessão
+      error.isAuthError =
+        (response.status === 401 || response.status === 403) &&
+        !/spedy|api.?key|integra[cç][aã]o|nota-fiscal|\/spedy\//i.test(
+          `${errorMessage} ${endpoint}`,
+        );
       throw error;
     }
 
