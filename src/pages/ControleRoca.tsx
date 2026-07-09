@@ -17,6 +17,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Command,
@@ -167,6 +168,7 @@ import {
     ChevronDown,
     ChevronsUpDown,
     ClipboardList,
+    Construction,
     Copy,
     Download,
     Eye,
@@ -177,6 +179,7 @@ import {
     Loader2,
     MapPin,
     MoreHorizontal,
+    NotebookPen,
     Package,
     Pencil,
     Phone,
@@ -2653,6 +2656,10 @@ export default function ControleRoca() {
             <TabsTrigger value="relatorio" className="gap-1">
               <FileText className="w-4 h-4" />
               Notas de lançamento
+            </TabsTrigger>
+            <TabsTrigger value="diario-roca" className="gap-1">
+              <NotebookPen className="w-4 h-4" />
+              Diário de roça
             </TabsTrigger>
           </TabsList>
 
@@ -8320,6 +8327,25 @@ className={
                 </Table>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="diario-roca" className="space-y-4">
+            <div className="flex min-h-[280px] items-center justify-center py-6">
+              <Card className="w-full max-w-lg border-dashed shadow-sm">
+                <CardContent className="flex flex-col items-center px-6 py-10 text-center sm:px-10 sm:py-12">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Construction className="h-7 w-7" aria-hidden />
+                  </div>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Em desenvolvimento
+                  </h2>
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                    O Diário de roça está sendo desenvolvido e estará disponível
+                    em breve. Agradecemos a sua paciência.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
