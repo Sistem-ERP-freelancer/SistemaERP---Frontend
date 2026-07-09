@@ -51,39 +51,45 @@ function prepararEndereco(endereco: EnderecoFormState): UpdateEndereco {
   }
   // Se não tem ID, omitir (será criado novo endereço)
   
-  // Campos obrigatórios (apenas se preenchidos)
-  if (endereco.cep !== undefined && endereco.cep !== null && typeof endereco.cep === 'string' && endereco.cep.trim() !== '') {
-    payload.cep = endereco.cep.trim();
-  }
-  if (endereco.logradouro !== undefined && endereco.logradouro !== null && typeof endereco.logradouro === 'string' && endereco.logradouro.trim() !== '') {
-    payload.logradouro = endereco.logradouro.trim();
-  }
-  if (endereco.numero !== undefined && endereco.numero !== null && typeof endereco.numero === 'string' && endereco.numero.trim() !== '') {
-    payload.numero = endereco.numero.trim();
-  }
-  if (endereco.bairro !== undefined && endereco.bairro !== null && typeof endereco.bairro === 'string' && endereco.bairro.trim() !== '') {
-    payload.bairro = endereco.bairro.trim();
-  }
-  if (endereco.cidade !== undefined && endereco.cidade !== null && typeof endereco.cidade === 'string' && endereco.cidade.trim() !== '') {
-    payload.cidade = endereco.cidade.trim();
-  }
-  if (endereco.estado !== undefined && endereco.estado !== null && typeof endereco.estado === 'string' && endereco.estado.trim() !== '') {
-    payload.estado = endereco.estado.trim().toUpperCase();
-  }
+  const asTrimmedString = (v: unknown): string | undefined => {
+    if (v === undefined || v === null) return undefined;
+    const s = String(v).trim();
+    return s === '' ? undefined : s;
+  };
+
+  // Campos obrigatórios (apenas se preenchidos) — coerção para string
+  // evita omitir numero quando vier como number do formulário/API.
+  const cep = asTrimmedString(endereco.cep);
+  if (cep !== undefined) payload.cep = cep;
+
+  const logradouro = asTrimmedString(endereco.logradouro);
+  if (logradouro !== undefined) payload.logradouro = logradouro;
+
+  const numero = asTrimmedString(endereco.numero);
+  if (numero !== undefined) payload.numero = numero;
+
+  const bairro = asTrimmedString(endereco.bairro);
+  if (bairro !== undefined) payload.bairro = bairro;
+
+  const cidade = asTrimmedString(endereco.cidade);
+  if (cidade !== undefined) payload.cidade = cidade;
+
+  const estado = asTrimmedString(endereco.estado);
+  if (estado !== undefined) payload.estado = estado.toUpperCase();
   
   // Campos opcionais: "" vira null (apenas se definido)
   if (endereco.complemento !== undefined) {
     if (endereco.complemento === '' || endereco.complemento === null) {
       payload.complemento = null;
-    } else if (typeof endereco.complemento === 'string') {
-      payload.complemento = endereco.complemento.trim();
+    } else {
+      payload.complemento = String(endereco.complemento).trim();
     }
   }
   if (endereco.referencia !== undefined) {
     if (endereco.referencia === '' || endereco.referencia === null) {
       payload.referencia = null;
-    } else if (typeof endereco.referencia === 'string') {
-      payload.referencia = endereco.referencia.trim();
+    } else {
+      payload.referencia = String(endereco.referencia).trim();
     }
   }
 
