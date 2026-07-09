@@ -49,7 +49,7 @@ import {
   Loader2,
   Wallet,
 } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 type DiaColuna = {
@@ -72,6 +72,11 @@ function periodoPadrao() {
     dataInicial: inicioDoMesYMD(hoje),
     dataFinal: fimDoMesYMD(hoje),
   };
+}
+
+function rotuloRoca(r: Pick<Roca, 'nome' | 'codigo'>): string {
+  const nome = r.nome?.trim() || 'Roça';
+  return r.codigo ? `${nome} (${r.codigo})` : nome;
 }
 
 function abrirSeletorDataNativo(input: HTMLInputElement | null) {
@@ -330,6 +335,7 @@ export default function FluxoDeCaixa() {
     dataInicial: padrao.dataInicial,
     dataFinal: padrao.dataFinal,
     rocaId: undefined as number | undefined,
+    rocaLabel: undefined as string | undefined,
   });
 
   const { data: rocasApi = [] } = useQuery({
@@ -341,6 +347,28 @@ export default function FluxoDeCaixa() {
     () => (rocasApi as Roca[]).filter((r) => r.ativo !== false),
     [rocasApi],
   );
+
+  const rocasPorId = useMemo(() => {
+    const map = new Map<number, Roca>();
+    for (const r of rocasAtivas) {
+      const id = Number(r.id);
+      if (Number.isFinite(id) && id > 0) map.set(id, r);
+    }
+    return map;
+  }, [rocasAtivas]);
+
+  // Se o filtro já estava aplicado antes da lista carregar (ou id veio como string),
+  // preenche o rótulo assim que a roça existir no mapa.
+  useEffect(() => {
+    if (filtros.rocaId == null || filtros.rocaLabel) return;
+    const roca = rocasPorId.get(Number(filtros.rocaId));
+    if (!roca) return;
+    setFiltros((prev) =>
+      prev.rocaId == null || prev.rocaLabel
+        ? prev
+        : { ...prev, rocaLabel: rotuloRoca(roca) },
+    );
+  }, [filtros.rocaId, filtros.rocaLabel, rocasPorId]);
 
   const {
     data: fluxoData,
@@ -434,13 +462,16 @@ export default function FluxoDeCaixa() {
       toast.error('Selecione uma roça válida.');
       return false;
     }
+    const rocaSelecionada =
+      rocaId && rocaId > 0 ? rocasPorId.get(rocaId) : undefined;
     setFiltros({
       dataInicial: formDataInicial,
       dataFinal: formDataFinal,
       rocaId: rocaId && rocaId > 0 ? rocaId : undefined,
+      rocaLabel: rocaSelecionada ? rotuloRoca(rocaSelecionada) : undefined,
     });
     return true;
-  }, [formDataInicial, formDataFinal, formRocaId]);
+  }, [formDataInicial, formDataFinal, formRocaId, rocasPorId]);
 
   const abrirSheetFiltros = useCallback(() => {
     setFormDataInicial(filtros.dataInicial);
@@ -465,6 +496,7 @@ export default function FluxoDeCaixa() {
       dataInicial: padrao.dataInicial,
       dataFinal: padrao.dataFinal,
       rocaId: undefined,
+      rocaLabel: undefined,
     });
     setSheetOpen(false);
   }, [padrao.dataInicial, padrao.dataFinal]);
@@ -481,11 +513,10 @@ export default function FluxoDeCaixa() {
 
   const rocaAplicadaNome = useMemo(() => {
     if (filtros.rocaId == null) return 'Todas as roças';
-    return (
-      rocasAtivas.find((r) => r.id === filtros.rocaId)?.nome ??
-      `Roça #${filtros.rocaId}`
-    );
-  }, [filtros.rocaId, rocasAtivas]);
+    if (filtros.rocaLabel) return filtros.rocaLabel;
+    const roca = rocasPorId.get(Number(filtros.rocaId));
+    return roca ? rotuloRoca(roca) : `Roça #${filtros.rocaId}`;
+  }, [filtros.rocaId, filtros.rocaLabel, rocasPorId]);
 
   const exportarExcel = useCallback(() => {
     if (!fluxoData) {
@@ -494,7 +525,11 @@ export default function FluxoDeCaixa() {
     }
     const rocaNome =
       filtros.rocaId != null
-        ? rocasAtivas.find((r) => r.id === filtros.rocaId)?.nome
+        ? filtros.rocaLabel ??
+          (() => {
+            const roca = rocasPorId.get(Number(filtros.rocaId));
+            return roca ? rotuloRoca(roca) : undefined;
+          })()
         : undefined;
     try {
       exportarFluxoCaixaExcel(fluxoData, { rocaNome });
@@ -502,7 +537,7 @@ export default function FluxoDeCaixa() {
     } catch (e) {
       toast.error(extractApiErrorMessage(e) || 'Não foi possível exportar.');
     }
-  }, [fluxoData, filtros.rocaId, rocasAtivas]);
+  }, [fluxoData, filtros.rocaId, filtros.rocaLabel, rocasPorId]);
 
   const erroMsg = error ? extractApiErrorMessage(error) : null;
 
@@ -599,8 +634,7 @@ export default function FluxoDeCaixa() {
                         <SelectItem value="todas">Todas as roças</SelectItem>
                         {rocasAtivas.map((r) => (
                           <SelectItem key={r.id} value={String(r.id)}>
-                            {r.nome}
-                            {r.codigo ? ` (${r.codigo})` : ''}
+                            {rotuloRoca(r)}
                           </SelectItem>
                         ))}
                       </SelectContent>
