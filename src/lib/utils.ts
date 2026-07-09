@@ -5,6 +5,30 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Ordenação natural de códigos (RO01, RO02, … RO10 — não RO10 antes de RO01). */
+export function compareCodigoNatural(
+  a?: string | null,
+  b?: string | null,
+): number {
+  return String(a ?? '').localeCompare(String(b ?? ''), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+/** Ordena roças por código (numérico) e depois pelo nome. */
+export function compareRocaPorCodigo(
+  a: { codigo?: string | null; nome?: string | null },
+  b: { codigo?: string | null; nome?: string | null },
+): number {
+  const byCodigo = compareCodigoNatural(a.codigo, b.codigo);
+  if (byCodigo !== 0) return byCodigo;
+  return String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',

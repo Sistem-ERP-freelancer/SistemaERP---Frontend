@@ -78,7 +78,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { cn, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { cn, compareRocaPorCodigo, formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import {
   cleanDocument,
   formatCPF,
@@ -585,9 +585,7 @@ export default function ControleRoca() {
         );
       });
     }
-    return [...list].sort((a, b) =>
-      (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' })
-    );
+    return [...list].sort(compareRocaPorCodigo);
   }, [rocas, produtores, searchRoca]);
 
   // Meeiros
@@ -610,9 +608,7 @@ export default function ControleRoca() {
   });
   const rocasFiltroMeeiroOrdenadas = useMemo(() => {
     const term = filtroMeeiroRocaSearch.trim().toLowerCase();
-    const sorted = [...meeiroFiltroRocas].sort((a, b) =>
-      (a.nome ?? a.codigo ?? '').localeCompare(b.nome ?? b.codigo ?? '', 'pt-BR', { sensitivity: 'base' }),
-    );
+    const sorted = [...meeiroFiltroRocas].sort(compareRocaPorCodigo);
     if (!term) return sorted;
     return sorted.filter(
       (r) =>
@@ -1401,9 +1397,7 @@ export default function ControleRoca() {
 
   const rocasFiltroOrdenadas = useMemo(() => {
     const term = filtroRocaSearch.trim().toLowerCase();
-    const sorted = [...rocasParaFiltroLancamento].sort((a, b) =>
-      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' })
-    );
+    const sorted = [...rocasParaFiltroLancamento].sort(compareRocaPorCodigo);
     if (!term) return sorted;
     return sorted.filter((r) => (r.nome ?? '').toLowerCase().includes(term));
   }, [rocasParaFiltroLancamento, filtroRocaSearch]);
@@ -1868,9 +1862,7 @@ export default function ControleRoca() {
   }, [meeirosParaRelatorio, relPagMeeiroComboSearch]);
   const rocasRelPagamentoMeeiroSheet = useMemo(() => {
     const term = relPagRocaComboSearch.trim().toLowerCase();
-    const sorted = [...rocasParaFiltroLancamento].sort((a, b) =>
-      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR', { sensitivity: 'base' }),
-    );
+    const sorted = [...rocasParaFiltroLancamento].sort(compareRocaPorCodigo);
     if (!term) return sorted;
     return sorted.filter((r) => (r.nome ?? '').toLowerCase().includes(term));
   }, [rocasParaFiltroLancamento, relPagRocaComboSearch]);
@@ -2347,10 +2339,7 @@ export default function ControleRoca() {
     [dashboardRocaId, lancamentosDashboardTodos]
   );
   const rocasDashboardSelectOrdenadas = useMemo(
-    () =>
-      [...rocasParaFiltroLancamento].sort((a, b) =>
-        String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR', { sensitivity: 'base' })
-      ),
+    () => [...rocasParaFiltroLancamento].sort(compareRocaPorCodigo),
     [rocasParaFiltroLancamento]
   );
   const mesesDisponiveisDashboard = useMemo(() => {
@@ -2565,9 +2554,10 @@ export default function ControleRoca() {
     const rocaIdsOrdenados = Array.from(rocaIdsNoGrafico).sort((a, b) => {
       const ra = resolverRoca(a);
       const rb = resolverRoca(b);
-      const labelA = rocaNomePorIdDosLancamentos.get(a) ?? ra?.nome ?? ra?.codigo ?? String(a);
-      const labelB = rocaNomePorIdDosLancamentos.get(b) ?? rb?.nome ?? rb?.codigo ?? String(b);
-      return String(labelA).localeCompare(String(labelB), 'pt-BR', { sensitivity: 'base' });
+      return compareRocaPorCodigo(
+        { codigo: ra?.codigo, nome: ra?.nome ?? rocaNomePorIdDosLancamentos.get(a) },
+        { codigo: rb?.codigo, nome: rb?.nome ?? rocaNomePorIdDosLancamentos.get(b) },
+      );
     });
 
     const series: Serie[] = rocaIdsOrdenados.map((id, i) => {
@@ -2614,11 +2604,7 @@ export default function ControleRoca() {
     if (dashboardRocaId !== '') {
       list = list.filter((r) => Number(r.id) === Number(dashboardRocaId));
     }
-    return [...list].sort((a, b) =>
-      String(a.nome ?? a.codigo ?? '').localeCompare(String(b.nome ?? b.codigo ?? ''), 'pt-BR', {
-        sensitivity: 'base',
-      }),
-    );
+    return [...list].sort(compareRocaPorCodigo);
   }, [rocasParaFiltroLancamento, dashboardRocaId]);
 
   return (
