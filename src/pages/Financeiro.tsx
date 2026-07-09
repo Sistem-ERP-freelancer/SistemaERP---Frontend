@@ -54,7 +54,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, compareRocaPorCodigo, formatDate } from "@/lib/utils";
 import {
   calcularStatsFinanceiroFiltrado,
+  fimDoMesYMD,
   listarContasTodasAsPaginas,
+  toYMD,
 } from "@/lib/contas-financeiras-listagem";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { controleRocaService } from "@/services/controle-roca.service";
@@ -142,6 +144,14 @@ function pickOptionalId(...candidates: unknown[]): number | undefined {
     if (Number.isFinite(n) && n > 0) return n;
   }
   return undefined;
+}
+
+/** Período do mês corrente (mesmo critério dos cards Receita/Despesas do Mês). */
+function periodoMesAtualYMD(ref = new Date()) {
+  return {
+    dataInicial: toYMD(new Date(ref.getFullYear(), ref.getMonth(), 1)),
+    dataFinal: fimDoMesYMD(ref),
+  };
 }
 
 /** Normaliza GET /contas-financeiras/:id para o formulário (snake_case, camelCase, decimal como string, relações aninhadas). */
@@ -792,10 +802,37 @@ const Financeiro = () => {
     ];
   }, [contasReceberStats, contasPagarStats, statsFiltrados, totalPrevisaoEntrada]);
 
+  const periodoMesAtual = useMemo(() => periodoMesAtualYMD(), []);
+
+  const periodoEhMesAtual =
+    dataInicialFilter === periodoMesAtual.dataInicial &&
+    dataFinalFilter === periodoMesAtual.dataFinal;
+
+  const aplicarPeriodoMesAtual = () => {
+    setDataInicialFilter(periodoMesAtual.dataInicial);
+    setDataFinalFilter(periodoMesAtual.dataFinal);
+  };
+
+  const limparPeriodoSeForMesAtual = () => {
+    if (
+      dataInicialFilter === periodoMesAtual.dataInicial &&
+      dataFinalFilter === periodoMesAtual.dataFinal
+    ) {
+      setDataInicialFilter("");
+      setDataFinalFilter("");
+    }
+  };
+
   const statsCardItems = useMemo((): ModuleStatCardItem[] => {
     return stats.map((stat) => {
       const cardFilter = stat.cardFilter ?? "todos";
       const isPrevisaoCard = cardFilter === "PREVISAO";
+      const isSaldoCard = cardFilter === "todos" && stat.key === "saldo_atual";
+      const cardTipoAtivo =
+        !isPrevisaoCard &&
+        !isSaldoCard &&
+        cardFilter !== "todos" &&
+        cardTipoFilter === cardFilter;
       return {
         key: stat.key,
         label: stat.label,
@@ -805,26 +842,65 @@ const Financeiro = () => {
         valueClass: stat.valueClass,
         Icon: stat.Icon,
         active: isPrevisaoCard
-          ? activeTab === "PREVISAO"
-          : cardFilter !== "todos" && cardTipoFilter === cardFilter,
+          ? activeTab === "PREVISAO" && periodoEhMesAtual
+          : isSaldoCard
+            ? cardTipoFilter === "todos" &&
+              activeTab === "Todos" &&
+              periodoEhMesAtual
+            : cardTipoAtivo && periodoEhMesAtual,
         onClick: () => {
           if (isPrevisaoCard) {
-            // Só filtra a tabela por status; não altera tipo nem totais dos outros cards.
-            setActiveTab((prev) => (prev === "PREVISAO" ? "Todos" : "PREVISAO"));
-            setCardTipoFilter("todos");
+            const desligar =
+              activeTab === "PREVISAO" && periodoEhMesAtual;
+            if (desligar) {
+              setActiveTab("Todos");
+              setCardTipoFilter("todos");
+              limparPeriodoSeForMesAtual();
+            } else {
+              setActiveTab("PREVISAO");
+              setCardTipoFilter("todos");
+              aplicarPeriodoMesAtual();
+            }
             setPage(1);
             return;
           }
-          // Clique em Receita/Despesa limpa o filtro de Previsão para não esvaziar a lista.
+
+          if (isSaldoCard) {
+            const desligar =
+              cardTipoFilter === "todos" &&
+              activeTab === "Todos" &&
+              periodoEhMesAtual;
+            setActiveTab("Todos");
+            setCardTipoFilter("todos");
+            if (desligar) limparPeriodoSeForMesAtual();
+            else aplicarPeriodoMesAtual();
+            setPage(1);
+            return;
+          }
+
+          // Receita / Despesas: filtra tipo + mês atual.
+          const desligar = cardTipoAtivo && periodoEhMesAtual;
           setActiveTab("Todos");
-          setCardTipoFilter((prev) =>
-            cardFilter !== "todos" && prev === cardFilter ? "todos" : cardFilter,
-          );
+          if (desligar) {
+            setCardTipoFilter("todos");
+            limparPeriodoSeForMesAtual();
+          } else {
+            setCardTipoFilter(cardFilter);
+            aplicarPeriodoMesAtual();
+          }
           setPage(1);
         },
       };
     });
-  }, [stats, cardTipoFilter, activeTab]);
+  }, [
+    stats,
+    cardTipoFilter,
+    activeTab,
+    periodoEhMesAtual,
+    periodoMesAtual,
+    dataInicialFilter,
+    dataFinalFilter,
+  ]);
 
   // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
