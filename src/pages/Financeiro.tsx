@@ -553,15 +553,20 @@ const Financeiro = () => {
 
   const pedidos = Array.isArray(pedidosData) ? pedidosData : [];
 
-  const temFiltrosAtivos =
-    cardTipoFilter !== "todos" ||
+  /** Filtros do painel (não incluem clique nos cards de tipo/status). */
+  const temFiltrosAvancados =
     secaoTipoFilter !== "todos" ||
     clienteFilterId != null ||
     fornecedorFilterId != null ||
     rocaFilterId != null ||
     !!dataInicialFilter ||
-    !!dataFinalFilter ||
-    (activeTab !== "Todos");
+    !!dataFinalFilter;
+
+  const temFiltrosAtivos =
+    temFiltrosAvancados ||
+    cardTipoFilter !== "todos" ||
+    activeTab !== "Todos";
+
   const handleAplicarFiltros = () => setFiltrosDialogOpen(false);
   const handleLimparFiltros = () => {
     setCardTipoFilter("todos");
@@ -576,103 +581,86 @@ const Financeiro = () => {
     setFiltrosDialogOpen(false);
   };
 
-  const statusTabsFinanceiro = [
-    "PENDENTE",
-    "PREVISAO",
-    "PAGO_PARCIAL",
-    "PAGO_TOTAL",
-    "VENCIDO",
-    "CANCELADO",
-  ] as const;
-
-  const filtrosContasCardsBase = useMemo(() => {
-    const status = statusTabsFinanceiro.includes(activeTab as (typeof statusTabsFinanceiro)[number])
-      ? activeTab
-      : undefined;
-    return {
+  // Totais dos cards: só filtros avançados (sem status/tipo do clique nos cards),
+  // para Previsão/Receita não zerar Despesas indevidamente.
+  const filtrosTotaisCards = useMemo(
+    () => ({
       cliente_id: clienteFilterId,
       fornecedor_id: fornecedorFilterId,
       roca_id: rocaFilterId,
       data_inicial: dataInicialFilter || undefined,
       data_final: dataFinalFilter || undefined,
-      status,
-    };
-  }, [
-    activeTab,
-    clienteFilterId,
-    fornecedorFilterId,
-    rocaFilterId,
-    dataInicialFilter,
-    dataFinalFilter,
-  ]);
+    }),
+    [
+      clienteFilterId,
+      fornecedorFilterId,
+      rocaFilterId,
+      dataInicialFilter,
+      dataFinalFilter,
+    ],
+  );
 
-  const buscaContasReceberCards =
-    temFiltrosAtivos &&
-    (tipoFiltroEfetivo === undefined || tipoFiltroEfetivo === "RECEBER");
-  const buscaContasPagarCards =
-    temFiltrosAtivos &&
-    (tipoFiltroEfetivo === undefined || tipoFiltroEfetivo === "PAGAR");
-
-  const { data: contasReceberCards, isLoading: isLoadingReceberCards } = useQuery({
+  const { data: contasReceberCards } = useQuery({
     queryKey: [
       "contas-financeiras",
       "financeiro",
       "cards",
       "receber",
-      filtrosContasCardsBase,
+      filtrosTotaisCards,
+      secaoTipoFilter,
     ],
     queryFn: () =>
       listarContasTodasAsPaginas({
-        ...filtrosContasCardsBase,
+        ...filtrosTotaisCards,
         tipo: "RECEBER",
       }),
-    enabled: buscaContasReceberCards,
+    enabled: temFiltrosAvancados && secaoTipoFilter !== "despesas" && secaoTipoFilter !== "contas_pagar",
     retry: false,
   });
 
-  const { data: contasPagarCards, isLoading: isLoadingPagarCards } = useQuery({
+  const { data: contasPagarCards } = useQuery({
     queryKey: [
       "contas-financeiras",
       "financeiro",
       "cards",
       "pagar",
-      filtrosContasCardsBase,
+      filtrosTotaisCards,
+      secaoTipoFilter,
     ],
     queryFn: () =>
       listarContasTodasAsPaginas({
-        ...filtrosContasCardsBase,
+        ...filtrosTotaisCards,
         tipo: "PAGAR",
       }),
-    enabled: buscaContasPagarCards,
+    enabled: temFiltrosAvancados && secaoTipoFilter !== "contas_receber",
     retry: false,
   });
 
+  const buscaContasReceberCards =
+    temFiltrosAvancados &&
+    secaoTipoFilter !== "despesas" &&
+    secaoTipoFilter !== "contas_pagar";
+  const buscaContasPagarCards =
+    temFiltrosAvancados && secaoTipoFilter !== "contas_receber";
+
   const statsFiltrados = useMemo(() => {
-    if (!temFiltrosAtivos) return null;
-    const receber =
-      tipoFiltroEfetivo === "PAGAR" ? [] : (contasReceberCards ?? []);
-    const pagar =
-      tipoFiltroEfetivo === "RECEBER" ? [] : (contasPagarCards ?? []);
+    if (!temFiltrosAvancados) return null;
     if (
       (buscaContasReceberCards && contasReceberCards === undefined) ||
       (buscaContasPagarCards && contasPagarCards === undefined)
     ) {
       return null;
     }
+    const receber = buscaContasReceberCards ? (contasReceberCards ?? []) : [];
+    const pagar = buscaContasPagarCards ? (contasPagarCards ?? []) : [];
     return calcularStatsFinanceiroFiltrado(receber, pagar);
   }, [
-    temFiltrosAtivos,
-    tipoFiltroEfetivo,
+    temFiltrosAvancados,
     contasReceberCards,
     contasPagarCards,
     buscaContasReceberCards,
     buscaContasPagarCards,
   ]);
-
-  const isLoadingStatsFiltrados =
-    temFiltrosAtivos &&
-    ((buscaContasReceberCards && isLoadingReceberCards) ||
-      (buscaContasPagarCards && isLoadingPagarCards));
 
   // Buscar contas agrupadas (uma linha por cliente/pedido) - visão resumida
   const { data: contasAgrupadasResponse, isLoading: isLoadingContas } = useQuery({
@@ -821,11 +809,14 @@ const Financeiro = () => {
           : cardFilter !== "todos" && cardTipoFilter === cardFilter,
         onClick: () => {
           if (isPrevisaoCard) {
+            // Só filtra a tabela por status; não altera tipo nem totais dos outros cards.
             setActiveTab((prev) => (prev === "PREVISAO" ? "Todos" : "PREVISAO"));
-            setCardTipoFilter("RECEBER");
+            setCardTipoFilter("todos");
             setPage(1);
             return;
           }
+          // Clique em Receita/Despesa limpa o filtro de Previsão para não esvaziar a lista.
+          setActiveTab("Todos");
           setCardTipoFilter((prev) =>
             cardFilter !== "todos" && prev === cardFilter ? "todos" : cardFilter,
           );
