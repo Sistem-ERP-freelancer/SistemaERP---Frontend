@@ -51,7 +51,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, compareRocaPorCodigo, formatDate } from "@/lib/utils";
 import {
   calcularStatsFinanceiroFiltrado,
   listarContasTodasAsPaginas,
@@ -194,6 +194,7 @@ const Financeiro = () => {
   const limit = 15;
   const [clienteFilterId, setClienteFilterId] = useState<number | undefined>();
   const [fornecedorFilterId, setFornecedorFilterId] = useState<number | undefined>();
+  const [rocaFilterId, setRocaFilterId] = useState<number | undefined>();
   const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
   const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
@@ -296,6 +297,14 @@ const Financeiro = () => {
     ? rocasData
     : (rocasData as any)?.rocas ?? [];
 
+  const rocasFiltroOrdenadas = useMemo(
+    () =>
+      [...rocasLista]
+        .filter((r) => r.ativo !== false)
+        .sort(compareRocaPorCodigo),
+    [rocasLista],
+  );
+
   const tipoFiltroEfetivo = useMemo<"RECEBER" | "PAGAR" | undefined>(() => {
     if (secaoTipoFilter === "contas_receber") return "RECEBER";
     if (secaoTipoFilter === "despesas" || secaoTipoFilter === "contas_pagar") {
@@ -307,14 +316,29 @@ const Financeiro = () => {
 
   // Parâmetros de filtro para dashboard (tipo vem dos cards/ seção; demais do painel)
   const dashboardFiltros = useMemo(() => {
-    const f: { data_inicial?: string; data_final?: string; tipo?: string; cliente_id?: number; fornecedor_id?: number } = {};
+    const f: {
+      data_inicial?: string;
+      data_final?: string;
+      tipo?: string;
+      cliente_id?: number;
+      fornecedor_id?: number;
+      roca_id?: number;
+    } = {};
     if (dataInicialFilter) f.data_inicial = dataInicialFilter;
     if (dataFinalFilter) f.data_final = dataFinalFilter;
     if (tipoFiltroEfetivo) f.tipo = tipoFiltroEfetivo;
     if (clienteFilterId != null) f.cliente_id = clienteFilterId;
     if (fornecedorFilterId != null) f.fornecedor_id = fornecedorFilterId;
+    if (rocaFilterId != null) f.roca_id = rocaFilterId;
     return Object.keys(f).length ? f : undefined;
-  }, [dataInicialFilter, dataFinalFilter, tipoFiltroEfetivo, clienteFilterId, fornecedorFilterId]);
+  }, [
+    dataInicialFilter,
+    dataFinalFilter,
+    tipoFiltroEfetivo,
+    clienteFilterId,
+    fornecedorFilterId,
+    rocaFilterId,
+  ]);
 
   const relatorioClienteIdParsed = useMemo(() => {
     if (!relatorioClienteIdSelect) return null;
@@ -470,6 +494,7 @@ const Financeiro = () => {
       "previsao-entrada",
       clienteFilterId,
       fornecedorFilterId,
+      rocaFilterId,
       dataInicialFilter,
       dataFinalFilter,
     ],
@@ -479,6 +504,7 @@ const Financeiro = () => {
         status: "PREVISAO",
         cliente_id: clienteFilterId,
         fornecedor_id: fornecedorFilterId,
+        roca_id: rocaFilterId,
         data_inicial: dataInicialFilter || undefined,
         data_final: dataFinalFilter || undefined,
       }),
@@ -532,6 +558,7 @@ const Financeiro = () => {
     secaoTipoFilter !== "todos" ||
     clienteFilterId != null ||
     fornecedorFilterId != null ||
+    rocaFilterId != null ||
     !!dataInicialFilter ||
     !!dataFinalFilter ||
     (activeTab !== "Todos");
@@ -541,6 +568,7 @@ const Financeiro = () => {
     setSecaoTipoFilter("todos");
     setClienteFilterId(undefined);
     setFornecedorFilterId(undefined);
+    setRocaFilterId(undefined);
     setDataInicialFilter("");
     setDataFinalFilter("");
     setActiveTab("Todos");
@@ -564,6 +592,7 @@ const Financeiro = () => {
     return {
       cliente_id: clienteFilterId,
       fornecedor_id: fornecedorFilterId,
+      roca_id: rocaFilterId,
       data_inicial: dataInicialFilter || undefined,
       data_final: dataFinalFilter || undefined,
       status,
@@ -572,6 +601,7 @@ const Financeiro = () => {
     activeTab,
     clienteFilterId,
     fornecedorFilterId,
+    rocaFilterId,
     dataInicialFilter,
     dataFinalFilter,
   ]);
@@ -646,7 +676,20 @@ const Financeiro = () => {
 
   // Buscar contas agrupadas (uma linha por cliente/pedido) - visão resumida
   const { data: contasAgrupadasResponse, isLoading: isLoadingContas } = useQuery({
-    queryKey: ["contas-financeiras", "agrupado", activeTab, cardTipoFilter, secaoTipoFilter, page, limit, clienteFilterId, fornecedorFilterId, dataInicialFilter, dataFinalFilter],
+    queryKey: [
+      "contas-financeiras",
+      "agrupado",
+      activeTab,
+      cardTipoFilter,
+      secaoTipoFilter,
+      page,
+      limit,
+      clienteFilterId,
+      fornecedorFilterId,
+      rocaFilterId,
+      dataInicialFilter,
+      dataFinalFilter,
+    ],
     queryFn: async () => {
       try {
         const tipo = tipoFiltroEfetivo;
@@ -660,6 +703,7 @@ const Financeiro = () => {
           status,
           cliente_id: clienteFilterId,
           fornecedor_id: fornecedorFilterId,
+          roca_id: rocaFilterId,
           data_inicial: dataInicialFilter || undefined,
           data_final: dataFinalFilter || undefined,
         });
@@ -1105,6 +1149,7 @@ const Financeiro = () => {
                     (secaoTipoFilter !== "todos" ? 1 : 0) +
                     (clienteFilterId != null ? 1 : 0) +
                     (fornecedorFilterId != null ? 1 : 0) +
+                    (rocaFilterId != null ? 1 : 0) +
                     (dataInicialFilter ? 1 : 0) +
                     (dataFinalFilter ? 1 : 0) +
                     (activeTab !== "Todos" ? 1 : 0)}
@@ -1245,6 +1290,32 @@ const Financeiro = () => {
                         <SelectItem value="todos">Todos os fornecedores</SelectItem>
                         {fornecedores.map((f) => (
                           <SelectItem key={f.id} value={String(f.id)}>{f.nome_fantasia}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Roça */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Select
+                      value={rocaFilterId == null ? "todos" : String(rocaFilterId)}
+                      onValueChange={(v) => {
+                        setRocaFilterId(v === "todos" ? undefined : parseInt(v, 10));
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as roças" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todas as roças</SelectItem>
+                        {rocasFiltroOrdenadas.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {(r.codigo ? `${r.codigo} – ` : "") + (r.nome ?? `Roça ${r.id}`)}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

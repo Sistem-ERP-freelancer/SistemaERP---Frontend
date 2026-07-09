@@ -1943,16 +1943,14 @@ const Clientes = () => {
                         : "-"}
                     </p>
                   </div>
-                  {selectedCliente.tipoPessoa === "PESSOA_JURIDICA" && (
-                      <div className="space-y-3">
-                        <Label className="text-sm text-muted-foreground">
-                          Inscrição Estadual
-                        </Label>
-                        <p className="font-medium text-base">
-                        {selectedCliente.inscricao_estadual || "-"}
-                        </p>
-                      </div>
-                    )}
+                  <div className="space-y-3">
+                    <Label className="text-sm text-muted-foreground">
+                      Inscrição Estadual (IE)
+                    </Label>
+                    <p className="font-medium text-base">
+                      {selectedCliente.inscricao_estadual || "-"}
+                    </p>
+                  </div>
                   <div className="space-y-3">
                     <Label className="text-sm text-muted-foreground">
                       Tipo
@@ -2742,29 +2740,27 @@ const Clientes = () => {
                       )}
                   </div>
 
-                  {/* Inscrição Estadual - Apenas para Pessoa Jurídica */}
-                  {(editCliente.tipoPessoa || selectedCliente.tipoPessoa) ===
-                    "PESSOA_JURIDICA" && (
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Hash className="w-4 h-4 text-muted-foreground" />
-                        Inscrição Estadual
-                      </Label>
-                      <Input
-                        placeholder="000.000.000.000"
-                        value={
-                          (editCliente.inscricao_estadual ||
+                  {/* Inscrição Estadual - Opcional (PJ e PF / produtor rural) */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-muted-foreground" />
+                      Inscrição Estadual (IE)
+                      <span className="text-xs text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input
+                      placeholder="000.000.000.000"
+                      value={
+                        (editCliente.inscricao_estadual ||
                           selectedCliente.inscricao_estadual) || ""
-                        }
-                        onChange={(e) =>
-                          setEditCliente({
-                            ...editCliente,
-                            inscricao_estadual: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  )}
+                      }
+                      onChange={(e) =>
+                        setEditCliente({
+                          ...editCliente,
+                          inscricao_estadual: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
 
                   {/* Limite de Crédito (opcional) - Mesmo design da seção de criar */}
                   <div className="space-y-2">

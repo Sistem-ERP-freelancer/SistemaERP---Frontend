@@ -281,6 +281,7 @@ class FinanceiroService {
     status?: string;
     cliente_id?: number;
     fornecedor_id?: number;
+    roca_id?: number;
     data_inicial?: string;
     data_final?: string;
   }): Promise<ContasAgrupadasResponse> {
@@ -291,6 +292,9 @@ class FinanceiroService {
     if (params?.status) queryParams.append('status', params.status);
     if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
     if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
+    if (params?.roca_id != null && params.roca_id > 0) {
+      queryParams.append('roca_id', params.roca_id.toString());
+    }
     if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
     if (params?.data_final) queryParams.append('data_final', params.data_final);
 

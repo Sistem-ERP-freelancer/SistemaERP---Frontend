@@ -387,22 +387,21 @@ export const ClienteFormStep1 = ({
           )}
       </div>
 
-      {/* Inscrição Estadual - Apenas para Pessoa Jurídica - Opcional */}
-      {(formData.tipoPessoa || "PESSOA_FISICA") === "PESSOA_JURIDICA" && (
-        <div className="space-y-2">
-          <Label className="flex items-center gap-2">
-            <Hash className="w-4 h-4 text-muted-foreground" />
-            Inscrição Estadual
-          </Label>
-          <Input
-            placeholder="000.000.000.000"
-            value={formData.inscricao_estadual || ""}
-            onChange={(e) =>
-              onFormDataChange({ inscricao_estadual: e.target.value })
-            }
-          />
-        </div>
-      )}
+      {/* Inscrição Estadual - Opcional (PJ e PF / produtor rural) */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <Hash className="w-4 h-4 text-muted-foreground" />
+          Inscrição Estadual (IE)
+          <span className="text-xs text-muted-foreground">(opcional)</span>
+        </Label>
+        <Input
+          placeholder="000.000.000.000"
+          value={formData.inscricao_estadual || ""}
+          onChange={(e) =>
+            onFormDataChange({ inscricao_estadual: e.target.value })
+          }
+        />
+      </div>
 
       {/* Limite de Crédito - Mesmo design da seção de edição */}
       <div className="space-y-2">
