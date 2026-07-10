@@ -98,6 +98,7 @@ import {
   type ApiCentroCustoDespesa,
 } from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
+import { relatoriosClienteService } from '@/services/relatorios-cliente.service';
 import type { Roca } from '@/types/roca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -107,7 +108,7 @@ import {
   Check,
   ChevronsUpDown,
   Circle,
-  Construction,
+  Download,
   Eye,
   Filter,
   Landmark,
@@ -115,6 +116,7 @@ import {
   Pencil,
   PiggyBank,
   Plus,
+  Printer,
   Receipt,
   Scale,
   Search,
@@ -239,8 +241,15 @@ function DespesasTable({
               const dataPagamento = dataPagamentoExibicao(d);
               return (
                 <TableRow key={d.id}>
-                  <TableCell className="font-medium max-w-[180px] truncate">{d.descricao}</TableCell>
-                  <TableCell className="text-center">{d.rocaNome}</TableCell>
+                  <TableCell className="font-medium max-w-[180px] truncate" title={d.descricao}>
+                    {d.descricao}
+                  </TableCell>
+                  <TableCell
+                    className="text-center max-w-[160px] truncate"
+                    title={d.rocaNome || undefined}
+                  >
+                    {d.rocaNome || '—'}
+                  </TableCell>
                   <TableCell className="text-center">{nomeTipo(d)}</TableCell>
                   <TableCell className="text-center tabular-nums">
                     {formatCurrency(Number(d.valor))}
@@ -556,8 +565,12 @@ function DespesasFiltrosBar({
   const [statusFiltro, setStatusFiltro] = useState<'' | DespesasStatusFiltro>('');
   const [qLocal, setQLocal] = useState(despesasBusca);
 
-  const [relatoriosEmDesenvolvimentoAberto, setRelatoriosEmDesenvolvimentoAberto] =
-    useState(false);
+  const [relatorioPdfOpen, setRelatorioPdfOpen] = useState(false);
+  const [relatorioPdfLoading, setRelatorioPdfLoading] = useState(false);
+  const [relatorioPdfDataIni, setRelatorioPdfDataIni] = useState('');
+  const [relatorioPdfDataFim, setRelatorioPdfDataFim] = useState('');
+  const [relatorioPdfTipoSelect, setRelatorioPdfTipoSelect] = useState('todos');
+  const [relatorioPdfStatus, setRelatorioPdfStatus] = useState('Todos');
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [relatorioKind, setRelatorioKind] = useState<RelatorioDespesaId | null>(null);
   const [relatorioGerando, setRelatorioGerando] = useState(false);
@@ -567,6 +580,58 @@ function DespesasFiltrosBar({
   const [rTipoFiltro, setRTipoFiltro] = useState('');
   const [rRocaFiltro, setRRocaFiltro] = useState<number | null>(null);
   const [rStatusFiltro, setRStatusFiltro] = useState<'' | DespesasStatusFiltro>('');
+
+  const relatorioPdfTipoId = useMemo(() => {
+    if (!relatorioPdfTipoSelect || relatorioPdfTipoSelect === 'todos') return null;
+    const n = parseInt(relatorioPdfTipoSelect, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [relatorioPdfTipoSelect]);
+
+  const relatorioPdfParams = useMemo(
+    () => ({
+      dataInicial: relatorioPdfDataIni || undefined,
+      dataFinal: relatorioPdfDataFim || undefined,
+      status:
+        relatorioPdfStatus !== 'Todos' ? relatorioPdfStatus : undefined,
+      tipoDespesaId: relatorioPdfTipoId ?? undefined,
+    }),
+    [
+      relatorioPdfDataIni,
+      relatorioPdfDataFim,
+      relatorioPdfStatus,
+      relatorioPdfTipoId,
+    ],
+  );
+
+  const {
+    data: relatorioPdfPreviewTotal,
+    isFetching: relatorioPdfPreviewFetching,
+    isError: relatorioPdfPreviewError,
+    error: relatorioPdfPreviewErr,
+  } = useQuery({
+    queryKey: ['centro-despesa-relatorio-pdf-preview', relatorioPdfParams],
+    queryFn: () =>
+      relatoriosClienteService.contarRelatorioCentroCustoContasPagar(
+        relatorioPdfParams,
+      ),
+    enabled: relatorioPdfOpen,
+    retry: false,
+  });
+
+  const relatorioPdfTemDados =
+    relatorioPdfPreviewTotal != null && relatorioPdfPreviewTotal > 0;
+
+  const abrirRelatorioPdf = () => {
+    setRelatorioPdfDataIni(despesasFiltro.dataInicial ?? '');
+    setRelatorioPdfDataFim(despesasFiltro.dataFinal ?? '');
+    setRelatorioPdfTipoSelect(despesasFiltro.tipoId || 'todos');
+    const st = despesasFiltro.status;
+    if (st === 'ABERTO') setRelatorioPdfStatus('PENDENTE');
+    else if (st === 'PARCIAL') setRelatorioPdfStatus('PAGO_PARCIAL');
+    else if (st === 'QUITADO') setRelatorioPdfStatus('PAGO_TOTAL');
+    else setRelatorioPdfStatus('Todos');
+    setRelatorioPdfOpen(true);
+  };
 
   const abrirRelatorio = useCallback(
     (kind: RelatorioDespesaId) => {
@@ -920,7 +985,7 @@ function DespesasFiltrosBar({
             type="button"
             variant="outline"
             className="gap-2 w-full sm:w-auto"
-            onClick={() => setRelatoriosEmDesenvolvimentoAberto(true)}
+            onClick={abrirRelatorioPdf}
           >
             <BarChart3 className="w-4 h-4" />
             Relatórios
@@ -928,6 +993,202 @@ function DespesasFiltrosBar({
         </div>
       </div>
     </div>
+
+    <Dialog
+      open={relatorioPdfOpen}
+      onOpenChange={(open) => {
+        setRelatorioPdfOpen(open);
+      }}
+    >
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Relatório por centro de despesa</DialogTitle>
+          <DialogDescription>
+            Mesmo formato do relatório de Contas a Pagar: filtros, resumo e
+            lançamentos financeiros em PDF.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="cc-relatorio-pdf-tipo">Tipo de despesa</Label>
+            <Select
+              value={relatorioPdfTipoSelect || 'todos'}
+              onValueChange={setRelatorioPdfTipoSelect}
+            >
+              <SelectTrigger id="cc-relatorio-pdf-tipo">
+                <SelectValue placeholder="Todos os tipos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os tipos</SelectItem>
+                {tiposOpcoes.map((tipo) => (
+                  <SelectItem key={tipo.id} value={String(tipo.id)}>
+                    {tipo.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                  <Input
+                    type="date"
+                    className="rounded-lg border-border/80 bg-muted/50"
+                    value={relatorioPdfDataIni}
+                    onChange={(e) => setRelatorioPdfDataIni(e.target.value || '')}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Data Final</Label>
+                  <Input
+                    type="date"
+                    className="rounded-lg border-border/80 bg-muted/50"
+                    value={relatorioPdfDataFim}
+                    onChange={(e) => setRelatorioPdfDataFim(e.target.value || '')}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-[#1A3B70]">Status</Label>
+              <RadioGroup
+                value={relatorioPdfStatus}
+                onValueChange={setRelatorioPdfStatus}
+                className="space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Todos" id="cc-pdf-status-todos" />
+                  <Label htmlFor="cc-pdf-status-todos" className="cursor-pointer">
+                    Todos
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="PENDENTE" id="cc-pdf-status-pendente" />
+                  <Label htmlFor="cc-pdf-status-pendente" className="cursor-pointer">
+                    Pendente
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="PAGO_PARCIAL" id="cc-pdf-status-parcial" />
+                  <Label htmlFor="cc-pdf-status-parcial" className="cursor-pointer">
+                    Pago Parcial
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="PAGO_TOTAL" id="cc-pdf-status-quitado" />
+                  <Label htmlFor="cc-pdf-status-quitado" className="cursor-pointer">
+                    Quitada
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="VENCIDO" id="cc-pdf-status-vencido" />
+                  <Label htmlFor="cc-pdf-status-vencido" className="cursor-pointer">
+                    Vencido
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="CANCELADO" id="cc-pdf-status-cancelado" />
+                  <Label htmlFor="cc-pdf-status-cancelado" className="cursor-pointer">
+                    Cancelado
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
+
+          {relatorioPdfPreviewFetching && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Verificando filtros…
+            </p>
+          )}
+
+          {relatorioPdfPreviewError && (
+            <p className="text-sm text-destructive">
+              {(relatorioPdfPreviewErr as Error)?.message ||
+                'Não foi possível verificar os filtros.'}{' '}
+              Você ainda pode baixar o PDF.
+            </p>
+          )}
+
+          {!relatorioPdfPreviewFetching &&
+            !relatorioPdfPreviewError &&
+            relatorioPdfPreviewTotal === 0 && (
+              <p className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm text-[#1A3B70]">
+                Nenhum lançamento encontrado com esses filtros.
+              </p>
+            )}
+
+          {!relatorioPdfPreviewFetching && relatorioPdfTemDados && (
+            <p className="text-sm text-muted-foreground">
+              {relatorioPdfPreviewTotal} lançamento(s) encontrado(s) com os filtros
+              atuais.
+            </p>
+          )}
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            <Button
+              type="button"
+              variant="relatorioPrimary"
+              className="flex-1 gap-2"
+              disabled={relatorioPdfLoading}
+              onClick={async () => {
+                setRelatorioPdfLoading(true);
+                try {
+                  await relatoriosClienteService.downloadRelatorioCentroCustoContasPagar(
+                    relatorioPdfParams,
+                  );
+                  toast.success('PDF baixado.');
+                } catch (e: unknown) {
+                  toast.error(
+                    e instanceof Error ? e.message : 'Erro ao gerar PDF.',
+                  );
+                } finally {
+                  setRelatorioPdfLoading(false);
+                }
+              }}
+            >
+              {relatorioPdfLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Baixar PDF
+            </Button>
+            <Button
+              type="button"
+              variant="relatorioSecondary"
+              className="flex-1 gap-2"
+              disabled={relatorioPdfLoading}
+              onClick={async () => {
+                setRelatorioPdfLoading(true);
+                try {
+                  await relatoriosClienteService.imprimirRelatorioCentroCustoContasPagar(
+                    relatorioPdfParams,
+                  );
+                } catch (e: unknown) {
+                  toast.error(
+                    e instanceof Error ? e.message : 'Erro ao abrir PDF.',
+                  );
+                } finally {
+                  setRelatorioPdfLoading(false);
+                }
+              }}
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={relatorioOpen} onOpenChange={fecharRelatorioDialog}>
       <DialogContent
@@ -1249,33 +1510,6 @@ function DespesasFiltrosBar({
                 Gerar relatório
               </>
             )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog
-      open={relatoriosEmDesenvolvimentoAberto}
-      onOpenChange={setRelatoriosEmDesenvolvimentoAberto}
-    >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Construction className="h-6 w-6" />
-          </div>
-          <DialogTitle className="text-center">Relatórios</DialogTitle>
-          <DialogDescription className="text-center">
-            Esta funcionalidade está sendo desenvolvida e estará disponível em
-            breve. Agradecemos a sua paciência.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="sm:justify-center">
-          <Button
-            type="button"
-            className="w-full sm:w-auto min-w-[8rem]"
-            onClick={() => setRelatoriosEmDesenvolvimentoAberto(false)}
-          >
-            Entendi
           </Button>
         </DialogFooter>
       </DialogContent>
