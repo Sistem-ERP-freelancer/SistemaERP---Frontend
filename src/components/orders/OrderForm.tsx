@@ -625,13 +625,30 @@ export function OrderForm({
 
   const itensValidos = itens.filter((i) => i.produto_id && i.produto_id !== 0);
 
+  const nomeExibicaoParceiro = (pessoa?: {
+    nome?: string | null;
+    nome_fantasia?: string | null;
+    nome_razao?: string | null;
+  }) =>
+    [pessoa?.nome_fantasia, pessoa?.nome_razao, pessoa?.nome]
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .find(Boolean) || '';
+
+  const clienteSelecionado = clientesLista.find(
+    (c) => Number(c.id) === Number(clienteId),
+  );
+  const fornecedorSelecionado = fornecedoresLista.find(
+    (f) => Number(f.id) === Number(fornecedorId),
+  );
+
+  // Em VENDA = cliente; em COMPRA = fornecedor
   const parceiroNome =
     tipo === 'VENDA'
-      ? clientesLista.find((c) => c.id === clienteId)?.nome_fantasia ||
-        clientesLista.find((c) => c.id === clienteId)?.nome_razao ||
-        clientesLista.find((c) => c.id === clienteId)?.nome
-      : fornecedoresLista.find((f) => f.id === fornecedorId)?.nome_fantasia ||
-        fornecedoresLista.find((f) => f.id === fornecedorId)?.nome_razao;
+      ? nomeExibicaoParceiro(clienteSelecionado) ||
+        (typeof dadosClientePedido?.cliente?.nome === 'string'
+          ? dadosClientePedido.cliente.nome.trim()
+          : '')
+      : nomeExibicaoParceiro(fornecedorSelecionado);
 
   const inputClass = 'h-11 rounded-xl';
 
@@ -906,7 +923,7 @@ export function OrderForm({
                       ) : (
                         clientesLista.map((cliente) => (
                           <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                            {cliente.nome_fantasia || cliente.nome_razao || cliente.nome}
+                            {nomeExibicaoParceiro(cliente) || `Cliente #${cliente.id}`}
                           </SelectItem>
                         ))
                       )}
@@ -1532,7 +1549,9 @@ export function OrderForm({
               <CardContent className="space-y-3 p-5 pt-4">
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
-                    <span className="text-muted-foreground">Parceiro</span>
+                    <span className="text-muted-foreground">
+                      {tipo === 'VENDA' ? 'Cliente' : 'Fornecedor'}
+                    </span>
                     <span className="max-w-[55%] truncate text-right font-medium">
                       {parceiroNome || '—'}
                     </span>
