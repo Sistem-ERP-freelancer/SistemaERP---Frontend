@@ -518,3 +518,37 @@ export interface RelatorioMeeiroResponse {
   linhas: LinhaRelatorioMeeiro[];
   resumo: ResumoRelatorioMeeiro;
 }
+
+/** Registro do Diário de roça (procedimentos / produtos utilizados). */
+export interface DiarioRoca {
+  id: number;
+  data: string;
+  rocaId: number;
+  rocaCodigo?: string | null;
+  rocaNome?: string | null;
+  procedimento: string;
+  produtosUtilizados?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateDiarioRocaDto {
+  data: string;
+  rocaId: number;
+  procedimento: string;
+  produtosUtilizados?: string;
+}
+
+export interface UpdateDiarioRocaDto {
+  data?: string;
+  rocaId?: number;
+  procedimento?: string;
+  produtosUtilizados?: string | null;
+}
+
+export interface ListaDiarioRocaResponse {
+  items: DiarioRoca[];
+  total: number;
+  page: number;
+  limit: number;
+}

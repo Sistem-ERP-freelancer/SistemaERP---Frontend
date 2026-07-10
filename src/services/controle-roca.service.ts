@@ -1,12 +1,15 @@
 import type {
+    CreateDiarioRocaDto,
     CreateLancamentoProducaoRocaDto,
     CreateMeeiroRocaDto,
     CreateProdutoRocaDto,
     CreateProdutorRocaDto,
     CreateRocaDto,
+    DiarioRoca,
     EmprestimoMeeiro,
     LancamentoDetalhesRoca,
     LancamentoProducaoRoca,
+    ListaDiarioRocaResponse,
     ListaEmprestimosResponse,
     MeeiroDetalhe,
     MeeiroRoca,
@@ -23,6 +26,7 @@ import type {
     RegistrarRelatorioMeeiroPendenteDto,
     Roca,
     RocaDetalhes,
+    UpdateDiarioRocaDto,
     UpdateLancamentoProducaoRocaDto,
     UpdateMeeiroRocaDto,
     UpdateProdutorRocaDto,
@@ -211,6 +215,51 @@ class ControleRocaService {
       `${BASE}/emprestimos/${id}/status`,
       data
     );
+  }
+
+  // Diário de roça
+  async listarDiarioRoca(opts?: {
+    page?: number;
+    limit?: number;
+    rocaId?: number;
+    dataInicial?: string;
+    dataFinal?: string;
+    procedimento?: string;
+    produtosUtilizados?: string;
+    busca?: string;
+  }): Promise<ListaDiarioRocaResponse> {
+    const params = new URLSearchParams();
+    params.set('page', String(opts?.page ?? 1));
+    params.set('limit', String(opts?.limit ?? LIST_ALL_LIMIT));
+    if (opts?.rocaId != null && opts.rocaId > 0) {
+      params.set('rocaId', String(opts.rocaId));
+    }
+    if (opts?.dataInicial) params.set('dataInicial', opts.dataInicial);
+    if (opts?.dataFinal) params.set('dataFinal', opts.dataFinal);
+    if (opts?.procedimento?.trim()) {
+      params.set('procedimento', opts.procedimento.trim());
+    }
+    if (opts?.produtosUtilizados?.trim()) {
+      params.set('produtosUtilizados', opts.produtosUtilizados.trim());
+    }
+    if (opts?.busca?.trim()) params.set('busca', opts.busca.trim());
+    const q = `?${params.toString()}`;
+    return apiClient.get<ListaDiarioRocaResponse>(`${BASE}/diario${q}`);
+  }
+
+  async criarDiarioRoca(data: CreateDiarioRocaDto): Promise<DiarioRoca> {
+    return apiClient.post<DiarioRoca>(`${BASE}/diario`, data);
+  }
+
+  async atualizarDiarioRoca(
+    id: number,
+    data: UpdateDiarioRocaDto,
+  ): Promise<DiarioRoca> {
+    return apiClient.patch<DiarioRoca>(`${BASE}/diario/${id}`, data);
+  }
+
+  async excluirDiarioRoca(id: number): Promise<{ sucesso: boolean }> {
+    return apiClient.delete<{ sucesso: boolean }>(`${BASE}/diario/${id}`);
   }
 
   async atualizarEmprestimo(
