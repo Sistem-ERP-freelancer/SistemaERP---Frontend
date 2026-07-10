@@ -11,6 +11,7 @@ function isBrokenFrontendApiUrl(url: string): boolean {
   if (!url) return true;
   if (url === '/api/v1' || url === '/api') return true;
   if (/^https?:\/\/(www\.)?toperp\.com\.br(\/api\/v1)?$/i.test(url)) return true;
+  if (/onrender\.com/i.test(url)) return true;
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
 }
 

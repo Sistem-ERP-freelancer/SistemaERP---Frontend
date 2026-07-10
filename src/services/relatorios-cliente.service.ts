@@ -3,7 +3,7 @@
  * Implementa todas as funcionalidades de relatórios conforme GUIA_FRONTEND_RELATORIOS_CLIENTE.md
  */
 
-import { getApiBaseUrlPublic } from '@/services/api';
+import { apiClient, getApiBaseUrlPublic } from '@/services/api';
 
 const API_BASE_URL = getApiBaseUrlPublic();
 
@@ -75,61 +75,18 @@ class RelatoriosClienteService {
     endpoint: string,
     defaultFilename: string
   ): Promise<void> {
-    const token = this.getAuthToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
+    const blob = await apiClient.getBlob(endpoint);
 
-    const url = `${API_BASE_URL}${endpoint}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    // Verificar se a resposta é um PDF
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/pdf')) {
-      try {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erro ao gerar relatório');
-      } catch {
-        throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
-    }
-
-    const blob = await response.blob();
-
-    if (blob.size === 0) {
+    if (!blob || blob.size === 0) {
       throw new Error('O PDF gerado está vazio');
     }
 
-    // Extrair nome do arquivo do header Content-Disposition
-    const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = defaultFilename;
-    
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-      if (filenameMatch) {
-        filename = filenameMatch[1];
-      }
-    }
-
-    // Criar URL temporária e fazer download
     const urlBlob = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = urlBlob;
-    link.download = filename;
+    link.download = defaultFilename;
     document.body.appendChild(link);
     link.click();
-
-    // Limpar
     document.body.removeChild(link);
     window.URL.revokeObjectURL(urlBlob);
   }
@@ -353,28 +310,12 @@ class RelatoriosClienteService {
   async contarRelatorioCentroCustoContasPagar(
     filtros?: RelatorioCentroCustoContasPagarQuery,
   ): Promise<number> {
-    const token = this.getAuthToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
-
     const query = this.buildRelatorioCentroCustoContasPagarQuery(filtros);
-    const url = `${API_BASE_URL}/relatorios/contas-pagar/centro-custo/contagem${query}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Erro ${response.status}`);
-    }
-
-    const data = (await response.json()) as { total?: number };
-    return typeof data.total === 'number' ? data.total : 0;
+    const data = await apiClient.get<{ total?: number | string }>(
+      `/relatorios/contas-pagar/centro-custo/contagem${query}`,
+    );
+    const total = Number(data?.total ?? 0);
+    return Number.isFinite(total) ? total : 0;
   }
 
   async downloadRelatorioCentroCustoContasPagar(
@@ -390,36 +331,20 @@ class RelatoriosClienteService {
   async imprimirRelatorioCentroCustoContasPagar(
     filtros?: RelatorioCentroCustoContasPagarQuery,
   ): Promise<void> {
-    const token = this.getAuthToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
-
     const query = this.buildRelatorioCentroCustoContasPagarQuery(filtros);
-    const url = `${API_BASE_URL}/relatorios/contas-pagar/centro-custo/imprimir${query}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Erro ${response.status}`);
+    const blob = await apiClient.getBlob(
+      `/relatorios/contas-pagar/centro-custo/imprimir${query}`,
+    );
+    if (!blob || blob.size === 0) {
+      throw new Error('O PDF gerado está vazio');
     }
-
-    const blob = await response.blob();
     const urlBlob = window.URL.createObjectURL(blob);
     const printWindow = window.open(urlBlob, '_blank');
-
     if (printWindow) {
       printWindow.onload = () => {
         printWindow.print();
       };
     }
-
     setTimeout(() => {
       window.URL.revokeObjectURL(urlBlob);
     }, 1000);

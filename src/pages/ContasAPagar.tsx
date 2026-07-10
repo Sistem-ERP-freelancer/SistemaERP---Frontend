@@ -508,6 +508,7 @@ function ContasAPagar() {
     data: relatorioCentroCustoPreviewTotal,
     isFetching: relatorioCentroCustoPreviewFetching,
     isError: relatorioCentroCustoPreviewError,
+    error: relatorioCentroCustoPreviewErr,
   } = useQuery({
     queryKey: [
       "contas-pagar-relatorio-centro-custo-preview",
@@ -518,10 +519,10 @@ function ContasAPagar() {
         relatorioCentroCustoPreviewParams,
       ),
     enabled: relatorioCentroCustoPdfOpen,
+    retry: 1,
   });
 
   const relatorioCentroCustoTemDados =
-    !relatorioCentroCustoPreviewError &&
     relatorioCentroCustoPreviewTotal != null &&
     relatorioCentroCustoPreviewTotal > 0;
 
@@ -3225,7 +3226,9 @@ function ContasAPagar() {
 
               {relatorioCentroCustoPreviewError && (
                 <p className="text-sm text-destructive">
-                  Não foi possível verificar os filtros. Você ainda pode tentar baixar o PDF.
+                  {(relatorioCentroCustoPreviewErr as Error)?.message ||
+                    "Não foi possível verificar os filtros."}{" "}
+                  Você ainda pode baixar o PDF.
                 </p>
               )}
 
@@ -3237,18 +3240,20 @@ function ContasAPagar() {
                   </p>
                 )}
 
+              {!relatorioCentroCustoPreviewFetching &&
+                relatorioCentroCustoTemDados && (
+                  <p className="text-sm text-muted-foreground">
+                    {relatorioCentroCustoPreviewTotal} lançamento(s) encontrado(s) com os filtros atuais.
+                  </p>
+                )}
+
               <div className="space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                   <Button
                     type="button"
                     variant="relatorioPrimary"
                     className="flex-1 gap-2"
-                    disabled={
-                      relatorioCentroCustoPreviewFetching ||
-                      (!relatorioCentroCustoPreviewError &&
-                        !relatorioCentroCustoTemDados) ||
-                      relatorioCentroCustoPdfLoading
-                    }
+                    disabled={relatorioCentroCustoPdfLoading}
                     onClick={async () => {
                       setRelatorioCentroCustoPdfLoading(true);
                       try {
@@ -3276,12 +3281,7 @@ function ContasAPagar() {
                     type="button"
                     variant="relatorioSecondary"
                     className="flex-1 gap-2"
-                    disabled={
-                      relatorioCentroCustoPreviewFetching ||
-                      (!relatorioCentroCustoPreviewError &&
-                        !relatorioCentroCustoTemDados) ||
-                      relatorioCentroCustoPdfLoading
-                    }
+                    disabled={relatorioCentroCustoPdfLoading}
                     onClick={async () => {
                       setRelatorioCentroCustoPdfLoading(true);
                       try {
