@@ -218,16 +218,19 @@ const NovaTransacao = () => {
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
 
   const { data: clientesData } = useQuery({
-    queryKey: ["clientes"],
+    queryKey: ["clientes", "nova-transacao"],
     queryFn: async () => {
       try {
         const response = await clientesService.listar({
-          limit: 100,
+          limit: 500,
           statusCliente: "ATIVO",
         });
         if (Array.isArray(response)) return response;
-        if (Array.isArray((response as { data?: Cliente[] })?.data))
-          return (response as { data: Cliente[] }).data;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.clientes)) return response.clientes;
+        if (Array.isArray((response as { items?: Cliente[] })?.items)) {
+          return (response as { items: Cliente[] }).items;
+        }
         return [];
       } catch {
         return [];
@@ -236,19 +239,27 @@ const NovaTransacao = () => {
     retry: false,
   });
 
-  const clientes: Cliente[] = Array.isArray(clientesData) ? clientesData : [];
+  const clientes: Cliente[] = Array.isArray(clientesData)
+    ? clientesData
+    : (clientesData as { data?: Cliente[] })?.data ||
+      (clientesData as { clientes?: Cliente[] })?.clientes ||
+      (clientesData as { items?: Cliente[] })?.items ||
+      [];
 
   const { data: fornecedoresData } = useQuery({
-    queryKey: ["fornecedores"],
+    queryKey: ["fornecedores", "nova-transacao"],
     queryFn: async () => {
       try {
         const response = await fornecedoresService.listar({
-          limit: 100,
+          limit: 500,
           statusFornecedor: "ATIVO",
         });
         if (Array.isArray(response)) return response;
-        if (Array.isArray((response as { data?: Fornecedor[] })?.data))
-          return (response as { data: Fornecedor[] }).data;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.fornecedores)) return response.fornecedores;
+        if (Array.isArray((response as { items?: Fornecedor[] })?.items)) {
+          return (response as { items: Fornecedor[] }).items;
+        }
         return [];
       } catch {
         return [];
@@ -259,7 +270,10 @@ const NovaTransacao = () => {
 
   const fornecedores: Fornecedor[] = Array.isArray(fornecedoresData)
     ? fornecedoresData
-    : [];
+    : (fornecedoresData as { data?: Fornecedor[] })?.data ||
+      (fornecedoresData as { fornecedores?: Fornecedor[] })?.fornecedores ||
+      (fornecedoresData as { items?: Fornecedor[] })?.items ||
+      [];
 
   const { data: tiposDespesaCc = [] } = useQuery({
     queryKey: ["centro-custo", "tipos-opcoes", "financeiro-nova-transacao"],

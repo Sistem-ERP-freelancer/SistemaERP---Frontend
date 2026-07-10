@@ -152,8 +152,11 @@ class ClientesService {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
     if (params?.limit) queryParams.append("limit", params.limit.toString());
-    if (params?.statusCliente)
+    // Backend espera `status` (não statusCliente) em GET /clientes
+    if (params?.statusCliente) {
+      queryParams.append("status", params.statusCliente);
       queryParams.append("statusCliente", params.statusCliente);
+    }
 
     const query = queryParams.toString();
     return apiClient.get<ClientesResponse>(
