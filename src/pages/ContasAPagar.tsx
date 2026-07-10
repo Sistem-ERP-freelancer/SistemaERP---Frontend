@@ -206,6 +206,7 @@ function ContasAPagar() {
   const [pageSize] = useState(15);
   const [fornecedorFilterId, setFornecedorFilterId] = useState<number | null>(null);
   const [rocaFilterId, setRocaFilterId] = useState<number | null>(null);
+  const [tipoDespesaFilterId, setTipoDespesaFilterId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [dataInicialFilter, setDataInicialFilter] = useState<string>("");
   const [dataFinalFilter, setDataFinalFilter] = useState<string>("");
@@ -471,12 +472,12 @@ function ContasAPagar() {
     ],
   );
 
-  const { data: relatorioCentroCustoTipos = [] } = useQuery({
-    queryKey: ["contas-pagar-relatorio-centro-custo-tipos"],
+  const { data: tiposDespesaOpcoes = [] } = useQuery({
+    queryKey: ["centro-custo-tipos-opcoes"],
     queryFn: () => centroCustoService.listarTiposOpcoes(),
-    enabled: relatorioCentroCustoPdfOpen,
     retry: false,
   });
+  const relatorioCentroCustoTipos = tiposDespesaOpcoes;
 
   const relatorioCentroCustoTipoIdParsed = useMemo(() => {
     if (!relatorioCentroCustoTipoSelect || relatorioCentroCustoTipoSelect === "todos") {
@@ -597,6 +598,7 @@ function ContasAPagar() {
       pageSize,
       fornecedorFilterId,
       rocaFilterId,
+      tipoDespesaFilterId,
       statusFilter,
       dataInicialFilter,
       dataFinalFilter,
@@ -631,6 +633,10 @@ function ContasAPagar() {
             : undefined;
         const rocaArg =
           rocaFilterId != null && rocaFilterId > 0 ? rocaFilterId : undefined;
+        const tipoDespesaArg =
+          tipoDespesaFilterId != null && tipoDespesaFilterId > 0
+            ? tipoDespesaFilterId
+            : undefined;
         const dataInicialArg =
           dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
             ? dataInicialFilter
@@ -653,6 +659,7 @@ function ContasAPagar() {
                 status: "PAGO_TOTAL",
                 fornecedor_id: fornecedorArg,
                 roca_id: rocaArg,
+                tipo_despesa_id: tipoDespesaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -661,6 +668,7 @@ function ContasAPagar() {
                 status: "PAGO_PARCIAL",
                 fornecedor_id: fornecedorArg,
                 roca_id: rocaArg,
+                tipo_despesa_id: tipoDespesaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -682,6 +690,7 @@ function ContasAPagar() {
                 status: "PENDENTE",
                 fornecedor_id: fornecedorArg,
                 roca_id: rocaArg,
+                tipo_despesa_id: tipoDespesaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -690,6 +699,7 @@ function ContasAPagar() {
                 status: "VENCIDO",
                 fornecedor_id: fornecedorArg,
                 roca_id: rocaArg,
+                tipo_despesa_id: tipoDespesaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -698,6 +708,7 @@ function ContasAPagar() {
                 status: "PAGO_PARCIAL",
                 fornecedor_id: fornecedorArg,
                 roca_id: rocaArg,
+                tipo_despesa_id: tipoDespesaArg,
                 data_inicial: dataInicialArg,
                 data_final: dataFinalArg,
               }),
@@ -727,6 +738,7 @@ function ContasAPagar() {
               proximidade_vencimento: "VENCIDA",
               fornecedor_id: fornecedorArg,
               roca_id: rocaArg,
+              tipo_despesa_id: tipoDespesaArg,
               data_inicial: dataInicialArg,
               data_final: dataFinalArg,
             });
@@ -738,6 +750,7 @@ function ContasAPagar() {
               proximidade_vencimento: "VENCE_HOJE",
               fornecedor_id: fornecedorArg,
               roca_id: rocaArg,
+              tipo_despesa_id: tipoDespesaArg,
               data_inicial: dataInicialArg,
               data_final: dataFinalArg,
             });
@@ -749,6 +762,7 @@ function ContasAPagar() {
               tipo: "PAGAR",
               fornecedor_id: fornecedorArg,
               roca_id: rocaArg,
+              tipo_despesa_id: tipoDespesaArg,
               data_inicial: hojeStr,
               data_final: fimDoMesYMD(),
             });
@@ -780,6 +794,7 @@ function ContasAPagar() {
             | undefined,
           fornecedor_id: fornecedorArg,
           roca_id: rocaArg,
+          tipo_despesa_id: tipoDespesaArg,
           data_inicial: dataInicialArg,
           data_final: dataFinalArg,
         });
@@ -852,6 +867,7 @@ function ContasAPagar() {
   const temFiltrosAtivos =
     (fornecedorFilterId != null && fornecedorFilterId > 0) ||
     (rocaFilterId != null && rocaFilterId > 0) ||
+    (tipoDespesaFilterId != null && tipoDespesaFilterId > 0) ||
     !!statusFilter ||
     !!dataInicialFilter ||
     !!dataFinalFilter ||
@@ -860,6 +876,7 @@ function ContasAPagar() {
   const handleLimparFiltros = () => {
     setFornecedorFilterId(null);
     setRocaFilterId(null);
+    setTipoDespesaFilterId(null);
     setStatusFilter("");
     setDataInicialFilter("");
     setDataFinalFilter("");
@@ -873,6 +890,10 @@ function ContasAPagar() {
         : undefined;
     const rocaArg =
       rocaFilterId != null && rocaFilterId > 0 ? rocaFilterId : undefined;
+    const tipoDespesaArg =
+      tipoDespesaFilterId != null && tipoDespesaFilterId > 0
+        ? tipoDespesaFilterId
+        : undefined;
     const dataInicialArg =
       dataInicialFilter && /^\d{4}-\d{2}-\d{2}$/.test(dataInicialFilter)
         ? dataInicialFilter
@@ -905,6 +926,7 @@ function ContasAPagar() {
       tipo: "PAGAR" as const,
       fornecedor_id: fornecedorArg,
       roca_id: rocaArg,
+      tipo_despesa_id: tipoDespesaArg,
       data_inicial: dataInicialArg,
       data_final: dataFinalArg,
       status,
@@ -913,6 +935,7 @@ function ContasAPagar() {
   }, [
     fornecedorFilterId,
     rocaFilterId,
+    tipoDespesaFilterId,
     dataInicialFilter,
     dataFinalFilter,
     statusFilter,
@@ -954,7 +977,7 @@ function ContasAPagar() {
   // Resetar página quando tab, busca ou filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm, fornecedorFilterId, rocaFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeCardFilter]);
+  }, [activeTab, searchTerm, fornecedorFilterId, rocaFilterId, tipoDespesaFilterId, statusFilter, dataInicialFilter, dataFinalFilter, activeCardFilter]);
 
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
@@ -2090,6 +2113,7 @@ function ContasAPagar() {
                 <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
                   {(fornecedorFilterId != null && fornecedorFilterId > 0 ? 1 : 0) +
                     (rocaFilterId != null && rocaFilterId > 0 ? 1 : 0) +
+                    (tipoDespesaFilterId != null && tipoDespesaFilterId > 0 ? 1 : 0) +
                     (statusFilter ? 1 : 0) +
                     (dataInicialFilter ? 1 : 0) +
                     (dataFinalFilter ? 1 : 0)}
@@ -2158,6 +2182,37 @@ function ContasAPagar() {
                               {roca.nome}
                             </SelectItem>
                           ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  {/* Centro de despesa (tipo) */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Centro de despesa</Label>
+                    <Select
+                      value={
+                        tipoDespesaFilterId == null
+                          ? "todos"
+                          : String(tipoDespesaFilterId)
+                      }
+                      onValueChange={(v) =>
+                        setTipoDespesaFilterId(
+                          v === "todos" ? null : parseInt(v, 10),
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os tipos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os tipos</SelectItem>
+                        {tiposDespesaOpcoes.map((tipo) => (
+                          <SelectItem key={tipo.id} value={String(tipo.id)}>
+                            {tipo.nome}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

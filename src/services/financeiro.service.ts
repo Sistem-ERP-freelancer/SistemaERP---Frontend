@@ -310,6 +310,7 @@ class FinanceiroService {
     cliente_id?: number;
     fornecedor_id?: number;
     roca_id?: number;
+    tipo_despesa_id?: number;
     pedido_id?: number;
     proximidade_vencimento?: 'VENCIDA' | 'VENCE_HOJE' | 'CRITICO' | 'ATENCAO' | 'NORMAL' | 'LONGO_PRAZO';
     dias_maximos?: number;
@@ -325,6 +326,9 @@ class FinanceiroService {
     if (params?.fornecedor_id) queryParams.append('fornecedor_id', params.fornecedor_id.toString());
     if (params?.roca_id != null && params.roca_id > 0) {
       queryParams.append('roca_id', params.roca_id.toString());
+    }
+    if (params?.tipo_despesa_id != null && params.tipo_despesa_id > 0) {
+      queryParams.append('tipo_despesa_id', params.tipo_despesa_id.toString());
     }
     if (params?.pedido_id) queryParams.append('pedido_id', params.pedido_id.toString());
     if (params?.proximidade_vencimento) queryParams.append('proximidade_vencimento', params.proximidade_vencimento);
