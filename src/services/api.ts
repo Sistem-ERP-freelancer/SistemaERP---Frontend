@@ -232,8 +232,12 @@ class ApiClient {
           };
         }
 
-        // Log detalhado do erro em desenvolvimento
-        if (import.meta.env.DEV) {
+        const isExpectedNotaFiscalMiss =
+          response.status === 404 &&
+          /\/pedidos\/\d+\/nota-fiscal\/?$/i.test(endpoint);
+
+        // Log detalhado do erro em desenvolvimento (omite 404 esperado sem NF)
+        if (import.meta.env.DEV && !isExpectedNotaFiscalMiss) {
           console.error('❌ [API Error]', {
             url,
             status: response.status,
@@ -374,7 +378,7 @@ class ApiClient {
         }
 
         // Log detalhado do erro em desenvolvimento
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && !isExpectedNotaFiscalMiss) {
           console.error('❌ [API Error]', {
             url,
             status: response.status,

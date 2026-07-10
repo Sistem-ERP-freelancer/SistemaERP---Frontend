@@ -71,6 +71,35 @@ export function OrderViewDialog({
   if (!order) return null;
 
   const vinculadoRoca = pedidoVinculadoRoca(order);
+  const nomeClienteExibicao =
+    order.cliente?.nome?.trim() ||
+    order.cliente?.nome_fantasia?.trim() ||
+    order.cliente?.nome_razao?.trim() ||
+    (order.cliente_id ? `Cliente #${order.cliente_id}` : '');
+  const nomeFornecedorExibicao =
+    order.fornecedor?.nome_fantasia?.trim() ||
+    order.fornecedor?.nome_razao?.trim() ||
+    (order.fornecedor_id ? `Fornecedor #${order.fornecedor_id}` : '');
+  const temParceiroVenda =
+    order.tipo === 'VENDA' &&
+    (!!order.cliente ||
+      (!!order.cliente_id && Number(order.cliente_id) > 0) ||
+      !!nomeClienteExibicao);
+  const temParceiroCompra =
+    order.tipo === 'COMPRA' &&
+    (!!order.fornecedor ||
+      (!!order.fornecedor_id && Number(order.fornecedor_id) > 0) ||
+      !!nomeFornecedorExibicao);
+  // Roça complementar — não substitui cliente/fornecedor quando o pedido tem vínculo
+  const tituloParceiro = temParceiroVenda
+    ? 'Cliente'
+    : temParceiroCompra
+      ? 'Fornecedor'
+      : vinculadoRoca
+        ? 'Roça'
+        : order.tipo === 'VENDA'
+          ? 'Cliente'
+          : 'Fornecedor';
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '--';
@@ -217,13 +246,13 @@ export function OrderViewDialog({
           <div className="bg-card border rounded-lg p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`p-2 rounded-lg ${
-                vinculadoRoca
+                tituloParceiro === 'Roça'
                   ? 'bg-emerald-100 dark:bg-emerald-900/20'
                   : order.tipo === 'VENDA'
                     ? 'bg-green-100 dark:bg-green-900/20'
                     : 'bg-blue-100 dark:bg-blue-900/20'
               }`}>
-                {vinculadoRoca ? (
+                {tituloParceiro === 'Roça' ? (
                   <Sprout className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 ) : order.tipo === 'VENDA' ? (
                   <User className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -232,34 +261,25 @@ export function OrderViewDialog({
                 )}
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">
-                  {vinculadoRoca
-                    ? 'Roça'
-                    : order.tipo === 'VENDA'
-                      ? 'Cliente'
-                      : 'Fornecedor'}
-                </h3>
+                <h3 className="font-semibold text-foreground">{tituloParceiro}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {vinculadoRoca
+                  {tituloParceiro === 'Roça'
                     ? 'Pedido vinculado à roça'
-                    : `Informações do ${order.tipo === 'VENDA' ? 'cliente' : 'fornecedor'}`}
+                    : `Informações do ${tituloParceiro === 'Cliente' ? 'cliente' : 'fornecedor'}`}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {vinculadoRoca ? (
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Nome</Label>
-                  <div className="text-sm font-medium">{nomeRocaPedido(order) || '—'}</div>
-                </div>
-              ) : order.tipo === 'VENDA' && order.cliente ? (
+              {temParceiroVenda ? (
                 <>
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Nome</Label>
-                    <div className="text-sm font-medium">{order.cliente.nome}</div>
+                    <div className="text-sm font-medium">
+                      {nomeClienteExibicao || '—'}
+                    </div>
                   </div>
-                  {order.cliente.cpf_cnpj && (
+                  {order.cliente?.cpf_cnpj && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">CPF/CNPJ</Label>
                       <div className="text-sm">
@@ -270,34 +290,43 @@ export function OrderViewDialog({
                       </div>
                     </div>
                   )}
-                  {order.cliente.email && (
+                  {order.cliente?.email && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">E-mail</Label>
                       <div className="text-sm">{order.cliente.email}</div>
                     </div>
                   )}
-                  {order.cliente.telefone && (
+                  {order.cliente?.telefone && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Telefone</Label>
                       <div className="text-sm">{order.cliente.telefone}</div>
                     </div>
                   )}
+                  {vinculadoRoca && (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Roça</Label>
+                      <div className="text-sm font-medium">
+                        {nomeRocaPedido(order) || '—'}
+                      </div>
+                    </div>
+                  )}
                 </>
-              ) : order.tipo === 'COMPRA' && order.fornecedor ? (
+              ) : temParceiroCompra ? (
                 <>
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Nome Fantasia</Label>
                     <div className="text-sm font-medium">
-                      {order.fornecedor.nome_fantasia || order.fornecedor.nome_razao || '--'}
+                      {nomeFornecedorExibicao || '--'}
                     </div>
                   </div>
-                  {order.fornecedor.nome_razao && order.fornecedor.nome_razao !== order.fornecedor.nome_fantasia && (
+                  {order.fornecedor?.nome_razao &&
+                    order.fornecedor.nome_razao !== order.fornecedor.nome_fantasia && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Razão Social</Label>
                       <div className="text-sm">{order.fornecedor.nome_razao}</div>
                     </div>
                   )}
-                  {order.fornecedor.cpf_cnpj && (
+                  {order.fornecedor?.cpf_cnpj && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">CPF/CNPJ</Label>
                       <div className="text-sm">
@@ -308,19 +337,32 @@ export function OrderViewDialog({
                       </div>
                     </div>
                   )}
-                  {order.fornecedor.email && (
+                  {order.fornecedor?.email && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">E-mail</Label>
                       <div className="text-sm">{order.fornecedor.email}</div>
                     </div>
                   )}
-                  {order.fornecedor.telefone && (
+                  {order.fornecedor?.telefone && (
                     <div className="space-y-2">
                       <Label className="text-muted-foreground">Telefone</Label>
                       <div className="text-sm">{order.fornecedor.telefone}</div>
                     </div>
                   )}
+                  {vinculadoRoca && (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Roça</Label>
+                      <div className="text-sm font-medium">
+                        {nomeRocaPedido(order) || '—'}
+                      </div>
+                    </div>
+                  )}
                 </>
+              ) : vinculadoRoca ? (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Nome</Label>
+                  <div className="text-sm font-medium">{nomeRocaPedido(order) || '—'}</div>
+                </div>
               ) : (
                 <div className="text-sm text-muted-foreground">--</div>
               )}
