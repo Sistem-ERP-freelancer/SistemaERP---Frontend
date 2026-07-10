@@ -2787,11 +2787,26 @@ const ContasAReceber = () => {
                                 Pagar
                               </DropdownMenuItem>
                             )}
+                            {(grupo?.parcelas?.[0]?.id != null) && (
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    await financeiroService.downloadReciboPagamento(grupo!.parcelas![0].id);
+                                    toast.success('Recibo de pagamento baixado.');
+                                  } catch (e) {
+                                    toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                                  }
+                                }}
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Recibo de pagamento
+                              </DropdownMenuItem>
+                            )}
                             {grupo?.pedido_id != null &&
                               grupo?.statusConsolidado !== "Cancelado" &&
                               grupo?.statusConsolidado !== "Pago Total" && (
                               <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
+                                className="text-orange-600 focus:text-orange-600"
                                 onClick={() =>
                                   setPedidoCancelar({
                                     id: grupo.pedido_id!,
@@ -2834,22 +2849,7 @@ const ContasAReceber = () => {
                                 }}
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
-                                Apagar
-                              </DropdownMenuItem>
-                            )}
-                            {(grupo?.parcelas?.[0]?.id != null) && (
-                              <DropdownMenuItem
-                                onClick={async () => {
-                                  try {
-                                    await financeiroService.downloadReciboPagamento(grupo!.parcelas![0].id);
-                                    toast.success('Recibo de pagamento baixado.');
-                                  } catch (e) {
-                                    toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
-                                  }
-                                }}
-                              >
-                                <FileText className="w-4 h-4 mr-2" />
-                                Recibo de pagamento
+                                Excluir
                               </DropdownMenuItem>
                             )}
                         </TableRowActionsMenu>
@@ -2950,6 +2950,29 @@ const ContasAReceber = () => {
                               Pagar
                             </DropdownMenuItem>
                           ) : null}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                const pedidoId = transacao.pedidoId;
+                                if (pedidoId == null) {
+                                  toast.error('Conta financeira não encontrada para este pedido.');
+                                  return;
+                                }
+                                const contaId = await financeiroService.getContaIdPorPedidoId(pedidoId, 'RECEBER');
+                                if (contaId == null) {
+                                  toast.error('Conta financeira não encontrada para este pedido.');
+                                  return;
+                                }
+                                await financeiroService.downloadReciboPagamento(contaId);
+                                toast.success('Recibo de pagamento baixado.');
+                              } catch (e) {
+                                toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
+                              }
+                            }}
+                          >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Recibo de pagamento
+                          </DropdownMenuItem>
                           {transacao.pedidoId &&
                             (() => {
                               const st = (transacao.status || "").toLowerCase();
@@ -2960,7 +2983,7 @@ const ContasAReceber = () => {
                               );
                             })() && (
                             <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
+                              className="text-orange-600 focus:text-orange-600"
                               onClick={() =>
                                 setPedidoCancelar({
                                   id: transacao.pedidoId!,
@@ -2990,32 +3013,9 @@ const ContasAReceber = () => {
                               }
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
-                              Apagar
+                              Excluir
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              try {
-                                const pedidoId = transacao.pedidoId;
-                                if (pedidoId == null) {
-                                  toast.error('Conta financeira não encontrada para este pedido.');
-                                  return;
-                                }
-                                const contaId = await financeiroService.getContaIdPorPedidoId(pedidoId, 'RECEBER');
-                                if (contaId == null) {
-                                  toast.error('Conta financeira não encontrada para este pedido.');
-                                  return;
-                                }
-                                await financeiroService.downloadReciboPagamento(contaId);
-                                toast.success('Recibo de pagamento baixado.');
-                              } catch (e) {
-                                toast.error(e instanceof Error ? e.message : 'Erro ao gerar recibo.');
-                              }
-                            }}
-                          >
-                            <FileText className="w-4 h-4 mr-2" />
-                            Recibo de pagamento
-                          </DropdownMenuItem>
                       </TableRowActionsMenu>
                     </TableCell>
                   </TableRow>
@@ -3313,7 +3313,7 @@ const ContasAReceber = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Trash2 className="w-5 h-5 text-destructive" />
-                Apagar
+                Excluir
               </DialogTitle>
               <DialogDescription>
                 Esta ação remove o registro permanentemente e não pode ser desfeita.
@@ -3325,8 +3325,8 @@ const ContasAReceber = () => {
               ) : null}
               <p className="mt-2 text-sm text-muted-foreground">
                 {itemApagar?.tipo === "conta"
-                  ? "Deseja realmente apagar esta conta?"
-                  : "Deseja realmente apagar este pedido? Pedidos com pagamento ou NF-e emitida não podem ser apagados."}
+                  ? "Deseja realmente excluir esta conta?"
+                  : "Deseja realmente excluir este pedido? Pedidos com pagamento ou NF-e emitida não podem ser excluídos."}
               </p>
             </div>
             <div className="flex gap-3 pt-4 border-t">
@@ -3349,12 +3349,12 @@ const ContasAReceber = () => {
                 {apagarMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Apagando...
+                    Excluindo...
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Apagar
+                    Excluir
                   </>
                 )}
               </Button>
