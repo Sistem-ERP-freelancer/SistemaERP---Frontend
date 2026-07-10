@@ -81,14 +81,32 @@ class RelatoriosClienteService {
       throw new Error('O PDF gerado está vazio');
     }
 
+    const filename = defaultFilename.endsWith('.pdf')
+      ? defaultFilename
+      : `${defaultFilename}.pdf`;
+
+    // Edge/IE legado
+    const nav = window.navigator as Navigator & {
+      msSaveOrOpenBlob?: (blob: Blob, defaultName?: string) => boolean;
+    };
+    if (typeof nav.msSaveOrOpenBlob === 'function') {
+      nav.msSaveOrOpenBlob(blob, filename);
+      return;
+    }
+
     const urlBlob = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = urlBlob;
-    link.download = defaultFilename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(urlBlob);
+    try {
+      const link = document.createElement('a');
+      link.href = urlBlob;
+      link.download = filename;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      // Revogar depois para o Edge/Chrome concluírem o download
+      setTimeout(() => window.URL.revokeObjectURL(urlBlob), 2500);
+    }
   }
 
   private buildRelatorioFinanceiroQuery(filtros?: RelatorioFinanceiroClienteQuery): string {
@@ -123,42 +141,27 @@ class RelatoriosClienteService {
     clienteId: number,
     filtros?: RelatorioFinanceiroClienteQuery,
   ): Promise<void> {
-    const token = this.getAuthToken();
-    if (!token) {
-      throw new Error('Token de autenticação não encontrado');
-    }
-
     const query = this.buildRelatorioFinanceiroQuery(filtros);
-    const url = `${API_BASE_URL}/relatorios/cliente/${clienteId}/financeiro/imprimir${query}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Erro ${response.status}`);
+    const blob = await apiClient.getBlob(
+      `/relatorios/cliente/${clienteId}/financeiro/imprimir${query}`,
+    );
+    if (!blob || blob.size === 0) {
+      throw new Error('O PDF gerado está vazio');
     }
-
-    const blob = await response.blob();
     const urlBlob = window.URL.createObjectURL(blob);
-    
-    // Abrir em nova janela para impressão
     const printWindow = window.open(urlBlob, '_blank');
-    
-    if (printWindow) {
-      printWindow.onload = () => {
-        printWindow.print();
-      };
+    if (!printWindow) {
+      window.URL.revokeObjectURL(urlBlob);
+      throw new Error(
+        'Não foi possível abrir a janela de impressão. Permita pop-ups para este site e tente novamente.',
+      );
     }
-    
-    // Limpar URL após um tempo
+    printWindow.onload = () => {
+      printWindow.print();
+    };
     setTimeout(() => {
       window.URL.revokeObjectURL(urlBlob);
-    }, 1000);
+    }, 60_000);
   }
 
   private buildRelatorioFinanceiroFornecedorQuery(

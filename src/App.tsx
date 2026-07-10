@@ -73,15 +73,26 @@ const queryClient = new QueryClient({
         
         // Não mostra toast para erros de autenticação (já tratados globalmente)
         if (error?.response?.status !== 401 && error?.response?.status !== 403) {
-          const errorMessage = 
-            error?.response?.data?.message || 
-            error?.message || 
+          const raw =
+            error?.response?.data?.message ||
+            error?.message ||
             'Erro ao carregar dados da API';
+          const errorMessage =
+            typeof raw === 'string' ? raw.trim() : 'Erro ao carregar dados';
+          // Evita toasts confusos do tipo "Erro HTTP: 200" / status OK
+          if (
+            !errorMessage ||
+            /^erro\s*http\s*:\s*200\b/i.test(errorMessage) ||
+            /^erro\s*200\b/i.test(errorMessage) ||
+            /^ok$/i.test(errorMessage)
+          ) {
+            return;
+          }
           
           // Usa sonner para notificações mais visíveis
           if (typeof window !== 'undefined') {
             import('sonner').then(({ toast }) => {
-              toast.error(typeof errorMessage === 'string' ? errorMessage : 'Erro ao carregar dados');
+              toast.error(errorMessage);
             });
           }
         }

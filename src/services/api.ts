@@ -478,6 +478,8 @@ class ApiClient {
   /**
    * GET que retorna o corpo da resposta como Blob (ex.: PDF).
    * Não envia Content-Type: application/json para não alterar o Accept.
+   * Em 200, rejeita corpo JSON de erro (proxies/APIs mal configuradas) e
+   * valida assinatura %PDF quando o endpoint parece ser PDF.
    */
   async getBlob(endpoint: string): Promise<Blob> {
     const url = `${this.baseURL}${endpoint}`;
@@ -488,8 +490,10 @@ class ApiClient {
       throw error;
     }
     const token = localStorage.getItem('access_token');
+    const expectsPdf = /\/pdf(\?|$)|\/imprimir(\?|$)|recibo\/pdf/i.test(endpoint);
     const headers: HeadersInit = {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(expectsPdf ? { Accept: 'application/pdf, application/octet-stream, */*' } : {}),
     };
     const response = await fetchWithOptionalRetry(url, { method: 'GET', headers }, endpoint);
     if (!response.ok) {
@@ -523,7 +527,60 @@ class ApiClient {
       error.response = { status: response.status, data: { message } };
       throw error;
     }
-    return response.blob();
+
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
+    const buffer = await response.arrayBuffer();
+    if (!buffer || buffer.byteLength === 0) {
+      throw new Error('O arquivo retornado pela API está vazio.');
+    }
+
+    // Resposta 200 com JSON de erro (não tratar como PDF).
+    if (contentType.includes('application/json') || contentType.includes('text/json')) {
+      let message = 'A API retornou um erro ao gerar o arquivo.';
+      try {
+        const j = JSON.parse(new TextDecoder().decode(buffer));
+        if (typeof j?.message === 'string' && j.message.trim()) {
+          message = j.message.trim();
+        }
+      } catch {
+        /* mantém message */
+      }
+      const error = new Error(message) as any;
+      error.response = { status: response.status, data: { message } };
+      throw error;
+    }
+
+    if (expectsPdf) {
+      const head = new Uint8Array(buffer.slice(0, 5));
+      const magic = String.fromCharCode(...head);
+      const looksPdf = magic.startsWith('%PDF');
+      const looksJson =
+        magic.trimStart().startsWith('{') || magic.trimStart().startsWith('[');
+      if (looksJson) {
+        let message = 'A API retornou um erro ao gerar o PDF.';
+        try {
+          const j = JSON.parse(new TextDecoder().decode(buffer));
+          if (typeof j?.message === 'string' && j.message.trim()) {
+            message = j.message.trim();
+          }
+        } catch {
+          /* mantém */
+        }
+        throw new Error(message);
+      }
+      if (!looksPdf && contentType && !contentType.includes('pdf') && !contentType.includes('octet-stream')) {
+        throw new Error(
+          'A resposta da API não é um PDF válido. Atualize a página (Ctrl+Shift+R) e tente novamente.',
+        );
+      }
+    }
+
+    const mime =
+      contentType.includes('pdf')
+        ? 'application/pdf'
+        : contentType.split(';')[0].trim() ||
+          (expectsPdf ? 'application/pdf' : 'application/octet-stream');
+    return new Blob([buffer], { type: mime });
   }
 
   post<T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> {

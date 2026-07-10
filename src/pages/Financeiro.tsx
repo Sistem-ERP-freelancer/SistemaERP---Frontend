@@ -2512,8 +2512,12 @@ const Financeiro = () => {
                         );
                         toast.success("PDF baixado.");
                       } catch (e: unknown) {
-                        const msg =
+                        let msg =
                           e instanceof Error ? e.message : "Erro ao gerar PDF.";
+                        if (/erro\s*http\s*:\s*200/i.test(msg)) {
+                          msg =
+                            "Falha ao processar o PDF no navegador. Atualize a página com Ctrl+Shift+R e tente novamente.";
+                        }
                         toast.error(msg);
                       } finally {
                         setRelatorioClientePdfLoading(false);
@@ -2550,8 +2554,12 @@ const Financeiro = () => {
                           relatorioFiltrosForPdf,
                         );
                       } catch (e: unknown) {
-                        const msg =
+                        let msg =
                           e instanceof Error ? e.message : "Erro ao abrir PDF.";
+                        if (/erro\s*http\s*:\s*200/i.test(msg)) {
+                          msg =
+                            "Falha ao abrir o PDF. Atualize a página com Ctrl+Shift+R, permita pop-ups e tente novamente.";
+                        }
                         toast.error(msg);
                       } finally {
                         setRelatorioClientePdfLoading(false);
