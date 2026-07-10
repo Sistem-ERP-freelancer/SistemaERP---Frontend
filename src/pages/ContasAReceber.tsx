@@ -78,6 +78,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     BarChart3,
+    Ban,
     Calendar,
     Circle,
     CreditCard,
@@ -91,7 +92,8 @@ import {
     Loader2,
     Printer,
     Search,
-    ShoppingCart
+    ShoppingCart,
+    XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -140,6 +142,10 @@ const ContasAReceber = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
+  const [pedidoCancelar, setPedidoCancelar] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [newTransacao, setNewTransacao] = useState<CreateContaFinanceiraDto & { 
     data_emissao: string;
@@ -1070,6 +1076,28 @@ const ContasAReceber = () => {
       
       toast.error(errorMessage);
       setEditingStatusId(null);
+    },
+  });
+
+  const cancelarPedidoMutation = useMutation({
+    mutationFn: (pedidoId: number) => pedidosService.cancelar(pedidoId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] }),
+        queryClient.invalidateQueries({ queryKey: ["pedidos"] }),
+        queryClient.invalidateQueries({ queryKey: ["pedidos", "contas-receber"] }),
+        queryClient.invalidateQueries({ queryKey: ["contas-receber"] }),
+      ]);
+      toast.success("Pedido cancelado com sucesso!");
+      setPedidoCancelar(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Erro ao cancelar pedido.",
+      );
     },
   });
 
@@ -2689,8 +2717,8 @@ const ContasAReceber = () => {
                                   )
                                 }
                               >
-                                <CreditCard className="w-4 h-4 mr-2" />
-                                Pagamentos
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                Pagar
                               </DropdownMenuItem>
                             )}
                             {grupo?.pedido_id == null &&
@@ -2703,8 +2731,8 @@ const ContasAReceber = () => {
                                   )
                                 }
                               >
-                                <CreditCard className="w-4 h-4 mr-2" />
-                                Pagamentos
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                Pagar
                               </DropdownMenuItem>
                             )}
                             {grupo?.pedido_id != null &&
@@ -2718,8 +2746,26 @@ const ContasAReceber = () => {
                                   )
                                 }
                               >
-                                <CreditCard className="w-4 h-4 mr-2" />
-                                Pagamentos
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                Pagar
+                              </DropdownMenuItem>
+                            )}
+                            {grupo?.pedido_id != null &&
+                              grupo?.statusConsolidado !== "Cancelado" &&
+                              grupo?.statusConsolidado !== "Pago Total" && (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() =>
+                                  setPedidoCancelar({
+                                    id: grupo.pedido_id!,
+                                    label:
+                                      grupo.parcelas?.[0]?.numero_conta ||
+                                      `Pedido #${grupo.pedido_id}`,
+                                  })
+                                }
+                              >
+                                <Ban className="w-4 h-4 mr-2" />
+                                Cancelar pedido
                               </DropdownMenuItem>
                             )}
                             {(grupo?.parcelas?.[0]?.id != null) && (
@@ -2826,14 +2872,37 @@ const ContasAReceber = () => {
                               !!transacao.pedidoId &&
                               aberto > 0 &&
                               st !== "quitado" &&
+                              st !== "pago total" &&
                               st !== "cancelado";
                             return podeReceber;
                           })() ? (
                             <DropdownMenuItem onClick={() => navigate(`/financeiro/contas-receber/${transacao.pedidoId}/pagamentos`)}>
-                              <CreditCard className="w-4 h-4 mr-2" />
-                              Pagamentos
+                              <DollarSign className="w-4 h-4 mr-2" />
+                              Pagar
                             </DropdownMenuItem>
                           ) : null}
+                          {transacao.pedidoId &&
+                            (() => {
+                              const st = (transacao.status || "").toLowerCase();
+                              return (
+                                st !== "cancelado" &&
+                                st !== "quitado" &&
+                                st !== "pago total"
+                              );
+                            })() && (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() =>
+                                setPedidoCancelar({
+                                  id: transacao.pedidoId!,
+                                  label: String(transacao.id || `Pedido #${transacao.pedidoId}`),
+                                })
+                              }
+                            >
+                              <Ban className="w-4 h-4 mr-2" />
+                              Cancelar pedido
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
@@ -3080,6 +3149,67 @@ const ContasAReceber = () => {
           clientes={clientes}
           defaultClienteId={clienteFilterId}
         />
+
+        <Dialog
+          open={pedidoCancelar != null}
+          onOpenChange={(open) => {
+            if (!open && !cancelarPedidoMutation.isPending) {
+              setPedidoCancelar(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-amber-600" />
+                Cancelar pedido
+              </DialogTitle>
+              <DialogDescription>
+                O pedido será marcado como cancelado e sairá das Contas a Receber.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              {pedidoCancelar ? (
+                <p className="text-sm font-medium">{pedidoCancelar.label}</p>
+              ) : null}
+              <p className="mt-2 text-sm text-muted-foreground">
+                Deseja realmente cancelar este pedido?
+              </p>
+            </div>
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={cancelarPedidoMutation.isPending}
+                onClick={() => setPedidoCancelar(null)}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={cancelarPedidoMutation.isPending || !pedidoCancelar}
+                onClick={() => {
+                  if (pedidoCancelar) {
+                    cancelarPedidoMutation.mutate(pedidoCancelar.id);
+                  }
+                }}
+              >
+                {cancelarPedidoMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cancelando...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4 mr-2" />
+                    Cancelar pedido
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

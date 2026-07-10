@@ -84,6 +84,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     BarChart3,
+    Ban,
     Calendar,
     CheckCircle,
     Circle,
@@ -100,6 +101,7 @@ import {
     Search,
     ShoppingCart,
     Truck,
+    XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -234,6 +236,10 @@ function ContasAPagar() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
+  const [pedidoCancelar, setPedidoCancelar] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [newTransacao, setNewTransacao] = useState<CreateContaFinanceiraDto & { 
     data_emissao: string;
@@ -1244,6 +1250,27 @@ function ContasAPagar() {
       
       toast.error(errorMessage);
       setEditingStatusId(null);
+    },
+  });
+
+  const cancelarPedidoMutation = useMutation({
+    mutationFn: (pedidoId: number) => pedidosService.cancelar(pedidoId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] }),
+        queryClient.invalidateQueries({ queryKey: ["pedidos"] }),
+      ]);
+      toast.success("Pedido cancelado com sucesso!");
+      setPedidoCancelar(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Erro ao cancelar pedido.",
+      );
     },
   });
 
@@ -2410,7 +2437,7 @@ function ContasAPagar() {
                                 }
                               >
                                 <DollarSign className="w-4 h-4 mr-2" />
-                                Pagamentos
+                                Pagar
                               </DropdownMenuItem>
                             ) : transacao.contaId ? (
                               <DropdownMenuItem
@@ -2421,9 +2448,42 @@ function ContasAPagar() {
                                 }
                               >
                                 <DollarSign className="w-4 h-4 mr-2" />
-                                Pagamentos
+                                Pagar
                               </DropdownMenuItem>
                             ) : null)}
+                          {(transacao as any).pedidoId &&
+                            (() => {
+                              const st = String(
+                                (transacao as any).statusOriginal ||
+                                  transacao.status ||
+                                  "",
+                              ).toUpperCase();
+                              const stLabel = String(transacao.status || "").toLowerCase();
+                              return (
+                                st !== "CANCELADO" &&
+                                st !== "QUITADO" &&
+                                st !== "PAGO_TOTAL" &&
+                                stLabel !== "cancelado" &&
+                                stLabel !== "quitado" &&
+                                stLabel !== "pago total"
+                              );
+                            })() && (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() =>
+                                setPedidoCancelar({
+                                  id: Number((transacao as any).pedidoId),
+                                  label: String(
+                                    transacao.id ||
+                                      `Pedido #${(transacao as any).pedidoId}`,
+                                  ),
+                                })
+                              }
+                            >
+                              <Ban className="w-4 h-4 mr-2" />
+                              Cancelar pedido
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
@@ -3150,6 +3210,67 @@ function ContasAPagar() {
                   </Button>
                 </div>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={pedidoCancelar != null}
+          onOpenChange={(open) => {
+            if (!open && !cancelarPedidoMutation.isPending) {
+              setPedidoCancelar(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-amber-600" />
+                Cancelar pedido
+              </DialogTitle>
+              <DialogDescription>
+                O pedido será marcado como cancelado e sairá das Contas a Pagar.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              {pedidoCancelar ? (
+                <p className="text-sm font-medium">{pedidoCancelar.label}</p>
+              ) : null}
+              <p className="mt-2 text-sm text-muted-foreground">
+                Deseja realmente cancelar este pedido?
+              </p>
+            </div>
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={cancelarPedidoMutation.isPending}
+                onClick={() => setPedidoCancelar(null)}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={cancelarPedidoMutation.isPending || !pedidoCancelar}
+                onClick={() => {
+                  if (pedidoCancelar) {
+                    cancelarPedidoMutation.mutate(pedidoCancelar.id);
+                  }
+                }}
+              >
+                {cancelarPedidoMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cancelando...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4 mr-2" />
+                    Cancelar pedido
+                  </>
+                )}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
