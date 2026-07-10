@@ -97,6 +97,8 @@ export function OrderList({
   const parceiroLabel = (order: Pedido) =>
     order.tipo === 'VENDA'
       ? order.cliente?.nome ||
+        order.cliente?.nome_fantasia ||
+        order.cliente?.nome_razao ||
         order.roca_nome ||
         order.roca?.nome ||
         (order.cliente_id

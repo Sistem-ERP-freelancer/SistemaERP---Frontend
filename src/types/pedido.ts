@@ -45,6 +45,8 @@ export interface Pedido {
   cliente?: {
     id: number;
     nome: string;
+    nome_fantasia?: string | null;
+    nome_razao?: string | null;
     cpf_cnpj?: string;
     email?: string;
     telefone?: string;
