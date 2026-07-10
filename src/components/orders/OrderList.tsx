@@ -1,4 +1,8 @@
-import { Button } from '@/components/ui/button';
+import { TableRowActionsMenu } from '@/components/TableRowActionsMenu';
+import {
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -116,83 +120,81 @@ export function OrderList({
             ? `Roça #${order.roca_id}`
             : '--');
 
-  const renderActions = (order: Pedido) => (
-    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 shrink-0"
-        onClick={() => onView(order)}
-        title="Visualizar"
-      >
-        <Eye className="w-4 h-4 text-muted-foreground" />
-      </Button>
-      {onReport && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => onReport(order)}
-          disabled={reportingOrderId === order.id}
-          title={
-            pedidoVinculadoRoca(order)
-              ? 'Relatório PDF com itens (sem endereço/contato da roça)'
-              : 'Relatório PDF com itens e endereço'
-          }
-        >
-          {reportingOrderId === order.id ? (
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-          ) : (
-            <FileText className="w-4 h-4 text-primary" />
+  const renderActions = (order: Pedido) => {
+    const canEditOrCancel =
+      order.status !== 'CANCELADO' && order.status !== 'QUITADO';
+    const canDelete = order.status !== 'QUITADO';
+    const canEmitNf =
+      !!podeEmitirNf &&
+      !!onEmitNotaFiscal &&
+      order.tipo === 'VENDA' &&
+      order.status !== 'CANCELADO';
+    const showDestructiveSeparator = canEditOrCancel || canDelete;
+
+    return (
+      <div className="flex justify-end">
+        <TableRowActionsMenu contentClassName="w-52">
+          <DropdownMenuItem onSelect={() => onView(order)} className="gap-2">
+            <Eye className="w-4 h-4 text-muted-foreground" />
+            Visualizar
+          </DropdownMenuItem>
+          {onReport && (
+            <DropdownMenuItem
+              onSelect={() => onReport(order)}
+              disabled={reportingOrderId === order.id}
+              className="gap-2"
+              title={
+                pedidoVinculadoRoca(order)
+                  ? 'Relatório PDF com itens (sem endereço/contato da roça)'
+                  : 'Relatório PDF com itens e endereço'
+              }
+            >
+              {reportingOrderId === order.id ? (
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              ) : (
+                <FileText className="w-4 h-4 text-primary" />
+              )}
+              Relatório PDF
+            </DropdownMenuItem>
           )}
-        </Button>
-      )}
-      {podeEmitirNf && onEmitNotaFiscal && order.tipo === 'VENDA' && order.status !== 'CANCELADO' && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => onEmitNotaFiscal(order)}
-          title="Emitir nota fiscal"
-        >
-          <Receipt className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-        </Button>
-      )}
-      {order.status !== 'CANCELADO' && order.status !== 'QUITADO' && (
-        <>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            onClick={() => onEdit(order)}
-            title="Editar"
-          >
-            <Edit className="w-4 h-4 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            onClick={() => onCancel(order)}
-            title="Cancelar"
-          >
-            <Ban className="w-4 h-4 text-amber-600" />
-          </Button>
-        </>
-      )}
-      {order.status !== 'QUITADO' && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => onDelete(order)}
-          title="Excluir"
-        >
-          <Trash2 className="w-4 h-4 text-destructive" />
-        </Button>
-      )}
-    </div>
-  );
+          {canEmitNf && (
+            <DropdownMenuItem
+              onSelect={() => onEmitNotaFiscal?.(order)}
+              className="gap-2"
+            >
+              <Receipt className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              Emitir nota fiscal
+            </DropdownMenuItem>
+          )}
+          {canEditOrCancel && (
+            <DropdownMenuItem onSelect={() => onEdit(order)} className="gap-2">
+              <Edit className="w-4 h-4 text-muted-foreground" />
+              Editar
+            </DropdownMenuItem>
+          )}
+          {showDestructiveSeparator && <DropdownMenuSeparator />}
+          {canEditOrCancel && (
+            <DropdownMenuItem
+              onSelect={() => onCancel(order)}
+              className="gap-2 text-amber-700 focus:text-amber-700 dark:text-amber-500 dark:focus:text-amber-500"
+            >
+              <Ban className="w-4 h-4" />
+              Cancelar
+            </DropdownMenuItem>
+          )}
+          {canDelete && (
+            <DropdownMenuItem
+              onSelect={() => onDelete(order)}
+              className="gap-2 text-destructive focus:text-destructive"
+            >
+              <Trash2 className="w-4 h-4" />
+              Excluir
+            </DropdownMenuItem>
+          )}
+        </TableRowActionsMenu>
+      </div>
+    );
+  };
 
   const renderStatus = (order: Pedido) =>
     onStatusChange ? (
@@ -306,7 +308,7 @@ export function OrderList({
             <TableHead className="font-semibold text-foreground whitespace-nowrap">Status</TableHead>
             <TableHead className="font-semibold text-foreground whitespace-nowrap">Total</TableHead>
             <TableHead className="font-semibold text-foreground whitespace-nowrap hidden lg:table-cell">Data</TableHead>
-            <TableHead className="w-[160px] lg:w-[200px] font-semibold text-foreground text-right whitespace-nowrap">
+            <TableHead className="w-[72px] font-semibold text-foreground text-right whitespace-nowrap">
               Ações
             </TableHead>
           </TableRow>
