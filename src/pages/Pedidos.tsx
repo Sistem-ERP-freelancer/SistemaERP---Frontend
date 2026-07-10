@@ -48,7 +48,7 @@ import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { FiltrosPedidos, Pedido, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, XCircle } from 'lucide-react';
+import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, Trash2, XCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -67,13 +67,16 @@ export default function Pedidos() {
     isLoading,
     isViewDialogOpen,
     isCancelDialogOpen,
+    isDeleteDialogOpen,
     selectedOrder,
     orderToCancel,
+    orderToDelete,
     clientes,
     fornecedores,
     produtos,
     transportadoras,
     isCanceling,
+    isDeleting,
     updatingStatusId,
     handleStatusChange,
     setCurrentPage,
@@ -81,15 +84,17 @@ export default function Pedidos() {
     clearFilters,
     openViewDialog,
     openCancelDialog,
+    openDeleteDialog,
     cancelOrder,
+    deleteOrder,
     closeViewDialog,
     closeCancelDialog,
+    closeDeleteDialog,
   } = useOrders();
 
   const { downloadRelatorio, loading: loadingRelatorio } = useRelatorioPedidos();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [dataInicialMargem, setDataInicialMargem] = useState('');
   const [dataFinalMargem, setDataFinalMargem] = useState('');
@@ -506,13 +511,6 @@ export default function Pedidos() {
     else if (!valor && searchTerm) setSearchTerm('');
   }, [filters.busca, filters.numero_pedido, filters.cliente_nome]);
 
-  // Fechar o diálogo de exclusão quando o cancelamento for bem-sucedido
-  useEffect(() => {
-    if (!isCancelDialogOpen && !isCanceling) {
-      setIsDeleteDialogOpen(false);
-    }
-  }, [isCancelDialogOpen, isCanceling]);
-
   // Limpar timeout quando o componente desmontar
   useEffect(() => {
     return () => {
@@ -548,15 +546,9 @@ export default function Pedidos() {
   };
 
   const handleDeleteConfirm = () => {
-    if (orderToCancel) {
-      cancelOrder(orderToCancel);
-      // O diálogo será fechado automaticamente pelo hook quando a exclusão for bem-sucedida
+    if (orderToDelete) {
+      deleteOrder(orderToDelete);
     }
-  };
-
-  const handleOpenDeleteDialog = (order: any) => {
-    openCancelDialog(order);
-    setIsDeleteDialogOpen(true);
   };
 
   const handleOpenNotaFiscal = (order: Pedido) => {
@@ -890,7 +882,8 @@ export default function Pedidos() {
               isLoading={isLoading}
               onView={openViewDialog}
               onEdit={(order) => navigate(`/pedidos/${order.id}/editar`)}
-              onCancel={handleOpenDeleteDialog}
+              onCancel={openCancelDialog}
+              onDelete={openDeleteDialog}
               onReport={abrirDialogRelatorioIndividual}
               onEmitNotaFiscal={handleOpenNotaFiscal}
               reportingOrderId={reportingOrderId}
@@ -1251,28 +1244,25 @@ export default function Pedidos() {
 
         {/* Modal de Confirmação de Cancelamento */}
         <Dialog
-          open={isDeleteDialogOpen}
+          open={isCancelDialogOpen}
           onOpenChange={(open) => {
-            setIsDeleteDialogOpen(open);
-            if (!open) {
-              closeCancelDialog();
-            }
+            if (!open) closeCancelDialog();
           }}
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-destructive" />
-                Confirmar Cancelamento
+                <XCircle className="w-5 h-5 text-amber-600" />
+                Confirmar cancelamento
               </DialogTitle>
               <DialogDescription>
-                Esta ação não pode ser desfeita.
+                O pedido será marcado como cancelado e sairá das Contas a Receber / Pagar.
               </DialogDescription>
             </DialogHeader>
 
             <div className="py-4">
               <p className="text-sm text-muted-foreground">
-                Deseja realmente cancelar este pedido? Ele sairá das Contas a Receber e Contas a Pagar.
+                Deseja realmente cancelar este pedido? O registro permanece no histórico.
               </p>
               {orderToCancel && (
                 <div className="mt-2 space-y-1">
@@ -1292,10 +1282,7 @@ export default function Pedidos() {
             <div className="flex gap-3 pt-4 border-t">
               <Button
                 variant="outline"
-                onClick={() => {
-                  setIsDeleteDialogOpen(false);
-                  closeCancelDialog();
-                }}
+                onClick={closeCancelDialog}
                 className="flex-1"
                 disabled={isCanceling}
               >
@@ -1303,7 +1290,7 @@ export default function Pedidos() {
               </Button>
               <Button
                 variant="destructive"
-                onClick={handleDeleteConfirm}
+                onClick={handleCancelConfirm}
                 disabled={isCanceling}
                 className="flex-1"
               >
@@ -1315,7 +1302,75 @@ export default function Pedidos() {
                 ) : (
                   <>
                     <XCircle className="w-4 h-4 mr-2" />
-                    Cancelar
+                    Cancelar pedido
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Confirmação de Exclusão */}
+        <Dialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) closeDeleteDialog();
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-destructive" />
+                Confirmar exclusão
+              </DialogTitle>
+              <DialogDescription>
+                Esta ação remove o pedido permanentemente e não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-4">
+              <p className="text-sm text-muted-foreground">
+                Pedidos com pagamento ou NF-e emitida não podem ser excluídos — use Cancelar.
+              </p>
+              {orderToDelete && (
+                <div className="mt-2 space-y-1">
+                  <p className="font-medium">Pedido #{orderToDelete.numero_pedido}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {orderToDelete.tipo === 'VENDA'
+                      ? `Cliente: ${orderToDelete.cliente?.nome || 'N/A'}`
+                      : `Fornecedor: ${orderToDelete.fornecedor?.nome_fantasia || orderToDelete.fornecedor?.nome_razao || 'N/A'}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Valor: {formatCurrency(normalizeCurrency(orderToDelete.valor_total, true))}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={closeDeleteDialog}
+                className="flex-1"
+                disabled={isDeleting}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="flex-1"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir
                   </>
                 )}
               </Button>

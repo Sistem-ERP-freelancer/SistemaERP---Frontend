@@ -18,7 +18,7 @@ import { normalizeCurrency } from '@/lib/utils';
 import { Pedido, pedidoVinculadoRoca, StatusPedido } from '@/types/pedido';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Edit, Eye, FileText, Loader2, Receipt, ShoppingCart, Trash2 } from 'lucide-react';
+import { Edit, Eye, FileText, Loader2, Receipt, ShoppingCart, Trash2, Ban } from 'lucide-react';
 import { StatusBadge } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { canManageNotaFiscal } from '@/lib/role-access';
@@ -30,6 +30,7 @@ interface OrderListProps {
   onView: (order: Pedido) => void;
   onEdit: (order: Pedido) => void;
   onCancel: (order: Pedido) => void;
+  onDelete: (order: Pedido) => void;
   onReport?: (order: Pedido) => void;
   onEmitNotaFiscal?: (order: Pedido) => void;
   reportingOrderId?: number | null;
@@ -43,6 +44,7 @@ export function OrderList({
   onView, 
   onEdit, 
   onCancel,
+  onDelete,
   onReport,
   onEmitNotaFiscal,
   reportingOrderId = null,
@@ -170,11 +172,22 @@ export function OrderList({
             size="icon"
             className="h-8 w-8 shrink-0"
             onClick={() => onCancel(order)}
-            title="Excluir"
+            title="Cancelar"
           >
-            <Trash2 className="w-4 h-4 text-destructive" />
+            <Ban className="w-4 h-4 text-amber-600" />
           </Button>
         </>
+      )}
+      {order.status !== 'QUITADO' && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => onDelete(order)}
+          title="Excluir"
+        >
+          <Trash2 className="w-4 h-4 text-destructive" />
+        </Button>
       )}
     </div>
   );
@@ -291,7 +304,7 @@ export function OrderList({
             <TableHead className="font-semibold text-foreground whitespace-nowrap">Status</TableHead>
             <TableHead className="font-semibold text-foreground whitespace-nowrap">Total</TableHead>
             <TableHead className="font-semibold text-foreground whitespace-nowrap hidden lg:table-cell">Data</TableHead>
-            <TableHead className="w-[140px] lg:w-[160px] font-semibold text-foreground text-right whitespace-nowrap">
+            <TableHead className="w-[160px] lg:w-[200px] font-semibold text-foreground text-right whitespace-nowrap">
               Ações
             </TableHead>
           </TableRow>

@@ -324,6 +324,10 @@ class PedidosService {
     return apiClient.patch<Pedido>(`/pedidos/${id}/cancelar`, {});
   }
 
+  async excluir(id: number): Promise<{ sucesso: boolean }> {
+    return apiClient.delete<{ sucesso: boolean }>(`/pedidos/${id}`);
+  }
+
   /**
    * Baixa o PDF do Relatório de Pedidos em Aberto (Contas a Receber).
    * GET /pedidos/relatorio/em-aberto?data_inicial=YYYY-MM-DD&data_final=YYYY-MM-DD

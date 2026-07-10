@@ -24,9 +24,11 @@ export function useOrders() {
   const [filters, setFilters] = useState<FiltrosPedidos>({});
   const [selectedOrder, setSelectedOrder] = useState<Pedido | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<Pedido | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<Pedido | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
 
   // Query para listar pedidos
@@ -597,6 +599,54 @@ export function useOrders() {
     },
   });
 
+  // Mutation para excluir pedido permanentemente (DELETE /pedidos/:id)
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await pedidosService.excluir(id);
+    },
+    onSuccess: async (_data, id) => {
+      queryClient.setQueriesData(
+        { queryKey: ['pedidos'] },
+        (old: any) => {
+          if (!old) return old;
+          if (Array.isArray(old)) {
+            return old.filter((order: Pedido) => order.id !== id);
+          }
+          if (old?.data && Array.isArray(old.data)) {
+            return {
+              ...old,
+              data: old.data.filter((order: Pedido) => order.id !== id),
+              total: Math.max(0, Number(old.total ?? old.data.length) - 1),
+            };
+          }
+          return old;
+        },
+      );
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['pedidos'] }),
+        queryClient.invalidateQueries({ queryKey: ['pedidos', 'all'] }),
+        queryClient.invalidateQueries({ queryKey: ['pedidos', 'dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] }),
+      ]);
+      await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });
+
+      toast.success('Pedido excluído com sucesso!');
+      setIsDeleteDialogOpen(false);
+      setOrderToDelete(null);
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Erro ao excluir pedido.';
+      toast.error(message);
+    },
+  });
+
   // Mutation para atualizar status do pedido
   const updateStatusMutation = useMutation({
     mutationFn: async ({
@@ -648,6 +698,10 @@ export function useOrders() {
 
   const cancelOrder = (order: Pedido) => {
     cancelMutation.mutate(order.id);
+  };
+
+  const deleteOrder = (order: Pedido) => {
+    deleteMutation.mutate(order.id);
   };
 
   const handleStatusChange = (id: number, status: StatusPedido) => {
@@ -710,6 +764,11 @@ export function useOrders() {
     setIsCancelDialogOpen(true);
   };
 
+  const openDeleteDialog = (order: Pedido) => {
+    setOrderToDelete(order);
+    setIsDeleteDialogOpen(true);
+  };
+
   const closeForm = () => {
     setIsFormOpen(false);
     setSelectedOrder(null);
@@ -723,6 +782,11 @@ export function useOrders() {
   const closeCancelDialog = () => {
     setIsCancelDialogOpen(false);
     setOrderToCancel(null);
+  };
+
+  const closeDeleteDialog = () => {
+    setIsDeleteDialogOpen(false);
+    setOrderToDelete(null);
   };
 
   return {
@@ -739,6 +803,7 @@ export function useOrders() {
     selectedOrder: orderForView,
     selectedOrderForEdit: orderForEdit,
     orderToCancel,
+    orderToDelete,
     clientes,
     fornecedores,
     produtos,
@@ -750,6 +815,7 @@ export function useOrders() {
     isFormOpen,
     isViewDialogOpen,
     isCancelDialogOpen,
+    isDeleteDialogOpen,
 
     // Ações de navegação
     setCurrentPage,
@@ -760,6 +826,7 @@ export function useOrders() {
     createOrder,
     updateOrder,
     cancelOrder,
+    deleteOrder,
     getOrderById,
     searchOrderByNumber,
 
@@ -768,14 +835,17 @@ export function useOrders() {
     openEditForm,
     openViewDialog,
     openCancelDialog,
+    openDeleteDialog,
     closeForm,
     closeViewDialog,
     closeCancelDialog,
+    closeDeleteDialog,
 
     // Estados de mutations
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isCanceling: cancelMutation.isPending,
+    isDeleting: deleteMutation.isPending,
     updatingStatusId,
     handleStatusChange,
   };
