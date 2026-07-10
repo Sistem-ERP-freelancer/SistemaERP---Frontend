@@ -3,15 +3,9 @@
  * Implementa todas as funcionalidades de relatórios conforme GUIA_FRONTEND_RELATORIOS_CLIENTE.md
  */
 
-// Obter a URL base da API
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  return 'https://sistemaerp-3.onrender.com/api/v1';
-};
+import { getApiBaseUrlPublic } from '@/services/api';
 
-const API_BASE_URL = getApiBaseUrl();
+const API_BASE_URL = getApiBaseUrlPublic();
 
 export interface CompartilharRelatorioParams {
   tipoRelatorio: 'financeiro' | 'producao';

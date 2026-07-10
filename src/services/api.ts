@@ -647,5 +647,12 @@ class ApiClient {
   }
 }
 
+const API_BASE_URL = getApiBaseUrl();
+
 export const apiClient = new ApiClient(API_BASE_URL);
+
+/** Base URL da API (mesma regra do apiClient) — use em fetchs de PDF/relatórios. */
+export function getApiBaseUrlPublic(): string {
+  return API_BASE_URL;
+}
 

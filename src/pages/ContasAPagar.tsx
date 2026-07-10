@@ -528,10 +528,10 @@ function ContasAPagar() {
   const relatorioCentroCustoMensagemSemDados = useMemo(() => {
     if (relatorioCentroCustoTipoIdParsed != null) {
       if (relatorioCentroCustoStatusFiltro !== "Todos") {
-        return "Não há despesas desse tipo com o status selecionado.";
+        return "Não há despesas desse tipo com o status selecionado. Ajuste o status ou limpe o período.";
       }
       if (relatorioCentroCustoDataInicial || relatorioCentroCustoDataFinal) {
-        return "Não há despesas desse tipo no período selecionado.";
+        return "Não há despesas desse tipo no período informado (filtro por data de vencimento/lançamento). Limpe as datas ou amplie o período — os lançamentos podem estar fora desse intervalo.";
       }
       return "Não há despesas cadastradas para esse tipo.";
     }
@@ -539,7 +539,7 @@ function ContasAPagar() {
       return "Não há despesas de centro de custo com o status selecionado.";
     }
     if (relatorioCentroCustoDataInicial || relatorioCentroCustoDataFinal) {
-      return "Não há despesas de centro de custo no período selecionado.";
+      return "Não há despesas de centro de custo no período selecionado. Limpe as datas ou amplie o intervalo.";
     }
     return "Não há despesas de centro de custo cadastradas.";
   }, [
@@ -3225,7 +3225,7 @@ function ContasAPagar() {
 
               {relatorioCentroCustoPreviewError && (
                 <p className="text-sm text-destructive">
-                  Não foi possível verificar os filtros. Tente novamente.
+                  Não foi possível verificar os filtros. Você ainda pode tentar baixar o PDF.
                 </p>
               )}
 
@@ -3245,7 +3245,8 @@ function ContasAPagar() {
                     className="flex-1 gap-2"
                     disabled={
                       relatorioCentroCustoPreviewFetching ||
-                      !relatorioCentroCustoTemDados ||
+                      (!relatorioCentroCustoPreviewError &&
+                        !relatorioCentroCustoTemDados) ||
                       relatorioCentroCustoPdfLoading
                     }
                     onClick={async () => {
@@ -3277,7 +3278,8 @@ function ContasAPagar() {
                     className="flex-1 gap-2"
                     disabled={
                       relatorioCentroCustoPreviewFetching ||
-                      !relatorioCentroCustoTemDados ||
+                      (!relatorioCentroCustoPreviewError &&
+                        !relatorioCentroCustoTemDados) ||
                       relatorioCentroCustoPdfLoading
                     }
                     onClick={async () => {
