@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toYMD } from "@/lib/contas-financeiras-listagem";
+import { formatValorMonetarioBr } from "@/lib/parse-valor-monetario";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import {
   centroCustoService,
@@ -215,7 +216,22 @@ const NovaTransacao = () => {
   const [previsao, setPrevisao] = useState(false);
   const [centroCustoPopOpen, setCentroCustoPopOpen] = useState(false);
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
+  const [valorOriginalInput, setValorOriginalInput] = useState("");
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
+
+  const handleValorOriginalChange = (raw: string) => {
+    const apenasNumeros = raw.replace(/\D/g, "");
+    if (!apenasNumeros) {
+      setValorOriginalInput("");
+      setForm((prev) => ({ ...prev, valor_original: 0 }));
+      return;
+    }
+    // Limita a 15 dígitos (centavos) para evitar overflow visual
+    const digitos = apenasNumeros.slice(0, 15);
+    const valorDecimal = parseInt(digitos, 10) / 100;
+    setValorOriginalInput(formatValorMonetarioBr(valorDecimal));
+    setForm((prev) => ({ ...prev, valor_original: valorDecimal }));
+  };
 
   const { data: clientesData } = useQuery({
     queryKey: ["clientes", "nova-transacao"],
@@ -647,18 +663,11 @@ const NovaTransacao = () => {
                       </span>
                       <Input
                         id="valor"
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        inputMode="decimal"
                         placeholder="0,00"
-                        className="h-11 rounded-xl pl-10"
-                        value={form.valor_original || ""}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            valor_original: e.target.value ? Number(e.target.value) : 0,
-                          }))
-                        }
+                        className="h-11 rounded-xl pl-10 tabular-nums"
+                        value={valorOriginalInput}
+                        onChange={(e) => handleValorOriginalChange(e.target.value)}
                       />
                     </div>
                   </div>
