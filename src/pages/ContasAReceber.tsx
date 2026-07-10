@@ -93,6 +93,7 @@ import {
     Printer,
     Search,
     ShoppingCart,
+    Trash2,
     XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -143,6 +144,11 @@ const ContasAReceber = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
   const [pedidoCancelar, setPedidoCancelar] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
+  const [itemApagar, setItemApagar] = useState<{
+    tipo: "pedido" | "conta";
     id: number;
     label: string;
   } | null>(null);
@@ -1097,6 +1103,37 @@ const ContasAReceber = () => {
         error?.response?.data?.message ||
           error?.message ||
           "Erro ao cancelar pedido.",
+      );
+    },
+  });
+
+  const apagarMutation = useMutation({
+    mutationFn: async (item: { tipo: "pedido" | "conta"; id: number }) => {
+      if (item.tipo === "pedido") {
+        return pedidosService.excluir(item.id);
+      }
+      return financeiroService.deletar(item.id);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] }),
+        queryClient.invalidateQueries({ queryKey: ["pedidos"] }),
+        queryClient.invalidateQueries({ queryKey: ["pedidos", "contas-receber"] }),
+        queryClient.invalidateQueries({ queryKey: ["contas-receber"] }),
+      ]);
+      toast.success(
+        itemApagar?.tipo === "conta"
+          ? "Conta apagada com sucesso!"
+          : "Pedido apagado com sucesso!",
+      );
+      setItemApagar(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Erro ao apagar.",
       );
     },
   });
@@ -2768,6 +2805,38 @@ const ContasAReceber = () => {
                                 Cancelar pedido
                               </DropdownMenuItem>
                             )}
+                            {grupo?.statusConsolidado !== "Pago Total" &&
+                              (grupo?.pedido_id != null ||
+                                grupo?.parcelas?.[0]?.id != null) && (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => {
+                                  if (grupo?.pedido_id != null) {
+                                    setItemApagar({
+                                      tipo: "pedido",
+                                      id: grupo.pedido_id,
+                                      label:
+                                        grupo.parcelas?.[0]?.numero_conta ||
+                                        `Pedido #${grupo.pedido_id}`,
+                                    });
+                                    return;
+                                  }
+                                  const contaId = grupo?.parcelas?.[0]?.id;
+                                  if (contaId != null) {
+                                    setItemApagar({
+                                      tipo: "conta",
+                                      id: contaId,
+                                      label:
+                                        grupo.parcelas?.[0]?.numero_conta ||
+                                        `Conta #${contaId}`,
+                                    });
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Apagar
+                              </DropdownMenuItem>
+                            )}
                             {(grupo?.parcelas?.[0]?.id != null) && (
                               <DropdownMenuItem
                                 onClick={async () => {
@@ -2901,6 +2970,27 @@ const ContasAReceber = () => {
                             >
                               <Ban className="w-4 h-4 mr-2" />
                               Cancelar pedido
+                            </DropdownMenuItem>
+                          )}
+                          {transacao.pedidoId &&
+                            (() => {
+                              const st = (transacao.status || "").toLowerCase();
+                              return st !== "quitado" && st !== "pago total";
+                            })() && (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() =>
+                                setItemApagar({
+                                  tipo: "pedido",
+                                  id: transacao.pedidoId!,
+                                  label: String(
+                                    transacao.id || `Pedido #${transacao.pedidoId}`,
+                                  ),
+                                })
+                              }
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Apagar
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
@@ -3204,6 +3294,67 @@ const ContasAReceber = () => {
                   <>
                     <Ban className="w-4 h-4 mr-2" />
                     Cancelar pedido
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={itemApagar != null}
+          onOpenChange={(open) => {
+            if (!open && !apagarMutation.isPending) {
+              setItemApagar(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-destructive" />
+                Apagar
+              </DialogTitle>
+              <DialogDescription>
+                Esta ação remove o registro permanentemente e não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              {itemApagar ? (
+                <p className="text-sm font-medium">{itemApagar.label}</p>
+              ) : null}
+              <p className="mt-2 text-sm text-muted-foreground">
+                {itemApagar?.tipo === "conta"
+                  ? "Deseja realmente apagar esta conta?"
+                  : "Deseja realmente apagar este pedido? Pedidos com pagamento ou NF-e emitida não podem ser apagados."}
+              </p>
+            </div>
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={apagarMutation.isPending}
+                onClick={() => setItemApagar(null)}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={apagarMutation.isPending || !itemApagar}
+                onClick={() => {
+                  if (itemApagar) apagarMutation.mutate(itemApagar);
+                }}
+              >
+                {apagarMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Apagando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Apagar
                   </>
                 )}
               </Button>

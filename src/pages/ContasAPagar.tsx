@@ -100,6 +100,7 @@ import {
     Printer,
     Search,
     ShoppingCart,
+    Trash2,
     Truck,
     XCircle,
 } from "lucide-react";
@@ -237,6 +238,11 @@ function ContasAPagar() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedContaId, setSelectedContaId] = useState<number | null>(null);
   const [pedidoCancelar, setPedidoCancelar] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
+  const [itemApagar, setItemApagar] = useState<{
+    tipo: "pedido" | "conta";
     id: number;
     label: string;
   } | null>(null);
@@ -1270,6 +1276,36 @@ function ContasAPagar() {
         error?.response?.data?.message ||
           error?.message ||
           "Erro ao cancelar pedido.",
+      );
+    },
+  });
+
+  const apagarMutation = useMutation({
+    mutationFn: async (item: { tipo: "pedido" | "conta"; id: number }) => {
+      if (item.tipo === "pedido") {
+        return pedidosService.excluir(item.id);
+      }
+      return financeiroService.deletar(item.id);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] }),
+        queryClient.invalidateQueries({ queryKey: ["pedidos"] }),
+      ]);
+      toast.success(
+        itemApagar?.tipo === "conta"
+          ? "Conta apagada com sucesso!"
+          : "Pedido apagado com sucesso!",
+      );
+      setItemApagar(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Erro ao apagar.",
       );
     },
   });
@@ -2484,6 +2520,60 @@ function ContasAPagar() {
                               Cancelar pedido
                             </DropdownMenuItem>
                           )}
+                          {(() => {
+                            const st = String(
+                              (transacao as any).statusOriginal ||
+                                transacao.status ||
+                                "",
+                            ).toUpperCase();
+                            const stLabel = String(transacao.status || "").toLowerCase();
+                            const quitado =
+                              st === "QUITADO" ||
+                              st === "PAGO_TOTAL" ||
+                              stLabel === "quitado" ||
+                              stLabel === "pago total";
+                            if (quitado) return null;
+                            const pedidoId = (transacao as any).pedidoId;
+                            if (pedidoId != null) {
+                              return (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() =>
+                                    setItemApagar({
+                                      tipo: "pedido",
+                                      id: Number(pedidoId),
+                                      label: String(
+                                        transacao.id || `Pedido #${pedidoId}`,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Apagar
+                                </DropdownMenuItem>
+                              );
+                            }
+                            if (transacao.contaId != null) {
+                              return (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() =>
+                                    setItemApagar({
+                                      tipo: "conta",
+                                      id: Number(transacao.contaId),
+                                      label: String(
+                                        transacao.id || `Conta #${transacao.contaId}`,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Apagar
+                                </DropdownMenuItem>
+                              );
+                            }
+                            return null;
+                          })()}
                           <DropdownMenuItem
                             onClick={async () => {
                               try {
@@ -3268,6 +3358,67 @@ function ContasAPagar() {
                   <>
                     <Ban className="w-4 h-4 mr-2" />
                     Cancelar pedido
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={itemApagar != null}
+          onOpenChange={(open) => {
+            if (!open && !apagarMutation.isPending) {
+              setItemApagar(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-destructive" />
+                Apagar
+              </DialogTitle>
+              <DialogDescription>
+                Esta ação remove o registro permanentemente e não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              {itemApagar ? (
+                <p className="text-sm font-medium">{itemApagar.label}</p>
+              ) : null}
+              <p className="mt-2 text-sm text-muted-foreground">
+                {itemApagar?.tipo === "conta"
+                  ? "Deseja realmente apagar esta conta?"
+                  : "Deseja realmente apagar este pedido? Pedidos com pagamento ou NF-e emitida não podem ser apagados."}
+              </p>
+            </div>
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={apagarMutation.isPending}
+                onClick={() => setItemApagar(null)}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={apagarMutation.isPending || !itemApagar}
+                onClick={() => {
+                  if (itemApagar) apagarMutation.mutate(itemApagar);
+                }}
+              >
+                {apagarMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Apagando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Apagar
                   </>
                 )}
               </Button>
