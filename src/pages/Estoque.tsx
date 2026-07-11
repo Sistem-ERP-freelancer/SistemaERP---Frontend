@@ -456,8 +456,10 @@ const Estoque = () => {
             break;
 
           case 403:
-            // Sem permissão
-            toast.error('Sem permissão para realizar esta operação');
+            toast.error(
+              errorData?.message ||
+                'Sem permissão para realizar esta operação',
+            );
             break;
 
           case 404:
