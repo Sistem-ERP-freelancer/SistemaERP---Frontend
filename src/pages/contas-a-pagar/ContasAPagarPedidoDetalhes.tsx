@@ -9,6 +9,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { formatCurrency, formatarDataBR, formatarFormaPagamento } from '@/lib/utils';
+import { financeiroService } from '@/services/financeiro.service';
 import { pedidosService } from '@/services/pedidos.service';
 import type { ItemHistoricoPagamento } from '@/types/pedido-financeiro.types';
 import { useQueries } from '@tanstack/react-query';
@@ -26,7 +27,7 @@ const ContasAPagarPedidoDetalhes = () => {
   const navigate = useNavigate();
   const id = pedidoId ? Number(pedidoId) : 0;
 
-  const [pedidoQuery, resumoQuery, pagamentosQuery] = useQueries({
+  const [pedidoQuery, resumoQuery, pagamentosQuery, contasPedidoQuery] = useQueries({
     queries: [
       {
         queryKey: ['pedidos', pedidoId],
@@ -45,12 +46,22 @@ const ContasAPagarPedidoDetalhes = () => {
         enabled: !!id,
         retry: false,
       },
+      {
+        queryKey: ['contas-financeiras', 'pedido', pedidoId, 'PAGAR'],
+        queryFn: async () => {
+          const contas = await financeiroService.buscarPorPedido(id);
+          return (contas || []).filter((c) => c.tipo === 'PAGAR' || !c.tipo);
+        },
+        enabled: !!id,
+        retry: false,
+      },
     ],
   });
 
   const pedido = pedidoQuery.data;
   const resumoRaw = resumoQuery.data;
   const pagamentosNovo = pagamentosQuery.data;
+  const contasDoPedido = contasPedidoQuery.data ?? [];
 
   const isLoading = pedidoQuery.isLoading || resumoQuery.isLoading;
   const error = pedidoQuery.error || resumoQuery.error;
@@ -131,11 +142,27 @@ const ContasAPagarPedidoDetalhes = () => {
 
   const formaEstrutural = (pedido as any)?.forma_pagamento_estrutural || 'AVISTA';
   const formaPagamentoPedido = (pedido as any)?.forma_pagamento;
-  const formaDisplay = formaEstrutural === 'BOLETO_DESCONTADO'
-    ? 'Boleto Descontado'
-    : formaPagamentoPedido
-      ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
-      : (FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural);
+  const formasPagamentoPlano = pedido?.formas_pagamento ?? [];
+  const formasFromContas = contasDoPedido
+    .filter((c) => c.forma_pagamento)
+    .map((c) => ({
+      forma_pagamento: String(c.forma_pagamento),
+      valor: Number(
+        (c as any).valor_total ?? c.valor_original ?? c.valor_restante ?? 0,
+      ),
+    }));
+  const formasParaExibir =
+    formasPagamentoPlano.length > 0
+      ? formasPagamentoPlano
+      : contasDoPedido.length > 1
+        ? formasFromContas
+        : [];
+  const formaDisplay =
+    formaEstrutural === 'BOLETO_DESCONTADO'
+      ? 'Boleto Descontado'
+      : formaPagamentoPedido
+        ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
+        : FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural;
 
   return (
     <AppLayout>
@@ -175,10 +202,93 @@ const ContasAPagarPedidoDetalhes = () => {
               </div>
               <div className="font-medium">{pedido!.numero_pedido}</div>
             </div>
-            <div className="space-y-1">
-              <div className="text-sm text-muted-foreground">Forma de Pagamento</div>
-              <div className="font-medium">{formaDisplay}</div>
-            </div>
+            {formasParaExibir.length > 0 ? (
+              <div className="space-y-2 md:col-span-2">
+                <div className="text-sm text-muted-foreground">
+                  Formas de Pagamento ({formasParaExibir.length})
+                </div>
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Forma</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {formasParaExibir.map((fp, idx) => (
+                        <TableRow key={`${fp.forma_pagamento}-${idx}`}>
+                          <TableCell>
+                            {formatarFormaPagamento(fp.forma_pagamento)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatCurrency(Number(fp.valor || 0))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow>
+                        <TableCell className="font-semibold">Total</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(
+                            formasParaExibir.reduce(
+                              (acc, fp) => acc + Number(fp.valor || 0),
+                              0,
+                            ),
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="text-sm text-muted-foreground">Forma de Pagamento</div>
+                <div className="font-medium">{formaDisplay}</div>
+              </div>
+            )}
+            {contasDoPedido.length > 1 && (
+              <div className="space-y-2 md:col-span-2">
+                <div className="text-sm text-muted-foreground">
+                  Contas geradas ({contasDoPedido.length})
+                </div>
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Conta</TableHead>
+                        <TableHead>Forma</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {contasDoPedido.map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell>{c.numero_conta || c.id}</TableCell>
+                          <TableCell>
+                            {c.forma_pagamento
+                              ? formatarFormaPagamento(c.forma_pagamento)
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatCurrency(
+                              Number(
+                                (c as any).valor_total ??
+                                  c.valor_original ??
+                                  c.valor_restante ??
+                                  0,
+                              ),
+                            )}
+                          </TableCell>
+                          <TableCell>{c.status || '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Status financeiro</div>
               <div className="font-medium">{resumoFinal!.status}</div>

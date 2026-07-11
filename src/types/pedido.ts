@@ -79,6 +79,13 @@ export interface Pedido {
   condicao_pagamento?: string;
   forma_pagamento?: FormaPagamento;
   forma_pagamento_estrutural?: FormaPagamentoEstrutural;
+  /** Plano de pagamento (split): uma ou mais formas com valor */
+  formas_pagamento?: Array<{
+    forma_pagamento: FormaPagamento;
+    valor: number;
+    data_vencimento?: string;
+    ordem?: number;
+  }>;
   quantidade_parcelas?: number;
   valor_adiantado?: number | null;
   prazo_entrega_dias?: number;

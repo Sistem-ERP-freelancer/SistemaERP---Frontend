@@ -434,12 +434,49 @@ export function OrderViewDialog({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {order.forma_pagamento && (
+              {order.formas_pagamento && order.formas_pagamento.length > 0 ? (
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="text-muted-foreground">Formas de Pagamento</Label>
+                  <div className="rounded-md border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Forma</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {order.formas_pagamento.map((fp, idx) => (
+                          <TableRow key={`${fp.forma_pagamento}-${idx}`}>
+                            <TableCell>
+                              {getFormaPagamentoLabel(fp.forma_pagamento)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(Number(fp.valor || 0))}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow>
+                          <TableCell className="font-semibold">Total</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(
+                              order.formas_pagamento.reduce(
+                                (acc, fp) => acc + Number(fp.valor || 0),
+                                0,
+                              ),
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : order.forma_pagamento ? (
                 <div className="space-y-2">
                   <Label className="text-muted-foreground">Forma de Pagamento</Label>
                   <div className="text-sm">{getFormaPagamentoLabel(order.forma_pagamento)}</div>
                 </div>
-              )}
+              ) : null}
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Condição de Pagamento</Label>
                 <div className="text-sm">{order.condicao_pagamento || '—'}</div>

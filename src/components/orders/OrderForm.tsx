@@ -1864,16 +1864,33 @@ export function OrderForm({
                       {formatCurrency(typeof frete === 'number' ? frete : 0)}
                     </span>
                   </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Pagamento</span>
-                    <span className="max-w-[55%] truncate text-right font-medium">
-                      {multiFormas
-                        ? formasPagamentoLinhas
-                            .filter((l) => l.forma)
-                            .map((l) => l.forma)
-                            .join(' + ')
-                        : formaPagamentoSelecionada || '—'}
-                    </span>
+                  <div className="flex justify-between gap-2 items-start">
+                    <span className="text-muted-foreground shrink-0">Pagamento</span>
+                    <div className="max-w-[65%] text-right font-medium space-y-0.5">
+                      {formasPagamentoLinhas.some((l) => l.forma) ? (
+                        formasPagamentoLinhas
+                          .map((l, i) => ({ l, i }))
+                          .filter(({ l }) => l.forma)
+                          .map(({ l, i }) => (
+                            <div key={l.key} className="text-sm leading-snug">
+                              {l.forma}
+                              <span className="text-muted-foreground font-normal">
+                                {' '}
+                                · {formatCurrency(valoresFormasPreview[i] ?? 0)}
+                              </span>
+                            </div>
+                          ))
+                      ) : (
+                        <span>—</span>
+                      )}
+                      {!multiFormas &&
+                        formaPagamentoEstrutural === 'PARCELADO' &&
+                        qtdParcelasNum >= 2 && (
+                          <div className="text-xs text-muted-foreground font-normal">
+                            {qtdParcelasNum}x de {formatCurrency(valorPorParcela)}
+                          </div>
+                        )}
+                    </div>
                   </div>
                 </div>
                 <ResumoCardSubmitButton
