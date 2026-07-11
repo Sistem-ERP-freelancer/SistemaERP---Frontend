@@ -202,91 +202,10 @@ const ContasAPagarPedidoDetalhes = () => {
               </div>
               <div className="font-medium">{pedido!.numero_pedido}</div>
             </div>
-            {formasParaExibir.length > 0 ? (
-              <div className="space-y-2 md:col-span-2">
-                <div className="text-sm text-muted-foreground">
-                  Formas de Pagamento ({formasParaExibir.length})
-                </div>
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Forma</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {formasParaExibir.map((fp, idx) => (
-                        <TableRow key={`${fp.forma_pagamento}-${idx}`}>
-                          <TableCell>
-                            {formatarFormaPagamento(fp.forma_pagamento)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(Number(fp.valor || 0))}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow>
-                        <TableCell className="font-semibold">Total</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(
-                            formasParaExibir.reduce(
-                              (acc, fp) => acc + Number(fp.valor || 0),
-                              0,
-                            ),
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            ) : (
+            {contasDoPedido.length <= 1 && formasParaExibir.length === 0 && (
               <div className="space-y-1">
                 <div className="text-sm text-muted-foreground">Forma de Pagamento</div>
                 <div className="font-medium">{formaDisplay}</div>
-              </div>
-            )}
-            {contasDoPedido.length > 1 && (
-              <div className="space-y-2 md:col-span-2">
-                <div className="text-sm text-muted-foreground">
-                  Contas geradas ({contasDoPedido.length})
-                </div>
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Conta</TableHead>
-                        <TableHead>Forma</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {contasDoPedido.map((c) => (
-                        <TableRow key={c.id}>
-                          <TableCell>{c.numero_conta || c.id}</TableCell>
-                          <TableCell>
-                            {c.forma_pagamento
-                              ? formatarFormaPagamento(c.forma_pagamento)
-                              : '—'}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(
-                              Number(
-                                (c as any).valor_total ??
-                                  c.valor_original ??
-                                  c.valor_restante ??
-                                  0,
-                              ),
-                            )}
-                          </TableCell>
-                          <TableCell>{c.status || '—'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
               </div>
             )}
             <div className="space-y-1">
@@ -294,6 +213,112 @@ const ContasAPagarPedidoDetalhes = () => {
               <div className="font-medium">{resumoFinal!.status}</div>
             </div>
           </div>
+
+          {contasDoPedido.length > 1 ? (
+            <div className="space-y-2 pt-2 border-t">
+              <div className="text-sm font-medium text-muted-foreground">
+                Formas de pagamento ({contasDoPedido.length})
+              </div>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Conta</TableHead>
+                      <TableHead>Forma</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contasDoPedido.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="whitespace-nowrap">
+                          {c.numero_conta || c.id}
+                        </TableCell>
+                        <TableCell>
+                          {c.forma_pagamento
+                            ? formatarFormaPagamento(c.forma_pagamento)
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">
+                          {formatCurrency(
+                            Number(
+                              (c as any).valor_total ??
+                                c.valor_original ??
+                                c.valor_restante ??
+                                0,
+                            ),
+                          )}
+                        </TableCell>
+                        <TableCell>{c.status || '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell colSpan={2} className="font-semibold">
+                        Total
+                      </TableCell>
+                      <TableCell className="text-right font-semibold whitespace-nowrap">
+                        {formatCurrency(
+                          contasDoPedido.reduce(
+                            (acc, c) =>
+                              acc +
+                              Number(
+                                (c as any).valor_total ??
+                                  c.valor_original ??
+                                  c.valor_restante ??
+                                  0,
+                              ),
+                            0,
+                          ),
+                        )}
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : formasParaExibir.length > 0 ? (
+            <div className="space-y-2 pt-2 border-t">
+              <div className="text-sm font-medium text-muted-foreground">
+                Formas de pagamento ({formasParaExibir.length})
+              </div>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Forma</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {formasParaExibir.map((fp, idx) => (
+                      <TableRow key={`${fp.forma_pagamento}-${idx}`}>
+                        <TableCell>
+                          {formatarFormaPagamento(fp.forma_pagamento)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">
+                          {formatCurrency(Number(fp.valor || 0))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell className="font-semibold">Total</TableCell>
+                      <TableCell className="text-right font-semibold whitespace-nowrap">
+                        {formatCurrency(
+                          formasParaExibir.reduce(
+                            (acc, fp) => acc + Number(fp.valor || 0),
+                            0,
+                          ),
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
             <div className="space-y-1">
               <div className="text-sm text-muted-foreground">Valor Total</div>
