@@ -110,6 +110,12 @@ export interface CreatePedidoDto {
   data_vencimento_base?: string; // Data base para primeiro vencimento (parcelas mensais)
   forma_pagamento?: FormaPagamento; // Opcional - forma real será informada no pagamento
   forma_pagamento_estrutural?: FormaPagamentoEstrutural; // AVISTA, PARCELADO, BOLETO_DESCONTADO
+  /** Plano com uma ou mais formas; gera uma conta por forma. Valor omitido = divisão igual. */
+  formas_pagamento?: Array<{
+    forma_pagamento: FormaPagamento;
+    valor?: number;
+    data_vencimento?: string;
+  }>;
   quantidade_parcelas?: number; // 1 a 12 para PARCELADO; BOLETO_DESCONTADO não usa parcelas
   valor_adiantado?: number; // Obrigatório se BOLETO_DESCONTADO (0 < valor < valor_total)
   taxa_desconto?: number; // Opcional (antecipação bancária)

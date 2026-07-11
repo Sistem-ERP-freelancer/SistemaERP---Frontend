@@ -65,6 +65,29 @@ function parseDataLocal(value: string): Date {
   return new Date(value);
 }
 
+type FormaPagamentoOpcao =
+  | 'PIX'
+  | 'BOLETO'
+  | 'BOLETO_DESCONTADO'
+  | 'CHEQUE'
+  | 'DINHEIRO'
+  | 'CARTAO_DEBITO';
+
+type FormaPagamentoLinha = {
+  key: string;
+  forma: FormaPagamentoOpcao | '';
+  /** Vazio = sistema divide igualmente */
+  valor: string;
+};
+
+function novaLinhaForma(forma: FormaPagamentoOpcao | '' = ''): FormaPagamentoLinha {
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    forma,
+    valor: '',
+  };
+}
+
 /** Evita reset do form quando order vira undefined ao fechar após salvar (edição). */
 function usePrevious<T>(value: T): T | undefined {
   const ref = useRef<T>();
@@ -154,8 +177,12 @@ export function OrderForm({
   const [formaPagamentoEstrutural, setFormaPagamentoEstrutural] = useState<FormaPagamentoEstrutural | undefined>(undefined);
   /** Forma de pagamento exibida no dropdown: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */
   const [formaPagamentoSelecionada, setFormaPagamentoSelecionada] = useState<
-    'PIX' | 'BOLETO' | 'BOLETO_DESCONTADO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO' | undefined
+    FormaPagamentoOpcao | undefined
   >(undefined);
+  /** Uma ou mais formas; valores vazios = divisão igual do total */
+  const [formasPagamentoLinhas, setFormasPagamentoLinhas] = useState<FormaPagamentoLinha[]>([
+    novaLinhaForma(),
+  ]);
   const [quantidadeParcelas, setQuantidadeParcelas] = useState<number | ''>('');
   const [queroParcelarDinheiroPix, setQueroParcelarDinheiroPix] = useState(false);
   const [condicaoPagamento, setCondicaoPagamento] = useState<string>('');
@@ -288,6 +315,7 @@ export function OrderForm({
           ? 'PIX' // Fallback: Transferência mapeia para PIX
           : undefined;
     setFormaPagamentoSelecionada(formaParaSelect);
+    setFormasPagamentoLinhas([novaLinhaForma(formaParaSelect || '')]);
 
     // Forma estrutural: à vista para condições não parceladas
     if (!cond.parcelado || (cond.forma_pagamento !== 'CARTAO_CREDITO' && cond.forma_pagamento !== 'DINHEIRO' && cond.forma_pagamento !== 'PIX')) {
@@ -358,6 +386,7 @@ export function OrderForm({
     setFormaPagamento(undefined);
     setFormaPagamentoEstrutural(undefined);
     setFormaPagamentoSelecionada(undefined);
+    setFormasPagamentoLinhas([novaLinhaForma()]);
     setQuantidadeParcelas('');
     setQueroParcelarDinheiroPix(false);
     setCondicaoPagamento('');
@@ -411,6 +440,9 @@ export function OrderForm({
             : (order.forma_pagamento as 'PIX' | 'BOLETO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO' | undefined);
         if (formaSelecionada && ['PIX', 'BOLETO', 'BOLETO_DESCONTADO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'].includes(formaSelecionada)) {
           setFormaPagamentoSelecionada(formaSelecionada);
+          setFormasPagamentoLinhas([novaLinhaForma(formaSelecionada)]);
+        } else {
+          setFormasPagamentoLinhas([novaLinhaForma()]);
         }
         setFormaPagamentoEstrutural(formaEstruturalOrder === 'BOLETO_DESCONTADO' ? 'BOLETO_DESCONTADO' : formaEstruturalOrder || 'AVISTA');
         // Guia: derivar de condicao_pagamento quando quantidade_parcelas não vier no GET (nunca abrir sempre "à vista")
@@ -493,6 +525,7 @@ export function OrderForm({
       const formasUi = ['PIX', 'BOLETO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'] as const;
       if (formasUi.includes(fp as (typeof formasUi)[number])) {
         setFormaPagamentoSelecionada(fp as (typeof formasUi)[number]);
+        setFormasPagamentoLinhas([novaLinhaForma(fp as FormaPagamentoOpcao)]);
       }
       setFormaPagamentoEstrutural('AVISTA');
     }
@@ -658,6 +691,86 @@ export function OrderForm({
       ? valorTotalPedido / qtdParcelasNum
       : 0;
 
+  const multiFormas = formasPagamentoLinhas.length > 1;
+
+  /** Preview dos valores por linha (manual ou divisão igual) */
+  const valoresFormasPreview = useMemo(() => {
+    const total = Number(valorTotalPedido.toFixed(2));
+    const n = formasPagamentoLinhas.length;
+    if (n === 0) return [] as number[];
+    const parsed = formasPagamentoLinhas.map((l) => {
+      const raw = l.valor.trim().replace(',', '.');
+      if (!raw) return null;
+      const v = Number(raw);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    });
+    const semValor = parsed.filter((v) => v == null).length;
+    if (semValor === n) {
+      const base = Math.floor((total * 100) / n) / 100;
+      const vals = Array.from({ length: n }, () => base);
+      const somaBase = Number((base * n).toFixed(2));
+      vals[n - 1] = Number((total - (somaBase - base)).toFixed(2));
+      return vals;
+    }
+    if (semValor === 0) {
+      return parsed.map((v) => Number((v as number).toFixed(2)));
+    }
+    const somaInf = Number(
+      parsed.reduce((a, v) => a + (v ?? 0), 0).toFixed(2),
+    );
+    const restante = Math.max(0, Number((total - somaInf).toFixed(2)));
+    const base =
+      semValor > 0 ? Math.floor((restante * 100) / semValor) / 100 : 0;
+    let idxVazio = 0;
+    return parsed.map((v) => {
+      if (v != null) return Number(v.toFixed(2));
+      idxVazio += 1;
+      if (idxVazio === semValor) {
+        return Number((restante - base * (semValor - 1)).toFixed(2));
+      }
+      return base;
+    });
+  }, [formasPagamentoLinhas, valorTotalPedido]);
+
+  const somaFormasPreview = useMemo(
+    () =>
+      Number(
+        valoresFormasPreview.reduce((a, v) => a + v, 0).toFixed(2),
+      ),
+    [valoresFormasPreview],
+  );
+
+  const aplicarFormaNaLinha = (index: number, forma: FormaPagamentoOpcao) => {
+    const formaEfetiva: FormaPagamentoOpcao =
+      multiFormas && forma === 'BOLETO_DESCONTADO' ? 'BOLETO' : forma;
+
+    setFormasPagamentoLinhas((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], forma: formaEfetiva };
+      return next;
+    });
+
+    if (index === 0) {
+      setFormaPagamentoSelecionada(formaEfetiva);
+      if (formaEfetiva === 'BOLETO_DESCONTADO') {
+        setFormaPagamentoEstrutural('BOLETO_DESCONTADO');
+        setFormaPagamento('BOLETO');
+        setQuantidadeParcelas('');
+        setQueroParcelarDinheiroPix(false);
+        setValorAdiantado('');
+      } else {
+        setFormaPagamentoEstrutural('AVISTA');
+        setFormaPagamento(formaEfetiva);
+        setQuantidadeParcelas(1);
+        setQueroParcelarDinheiroPix(false);
+        setValorAdiantado('');
+        setTaxaDesconto('');
+        setDataAntecipacao('');
+        setInstituicaoFinanceira('');
+      }
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -675,9 +788,26 @@ export function OrderForm({
     }
 
     // Validação: forma de pagamento é obrigatória
-    if (!formaPagamentoSelecionada) {
-      toast.error('Selecione a Forma de Pagamento.');
+    const linhasValidas = formasPagamentoLinhas.filter((l) => l.forma);
+    if (linhasValidas.length === 0) {
+      toast.error('Selecione ao menos uma Forma de Pagamento.');
       return;
+    }
+    if (linhasValidas.some((l) => !l.forma)) {
+      toast.error('Preencha a forma de pagamento em todas as linhas.');
+      return;
+    }
+
+    if (multiFormas) {
+      const soma = somaFormasPreview;
+      const total = Number(valorTotalPedido.toFixed(2));
+      const todosManuais = formasPagamentoLinhas.every((l) => l.valor.trim() !== '');
+      if (todosManuais && Math.abs(soma - total) > 0.01) {
+        toast.error(
+          `A soma das formas (R$ ${soma.toFixed(2)}) deve ser igual ao total do pedido (R$ ${total.toFixed(2)}).`,
+        );
+        return;
+      }
     }
 
     // Validação: data de vencimento obrigatória (exceto BOLETO_DESCONTADO, que usa data do pedido)
@@ -766,17 +896,40 @@ export function OrderForm({
     // Determinar forma_pagamento e forma_pagamento_estrutural a partir da seleção (Pix, Boleto, etc.)
     let formaEstrutural: FormaPagamentoEstrutural | undefined = formaPagamentoEstrutural;
     let formaPagamentoPayload: FormaPagamento | undefined = formaPagamento;
-    if (formaPagamentoSelecionada === 'BOLETO_DESCONTADO') {
+    const primeiraForma = (linhasValidas[0]?.forma || formaPagamentoSelecionada) as
+      | FormaPagamentoOpcao
+      | undefined;
+
+    if (multiFormas) {
+      formaEstrutural = 'AVISTA';
+      formaPagamentoPayload =
+        primeiraForma === 'BOLETO_DESCONTADO' ? 'BOLETO' : (primeiraForma as FormaPagamento);
+    } else if (primeiraForma === 'BOLETO_DESCONTADO') {
       formaEstrutural = 'BOLETO_DESCONTADO';
       formaPagamentoPayload = 'BOLETO';
-    } else if (formaPagamentoSelecionada) {
-      formaEstrutural = 'AVISTA';
-      formaPagamentoPayload = formaPagamentoSelecionada;
+    } else if (primeiraForma) {
+      formaEstrutural = formaEstrutural === 'PARCELADO' ? 'PARCELADO' : 'AVISTA';
+      formaPagamentoPayload = primeiraForma as FormaPagamento;
     }
     if (!formaEstrutural) {
       if (qtdParcelasNum === 1) formaEstrutural = 'AVISTA';
       else if (qtdParcelasNum >= 2) formaEstrutural = 'PARCELADO';
     }
+
+    const dataVencBase =
+      dataVencimento ||
+      (formaEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) ||
+      undefined;
+
+    const formasPagamentoPayload = linhasValidas.map((l, i) => {
+      const formaApi: FormaPagamento =
+        l.forma === 'BOLETO_DESCONTADO' ? 'BOLETO' : (l.forma as FormaPagamento);
+      return {
+        forma_pagamento: formaApi,
+        valor: valoresFormasPreview[i] ?? 0,
+        ...(dataVencBase ? { data_vencimento: dataVencBase } : {}),
+      };
+    });
 
     const pedidoData: CreatePedidoDto = {
       tipo,
@@ -787,21 +940,48 @@ export function OrderForm({
       roca_id: rocaId,
       forma_pagamento: formaPagamentoPayload ?? formaPagamento,
       forma_pagamento_estrutural: formaEstrutural,
-      data_vencimento: dataVencimento || (formaPagamentoEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) || undefined,
-      data_vencimento_base: dataVencimento || (formaPagamentoEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) || undefined,
+      formas_pagamento: formasPagamentoPayload,
+      data_vencimento: dataVencBase,
+      data_vencimento_base: dataVencBase,
       condicao_pagamento:
         formaEstrutural === 'BOLETO_DESCONTADO'
           ? 'Boleto descontado'
-          : (quantidadeParcelasPayload && quantidadeParcelasPayload >= 2
-              ? (condicaoPagamento || `${quantidadeParcelasPayload}x`)
-              : (condicaoPagamento || 'À vista')),
-      ...(quantidadeParcelasPayload !== undefined ? { quantidade_parcelas: quantidadeParcelasPayload } : {}),
+          : multiFormas
+            ? `Múltiplas formas (${linhasValidas.length})`
+            : (quantidadeParcelasPayload && quantidadeParcelasPayload >= 2
+                ? (condicaoPagamento || `${quantidadeParcelasPayload}x`)
+                : (condicaoPagamento || 'À vista')),
+      ...(quantidadeParcelasPayload !== undefined && !multiFormas
+        ? { quantidade_parcelas: quantidadeParcelasPayload }
+        : multiFormas
+          ? { quantidade_parcelas: 1 }
+          : {}),
       // Boleto descontado: valor_adiantado obrigatório; sem parcelas
-      valor_adiantado: formaEstrutural === 'BOLETO_DESCONTADO' && (valorAdiantado !== '' && valorAdiantado != null) ? Number(valorAdiantado) : undefined,
-      taxa_desconto: formaEstrutural === 'BOLETO_DESCONTADO' && taxaDesconto ? Number(taxaDesconto) : undefined,
-      taxa_desconto_percentual: formaEstrutural === 'BOLETO_DESCONTADO' ? taxaDescontoPercentual : undefined,
-      data_antecipacao: formaEstrutural === 'BOLETO_DESCONTADO' && dataAntecipacao ? dataAntecipacao : undefined,
-      instituicao_financeira: formaEstrutural === 'BOLETO_DESCONTADO' && instituicaoFinanceira ? instituicaoFinanceira : undefined,
+      valor_adiantado:
+        !multiFormas &&
+        formaEstrutural === 'BOLETO_DESCONTADO' &&
+        valorAdiantado !== '' &&
+        valorAdiantado != null
+          ? Number(valorAdiantado)
+          : undefined,
+      taxa_desconto:
+        !multiFormas && formaEstrutural === 'BOLETO_DESCONTADO' && taxaDesconto
+          ? Number(taxaDesconto)
+          : undefined,
+      taxa_desconto_percentual:
+        !multiFormas && formaEstrutural === 'BOLETO_DESCONTADO'
+          ? taxaDescontoPercentual
+          : undefined,
+      data_antecipacao:
+        !multiFormas && formaEstrutural === 'BOLETO_DESCONTADO' && dataAntecipacao
+          ? dataAntecipacao
+          : undefined,
+      instituicao_financeira:
+        !multiFormas &&
+        formaEstrutural === 'BOLETO_DESCONTADO' &&
+        instituicaoFinanceira
+          ? instituicaoFinanceira
+          : undefined,
       prazo_entrega_dias: prazoEntregaDias,
       frete: typeof frete === 'number' ? frete : (frete ? Number(frete) : undefined),
       outras_taxas: typeof outrasTaxas === 'number' ? outrasTaxas : (outrasTaxas ? Number(outrasTaxas) : undefined),
@@ -1257,10 +1437,10 @@ export function OrderForm({
             description="Forma de pagamento, transportadora, frete e prazos."
           >
             <div className="space-y-6">
-              {/* Forma de Pagamento: Pix, Boleto, Boleto Descontado, Cheque, Dinheiro, Cartão de Débito */}
-              <div className="space-y-2">
+              {/* Formas de pagamento (1 ou mais — split do total) */}
+              <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <Label>Forma de Pagamento *</Label>
+                  <Label>Formas de Pagamento *</Label>
                   {tipo === 'VENDA' && clienteId && (
                     <Button
                       type="button"
@@ -1275,47 +1455,145 @@ export function OrderForm({
                     </Button>
                   )}
                 </div>
-                <Select
-                  value={formaPagamentoSelecionada || ''}
-                  onValueChange={(value) => {
-                    const forma = value as 'PIX' | 'BOLETO' | 'BOLETO_DESCONTADO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO';
-                    setFormaPagamentoSelecionada(forma);
-                    if (forma === 'BOLETO_DESCONTADO') {
-                      setFormaPagamentoEstrutural('BOLETO_DESCONTADO');
-                      setFormaPagamento('BOLETO');
-                      setQuantidadeParcelas('');
-                      setQueroParcelarDinheiroPix(false);
-                      setValorAdiantado('');
-                    } else {
-                      setFormaPagamentoEstrutural('AVISTA');
-                      setFormaPagamento(forma);
-                      setQuantidadeParcelas(1);
-                      setQueroParcelarDinheiroPix(false);
-                      setValorAdiantado('');
-                      setTaxaDesconto('');
-                      setDataAntecipacao('');
-                      setInstituicaoFinanceira('');
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a forma de pagamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PIX">Pix</SelectItem>
-                    <SelectItem value="BOLETO">Boleto</SelectItem>
-                    {tipo === 'VENDA' && (
-                      <SelectItem value="BOLETO_DESCONTADO">Boleto Descontado</SelectItem>
-                    )}
-                    <SelectItem value="CHEQUE">Cheque</SelectItem>
-                    <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
-                    <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
-                  </SelectContent>
-                </Select>
+
+                <div className="space-y-3">
+                  {formasPagamentoLinhas.map((linha, index) => (
+                    <div
+                      key={linha.key}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-2 items-end"
+                    >
+                      <div className="space-y-1.5">
+                        {index === 0 && (
+                          <Label className="text-xs text-muted-foreground">Forma</Label>
+                        )}
+                        <Select
+                          value={linha.forma || ''}
+                          onValueChange={(value) =>
+                            aplicarFormaNaLinha(index, value as FormaPagamentoOpcao)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a forma" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="PIX">Pix</SelectItem>
+                            <SelectItem value="BOLETO">Boleto</SelectItem>
+                            {tipo === 'VENDA' && !multiFormas && (
+                              <SelectItem value="BOLETO_DESCONTADO">
+                                Boleto Descontado
+                              </SelectItem>
+                            )}
+                            <SelectItem value="CHEQUE">Cheque</SelectItem>
+                            <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
+                            <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        {index === 0 && (
+                          <Label className="text-xs text-muted-foreground">
+                            Valor (opcional)
+                          </Label>
+                        )}
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={
+                            valoresFormasPreview[index] != null
+                              ? valoresFormasPreview[index].toFixed(2)
+                              : 'Auto'
+                          }
+                          value={linha.valor}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setFormasPagamentoLinhas((prev) => {
+                              const next = [...prev];
+                              next[index] = { ...next[index], valor: v };
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        disabled={formasPagamentoLinhas.length <= 1}
+                        onClick={() => {
+                          setFormasPagamentoLinhas((prev) => {
+                            const next = prev.filter((_, i) => i !== index);
+                            if (index === 0 && next[0]?.forma) {
+                              const f = next[0].forma as FormaPagamentoOpcao;
+                              setFormaPagamentoSelecionada(f);
+                              if (f === 'BOLETO_DESCONTADO') {
+                                setFormaPagamentoEstrutural('BOLETO_DESCONTADO');
+                                setFormaPagamento('BOLETO');
+                              } else {
+                                setFormaPagamentoEstrutural('AVISTA');
+                                setFormaPagamento(f);
+                              }
+                            }
+                            return next.length ? next : [novaLinhaForma()];
+                          });
+                        }}
+                        title="Remover forma"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => {
+                      setFormasPagamentoLinhas((prev) => {
+                        const next = [...prev];
+                        // Multi: boleto descontado vira boleto na 1ª linha
+                        if (next[0]?.forma === 'BOLETO_DESCONTADO') {
+                          next[0] = { ...next[0], forma: 'BOLETO' };
+                          setFormaPagamentoSelecionada('BOLETO');
+                          setFormaPagamento('BOLETO');
+                          setFormaPagamentoEstrutural('AVISTA');
+                          setValorAdiantado('');
+                        }
+                        next.push(novaLinhaForma());
+                        return next;
+                      });
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar forma de pagamento
+                  </Button>
+                  <div className="text-xs text-muted-foreground text-right">
+                    <div>
+                      Total pedido:{' '}
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(valorTotalPedido)}
+                      </span>
+                    </div>
+                    <div>
+                      Soma formas:{' '}
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(somaFormasPreview)}
+                      </span>
+                      {formasPagamentoLinhas.every((l) => !l.valor.trim()) &&
+                        formasPagamentoLinhas.length > 1 && (
+                          <span> (divisão igual)</span>
+                        )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Campos condicionais baseados na forma estrutural */}
-              {formaPagamentoEstrutural === 'AVISTA' && (
+              {/* Campos condicionais baseados na forma estrutural (somente 1 forma) */}
+              {!multiFormas && formaPagamentoEstrutural === 'AVISTA' && (
                 <div className="space-y-2">
                   <Label>Data de Vencimento *</Label>
                   <Input
@@ -1328,7 +1606,23 @@ export function OrderForm({
                 </div>
               )}
 
-              {formaPagamentoEstrutural === 'PARCELADO' && (
+              {multiFormas && (
+                <div className="space-y-2">
+                  <Label>Data de Vencimento *</Label>
+                  <Input
+                    type="date"
+                    value={dataVencimento}
+                    onChange={(e) => setDataVencimento(e.target.value)}
+                    min={minDataVencimento}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Aplicada a todas as contas geradas pelas formas de pagamento.
+                  </p>
+                </div>
+              )}
+
+              {!multiFormas && formaPagamentoEstrutural === 'PARCELADO' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1379,7 +1673,7 @@ export function OrderForm({
                 </div>
               )}
 
-              {formaPagamentoEstrutural === 'BOLETO_DESCONTADO' && (
+              {!multiFormas && formaPagamentoEstrutural === 'BOLETO_DESCONTADO' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1573,7 +1867,12 @@ export function OrderForm({
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Pagamento</span>
                     <span className="max-w-[55%] truncate text-right font-medium">
-                      {formaPagamentoSelecionada || '—'}
+                      {multiFormas
+                        ? formasPagamentoLinhas
+                            .filter((l) => l.forma)
+                            .map((l) => l.forma)
+                            .join(' + ')
+                        : formaPagamentoSelecionada || '—'}
                     </span>
                   </div>
                 </div>
