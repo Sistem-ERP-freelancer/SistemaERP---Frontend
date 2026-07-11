@@ -14,14 +14,18 @@ export interface ContaFinanceira {
   valor_original: number;
   valor_pago: number;
   valor_restante: number;
+  /** Modelo por saldo — preferir sobre valor_original quando presente. */
+  valor_total?: number;
   /** Modelo por saldo: pode vir preenchido quando `valor_restante` estiver 0 desatualizado. */
   valor_em_aberto?: number;
+  numero_parcela?: number;
+  total_parcelas?: number;
   data_emissao?: string | null;
   data_vencimento?: string | null;
   data_prevista?: string | null;
   previsao?: boolean;
   data_pagamento?: string;
-  status: 'PENDENTE' | 'PAGO_PARCIAL' | 'PAGO_TOTAL' | 'VENCIDO' | 'CANCELADO' | 'PREVISAO';
+  status: 'PENDENTE' | 'PAGO_PARCIAL' | 'PAGO_TOTAL' | 'VENCIDO' | 'CANCELADO' | 'PREVISAO' | 'ABERTO' | 'PARCIAL' | 'QUITADO';
   forma_pagamento?: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' | 'BOLETO' | 'TRANSFERENCIA' | 'CHEQUE';
   observacoes?: string;
   created_at?: string;

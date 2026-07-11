@@ -95,12 +95,60 @@ export function contaEstaPaga(c: ContaFinanceira): boolean {
   );
 }
 
+export function valorPrincipalConta(c: ContaFinanceira): number {
+  const total = Number(
+    (c as { valor_total?: number | string | null }).valor_total ??
+      c.valor_original ??
+      0,
+  );
+  if (Number.isFinite(total) && total > 0) return total;
+  const restante = Number(
+    c.valor_restante ??
+      (c as { valor_em_aberto?: number | string | null }).valor_em_aberto ??
+      0,
+  );
+  const pago = Number(c.valor_pago ?? 0);
+  const derivado = restante + pago;
+  return Number.isFinite(derivado) && derivado > 0 ? derivado : 0;
+}
+
+export function valorPagoConta(c: ContaFinanceira): number {
+  if (c.valor_pago != null && String(c.valor_pago).trim() !== '') {
+    const pago = Number(c.valor_pago);
+    if (Number.isFinite(pago) && pago >= 0) return pago;
+  }
+  const total = valorPrincipalConta(c);
+  const aberto = saldoAbertoConta(c);
+  return Math.max(0, Number((total - aberto).toFixed(2)));
+}
+
 export function saldoAbertoConta(c: ContaFinanceira): number {
   const st = String(c.status ?? '').toUpperCase();
   if (st === 'CANCELADO' || st === 'QUITADO' || st === 'PAGO_TOTAL') return 0;
-  const r = c.valor_restante != null ? Number(c.valor_restante) : 0;
-  const em = c.valor_em_aberto != null ? Number(c.valor_em_aberto) : 0;
-  return Math.max(0, r || em);
+
+  const restanteRaw = c.valor_restante;
+  const emAbertoRaw = (c as { valor_em_aberto?: number | string | null })
+    .valor_em_aberto;
+
+  if (restanteRaw != null && String(restanteRaw).trim() !== '') {
+    const r = Number(restanteRaw);
+    if (Number.isFinite(r)) return Math.max(0, r);
+  }
+  if (emAbertoRaw != null && String(emAbertoRaw).trim() !== '') {
+    const em = Number(emAbertoRaw);
+    if (Number.isFinite(em)) return Math.max(0, em);
+  }
+
+  const total = Number(
+    (c as { valor_total?: number | string | null }).valor_total ??
+      c.valor_original ??
+      0,
+  );
+  const pago = Number(c.valor_pago ?? 0);
+  if (Number.isFinite(total) && total > 0) {
+    return Math.max(0, Number((total - (Number.isFinite(pago) ? pago : 0)).toFixed(2)));
+  }
+  return 0;
 }
 
 function calcularResumoCardsPorTipo(

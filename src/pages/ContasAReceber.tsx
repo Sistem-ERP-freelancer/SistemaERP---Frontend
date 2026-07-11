@@ -64,6 +64,8 @@ import {
   listarContasTodasAsPaginas,
   saldoAbertoConta,
   toYMD,
+  valorPagoConta,
+  valorPrincipalConta,
 } from "@/lib/contas-financeiras-listagem";
 import { cn, formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils";
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
@@ -1366,7 +1368,11 @@ const ContasAReceber = () => {
       const valorFormatado = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL'
-      }).format(conta.valor_original || 0);
+      }).format(valorPrincipalConta(conta));
+      const valorPagoFormatado = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(valorPagoConta(conta));
 
       const ehPrevisao = contaEhPrevisao(conta);
 
@@ -1380,9 +1386,12 @@ const ContasAReceber = () => {
 
       const statusMap: Record<string, string> = {
         "PENDENTE": "Pendente",
+        "ABERTO": "Pendente",
         "PREVISAO": "Previsão",
         "PAGO_PARCIAL": "Pago Parcial",
+        "PARCIAL": "Pago Parcial",
         "PAGO_TOTAL": "Pago Total",
+        "QUITADO": "Pago Total",
         "VENCIDO": "Vencido",
         "CANCELADO": "Cancelado",
       };
@@ -1397,7 +1406,12 @@ const ContasAReceber = () => {
       let vencimentoStatus: { texto: string; cor: string; bgColor: string };
       
       // Não exibir vencimento se for previsão, paga ou cancelada
-      if (ehPrevisao || conta.status === "PAGO_TOTAL" || conta.status === "CANCELADO") {
+      if (
+        ehPrevisao ||
+        conta.status === "PAGO_TOTAL" ||
+        conta.status === "QUITADO" ||
+        conta.status === "CANCELADO"
+      ) {
         vencimentoStatus = { texto: "", cor: "", bgColor: "" };
       } else if (conta.status_vencimento && conta.proximidade_vencimento) {
         // Mapear proximidade_vencimento do backend para cores
@@ -1440,6 +1454,7 @@ const ContasAReceber = () => {
         descricao: formatarDescricao(conta),
         categoria: categoria,
         valor: valorFormatado,
+        valorPago: valorPagoFormatado,
         data: dataFormatada,
         status: statusFormatado,
         statusOriginal: conta.status,
@@ -1515,7 +1530,12 @@ const ContasAReceber = () => {
     const gruposMap = new Map<string, ContaFinanceira[]>();
 
     contasExibir.forEach((conta) => {
-      const key = conta.pedido_id != null ? `pedido-${conta.pedido_id}` : `avulso-${conta.id}`;
+      const pedidoIdNum =
+        conta.pedido_id != null && Number(conta.pedido_id) > 0
+          ? Number(conta.pedido_id)
+          : null;
+      const key =
+        pedidoIdNum != null ? `pedido-${pedidoIdNum}` : `avulso-${conta.id}`;
       const list = gruposMap.get(key) || [];
       list.push(conta);
       gruposMap.set(key, list);
@@ -1526,9 +1546,14 @@ const ContasAReceber = () => {
       const primeira = parcelas[0];
       const cliente = clientes.find((c) => c.id === primeira?.cliente_id);
       const total = Math.max(...parcelas.map((p) => p.total_parcelas || 1), parcelas.length);
-      const isPaga = (p: ContaFinanceira) =>
-        p.status === "PAGO_TOTAL" ||
-        (p.valor_restante != null && Number(p.valor_restante) <= 0);
+      const isPaga = (p: ContaFinanceira) => {
+        const st = String(p.status ?? "").toUpperCase();
+        if (st === "PAGO_TOTAL" || st === "QUITADO") return true;
+        if (st === "CANCELADO") return false;
+        const pago = valorPagoConta(p);
+        const aberto = saldoAbertoConta(p);
+        return pago > 0.009 && aberto <= 0.009;
+      };
       const pagas = parcelas.filter(isPaga).length;
       const restantes = parcelas.filter(
         (p) => p.status !== "CANCELADO" && !isPaga(p)
@@ -1547,12 +1572,18 @@ const ContasAReceber = () => {
       let statusConsolidado = "Pendente";
       const ehPrevisao = parcelas.some((p) => contaEhPrevisao(p));
       if (ehPrevisao) statusConsolidado = "Previsão";
-      else if (pagas === total) statusConsolidado = "Pago Total";
-      else if (pagas > 0) statusConsolidado = "Pago Parcial";
+      else if (restantes === 0 && pagas > 0) statusConsolidado = "Pago Total";
+      else if (pagas > 0 || parcelas.some((p) => valorPagoConta(p) > 0.009))
+        statusConsolidado = "Pago Parcial";
+
+      const pedidoIdNum =
+        primeira?.pedido_id != null && Number(primeira.pedido_id) > 0
+          ? Number(primeira.pedido_id)
+          : undefined;
 
       result.push({
         key,
-        pedido_id: primeira?.pedido_id,
+        pedido_id: pedidoIdNum,
         descricaoBase,
         parcelas: [...parcelas].sort((a, b) => (a.numero_parcela ?? 1) - (b.numero_parcela ?? 1)),
         total_parcelas: total,
@@ -1560,7 +1591,7 @@ const ContasAReceber = () => {
         parcelas_restantes: restantes,
         valor_aberto: valorAberto,
         cliente_nome: cliente?.nome || "—",
-        categoria: primeira?.pedido_id ? "Vendas" : "Avulso",
+        categoria: pedidoIdNum != null ? "Vendas" : "Avulso",
         primeira_vencimento: primeiraVenc,
         statusConsolidado,
         ehPrevisao,
@@ -1693,10 +1724,19 @@ const ContasAReceber = () => {
             ? "QUITADO"
             : "ABERTO",
       );
-      const totalGrupo = g.parcelas.reduce((s, p) => s + (p.valor_original ?? 0), 0);
-      const valorPagoGrupo = Math.max(0, totalGrupo - g.valor_aberto);
+      const totalGrupo = g.parcelas.reduce(
+        (s, p) => s + valorPrincipalConta(p),
+        0,
+      );
+      const valorPagoGrupo = g.parcelas.reduce(
+        (s, p) => s + valorPagoConta(p),
+        0,
+      );
       const primeiraParcela = g.parcelas[0];
-      const idExibicao = primeiraParcela?.numero_conta || g.descricaoBase?.split(" ")[0] || g.key;
+      const idExibicao =
+        primeiraParcela?.numero_conta ||
+        g.descricaoBase?.split(" ")[0] ||
+        g.key;
       const rocaNomes = g.parcelas
         .map((p) => (p as { roca_nome?: string | null }).roca_nome)
         .filter((n): n is string => typeof n === "string" && n.trim().length > 0);
@@ -1750,7 +1790,11 @@ const ContasAReceber = () => {
         const valorFormatado = new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL'
-        }).format(conta.valor_original || 0);
+        }).format(valorPrincipalConta(conta));
+        const valorPagoFormatado = new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL'
+        }).format(valorPagoConta(conta));
 
         const dataFormatada = conta.data_vencimento
           ? formatDate(conta.data_vencimento)
@@ -1781,6 +1825,7 @@ const ContasAReceber = () => {
           descricao: formatarDescricao(conta),
           categoria: categoria,
           valor: valorFormatado,
+          valorPago: valorPagoFormatado,
           data: ehPrevisao
             ? conta.data_prevista
               ? formatDate(conta.data_prevista)

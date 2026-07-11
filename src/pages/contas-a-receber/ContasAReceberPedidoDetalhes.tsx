@@ -174,10 +174,60 @@ const ContasAReceberPedidoDetalhes = () => {
         ? `${formatarFormaPagamento(formaPagamentoPedido)}${formaEstrutural === 'PARCELADO' ? ' (Parcelado)' : ''}`
         : (FORMA_ESTRUTURAL_LABELS[formaEstrutural] || formaEstrutural);
 
-  const valorTotal = contaDetalhe?.valor_total_pedido ?? resumoFinal!.valor_total;
-  const valorPago = contaDetalhe?.valor_pago ?? resumoFinal!.valor_pago;
-  const valorEmAberto = contaDetalhe?.valor_em_aberto ?? resumoFinal!.valor_em_aberto;
-  const statusExibicao = contaDetalhe?.status ?? resumoFinal!.status;
+  const totaisContas =
+    contasDoPedido.length > 0
+      ? {
+          total: contasDoPedido.reduce(
+            (s, c) =>
+              s +
+              Number(
+                (c as any).valor_total ??
+                  c.valor_original ??
+                  c.valor_restante ??
+                  0,
+              ),
+            0,
+          ),
+          pago: contasDoPedido.reduce(
+            (s, c) => s + Number(c.valor_pago ?? 0),
+            0,
+          ),
+          aberto: contasDoPedido.reduce((s, c) => {
+            const st = String(c.status ?? '').toUpperCase();
+            if (st === 'PAGO_TOTAL' || st === 'QUITADO' || st === 'CANCELADO') {
+              return s;
+            }
+            const aberto = Number(
+              c.valor_restante ??
+                (c as any).valor_em_aberto ??
+                Math.max(
+                  0,
+                  Number(
+                    (c as any).valor_total ?? c.valor_original ?? 0,
+                  ) - Number(c.valor_pago ?? 0),
+                ),
+            );
+            return s + Math.max(0, aberto);
+          }, 0),
+        }
+      : null;
+
+  const valorTotal =
+    totaisContas?.total ??
+    contaDetalhe?.valor_total_pedido ??
+    resumoFinal!.valor_total;
+  const valorPago =
+    totaisContas?.pago ?? contaDetalhe?.valor_pago ?? resumoFinal!.valor_pago;
+  const valorEmAberto =
+    totaisContas?.aberto ??
+    contaDetalhe?.valor_em_aberto ??
+    resumoFinal!.valor_em_aberto;
+  const statusExibicao =
+    valorEmAberto <= 0.009
+      ? 'Quitado'
+      : valorPago > 0.009
+        ? 'Parcial'
+        : (contaDetalhe?.status ?? resumoFinal!.status);
   const dataVencimento =
     contaDetalhe?.datas?.data_vencimento ?? resumoFinal!.data_vencimento ?? null;
   const dataCriacao =
