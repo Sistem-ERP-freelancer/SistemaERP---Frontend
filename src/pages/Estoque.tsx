@@ -25,6 +25,8 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 import {
     Select,
     SelectContent,
@@ -32,6 +34,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet";
 import {
     Table,
     TableBody,
@@ -50,17 +59,21 @@ import {
 import { Produto, produtosService } from "@/services/produtos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { formatCurrency } from "@/lib/utils";
 import {
     AlertTriangle,
     ArrowDownCircle,
     ArrowUpCircle,
     Calendar,
+    Circle,
+    CircleDollarSign,
     Download,
     FileText,
     Filter,
     Info,
     Loader2,
     Package,
+    Plus,
     Printer,
     RotateCcw,
     Search,
@@ -77,10 +90,11 @@ const Estoque = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15);
   const [ordenacaoMov, setOrdenacaoMov] = useState<"desc" | "asc">("desc");
+  const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [dialogMovimentacaoOpen, setDialogMovimentacaoOpen] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [movimentacao, setMovimentacao] = useState<MovimentacaoEstoqueDto>({
-    tipo: "ENTRADA",
+    tipo: "SAIDA",
     quantidade: 0,
     observacao: "",
     motivo: "",
@@ -91,12 +105,16 @@ const Estoque = () => {
   const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
   const [relatorioLoading, setRelatorioLoading] = useState<'download' | 'print' | null>(null);
 
-  // Buscar produtos para seleção
+  // Buscar produtos ativos (limit >= 100 + ATIVO retorna todos no backend)
   const { data: produtosData } = useQuery({
     queryKey: ["produtos-movimentacao"],
     queryFn: async () => {
       try {
-        const response = await produtosService.listar({ page: 1, limit: 100 });
+        const response = await produtosService.listar({
+          page: 1,
+          limit: 100,
+          statusProduto: "ATIVO",
+        });
         // Priorizar o novo formato: { data: Produto[], total, page, limit }
         if (response?.data && Array.isArray(response.data)) {
           return response.data;
@@ -116,6 +134,16 @@ const Estoque = () => {
   });
 
   const produtos: Produto[] = produtosData || [];
+
+  /** Valor total em estoque = Σ (estoque_atual × preço de custo) */
+  const valorTotalEstoque = useMemo(() => {
+    return produtos.reduce((acc, p) => {
+      const qtd = Number(p.estoque_atual) || 0;
+      const custo = Number(p.preco_custo) || 0;
+      if (qtd <= 0) return acc;
+      return acc + qtd * custo;
+    }, 0);
+  }, [produtos]);
 
   // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
   const validarParametrosPaginação = (page: number, limit: number): boolean => {
@@ -315,13 +343,15 @@ const Estoque = () => {
   }, [movimentacoesFiltradas]);
 
   const movimentacaoStatItems = useMemo((): ModuleStatCardItem[] => {
+    const formatQtd = (n: number) => Math.abs(n).toLocaleString("pt-BR");
     const formatValorTipo = (tipo: TipoMovimentacao, total: number) => {
+      const qtd = formatQtd(total);
       const isEntradaOuDevolucao = tipo === "ENTRADA" || tipo === "DEVOLUCAO";
       const isSaidaPerdaTransf =
         tipo === "SAIDA" || tipo === "PERDA" || tipo === "TRANSFERENCIA";
-      if (isEntradaOuDevolucao) return `+${Math.abs(total)} un`;
-      if (isSaidaPerdaTransf) return `-${Math.abs(total)} un`;
-      return total >= 0 ? `+${total} un` : `${total} un`;
+      if (isEntradaOuDevolucao) return `+${qtd} un`;
+      if (isSaidaPerdaTransf) return `-${qtd} un`;
+      return total >= 0 ? `+${qtd} un` : `-${qtd} un`;
     };
 
     const tipos: Array<{
@@ -340,9 +370,16 @@ const Estoque = () => {
 
     return [
       {
+        key: "valor-estoque",
+        label: "Valor em estoque",
+        value: formatCurrency(valorTotalEstoque),
+        Icon: CircleDollarSign,
+        ...statTheme.emerald,
+      },
+      {
         key: "balanco",
         label: "Balanço · saldo líquido",
-        value: `${balanco >= 0 ? "+" : ""}${balanco} un`,
+        value: `${balanco >= 0 ? "+" : "-"}${formatQtd(balanco)} un`,
         Icon: Package,
         ...statTheme.primary,
       },
@@ -359,7 +396,7 @@ const Estoque = () => {
         },
       })),
     ];
-  }, [balanco, totaisPorTipo, filtroTipo]);
+  }, [balanco, totaisPorTipo, filtroTipo, valorTotalEstoque]);
 
   // Mutation para criar movimentação
   const movimentarEstoqueMutation = useMutation({
@@ -384,7 +421,7 @@ const Estoque = () => {
       setDialogMovimentacaoOpen(false);
       setProdutoSelecionado(null);
       setMovimentacao({
-        tipo: "ENTRADA",
+        tipo: "SAIDA",
         quantidade: 0,
         observacao: "",
         motivo: "",
@@ -498,7 +535,12 @@ const Estoque = () => {
     }
 
     if (!movimentacao.tipo) {
-      toast.error("Selecione um tipo de movimentação");
+      toast.error("Selecione o tipo de saída");
+      return;
+    }
+
+    if (!movimentacao.motivo?.trim()) {
+      toast.error("Informe a causa da saída");
       return;
     }
 
@@ -542,6 +584,32 @@ const Estoque = () => {
     return tipo === "SAIDA" || tipo === "PERDA" || tipo === "TRANSFERENCIA";
   };
 
+  const temFiltrosAtivos =
+    filtroTipo !== "Todos" ||
+    ordenacaoMov !== "desc" ||
+    Boolean(dataInicialRelatorio) ||
+    Boolean(dataFinalRelatorio);
+
+  const contagemFiltrosAtivos =
+    (filtroTipo !== "Todos" ? 1 : 0) +
+    (ordenacaoMov !== "desc" ? 1 : 0) +
+    (dataInicialRelatorio ? 1 : 0) +
+    (dataFinalRelatorio ? 1 : 0);
+
+  const handleAplicarFiltros = () => {
+    setFiltrosDialogOpen(false);
+    setCurrentPage(1);
+  };
+
+  const handleLimparFiltros = () => {
+    setFiltroTipo("Todos");
+    setOrdenacaoMov("desc");
+    setDataInicialRelatorio("");
+    setDataFinalRelatorio("");
+    setCurrentPage(1);
+    setFiltrosDialogOpen(false);
+  };
+
   return (
     <AppLayout>
       <div className="p-3 sm:p-4 md:p-6 min-w-0">
@@ -551,12 +619,20 @@ const Estoque = () => {
           subtitle="Registro de entradas e saídas de estoque, com filtros rápidos por tipo."
         />
 
-        <ModuleStatCards columns={7} items={movimentacaoStatItems} />
+        <ModuleStatCards columns={8} items={movimentacaoStatItems} />
 
-        {/* Barra de Busca, Filtros e Ordenação */}
+        {/* Barra: Criar | Busca | Filtros */}
         <div className="bg-card rounded-xl border border-border p-4 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <Button
+              className="gap-2 shrink-0 w-full sm:w-auto"
+              onClick={() => setDialogMovimentacaoOpen(true)}
+            >
+              <Plus className="w-4 h-4" />
+              Criar saída
+            </Button>
+
+            <div className="relative flex-1 w-full min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por produto ou SKU..."
@@ -565,46 +641,413 @@ const Estoque = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Select 
-              value={filtroTipo} 
-              onValueChange={(value) => {
-                setFiltroTipo(value);
-                setCurrentPage(1);
-              }}
+
+            <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto lg:shrink-0 lg:ml-auto">
+              <Button
+                variant="outline"
+                className="gap-2 shrink-0"
+                onClick={() => setFiltrosDialogOpen(true)}
+                style={
+                  temFiltrosAtivos
+                    ? { borderColor: "var(--primary)", borderWidth: "2px" }
+                    : {}
+                }
+              >
+                <Filter className="w-4 h-4" />
+                Filtros
+                {temFiltrosAtivos && (
+                  <span className="ml-1 bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                    {contagemFiltrosAtivos}
+                  </span>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2 shrink-0"
+                onClick={() => setRelatorioDialogOpen(true)}
+              >
+                <FileText className="w-4 h-4" />
+                Relatório
+              </Button>
+            </div>
+          </div>
+
+          <Sheet open={filtrosDialogOpen} onOpenChange={setFiltrosDialogOpen}>
+            <SheetContent
+              side="right"
+              className="w-[400px] sm:w-[540px] overflow-y-auto"
             >
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Todos">Todos</SelectItem>
-                <SelectItem value="ENTRADA">Entrada</SelectItem>
-                <SelectItem value="SAIDA">Saída</SelectItem>
-                <SelectItem value="AJUSTE">Ajuste</SelectItem>
-                <SelectItem value="DEVOLUCAO">Devolução</SelectItem>
-                <SelectItem value="PERDA">Perda</SelectItem>
-                <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              className="gap-2 shrink-0"
-              onClick={() =>
-                setOrdenacaoMov((prev) => (prev === "desc" ? "asc" : "desc"))
+              <SheetHeader className="mb-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Filter className="w-5 h-5 text-primary" />
+                  </div>
+                  <SheetTitle className="text-xl">Filtros Avançados</SheetTitle>
+                </div>
+                <SheetDescription>Refine sua busca</SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">
+                    Tipo de Movimentação
+                  </Label>
+                  <RadioGroup
+                    value={filtroTipo}
+                    onValueChange={(value) => {
+                      setFiltroTipo(value);
+                      setCurrentPage(1);
+                    }}
+                    className="space-y-2"
+                  >
+                    {(
+                      [
+                        { value: "Todos", label: "Todos", color: "text-primary" },
+                        { value: "ENTRADA", label: "Entrada", color: "text-emerald-500" },
+                        { value: "SAIDA", label: "Saída", color: "text-red-500" },
+                        { value: "AJUSTE", label: "Ajuste", color: "text-blue-500" },
+                        { value: "DEVOLUCAO", label: "Devolução", color: "text-sky-500" },
+                        { value: "PERDA", label: "Perda", color: "text-amber-500" },
+                        { value: "TRANSFERENCIA", label: "Transferência", color: "text-purple-500" },
+                      ] as const
+                    ).map(({ value, label, color }) => (
+                      <div key={value} className="flex items-center space-x-2">
+                        <RadioGroupItem value={value} id={`filtro-tipo-${value}`} />
+                        <Label
+                          htmlFor={`filtro-tipo-${value}`}
+                          className="flex items-center gap-2 cursor-pointer flex-1"
+                        >
+                          <Circle className={`w-3 h-3 ${color}`} />
+                          <span>{label}</span>
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">Ordenação</Label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOrdenacaoMov("desc")}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-colors ${
+                        ordenacaoMov === "desc"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-card text-foreground border-border hover:bg-secondary"
+                      }`}
+                    >
+                      <span className="text-sm font-medium">Mais recentes</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrdenacaoMov("asc")}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border transition-colors ${
+                        ordenacaoMov === "asc"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-card text-foreground border-border hover:bg-secondary"
+                      }`}
+                    >
+                      <span className="text-sm font-medium">Mais antigos</span>
+                    </button>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                    Período
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="data-inicial-filtro"
+                        className="flex items-center gap-2"
+                      >
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        Data inicial
+                      </Label>
+                      <Input
+                        id="data-inicial-filtro"
+                        type="date"
+                        value={dataInicialRelatorio}
+                        onChange={(e) =>
+                          setDataInicialRelatorio(e.target.value || "")
+                        }
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Usada no relatório de acompanhamento
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="data-final-filtro"
+                        className="flex items-center gap-2"
+                      >
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        Data final
+                      </Label>
+                      <Input
+                        id="data-final-filtro"
+                        type="date"
+                        value={dataFinalRelatorio}
+                        onChange={(e) =>
+                          setDataFinalRelatorio(e.target.value || "")
+                        }
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Deixe em branco para não limitar o período
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    onClick={handleAplicarFiltros}
+                    className="flex-1"
+                    variant="gradient"
+                  >
+                    Aplicar Filtros
+                  </Button>
+                  <Button
+                    onClick={handleLimparFiltros}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <Dialog
+            open={dialogMovimentacaoOpen}
+            onOpenChange={(open) => {
+              setDialogMovimentacaoOpen(open);
+              if (!open) {
+                setProdutoSelecionado(null);
+                setMovimentacao({
+                  tipo: "SAIDA",
+                  quantidade: 0,
+                  observacao: "",
+                  motivo: "",
+                  documento_referencia: "",
+                });
               }
-            >
-              {ordenacaoMov === "desc"
-                ? "Mais recentes primeiro"
-                : "Mais antigos primeiro"}
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-2 shrink-0"
-              onClick={() => setRelatorioDialogOpen(true)}
-            >
-              <FileText className="w-4 h-4" />
-              Relatório de acompanhamento
-            </Button>
+            }}
+          >
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Registrar saída</DialogTitle>
+                <DialogDescription>
+                  Escolha o tipo de saída, o produto, a quantidade e a causa.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-5 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {(
+                    [
+                      {
+                        tipo: "SAIDA" as const,
+                        label: "Saída",
+                        desc: "Remover do estoque",
+                        Icon: ArrowUpCircle,
+                        border: "#E74C3C",
+                        bg: "#FDEDEC",
+                        color: "#922B21",
+                      },
+                      {
+                        tipo: "PERDA" as const,
+                        label: "Perda",
+                        desc: "Produto perdido ou danificado",
+                        Icon: AlertTriangle,
+                        border: "#F39C12",
+                        bg: "#FEF5E7",
+                        color: "#9C640C",
+                      },
+                      {
+                        tipo: "TRANSFERENCIA" as const,
+                        label: "Transferência",
+                        desc: "Envio entre estoques",
+                        Icon: Truck,
+                        border: "#9B59B6",
+                        bg: "#F4ECF7",
+                        color: "#5B2C6F",
+                      },
+                    ] as const
+                  ).map(({ tipo, label, desc, Icon, border, bg, color }) => {
+                    const ativo = movimentacao.tipo === tipo;
+                    return (
+                      <button
+                        key={tipo}
+                        type="button"
+                        onClick={() => setMovimentacao({ ...movimentacao, tipo })}
+                        className={`flex items-start gap-3 p-4 rounded-xl text-left transition-all hover:scale-[1.01] box-border ${
+                          ativo ? "shadow-md border-[3px]" : "border-2"
+                        }`}
+                        style={{
+                          borderColor: ativo ? border : `${border}4D`,
+                          backgroundColor: ativo ? bg : `${bg}80`,
+                        }}
+                      >
+                        <div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                          style={{ backgroundColor: bg }}
+                        >
+                          <Icon className="h-5 w-5" style={{ color }} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm" style={{ color }}>
+                            {label}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Produto *</Label>
+                    {produtos.length === 0 ? (
+                      <div className="text-sm text-muted-foreground py-2">
+                        Carregando produtos...
+                      </div>
+                    ) : (
+                      <Select
+                        value={produtoSelecionado?.id?.toString() || ""}
+                        onValueChange={(value) => {
+                          const produto = produtos.find((p) => {
+                            const produtoId = p.id?.toString();
+                            return (
+                              produtoId === value ||
+                              Number(produtoId) === Number(value)
+                            );
+                          });
+                          if (produto) setProdutoSelecionado(produto);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um produto">
+                            {produtoSelecionado
+                              ? `${produtoSelecionado.nome} — ${produtoSelecionado.sku}`
+                              : ""}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="z-[100]">
+                          {produtos.map((produto) => (
+                            <SelectItem
+                              key={produto.id}
+                              value={produto.id?.toString() || ""}
+                            >
+                              {produto.nome} — {produto.sku}
+                              {produto.estoque_atual != null
+                                ? ` (estoque: ${Number(produto.estoque_atual).toLocaleString("pt-BR")})`
+                                : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Quantidade *</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="Ex: 5"
+                      value={movimentacao.quantidade || ""}
+                      onChange={(e) =>
+                        setMovimentacao({
+                          ...movimentacao,
+                          quantidade: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Causa da saída *</Label>
+                    <Input
+                      placeholder="Ex: Venda avulsa, produto vencido, envio para filial..."
+                      value={movimentacao.motivo || ""}
+                      onChange={(e) =>
+                        setMovimentacao({
+                          ...movimentacao,
+                          motivo: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Observação</Label>
+                    <Textarea
+                      placeholder="Detalhes adicionais (opcional)"
+                      value={movimentacao.observacao || ""}
+                      onChange={(e) =>
+                        setMovimentacao({
+                          ...movimentacao,
+                          observacao: e.target.value,
+                        })
+                      }
+                      rows={2}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setDialogMovimentacaoOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleMovimentar}
+                    className="flex-1 text-white hover:opacity-90 transition-opacity"
+                    style={{
+                      backgroundColor:
+                        movimentacao.tipo === "PERDA"
+                          ? "#F39C12"
+                          : movimentacao.tipo === "TRANSFERENCIA"
+                            ? "#9B59B6"
+                            : "#E74C3C",
+                    }}
+                    disabled={movimentarEstoqueMutation.isPending}
+                  >
+                    {movimentarEstoqueMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Registrando...
+                      </>
+                    ) : movimentacao.tipo === "PERDA" ? (
+                      "Registrar perda"
+                    ) : movimentacao.tipo === "TRANSFERENCIA" ? (
+                      "Registrar transferência"
+                    ) : (
+                      "Registrar saída"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
             <Dialog open={relatorioDialogOpen} onOpenChange={setRelatorioDialogOpen}>
               <DialogContent className="max-w-md p-0 overflow-hidden">
@@ -684,27 +1127,6 @@ const Estoque = () => {
                 </div>
               </DialogContent>
             </Dialog>
-          </div>
-          <div className="mt-3 space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">
-              Período do relatório
-            </Label>
-            <div className="flex flex-wrap gap-3 items-center text-sm">
-              <Input
-                type="date"
-                className="w-[140px]"
-                value={dataInicialRelatorio}
-                onChange={(e) => setDataInicialRelatorio(e.target.value || "")}
-              />
-              <span className="text-muted-foreground">até</span>
-              <Input
-                type="date"
-                className="w-[140px]"
-                value={dataFinalRelatorio}
-                onChange={(e) => setDataFinalRelatorio(e.target.value || "")}
-              />
-            </div>
-          </div>
           <div className="mt-4">
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
               <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -860,12 +1282,16 @@ const Estoque = () => {
                             }}
                           >
                             {(mov.tipo === "ENTRADA" || mov.tipo === "DEVOLUCAO") 
-                              ? `+${Math.abs(mov.quantidade)}` 
+                              ? `+${Math.abs(mov.quantidade).toLocaleString("pt-BR")}` 
                               : (mov.tipo === "SAIDA" || mov.tipo === "PERDA" || mov.tipo === "TRANSFERENCIA") 
-                                ? mov.quantidade < 0 ? mov.quantidade : `-${mov.quantidade}`
+                                ? mov.quantidade < 0
+                                  ? mov.quantidade.toLocaleString("pt-BR")
+                                  : `-${mov.quantidade.toLocaleString("pt-BR")}`
                                 : mov.tipo === "AJUSTE"
-                                  ? (mov.quantidade >= 0 ? `+${mov.quantidade}` : String(mov.quantidade))
-                                  : mov.quantidade}
+                                  ? (mov.quantidade >= 0
+                                      ? `+${mov.quantidade.toLocaleString("pt-BR")}`
+                                      : mov.quantidade.toLocaleString("pt-BR"))
+                                  : mov.quantidade.toLocaleString("pt-BR")}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -961,400 +1387,6 @@ const Estoque = () => {
           )}
         </motion.div>
 
-        {/* Dialog de Nova Movimentação */}
-          <Dialog
-            open={dialogMovimentacaoOpen}
-            onOpenChange={(open) => {
-              setDialogMovimentacaoOpen(open);
-              if (!open) {
-                setProdutoSelecionado(null);
-                setMovimentacao({
-                  tipo: "ENTRADA",
-                  quantidade: 0,
-                  observacao: "",
-                  motivo: "",
-                  documento_referencia: "",
-                });
-              }
-            }}
-          >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-              <DialogHeader>
-              <DialogTitle>Nova Movimentação</DialogTitle>
-                <DialogDescription>
-                Registre uma entrada ou saída de estoque.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-6 pt-4 overflow-y-auto flex-1 pr-2">
-                {/* Seleção de Tipo de Movimentação */}
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">Tipo de Movimentação *</Label>
-                  
-                  {/* Tipos de Entrada */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Entradas</p>
-                    <div className="grid grid-cols-2 gap-3 overflow-visible">
-                      {/* ENTRADA */}
-                      <button
-                        type="button"
-                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "ENTRADA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
-                          movimentacao.tipo === "ENTRADA" ? "shadow-md border-[3px]" : "border-2"
-                        }`}
-                        style={{
-                          borderColor: movimentacao.tipo === "ENTRADA" ? "#2ECC71" : "rgba(46, 204, 113, 0.3)",
-                          backgroundColor: movimentacao.tipo === "ENTRADA" ? "#EAF7F0" : "rgba(234, 247, 240, 0.3)",
-                        }}
-                      >
-                        <div 
-                          className="p-2 rounded-full mb-2"
-                          style={{
-                            backgroundColor: movimentacao.tipo === "ENTRADA" ? "#EAF7F0" : "rgba(234, 247, 240, 0.5)",
-                          }}
-                        >
-                          <ArrowDownCircle 
-                            className="w-6 h-6"
-                            style={{ color: "#1E8449" }}
-                          />
-                        </div>
-                        <span 
-                          className="font-semibold text-sm"
-                          style={{ color: "#1E8449" }}
-                        >
-                          Entrada
-                        </span>
-                        <span className="text-xs text-muted-foreground mt-1 text-center">
-                          Adicionar ao estoque
-                        </span>
-                      </button>
-
-                      {/* DEVOLUCAO */}
-                      <button
-                        type="button"
-                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "DEVOLUCAO" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
-                          movimentacao.tipo === "DEVOLUCAO" ? "shadow-md border-[3px]" : "border-2"
-                        }`}
-                        style={{
-                          borderColor: movimentacao.tipo === "DEVOLUCAO" ? "#3498DB" : "rgba(52, 152, 219, 0.3)",
-                          backgroundColor: movimentacao.tipo === "DEVOLUCAO" ? "#EBF3FB" : "rgba(235, 243, 251, 0.3)",
-                        }}
-                      >
-                        <div 
-                          className="p-2 rounded-full mb-2"
-                          style={{
-                            backgroundColor: movimentacao.tipo === "DEVOLUCAO" ? "#EBF3FB" : "rgba(235, 243, 251, 0.5)",
-                          }}
-                        >
-                          <RotateCcw 
-                            className="w-6 h-6"
-                            style={{ color: "#21618C" }}
-                          />
-                        </div>
-                        <span 
-                          className="font-semibold text-sm"
-                          style={{ color: "#21618C" }}
-                        >
-                          Devolução
-                        </span>
-                        <span className="text-xs text-muted-foreground mt-1 text-center">
-                          Retorno de produtos
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tipos de Saída */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Saídas</p>
-                    <div className="grid grid-cols-3 gap-3 overflow-visible">
-                      {/* SAIDA */}
-                      <button
-                        type="button"
-                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "SAIDA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
-                          movimentacao.tipo === "SAIDA" ? "shadow-md border-[3px]" : "border-2"
-                        }`}
-                        style={{
-                          borderColor: movimentacao.tipo === "SAIDA" ? "#E74C3C" : "rgba(231, 76, 60, 0.3)",
-                          backgroundColor: movimentacao.tipo === "SAIDA" ? "#FDEDEC" : "rgba(253, 237, 236, 0.3)",
-                        }}
-                      >
-                        <div 
-                          className="p-2 rounded-full mb-2"
-                          style={{
-                            backgroundColor: movimentacao.tipo === "SAIDA" ? "#FDEDEC" : "rgba(253, 237, 236, 0.5)",
-                          }}
-                        >
-                          <ArrowUpCircle 
-                            className="w-5 h-5"
-                            style={{ color: "#922B21" }}
-                          />
-                        </div>
-                        <span 
-                          className="font-semibold text-xs"
-                          style={{ color: "#922B21" }}
-                        >
-                          Saída
-                        </span>
-                        <span className="text-xs text-muted-foreground mt-1 text-center">
-                          Remover estoque
-                        </span>
-                      </button>
-
-                      {/* PERDA */}
-                      <button
-                        type="button"
-                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "PERDA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
-                          movimentacao.tipo === "PERDA" ? "shadow-md border-[3px]" : "border-2"
-                        }`}
-                        style={{
-                          borderColor: movimentacao.tipo === "PERDA" ? "#F39C12" : "rgba(243, 156, 18, 0.3)",
-                          backgroundColor: movimentacao.tipo === "PERDA" ? "#FEF5E7" : "rgba(254, 245, 231, 0.3)",
-                        }}
-                      >
-                        <div 
-                          className="p-2 rounded-full mb-2"
-                          style={{
-                            backgroundColor: movimentacao.tipo === "PERDA" ? "#FEF5E7" : "rgba(254, 245, 231, 0.5)",
-                          }}
-                        >
-                          <AlertTriangle 
-                            className="w-5 h-5"
-                            style={{ color: "#9C640C" }}
-                          />
-                        </div>
-                        <span 
-                          className="font-semibold text-xs"
-                          style={{ color: "#9C640C" }}
-                        >
-                          Perda
-                        </span>
-                        <span className="text-xs text-muted-foreground mt-1 text-center">
-                          Produto perdido
-                        </span>
-                      </button>
-
-                      {/* TRANSFERENCIA */}
-                      <button
-                        type="button"
-                        onClick={() => setMovimentacao({ ...movimentacao, tipo: "TRANSFERENCIA" })}
-                        className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
-                          movimentacao.tipo === "TRANSFERENCIA" ? "shadow-md border-[3px]" : "border-2"
-                        }`}
-                        style={{
-                          borderColor: movimentacao.tipo === "TRANSFERENCIA" ? "#9B59B6" : "rgba(155, 89, 182, 0.3)",
-                          backgroundColor: movimentacao.tipo === "TRANSFERENCIA" ? "#F4ECF7" : "rgba(244, 236, 247, 0.3)",
-                        }}
-                      >
-                        <div 
-                          className="p-2 rounded-full mb-2"
-                          style={{
-                            backgroundColor: movimentacao.tipo === "TRANSFERENCIA" ? "#F4ECF7" : "rgba(244, 236, 247, 0.5)",
-                          }}
-                        >
-                          <Truck 
-                            className="w-5 h-5"
-                            style={{ color: "#5B2C6F" }}
-                          />
-                        </div>
-                        <span 
-                          className="font-semibold text-xs"
-                          style={{ color: "#5B2C6F" }}
-                        >
-                          Transferência
-                        </span>
-                        <span className="text-xs text-muted-foreground mt-1 text-center">
-                          Entre estoques
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Ajuste */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ajustes</p>
-                    <button
-                      type="button"
-                      onClick={() => setMovimentacao({ ...movimentacao, tipo: "AJUSTE" })}
-                      className={`w-full flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-[1.02] box-border ${
-                        movimentacao.tipo === "AJUSTE" ? "shadow-md border-[3px]" : "border-2"
-                      }`}
-                      style={{
-                        borderColor: movimentacao.tipo === "AJUSTE" ? "#3498DB" : "rgba(52, 152, 219, 0.3)",
-                        backgroundColor: movimentacao.tipo === "AJUSTE" ? "#EBF3FB" : "rgba(235, 243, 251, 0.3)",
-                      }}
-                    >
-                      <div 
-                        className="p-2 rounded-full mb-2"
-                        style={{
-                          backgroundColor: movimentacao.tipo === "AJUSTE" ? "#EBF3FB" : "rgba(235, 243, 251, 0.5)",
-                        }}
-                      >
-                        <Settings 
-                          className="w-6 h-6"
-                          style={{ color: "#21618C" }}
-                        />
-                      </div>
-                      <span 
-                        className="font-semibold text-sm"
-                        style={{ color: "#21618C" }}
-                      >
-                        Ajuste
-                      </span>
-                      <span className="text-xs text-muted-foreground mt-1 text-center">
-                        Definir estoque atual
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                  <div className="space-y-2">
-                <Label>Produto *</Label>
-                    {produtos.length === 0 ? (
-                      <div className="text-sm text-muted-foreground py-2">
-                        Carregando produtos...
-                      </div>
-                    ) : (
-                      <Select
-                        value={produtoSelecionado?.id?.toString() || ""}
-                        onValueChange={(value) => {
-                          const produto = produtos.find((p) => {
-                            const produtoId = p.id?.toString();
-                            const valueId = value?.toString();
-                            return produtoId === valueId || Number(produtoId) === Number(valueId);
-                          });
-                          if (produto) {
-                            setProdutoSelecionado(produto);
-                          }
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um produto">
-                            {produtoSelecionado ? `${produtoSelecionado.nome} - ${produtoSelecionado.sku}` : ""}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent className="z-[100]">
-                          {produtos.map((produto) => (
-                            <SelectItem 
-                              key={produto.id} 
-                              value={produto.id?.toString() || ""}
-                            >
-                              {produto.nome} - {produto.sku}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    </div>
-
-                      <div className="space-y-2">
-                        <Label>Quantidade *</Label>
-                        <Input
-                          type="number"
-                  min="1"
-                  step="1"
-                          placeholder="0"
-                          value={movimentacao.quantidade || ""}
-                          onChange={(e) =>
-                            setMovimentacao({
-                              ...movimentacao,
-                      quantidade: Number(e.target.value) || 0,
-                            })
-                          }
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Documento de Referência</Label>
-                      <Input
-                        placeholder="Ex: NF-12345, Pedido #1234..."
-                        value={movimentacao.documento_referencia || ""}
-                        onChange={(e) =>
-                          setMovimentacao({
-                            ...movimentacao,
-                            documento_referencia: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Motivo</Label>
-                      <Input
-                        placeholder="Ex: Compra de fornecedor, Venda para cliente..."
-                        value={movimentacao.motivo || ""}
-                        onChange={(e) =>
-                          setMovimentacao({
-                            ...movimentacao,
-                            motivo: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Observação</Label>
-                      <Textarea
-                        placeholder="Observações adicionais sobre a movimentação..."
-                        value={movimentacao.observacao || ""}
-                        onChange={(e) =>
-                          setMovimentacao({
-                            ...movimentacao,
-                            observacao: e.target.value,
-                          })
-                        }
-                        rows={3}
-                      />
-                    </div>
-
-                      <div className="flex gap-3 pt-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setDialogMovimentacaoOpen(false)}
-                          className="flex-1"
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          onClick={handleMovimentar}
-                          className="flex-1 text-white hover:opacity-90 transition-opacity"
-                          style={{
-                            backgroundColor: 
-                              movimentacao.tipo === "ENTRADA" ? "#2ECC71" :
-                              movimentacao.tipo === "DEVOLUCAO" ? "#3498DB" :
-                              movimentacao.tipo === "SAIDA" ? "#E74C3C" :
-                              movimentacao.tipo === "PERDA" ? "#F39C12" :
-                              movimentacao.tipo === "TRANSFERENCIA" ? "#9B59B6" :
-                              "#3498DB", // AJUSTE
-                          }}
-                          disabled={movimentarEstoqueMutation.isPending}
-                        >
-                          {movimentarEstoqueMutation.isPending ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Processando...
-                            </>
-                          ) : movimentacao.tipo === "ENTRADA" ? (
-                            "Registrar Entrada"
-                          ) : movimentacao.tipo === "DEVOLUCAO" ? (
-                            "Registrar Devolução"
-                          ) : movimentacao.tipo === "SAIDA" ? (
-                            "Registrar Saída"
-                          ) : movimentacao.tipo === "PERDA" ? (
-                            "Registrar Perda"
-                          ) : movimentacao.tipo === "TRANSFERENCIA" ? (
-                            "Registrar Transferência"
-                          ) : (
-                            "Registrar Ajuste"
-                          )}
-                        </Button>
-                      </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </AppLayout>
   );

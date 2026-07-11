@@ -17,7 +17,7 @@ export type ModuleStatCardItem = {
   labelExtra?: ReactNode;
 };
 
-type ColumnPreset = 2 | 3 | 4 | 5 | 6 | 7;
+type ColumnPreset = 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 const GRID_BY_COLUMNS: Record<ColumnPreset, string> = {
   2: 'grid grid-cols-1 gap-4 sm:grid-cols-2',
@@ -26,6 +26,7 @@ const GRID_BY_COLUMNS: Record<ColumnPreset, string> = {
   5: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
   6: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
   7: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7',
+  8: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8',
 };
 
 interface ModuleStatCardProps {
@@ -97,7 +98,7 @@ export function ModuleStatCards({
   columns,
   className,
 }: ModuleStatCardsProps) {
-  const colCount = (columns ?? Math.min(Math.max(items.length, 2), 7)) as ColumnPreset;
+  const colCount = (columns ?? Math.min(Math.max(items.length, 2), 8)) as ColumnPreset;
   const skeletons = loadingCount ?? (items.length || 4);
 
   if (isLoading) {
