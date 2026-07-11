@@ -10,12 +10,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatarFormaPagamento } from '@/lib/utils';
+import { financeiroService } from '@/services/financeiro.service';
 import { pagamentosService } from '@/services/pagamentos.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, DollarSign, Loader2, User } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -29,6 +30,25 @@ const FORMAS_PAGAMENTO = [
   { value: 'CHEQUE', label: 'Cheque' },
 ] as const;
 
+function abertoConta(c: {
+  valor_restante?: number | null;
+  valor_em_aberto?: number | null;
+  valor_original?: number | null;
+  valor_total?: number | null;
+  valor_pago?: number | null;
+}): number {
+  const restante = Number(
+    (c as any).valor_restante ??
+      (c as any).valor_em_aberto ??
+      Math.max(
+        0,
+        Number((c as any).valor_original ?? (c as any).valor_total ?? 0) -
+          Number((c as any).valor_pago ?? 0),
+      ),
+  );
+  return Number.isFinite(restante) ? restante : 0;
+}
+
 const ContasAReceberPedidoPagamentos = () => {
   const { pedidoId } = useParams<{ pedidoId: string }>();
   const navigate = useNavigate();
@@ -38,6 +58,7 @@ const ContasAReceberPedidoPagamentos = () => {
   const [valorPago, setValorPago] = useState<number | ''>('');
   const [dataPagamento, setDataPagamento] = useState<string>(new Date().toISOString().split('T')[0]);
   const [formaPagamento, setFormaPagamento] = useState<string>('');
+  const [contaFinanceiraId, setContaFinanceiraId] = useState<string>('');
   const [observacoes, setObservacoes] = useState<string>('');
   const [chequeBanco, setChequeBanco] = useState<string>('');
   const [chequeNumero, setChequeNumero] = useState<string>('');
@@ -45,16 +66,26 @@ const ContasAReceberPedidoPagamentos = () => {
   const [chequeConta, setChequeConta] = useState<string>('');
   const [chequeTitular, setChequeTitular] = useState<string>('');
 
-  const [pedidoQuery, resumoQuery] = useQueries({
+  const [pedidoQuery, resumoQuery, contasQuery] = useQueries({
     queries: [
       { queryKey: ['pedidos', pedidoId], queryFn: () => pedidosService.buscarPorId(id), enabled: !!id },
       { queryKey: ['pedidos', pedidoId, 'resumo-financeiro'], queryFn: () => pedidosService.getResumoFinanceiro(id), enabled: !!id, retry: false },
+      {
+        queryKey: ['contas-financeiras', 'pedido', pedidoId, 'RECEBER'],
+        queryFn: async () => {
+          const contas = await financeiroService.buscarPorPedido(id);
+          return (contas || []).filter((c) => c.tipo === 'RECEBER' || !c.tipo);
+        },
+        enabled: !!id,
+        retry: false,
+      },
     ],
   });
 
   const pedido = pedidoQuery.data;
   const resumo = resumoQuery.data;
   const resumoErro = resumoQuery.isError;
+  const contasDoPedido = contasQuery.data ?? [];
 
   const legadoQuery = useQueries({
     queries: [
@@ -79,18 +110,84 @@ const ContasAReceberPedidoPagamentos = () => {
   const valorAdiantadoResumo = (resumo as any)?.valor_adiantado ?? null;
   const mensagemAdiantamento = (resumo as any)?.mensagem_adiantamento ?? null;
 
-  const autoFilledRef = useRef(false);
+  const contasAbertas = useMemo(
+    () => contasDoPedido.filter((c) => abertoConta(c) > 0.009),
+    [contasDoPedido],
+  );
+
+  const formasDoPedido = useMemo(() => {
+    const doPlano = (pedido?.formas_pagamento ?? [])
+      .map((fp) => String(fp.forma_pagamento || ''))
+      .filter(Boolean);
+    const dasContas = contasAbertas
+      .map((c) => String(c.forma_pagamento || ''))
+      .filter(Boolean);
+    const unica = pedido?.forma_pagamento ? [String(pedido.forma_pagamento)] : [];
+    return Array.from(new Set([...doPlano, ...dasContas, ...unica]));
+  }, [pedido, contasAbertas]);
+
+  const formasSelect = useMemo(() => {
+    if (formasDoPedido.length === 0) return [...FORMAS_PAGAMENTO];
+    const preferidas = FORMAS_PAGAMENTO.filter((f) => formasDoPedido.includes(f.value));
+    const extras = FORMAS_PAGAMENTO.filter((f) => !formasDoPedido.includes(f.value));
+    return [...preferidas, ...extras];
+  }, [formasDoPedido]);
+
+  const autoFilledValorRef = useRef(false);
+  const autoFilledFormaRef = useRef(false);
+
   useEffect(() => {
-    if (autoFilledRef.current) return;
+    if (autoFilledValorRef.current) return;
     if (valorEmAberto > 0 && valorPago === '') {
       if (ehPagamentoAdiantamento && valorAdiantadoResumo != null && Number(valorAdiantadoResumo) > 0) {
         setValorPago(Number(valorAdiantadoResumo));
+      } else if (contasAbertas.length === 1) {
+        setValorPago(Number(abertoConta(contasAbertas[0]).toFixed(2)));
       } else {
         setValorPago(valorEmAberto);
       }
-      autoFilledRef.current = true;
+      autoFilledValorRef.current = true;
     }
-  }, [valorEmAberto, valorPago, ehPagamentoAdiantamento, valorAdiantadoResumo]);
+  }, [valorEmAberto, valorPago, ehPagamentoAdiantamento, valorAdiantadoResumo, contasAbertas]);
+
+  useEffect(() => {
+    if (autoFilledFormaRef.current) return;
+    if (formaPagamento) {
+      autoFilledFormaRef.current = true;
+      return;
+    }
+    if (contasAbertas.length >= 1) {
+      const primeira = contasAbertas[0];
+      if (primeira.forma_pagamento) {
+        setFormaPagamento(String(primeira.forma_pagamento));
+      }
+      setContaFinanceiraId(String(primeira.id));
+      if (contasAbertas.length > 1) {
+        setValorPago(Number(abertoConta(primeira).toFixed(2)));
+        autoFilledValorRef.current = true;
+      }
+      autoFilledFormaRef.current = true;
+      return;
+    }
+    const formaPedido =
+      pedido?.formas_pagamento?.[0]?.forma_pagamento ||
+      pedido?.forma_pagamento ||
+      '';
+    if (formaPedido) {
+      setFormaPagamento(String(formaPedido));
+      autoFilledFormaRef.current = true;
+    }
+  }, [contasAbertas, pedido, formaPagamento]);
+
+  const selecionarConta = (contaIdStr: string) => {
+    setContaFinanceiraId(contaIdStr);
+    const conta = contasAbertas.find((c) => String(c.id) === contaIdStr);
+    if (!conta) return;
+    if (conta.forma_pagamento) {
+      setFormaPagamento(String(conta.forma_pagamento));
+    }
+    setValorPago(Number(abertoConta(conta).toFixed(2)));
+  };
 
   const registrarMutation = useMutation({
     mutationFn: async () => {
@@ -103,6 +200,7 @@ const ContasAReceberPedidoPagamentos = () => {
         valor,
         forma_pagamento: formaPagamento,
         data_pagamento: dataPagamento,
+        ...(contaFinanceiraId ? { conta_financeira_id: Number(contaFinanceiraId) } : {}),
         ...(observacoes?.trim() ? { observacoes: observacoes.trim() } : {}),
         ...(ehPagamentoAdiantamento ? { tipo_lancamento: 'ADIANTAMENTO' } : {}),
         ...(formaPagamento === 'CHEQUE' ? {
@@ -121,6 +219,7 @@ const ContasAReceberPedidoPagamentos = () => {
       toast.success('Pagamento registrado com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['pedidos', pedidoId] });
       queryClient.invalidateQueries({ queryKey: ['pedidos', 'contas-receber'] });
+      queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'unificado'] });
@@ -140,7 +239,9 @@ const ContasAReceberPedidoPagamentos = () => {
       if (!pedidoId) throw new Error('ID do pedido não encontrado');
       return pagamentosService.criar({
         pedido_id: id,
-        conta_financeira_id: legado?.conta_financeira?.id,
+        conta_financeira_id: contaFinanceiraId
+          ? Number(contaFinanceiraId)
+          : legado?.conta_financeira?.id,
         valor_pago: Number(valorPago),
         forma_pagamento: formaPagamento as any,
         data_lancamento: dataPagamento,
@@ -152,6 +253,7 @@ const ContasAReceberPedidoPagamentos = () => {
       toast.success('Pagamento registrado com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['pedidos', pedidoId] });
       queryClient.invalidateQueries({ queryKey: ['pedidos', 'contas-receber'] });
+      queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] });
       setTimeout(() => navigate(`/financeiro/contas-receber/${pedidoId}`), 1000);
@@ -166,7 +268,11 @@ const ContasAReceberPedidoPagamentos = () => {
     registrarMutation.mutate();
   };
 
-  const isLoading = pedidoQuery.isLoading || (resumoQuery.isLoading && !resumoErro) || (resumoErro && legadoQuery[0]?.isLoading);
+  const isLoading =
+    pedidoQuery.isLoading ||
+    contasQuery.isLoading ||
+    (resumoQuery.isLoading && !resumoErro) ||
+    (resumoErro && legadoQuery[0]?.isLoading);
   const isPending = registrarMutation.isPending || registrarFallback.isPending;
   const semDados = !resumo && !legado;
 
@@ -245,6 +351,33 @@ const ContasAReceberPedidoPagamentos = () => {
               </div>
             )}
             <h2 className="text-lg font-semibold border-b pb-2">Dados do Pagamento</h2>
+
+            {contasAbertas.length > 1 && (
+              <div className="space-y-2">
+                <Label>Conta / Forma do pedido *</Label>
+                <Select value={contaFinanceiraId} onValueChange={selecionarConta} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a conta a receber" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contasAbertas.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.forma_pagamento
+                          ? formatarFormaPagamento(c.forma_pagamento)
+                          : 'Sem forma'}
+                        {' · '}
+                        {formatCurrency(abertoConta(c))}
+                        {c.numero_conta ? ` (${c.numero_conta})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Formas cadastradas no pedido. Ao escolher, o valor e a forma são preenchidos.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Valor *</Label>
               <Input
@@ -272,7 +405,7 @@ const ContasAReceberPedidoPagamentos = () => {
                     <SelectValue placeholder="Selecione a forma" />
                   </SelectTrigger>
                   <SelectContent>
-                    {FORMAS_PAGAMENTO.map((f) => (
+                    {formasSelect.map((f) => (
                       <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                     ))}
                   </SelectContent>

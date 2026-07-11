@@ -74,10 +74,13 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
 
   /** Só deixa de syncar com a API se o usuário alterou o valor manualmente (ex.: parcial). */
   const usuarioEditouValor = useRef(false);
+  const autoFilledFormaRef = useRef(false);
 
   useEffect(() => {
     usuarioEditouValor.current = false;
+    autoFilledFormaRef.current = false;
     setValorPago('');
+    setFormaPagamento('');
   }, [contaId]);
 
   useEffect(() => {
@@ -86,6 +89,15 @@ const ContasAPagarContaFinanceiraPagamentos = () => {
       setValorPago(Number(valorEmAberto.toFixed(2)));
     }
   }, [valorEmAberto]);
+
+  useEffect(() => {
+    if (autoFilledFormaRef.current) return;
+    const formaConta = detalhe?.pagamento?.forma_pagamento;
+    if (formaConta) {
+      setFormaPagamento(String(formaConta));
+      autoFilledFormaRef.current = true;
+    }
+  }, [detalhe?.pagamento?.forma_pagamento]);
 
   const registrarMutation = useMutation({
     mutationFn: async () => {
