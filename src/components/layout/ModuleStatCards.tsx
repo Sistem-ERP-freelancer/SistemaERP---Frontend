@@ -26,7 +26,8 @@ const GRID_BY_COLUMNS: Record<ColumnPreset, string> = {
   5: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
   6: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
   7: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7',
-  8: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8',
+  /** 8 cards: 2 linhas de 4 no desktop — evita truncar labels/valores */
+  8: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
 };
 
 interface ModuleStatCardProps {
@@ -43,6 +44,7 @@ export function ModuleStatCard({ item }: ModuleStatCardProps) {
       type={interactive ? 'button' : undefined}
       onClick={item.onClick}
       className={cn(
+        'min-w-0',
         interactive && 'cursor-pointer text-left',
         item.active &&
           'rounded-xl ring-2 ring-primary/40 ring-offset-2 ring-offset-background',
@@ -50,19 +52,19 @@ export function ModuleStatCard({ item }: ModuleStatCardProps) {
     >
       <Card
         className={cn(
-          'h-full overflow-hidden border-slate-200 bg-white shadow-sm',
+          'h-full min-w-0 border-slate-200 bg-white shadow-sm',
           interactive && 'transition-shadow hover:shadow-md',
         )}
       >
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <p className="line-clamp-3 text-sm font-medium text-slate-500">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-slate-500 break-words">
               {item.label}
               {item.labelExtra}
             </p>
             <div
               className={cn(
-                'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11',
                 item.iconWrap,
               )}
             >
@@ -71,9 +73,10 @@ export function ModuleStatCard({ item }: ModuleStatCardProps) {
           </div>
           <p
             className={cn(
-              'mt-4 text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]',
+              'mt-3 text-xl font-bold tabular-nums tracking-tight leading-tight break-words sm:mt-4 sm:text-2xl',
               item.valueClass,
             )}
+            title={String(item.value)}
           >
             {item.value}
           </p>
@@ -107,7 +110,7 @@ export function ModuleStatCards({
         {Array.from({ length: skeletons }, (_, i) => (
           <Card
             key={i}
-            className="h-full overflow-hidden border-slate-200 bg-white shadow-sm"
+            className="h-full min-w-0 border-slate-200 bg-white shadow-sm"
           >
             <CardContent className="flex items-center justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

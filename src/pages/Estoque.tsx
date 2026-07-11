@@ -378,7 +378,7 @@ const Estoque = () => {
       },
       {
         key: "balanco",
-        label: "Balanço · saldo líquido",
+        label: "Balanço",
         value: `${balanco >= 0 ? "+" : "-"}${formatQtd(balanco)} un`,
         Icon: Package,
         ...statTheme.primary,
