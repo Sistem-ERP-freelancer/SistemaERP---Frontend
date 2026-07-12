@@ -2,12 +2,12 @@ import { cn, formatCurrency } from '@/lib/utils';
 import {
   DollarSign,
   Equal,
-  FileText,
   Loader2,
   Minus,
   PiggyBank,
   ShoppingCart,
   TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -29,41 +29,53 @@ type FunnelCard = {
   value: number;
   Icon: LucideIcon;
   tone: CardTone;
+  after?: 'minus' | 'equals';
 };
 
 const toneStyles: Record<
   CardTone,
-  { wrap: string; iconWrap: string; icon: string; value: string }
+  {
+    wrap: string;
+    iconWrap: string;
+    icon: string;
+    value: string;
+    label: string;
+  }
 > = {
   neutral: {
-    wrap: 'border-border/70 bg-background/80',
-    iconWrap: 'bg-slate-100',
-    icon: 'text-slate-600',
-    value: 'text-slate-900 dark:text-foreground',
+    wrap: 'border-slate-200 bg-white dark:border-border dark:bg-card',
+    iconWrap: 'bg-slate-100 dark:bg-muted',
+    icon: 'text-slate-500',
+    value: 'text-[#003366] dark:text-foreground',
+    label: 'text-slate-500',
   },
   cost: {
-    wrap: 'border-red-200/80 bg-background/80',
-    iconWrap: 'bg-red-50',
-    icon: 'text-red-600',
-    value: 'text-red-600',
+    wrap: 'border-red-100 bg-red-50/90 dark:border-red-900/40 dark:bg-red-950/25',
+    iconWrap: 'bg-red-100 dark:bg-red-900/50',
+    icon: 'text-red-500',
+    value: 'text-red-600 dark:text-red-400',
+    label: 'text-red-500/90',
   },
   gross: {
-    wrap: 'border-blue-200/80 bg-background/80',
-    iconWrap: 'bg-blue-50',
-    icon: 'text-blue-600',
-    value: 'text-blue-600',
+    wrap: 'border-sky-100 bg-sky-50/90 dark:border-sky-900/40 dark:bg-sky-950/25',
+    iconWrap: 'bg-sky-100 dark:bg-sky-900/50',
+    icon: 'text-sky-600',
+    value: 'text-sky-700 dark:text-sky-400',
+    label: 'text-sky-600/90',
   },
   expense: {
-    wrap: 'border-amber-200/80 bg-background/80',
-    iconWrap: 'bg-amber-50',
+    wrap: 'border-amber-100 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/25',
+    iconWrap: 'bg-amber-100 dark:bg-amber-900/50',
     icon: 'text-amber-600',
-    value: 'text-amber-600',
+    value: 'text-amber-700 dark:text-amber-400',
+    label: 'text-amber-600/90',
   },
   net: {
-    wrap: 'border-emerald-300/80 bg-emerald-50/80 shadow-sm dark:bg-emerald-950/30',
-    iconWrap: 'bg-emerald-100 dark:bg-emerald-900/40',
-    icon: 'text-emerald-700 dark:text-emerald-400',
+    wrap: 'border-emerald-200 bg-emerald-50 shadow-md shadow-emerald-100/80 dark:border-emerald-800 dark:bg-emerald-950/35 dark:shadow-none',
+    iconWrap: 'bg-emerald-100 dark:bg-emerald-900/50',
+    icon: 'text-emerald-600 dark:text-emerald-400',
     value: 'text-emerald-700 dark:text-emerald-400',
+    label: 'text-emerald-600/90',
   },
 };
 
@@ -71,10 +83,10 @@ function Operator({ kind }: { kind: 'minus' | 'equals' }) {
   const Icon = kind === 'minus' ? Minus : Equal;
   return (
     <div
-      className="flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-full bg-muted text-muted-foreground"
+      className="hidden h-9 w-9 shrink-0 items-center justify-center self-center text-slate-400 sm:flex"
       aria-hidden
     >
-      <Icon className="h-4 w-4" strokeWidth={2.5} />
+      <Icon className="h-5 w-5" strokeWidth={2.5} />
     </div>
   );
 }
@@ -95,6 +107,7 @@ export function DreFaturamentoLucro({
       value: faturamento,
       Icon: TrendingUp,
       tone: 'neutral',
+      after: 'minus',
     },
     {
       key: 'custo',
@@ -102,6 +115,7 @@ export function DreFaturamentoLucro({
       value: custoProduto,
       Icon: ShoppingCart,
       tone: 'cost',
+      after: 'equals',
     },
     {
       key: 'bruto',
@@ -109,13 +123,15 @@ export function DreFaturamentoLucro({
       value: lucroBruto,
       Icon: DollarSign,
       tone: 'gross',
+      after: 'minus',
     },
     {
       key: 'despesas',
       label: 'Despesas gerais',
       value: despesasGerais,
-      Icon: FileText,
+      Icon: Wallet,
       tone: 'expense',
+      after: 'equals',
     },
     {
       key: 'liquido',
@@ -129,64 +145,68 @@ export function DreFaturamentoLucro({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60',
+        'rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6 dark:border-border dark:bg-card',
         className,
       )}
     >
-      <div className="mb-4 flex flex-col gap-3 border-b border-border/70 pb-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            DRE simplificado
-          </p>
-          <h3 className="mt-1 text-xl font-bold tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+            <PiggyBank className="h-3.5 w-3.5" />
+            Resultado
+          </span>
+          <h3 className="text-xl font-bold tracking-tight text-[#003366] dark:text-foreground sm:text-2xl">
             Do faturamento ao lucro líquido
           </h3>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
             Faturamento − Custo do produto = Lucro bruto. Lucro bruto − Despesas
-            gerais = Lucro líquido. Compras com fornecedor entram em custo de
-            produto.
+            gerais = Lucro líquido.
           </p>
         </div>
         <div
           className={cn(
-            'inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold tabular-nums text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400',
+            'inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-bold tabular-nums text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400',
             lucroLiquido < 0 &&
               'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400',
           )}
         >
-          <PiggyBank className="h-4 w-4 shrink-0" />
+          <PiggyBank className="h-4 w-4 shrink-0 opacity-90" />
           {loading ? '…' : formatCurrency(lucroLiquido)}
         </div>
       </div>
 
       {loading ? (
-        <div className="flex min-h-[7rem] items-center justify-center gap-2 text-muted-foreground">
+        <div className="flex min-h-[8rem] items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span className="text-sm">Carregando visão de lucro…</span>
         </div>
       ) : (
-        <div className="flex flex-wrap items-stretch justify-center gap-2 sm:gap-3 lg:flex-nowrap lg:justify-between">
-          {cards.map((card, index) => {
+        <div className="flex flex-col gap-3 sm:gap-2 lg:flex-row lg:items-stretch lg:gap-2 xl:gap-3">
+          {cards.map((card) => {
             const styles = toneStyles[card.tone];
-            const showMinus = index === 1 || index === 3;
-            const showEquals = index === 2 || index === 4;
             return (
-              <div key={card.key} className="flex min-w-[9.5rem] flex-1 items-stretch gap-2 sm:gap-3">
-                {showMinus ? <Operator kind="minus" /> : null}
-                {showEquals ? <Operator kind="equals" /> : null}
+              <div
+                key={card.key}
+                className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-stretch lg:contents"
+              >
                 <div
                   className={cn(
-                    'flex min-w-0 flex-1 flex-col gap-3 rounded-xl border p-3 sm:p-4',
+                    'flex min-w-0 flex-1 flex-col gap-3 rounded-2xl border p-4',
                     styles.wrap,
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase leading-snug tracking-wide text-muted-foreground">
+                    <p
+                      className={cn(
+                        'text-[11px] font-semibold uppercase leading-snug tracking-wide',
+                        styles.label,
+                      )}
+                    >
                       {card.label}
                     </p>
                     <div
                       className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
                         styles.iconWrap,
                       )}
                     >
@@ -195,9 +215,11 @@ export function DreFaturamentoLucro({
                   </div>
                   <p
                     className={cn(
-                      'text-lg font-bold tabular-nums leading-tight sm:text-xl',
+                      'text-xl font-bold tabular-nums leading-tight tracking-tight sm:text-2xl',
                       styles.value,
-                      card.value < 0 && card.tone !== 'cost' && card.tone !== 'expense'
+                      card.value < 0 &&
+                        card.tone !== 'cost' &&
+                        card.tone !== 'expense'
                         ? 'text-destructive'
                         : null,
                     )}
@@ -205,6 +227,7 @@ export function DreFaturamentoLucro({
                     {formatCurrency(card.value)}
                   </p>
                 </div>
+                {card.after ? <Operator kind={card.after} /> : null}
               </div>
             );
           })}

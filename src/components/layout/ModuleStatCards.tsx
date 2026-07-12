@@ -15,6 +15,9 @@ export type ModuleStatCardItem = {
   active?: boolean;
   onClick?: () => void;
   labelExtra?: ReactNode;
+  /** Fundo/borda do card (ex.: cards tintidos do dashboard). */
+  cardClassName?: string;
+  labelClassName?: string;
 };
 
 type ColumnPreset = 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -54,17 +57,23 @@ export function ModuleStatCard({ item }: ModuleStatCardProps) {
         className={cn(
           'h-full min-w-0 border-slate-200 bg-white shadow-sm',
           interactive && 'transition-shadow hover:shadow-md',
+          item.cardClassName,
         )}
       >
         <CardContent className="p-4 sm:p-5">
           <div className="flex items-start justify-between gap-2">
-            <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-slate-500 break-words">
+            <p
+              className={cn(
+                'min-w-0 flex-1 text-sm font-medium leading-snug text-slate-500 break-words',
+                item.labelClassName,
+              )}
+            >
               {item.label}
               {item.labelExtra}
             </p>
             <div
               className={cn(
-                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11',
+                'flex h-10 w-10 shrink-0 items-center justify-center rounded-full sm:h-11 sm:w-11',
                 item.iconWrap,
               )}
             >

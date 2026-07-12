@@ -2,7 +2,6 @@ import AppLayout from "@/components/layout/AppLayout";
 import { DashboardSectionErrorBoundary } from "@/components/dashboard/DashboardSectionErrorBoundary";
 import { DreFaturamentoLucro } from "@/components/dashboard/DreFaturamentoLucro";
 import { ModuleStatCard } from "@/components/layout/ModuleStatCards";
-import { statTheme } from "@/components/layout/module-stat-themes";
 import { OrderStats } from "@/components/orders/OrderStats";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,12 +27,13 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
     BarChart3,
+    Building2,
     Calendar,
+    Coins,
     Download,
     ListFilter,
     Loader2,
     Printer,
-    Scale,
     ShoppingCart,
     TrendingUp,
 } from "lucide-react";
@@ -61,41 +61,66 @@ function painelMetricKindFromLegenda(legenda: string): PainelMetricKind {
   if (l.includes("recebido")) return "vendas";
   if (l.includes("venda")) return "vendas";
   if (l.includes("pagar") && l.includes("aberto")) return "compras";
+  if (l.includes("pago") && !l.includes("saldo")) return "compras";
   if (l.includes("compra")) return "compras";
   return "compras";
 }
 
-const painelMetricVisual: Record<
-  PainelMetricKind,
-  { iconWrap: string; iconClass: string; valueClass: string; Icon: LucideIcon }
-> = {
-  compras: {
-    ...statTheme.red,
-    Icon: ShoppingCart,
-  },
-  vendas: {
-    ...statTheme.emerald,
-    Icon: TrendingUp,
-  },
-  saldo: {
-    ...statTheme.blue,
-    Icon: Scale,
-  },
+function tituloLegendaPainel(legenda: string): string {
+  const map: Record<string, string> = {
+    "compras do mês": "Compras do mês",
+    "venda do mês": "Vendas do mês",
+    "saldo do mês": "Saldo do mês",
+    "compras paga": "Compras pagas",
+    "vendas recebida": "Vendas recebidas",
+    saldo: "Saldo",
+    "total pago": "Total pago",
+    "total recebido": "Total recebido",
+    "saldo (caixa acumulado)": "Saldo (caixa acumulado)",
+    "a pagar (em aberto)": "A pagar (em aberto)",
+    "a receber (em aberto)": "A receber (em aberto)",
+    "saldo em aberto": "Saldo em aberto",
+    "saldo do período": "Saldo do período",
+  };
+  return map[legenda.toLowerCase()] ?? legenda;
+}
+
+type PainelCardVisual = {
+  iconWrap: string;
+  iconClass: string;
+  valueClass: string;
+  cardClassName: string;
+  labelClassName: string;
+  Icon: LucideIcon;
 };
 
-function painelValorClass(kind: PainelMetricKind, valor: number): string {
-  if (kind === "saldo") {
-    if (valor < 0) return statTheme.rose.valueClass;
-    if (valor > 0) return statTheme.emerald.valueClass;
-    return statTheme.blue.valueClass;
-  }
+function painelCardVisual(kind: PainelMetricKind, valor: number): PainelCardVisual {
+  const positivo = {
+    cardClassName: "border-emerald-100 bg-emerald-50/90 shadow-none dark:border-emerald-900/50 dark:bg-emerald-950/30",
+    iconWrap: "bg-emerald-100 dark:bg-emerald-900/50",
+    iconClass: "text-emerald-600 dark:text-emerald-400",
+    valueClass: "text-emerald-700 dark:text-emerald-400",
+    labelClassName: "text-emerald-800/70 dark:text-emerald-300/80",
+  };
+  const negativo = {
+    cardClassName: "border-red-100 bg-red-50/90 shadow-none dark:border-red-900/50 dark:bg-red-950/30",
+    iconWrap: "bg-red-100 dark:bg-red-900/50",
+    iconClass: "text-red-600 dark:text-red-400",
+    valueClass: "text-red-600 dark:text-red-400",
+    labelClassName: "text-red-800/70 dark:text-red-300/80",
+  };
+
   if (kind === "compras") {
-    return statTheme.red.valueClass;
+    return { ...negativo, Icon: ShoppingCart };
   }
-  if (kind === "vendas" && valor > 0) {
-    return statTheme.emerald.valueClass;
+  if (kind === "vendas") {
+    return { ...positivo, Icon: TrendingUp };
   }
-  return statTheme.slate.valueClass;
+  /** Saldo: verde se >= 0, vermelho se negativo (como no mock). */
+  return {
+    ...(valor < 0 ? negativo : positivo),
+    Icon: Coins,
+  };
 }
 
 /** API pode devolver número ou string decimal; JSON às vezes vem em camelCase. */
@@ -746,10 +771,10 @@ const Dashboard = () => {
                   >
                     <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#003366] text-xs font-bold text-white">
                           {bloco.etapa}
                         </span>
-                        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-muted dark:text-muted-foreground">
                           {bloco.pill}
                         </span>
                         <h3 className="text-base font-semibold text-slate-900 dark:text-foreground sm:text-lg">
@@ -851,7 +876,7 @@ const Dashboard = () => {
                       {bloco.celulas.map((c, idx) => {
                         const valorN = numPainel(c.valor);
                         const kind = painelMetricKindFromLegenda(c.legenda);
-                        const visual = painelMetricVisual[kind];
+                        const visual = painelCardVisual(kind, valorN);
                         return (
                           <motion.div
                             key={`${bloco.titulo}-${c.legenda}`}
@@ -862,11 +887,13 @@ const Dashboard = () => {
                             <ModuleStatCard
                               item={{
                                 key: `${bloco.titulo}-${c.legenda}`,
-                                label: c.legenda,
+                                label: tituloLegendaPainel(c.legenda),
                                 value: formatCurrency(valorN),
                                 iconWrap: visual.iconWrap,
                                 iconClass: visual.iconClass,
-                                valueClass: painelValorClass(kind, valorN),
+                                valueClass: visual.valueClass,
+                                labelClassName: visual.labelClassName,
+                                cardClassName: visual.cardClassName,
                                 Icon: visual.Icon,
                               }}
                             />
@@ -905,67 +932,96 @@ const Dashboard = () => {
         </motion.div>
         </DashboardSectionErrorBoundary>
 
-        {/* DRE - Demonstrativo de Resultados no Exercício */}
+        {/* DRE - Demonstrativo de Resultados */}
         <DashboardSectionErrorBoundary label="DRE tabular">
         <motion.div
           initial={false}
           animate={{ opacity: 1, y: 0 }}
           className="mb-6"
         >
-          <div className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60">
-            <div className="mb-4 border-b border-border/70 pb-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Financeiro
-                  </p>
-                  <h3 className="mt-1 text-xl font-bold tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">
-                    DRE - Demonstrativo de Resultados no Exercício
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Valores por tipo espelham o{' '}
-                    <strong className="font-medium text-foreground">Centro de Despesa</strong>
-                    {parametrosDre.semRecorteData
-                      ? " (todo o período, sem filtro de data)."
-                      : ` (mês ${parametrosDre.rotuloPeriodo}).`}
-                    {' '}Os totais à direita seguem a soma das linhas abaixo.
-                  </p>
-                </div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end sm:justify-end">
-                  <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
-                  <Label
-                    htmlFor="dashboard-dre-mes-ano"
-                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-6 dark:border-border dark:bg-card">
+            <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0 space-y-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:border-border dark:bg-muted dark:text-muted-foreground">
+                  <Building2 className="h-3.5 w-3.5" />
+                  Financeiro
+                </span>
+                <h3 className="text-xl font-bold tracking-tight text-[#003366] dark:text-foreground sm:text-2xl">
+                  DRE — Demonstrativo de Resultados
+                </h3>
+                <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
+                  Valores por tipo espelham o Centro de Despesa
+                  {parametrosDre.semRecorteData
+                    ? " (todo o período)."
+                    : ` (mês ${parametrosDre.rotuloPeriodo}).`}{" "}
+                  Os totais à direita seguem a soma das linhas.
+                </p>
+              </div>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 gap-2 border-slate-200 bg-white text-[#003366] hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
+                    disabled={loadingDre || drePdfLoading !== null}
+                    onClick={() => exportarDrePdf("download")}
                   >
-                    <Calendar className="h-3.5 w-3.5 opacity-70" />
-                    Mês de referência
-                  </Label>
-                  <div className="relative">
-                    <input
-                      id="dashboard-dre-mes-ano"
-                      type="month"
-                      value={dreMesAnoFiltro}
-                      onChange={(e) => setDreMesAnoFiltro(e.target.value)}
-                      className={`h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                        dreMesAnoFiltro
-                          ? "text-foreground"
-                          : "text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent"
-                      }`}
-                    />
-                    {!dreMesAnoFiltro ? (
-                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-muted-foreground">
-                        Todo o período
-                      </span>
-                    ) : null}
+                    {drePdfLoading === "download" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 gap-2 bg-[#003366] text-white hover:bg-[#002244]"
+                    disabled={loadingDre || drePdfLoading !== null}
+                    onClick={() => exportarDrePdf("print")}
+                  >
+                    {drePdfLoading === "print" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Printer className="h-4 w-4" />
+                    )}
+                    Imprimir
+                  </Button>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+                  <div className="flex min-w-[12rem] flex-col gap-1">
+                    <Label
+                      htmlFor="dashboard-dre-mes-ano"
+                      className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
+                    >
+                      <Calendar className="h-3.5 w-3.5 opacity-70" />
+                      Mês
+                    </Label>
+                    <div className="relative">
+                      <input
+                        id="dashboard-dre-mes-ano"
+                        type="month"
+                        value={dreMesAnoFiltro}
+                        onChange={(e) => setDreMesAnoFiltro(e.target.value)}
+                        className={`h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-border dark:bg-background ${
+                          dreMesAnoFiltro
+                            ? "text-foreground"
+                            : "text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent"
+                        }`}
+                      />
+                      {!dreMesAnoFiltro ? (
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-slate-400">
+                          Todo o período
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  </div>
-                  <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[16rem] dark:bg-background/50">
-                    <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <div className="flex min-w-[12rem] flex-col gap-1">
+                    <Label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                       <ListFilter className="h-3.5 w-3.5 opacity-70" />
                       Roça
                     </Label>
                     <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
-                      <SelectTrigger className="h-10">
+                      <SelectTrigger className="h-10 border-slate-200 bg-white dark:border-border dark:bg-background">
                         <SelectValue placeholder="Todas as roças" />
                       </SelectTrigger>
                       <SelectContent>
@@ -982,110 +1038,94 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[#003366]/20 bg-[#003366]/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Exporte o DRE com o período e a roça selecionados acima.
-              </p>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <Button
-                  type="button"
-                  className="h-10 gap-2 bg-[#003366] hover:bg-[#002244]"
-                  disabled={loadingDre || drePdfLoading !== null}
-                  onClick={() => exportarDrePdf("download")}
-                >
-                  {drePdfLoading === "download" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Baixar PDF do DRE
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 gap-2 border-[#003366]/30 bg-background"
-                  disabled={loadingDre || drePdfLoading !== null}
-                  onClick={() => exportarDrePdf("print")}
-                >
-                  {drePdfLoading === "print" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Printer className="h-4 w-4" />
-                  )}
-                  Imprimir DRE
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <div className="xl:col-span-8 overflow-x-auto rounded-xl border border-border/70 bg-background/70 dark:bg-background/40">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 xl:col-span-8 dark:border-border">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/60 hover:bg-muted/60">
-                      <TableHead className="min-w-[260px] text-foreground">
+                    <TableRow className="border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-border dark:bg-muted/50">
+                      <TableHead className="min-w-[220px] text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Conta
                       </TableHead>
-                      <TableHead className="text-right text-foreground">Valor</TableHead>
-                      <TableHead className="text-right text-foreground">Percentual</TableHead>
+                      <TableHead className="text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Valor
+                      </TableHead>
+                      <TableHead className="w-20 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        %
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {dreLinhas.map((linha) => (
-                      <TableRow key={linha.key}>
+                      <TableRow
+                        key={linha.key}
+                        className="border-slate-100 dark:border-border"
+                      >
                         <TableCell
                           className={
                             linha.indent
-                              ? "pl-6 font-medium text-muted-foreground"
-                              : "font-medium"
+                              ? "pl-6 font-medium text-slate-500"
+                              : "font-semibold text-[#003366] dark:text-foreground"
                           }
                         >
                           {linha.descricao}
                         </TableCell>
-                        <TableCell className="text-right whitespace-nowrap tabular-nums">
-                          {loadingDre ? "..." : formatCurrency(linha.valor)}
+                        <TableCell className="text-right whitespace-nowrap tabular-nums font-semibold text-[#003366] dark:text-foreground">
+                          {loadingDre ? "…" : formatCurrency(linha.valor)}
                         </TableCell>
-                        <TableCell className="text-right whitespace-nowrap tabular-nums">
-                          {linha.percentual === null ? "-" : `${linha.percentual}%`}
+                        <TableCell className="text-right whitespace-nowrap tabular-nums text-slate-500">
+                          {linha.percentual === null ? "—" : `${linha.percentual}%`}
                         </TableCell>
                       </TableRow>
                     ))}
+                    {!loadingDre && dreLinhas.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={3}
+                          className="py-8 text-center text-sm text-slate-400"
+                        >
+                          Nenhum lançamento no período.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                   </TableBody>
                 </Table>
               </div>
 
               <div className="xl:col-span-4 space-y-3">
-                <div className="rounded-xl border border-border/70 overflow-hidden bg-background/70 dark:bg-background/40">
-                  <div className="bg-muted px-4 py-2 text-sm font-semibold text-foreground">
-                    Total de Vendas Efetivas
-                  </div>
-                  <div className="border-t border-border/60 px-4 py-2 text-right text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
-                    {formatCurrency(dreTotais.totalVendasEfetivas)}
-                  </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 dark:border-border dark:bg-card">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Total de vendas efetivas
+                  </p>
+                  <p className="mt-2 text-right text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {loadingDre ? "…" : formatCurrency(dreTotais.totalVendasEfetivas)}
+                  </p>
                 </div>
-                <div className="rounded-xl border border-border/70 overflow-hidden bg-background/70 dark:bg-background/40">
-                  <div className="bg-muted px-4 py-2 text-sm font-semibold text-foreground">
-                    Total de Despesas Efetivas
-                  </div>
-                  <div className="border-t border-border/60 px-4 py-2 text-right text-base font-bold text-red-700 dark:text-red-400 tabular-nums">
-                    {formatCurrency(dreTotais.totalDespesasEfetivas)}
-                  </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 dark:border-border dark:bg-card">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Total de despesas efetivas
+                  </p>
+                  <p className="mt-2 text-right text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
+                    {loadingDre ? "…" : formatCurrency(dreTotais.totalDespesasEfetivas)}
+                  </p>
                 </div>
-                <div className="rounded-xl border border-border/70 overflow-hidden bg-background/70 dark:bg-background/40">
-                  <div className="bg-muted px-4 py-2 text-sm font-semibold text-foreground">
-                    RESULTADO EFETIVO MÊS
-                  </div>
-                  <div
-                    className={`border-t border-border/60 px-4 py-2 text-right text-base font-bold tabular-nums ${
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-800 dark:bg-emerald-950/30">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-emerald-300/80">
+                    Resultado efetivo do mês
+                  </p>
+                  <p
+                    className={`mt-2 text-right text-2xl font-bold tabular-nums ${
                       dreTotais.resultadoEfetivoMes < 0
-                        ? "text-destructive"
-                        : "text-emerald-600 dark:text-emerald-400"
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-emerald-700 dark:text-emerald-400"
                     }`}
                   >
-                    {formatCurrency(dreTotais.resultadoEfetivoMes)}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-2 text-right text-sm font-semibold text-muted-foreground tabular-nums dark:bg-background/40">
-                  {dreTotais.margemResultado}%
+                    {loadingDre
+                      ? "…"
+                      : formatCurrency(dreTotais.resultadoEfetivoMes)}
+                  </p>
+                  <p className="mt-1 text-right text-sm text-slate-500 dark:text-muted-foreground">
+                    {loadingDre ? "…" : `${dreTotais.margemResultado}% de margem`}
+                  </p>
                 </div>
               </div>
             </div>
