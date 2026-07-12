@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { DashboardSectionErrorBoundary } from "@/components/dashboard/DashboardSectionErrorBoundary";
 import { DreFaturamentoLucro } from "@/components/dashboard/DreFaturamentoLucro";
 import { ModuleStatCard } from "@/components/layout/ModuleStatCards";
 import { statTheme } from "@/components/layout/module-stat-themes";
@@ -120,36 +121,52 @@ async function agregarCentroCustoParaDre(filtros: {
   items: { tipoId: number; nome: string; valor: number }[];
   total: number;
 }> {
+  const toNum = (v: unknown) => {
+    const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   try {
     const res = await centroCustoService.agregarDespesasPorTipo(filtros);
+    const items = (res?.items ?? []).map((t) => ({
+      tipoId: Number(t.tipoId) || 0,
+      nome: String(t.nome || `Tipo #${t.tipoId}`),
+      valor: Number(toNum(t.valor).toFixed(2)),
+    }));
     return {
-      items: (res?.items ?? []).map((t) => ({
-        tipoId: t.tipoId,
-        nome: t.nome,
-        valor: Number(t.valor.toFixed(2)),
-      })),
-      total: Number((res?.total ?? 0).toFixed(2)),
+      items,
+      total: Number(
+        (res?.total != null
+          ? toNum(res.total)
+          : items.reduce((s, x) => s + x.valor, 0)
+        ).toFixed(2),
+      ),
     };
   } catch {
     const despesas: ApiCentroCustoDespesa[] = [];
     let totalRegistros = Infinity;
     let page = 1;
-    while ((page - 1) * CC_DRE_PAGE_LIMIT < totalRegistros) {
+    const maxPages = 50;
+    while (
+      page <= maxPages &&
+      (page - 1) * CC_DRE_PAGE_LIMIT < totalRegistros
+    ) {
       const res = await centroCustoService.listarDespesas(
         page,
         CC_DRE_PAGE_LIMIT,
         filtros,
       );
-      totalRegistros = res?.total ?? 0;
-      despesas.push(...(res?.items ?? []));
-      if (!res?.items?.length) break;
+      totalRegistros = Number(res?.total) || 0;
+      const batch = res?.items ?? [];
+      despesas.push(...batch);
+      if (!batch.length) break;
       page += 1;
     }
     const porTipo = new Map<number, { nome: string; valor: number }>();
     for (const d of despesas) {
       const tipoId = Number(d.tipoId) || 0;
       if (tipoId <= 0) continue;
-      const valor = Number(d.valor) || 0;
+      const valor = toNum(d.valor);
       const nome = (d.tipoNome || `Tipo #${tipoId}`).trim();
       const cur = porTipo.get(tipoId);
       if (cur) cur.valor += valor;
@@ -157,7 +174,7 @@ async function agregarCentroCustoParaDre(filtros: {
     }
     const items = [...porTipo.entries()]
       .sort((a, b) =>
-        a[1].nome.localeCompare(b[1].nome, "pt-BR", { sensitivity: "base" }),
+        a[1].nome.localeCompare(b[1].nome, 'pt-BR', { sensitivity: 'base' }),
       )
       .map(([tipoId, { nome, valor }]) => ({
         tipoId,
@@ -665,7 +682,7 @@ const Dashboard = () => {
 
         {!acessoFinanceiro ? (
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm"
           >
@@ -679,8 +696,9 @@ const Dashboard = () => {
 
         {acessoFinanceiro ? (
         <>
+        <DashboardSectionErrorBoundary label="painel financeiro">
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
           className="mb-6 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]"
@@ -721,7 +739,7 @@ const Dashboard = () => {
                 {painelBlocos.map((bloco, blocoIdx) => (
                   <motion.section
                     key={bloco.titulo}
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={false}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.08 + blocoIdx * 0.06 }}
                     className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60"
@@ -837,7 +855,7 @@ const Dashboard = () => {
                         return (
                           <motion.div
                             key={`${bloco.titulo}-${c.legenda}`}
-                            initial={{ opacity: 0, y: 6 }}
+                            initial={false}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.12 + blocoIdx * 0.05 + idx * 0.04 }}
                           >
@@ -867,12 +885,13 @@ const Dashboard = () => {
             )}
           </div>
         </motion.div>
+        </DashboardSectionErrorBoundary>
 
         {/* DRE simplificado: faturamento → lucro líquido */}
+        <DashboardSectionErrorBoundary label="DRE faturamento lucro">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
           className="mb-6"
         >
           <DreFaturamentoLucro
@@ -884,12 +903,13 @@ const Dashboard = () => {
             loading={loadingDre}
           />
         </motion.div>
+        </DashboardSectionErrorBoundary>
 
         {/* DRE - Demonstrativo de Resultados no Exercício */}
+        <DashboardSectionErrorBoundary label="DRE tabular">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
           className="mb-6"
         >
           <div className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60">
@@ -1071,6 +1091,7 @@ const Dashboard = () => {
             </div>
           </div>
         </motion.div>
+        </DashboardSectionErrorBoundary>
         </>
         ) : null}
       </div>
