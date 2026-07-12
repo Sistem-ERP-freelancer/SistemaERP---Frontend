@@ -1038,8 +1038,8 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12 xl:gap-5">
-              <div className="overflow-hidden rounded-2xl border border-slate-200 xl:col-span-8 dark:border-border">
+            <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12 xl:gap-5">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 xl:col-span-8 dark:border-border">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-200 bg-slate-50 hover:bg-slate-50 dark:border-border dark:bg-muted/50">
@@ -1091,7 +1091,8 @@ const Dashboard = () => {
                 </Table>
               </div>
 
-              <div className="xl:col-span-4 space-y-3">
+              <div className="xl:col-span-4 xl:self-stretch">
+                <div className="space-y-3 xl:sticky xl:top-20 xl:z-10">
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 dark:border-border dark:bg-card">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Total de vendas efetivas
@@ -1126,6 +1127,7 @@ const Dashboard = () => {
                   <p className="mt-1 text-right text-sm text-slate-500 dark:text-muted-foreground">
                     {loadingDre ? "…" : `${dreTotais.margemResultado}% de margem`}
                   </p>
+                </div>
                 </div>
               </div>
             </div>
