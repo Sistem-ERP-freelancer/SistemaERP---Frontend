@@ -1,4 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { DreFaturamentoLucro } from "@/components/dashboard/DreFaturamentoLucro";
 import { ModuleStatCard } from "@/components/layout/ModuleStatCards";
 import { statTheme } from "@/components/layout/module-stat-themes";
 import { OrderStats } from "@/components/orders/OrderStats";
@@ -472,6 +473,16 @@ const Dashboard = () => {
         totalDespesasEfetivasDre,
         fornecedoresPorTipo,
         fornecedoresDemaisCompras,
+        /** Centro de despesa no período (despesas gerais do DRE simplificado). */
+        despesasGerais: somaCentroDespesaNoPeriodo,
+        /**
+         * Compras com fornecedor fora do centro de despesa.
+         * Sempre compras − CC (mesmo sem recorte mensal), para o funil de lucro.
+         */
+        custoProduto: Math.max(
+          0,
+          Number((totalFornecedores - somaCentroDespesaNoPeriodo).toFixed(2)),
+        ),
       };
     },
     refetchInterval: 30000,
@@ -550,6 +561,46 @@ const Dashboard = () => {
       totalDespesasEfetivas,
       resultadoEfetivoMes,
       margemResultado,
+    };
+  }, [dreDadosReais]);
+
+  /** Funil: faturamento → custo produto → lucro bruto → despesas → lucro líquido.
+   * Lucro líquido = mesmo Resultado Efetivo do DRE (vendas − despesas efetivas).
+   * Custo + despesas gerais = total de despesas efetivas do DRE. */
+  const dreFaturamentoLucro = useMemo(() => {
+    const faturamento = dreDadosReais?.totalVendasEfetivas ?? 0;
+    const totalDespesasEfetivas =
+      dreDadosReais?.totalDespesasEfetivasDre ??
+      dreDadosReais?.totalFornecedores ??
+      0;
+    const cc = dreDadosReais?.despesasGerais ?? 0;
+    const demais = dreDadosReais?.fornecedoresDemaisCompras ?? 0;
+    const porTipoLen = dreDadosReais?.fornecedoresPorTipo?.length ?? 0;
+
+    let despesasGerais: number;
+    let custoProduto: number;
+
+    if (porTipoLen === 0 && demais <= 0.005) {
+      despesasGerais = 0;
+      custoProduto = totalDespesasEfetivas;
+    } else {
+      despesasGerais = Math.min(cc, totalDespesasEfetivas);
+      custoProduto = Number(
+        (totalDespesasEfetivas - despesasGerais).toFixed(2),
+      );
+    }
+
+    const lucroBruto = Number((faturamento - custoProduto).toFixed(2));
+    const lucroLiquido = Number(
+      (faturamento - totalDespesasEfetivas).toFixed(2),
+    );
+
+    return {
+      faturamento,
+      custoProduto,
+      lucroBruto,
+      despesasGerais,
+      lucroLiquido,
     };
   }, [dreDadosReais]);
 
@@ -815,6 +866,23 @@ const Dashboard = () => {
               </p>
             )}
           </div>
+        </motion.div>
+
+        {/* DRE simplificado: faturamento → lucro líquido */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="mb-6"
+        >
+          <DreFaturamentoLucro
+            faturamento={dreFaturamentoLucro.faturamento}
+            custoProduto={dreFaturamentoLucro.custoProduto}
+            lucroBruto={dreFaturamentoLucro.lucroBruto}
+            despesasGerais={dreFaturamentoLucro.despesasGerais}
+            lucroLiquido={dreFaturamentoLucro.lucroLiquido}
+            loading={loadingDre}
+          />
         </motion.div>
 
         {/* DRE - Demonstrativo de Resultados no Exercício */}
