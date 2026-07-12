@@ -929,6 +929,8 @@ const ContasAReceber = () => {
       iconWrap: stat.iconWrap,
       iconClass: stat.iconClass,
       valueClass: stat.valueClass,
+      cardClassName: stat.cardClassName,
+      labelClassName: stat.labelClassName,
       Icon: stat.Icon,
       labelExtra: stat.key === "a_receber" ? totalReceberTooltip : undefined,
       active: activeCardFilter === stat.filterKey,

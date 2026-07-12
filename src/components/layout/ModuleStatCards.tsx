@@ -55,7 +55,7 @@ export function ModuleStatCard({ item }: ModuleStatCardProps) {
     >
       <Card
         className={cn(
-          'h-full min-w-0 border-slate-200 bg-white shadow-sm',
+          'h-full min-w-0 rounded-2xl border-slate-200 bg-white shadow-sm',
           interactive && 'transition-shadow hover:shadow-md',
           item.cardClassName,
         )}
@@ -119,7 +119,7 @@ export function ModuleStatCards({
         {Array.from({ length: skeletons }, (_, i) => (
           <Card
             key={i}
-            className="h-full min-w-0 border-slate-200 bg-white shadow-sm"
+            className="h-full min-w-0 rounded-2xl border-slate-200 bg-white shadow-sm"
           >
             <CardContent className="flex items-center justify-center p-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

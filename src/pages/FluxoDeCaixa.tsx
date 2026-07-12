@@ -4,7 +4,7 @@ import {
   ModuleStatCards,
   type ModuleStatCardItem,
 } from '@/components/layout/ModuleStatCards';
-import { statTheme } from '@/components/layout/module-stat-themes';
+import { saldoStatTheme, statTheme } from '@/components/layout/module-stat-themes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -406,13 +406,14 @@ export default function FluxoDeCaixa() {
 
   const resumoCards: ModuleStatCardItem[] = useMemo(() => {
     const cards = fluxoData?.cards;
+    const saldoProjetado = cards?.saldo_projetado ?? 0;
     return [
       {
         key: 'saldo-inicial',
         label: 'Saldo inicial',
         value: formatCurrency(cards?.saldo_inicial ?? 0),
         Icon: Wallet,
-        ...statTheme.blue,
+        ...statTheme.sky,
       },
       {
         key: 'total-receber',
@@ -433,16 +434,14 @@ export default function FluxoDeCaixa() {
         label: 'Total a pagar',
         value: formatCurrency(cards?.total_a_pagar ?? 0),
         Icon: ArrowDownRight,
-        ...statTheme.rose,
+        ...statTheme.red,
       },
       {
         key: 'saldo-projetado',
         label: 'Saldo projetado',
-        value: formatCurrency(cards?.saldo_projetado ?? 0),
+        value: formatCurrency(saldoProjetado),
         Icon: Calculator,
-        iconWrap: 'bg-sky-50',
-        iconClass: 'text-[#003366]',
-        valueClass: 'text-[#003366]',
+        ...saldoStatTheme(saldoProjetado),
       },
     ];
   }, [fluxoData?.cards]);

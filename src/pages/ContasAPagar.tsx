@@ -1112,7 +1112,7 @@ function ContasAPagar() {
         label: "Total a Pagar",
         value: formatarMoedaCard(totalPagar),
         Icon: DollarSign,
-        ...statTheme.orange,
+        ...statTheme.red,
       },
       {
         key: "valor_pago",
@@ -1157,6 +1157,8 @@ function ContasAPagar() {
       iconWrap: stat.iconWrap,
       iconClass: stat.iconClass,
       valueClass: stat.valueClass,
+      cardClassName: stat.cardClassName,
+      labelClassName: stat.labelClassName,
       Icon: stat.Icon,
       active: activeCardFilter === stat.filterKey,
       onClick: () =>

@@ -1812,6 +1812,8 @@ export default function CentroCustos() {
         iconWrap: c.iconWrap,
         iconClass: c.iconClass,
         valueClass: c.valueClass,
+        cardClassName: c.cardClassName,
+        labelClassName: c.labelClassName,
         Icon: c.Icon,
       };
     });

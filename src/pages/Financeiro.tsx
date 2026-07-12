@@ -5,7 +5,7 @@ import {
   ModuleStatCards,
   type ModuleStatCardItem,
 } from "@/components/layout/ModuleStatCards";
-import { statTheme } from "@/components/layout/module-stat-themes";
+import { saldoStatTheme, statTheme } from "@/components/layout/module-stat-themes";
 import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -758,14 +758,14 @@ const Financeiro = () => {
         ? statsFiltrados.saldoAtual
         : receitaMes - despesaMes;
 
-    /** Mesmo padrão visual dos cards em Centro de custos (borda lateral + ícone + valor). */
+    /** Visual pastel alinhado ao Dashboard (vendas verde / despesas vermelho / saldo dinâmico). */
     return [
       {
         key: "receita_mes",
         label: "Receita do Mês",
         value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(receitaMes),
         Icon: TrendingUp,
-        ...statTheme.sky,
+        ...statTheme.emerald,
         cardFilter: "RECEBER" as const,
       },
       {
@@ -773,7 +773,7 @@ const Financeiro = () => {
         label: "Despesas do Mês",
         value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(despesaMes),
         Icon: TrendingDown,
-        ...statTheme.rose,
+        ...statTheme.red,
         cardFilter: "PAGAR" as const,
       },
       {
@@ -796,7 +796,7 @@ const Financeiro = () => {
           maximumFractionDigits: 2,
         }).format(saldoAtual),
         Icon: Wallet,
-        ...statTheme.blue,
+        ...saldoStatTheme(saldoAtual),
         cardFilter: "todos" as const,
       },
     ];
@@ -840,6 +840,8 @@ const Financeiro = () => {
         iconWrap: stat.iconWrap,
         iconClass: stat.iconClass,
         valueClass: stat.valueClass,
+        cardClassName: stat.cardClassName,
+        labelClassName: stat.labelClassName,
         Icon: stat.Icon,
         active: isPrevisaoCard
           ? activeTab === "PREVISAO" && periodoEhMesAtual
