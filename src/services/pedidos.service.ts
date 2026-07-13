@@ -371,10 +371,14 @@ class PedidosService {
   async getRelatorioMargemContribuicao(params?: {
     data_inicial?: string;
     data_final?: string;
+    roca_id?: number;
   }): Promise<RelatorioMargemContribuicaoResponse> {
     const q = new URLSearchParams();
     if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
     if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    if (params?.roca_id != null && params.roca_id > 0) {
+      q.append('roca_id', String(params.roca_id));
+    }
     const query = q.toString();
     return apiClient.get<RelatorioMargemContribuicaoResponse>(
       `/pedidos/relatorio/margem-contribuicao${query ? `?${query}` : ''}`

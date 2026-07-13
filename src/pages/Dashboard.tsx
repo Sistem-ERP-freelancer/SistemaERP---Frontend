@@ -23,6 +23,7 @@ import {
 } from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
 import { financeiroService } from "@/services/financeiro.service";
+import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -469,10 +470,22 @@ const Dashboard = () => {
             ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
           };
 
-      const [resumoFinanceiroMes, agregadoCentroCusto] = await Promise.all([
-        financeiroService.getDashboardUnificado(paramsDashboard),
-        agregarCentroCustoParaDre(filtrosCentroCusto),
-      ]);
+      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao] =
+        await Promise.all([
+          financeiroService.getDashboardUnificado(paramsDashboard),
+          agregarCentroCustoParaDre(filtrosCentroCusto),
+          pedidosService
+            .getRelatorioMargemContribuicao({
+              ...(parametrosDre.semRecorteData
+                ? {}
+                : {
+                    data_inicial: parametrosDre.data_inicial,
+                    data_final: parametrosDre.data_final,
+                  }),
+              ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
+            })
+            .catch(() => null),
+        ]);
 
       const resumoRaw = resumoFinanceiroMes as Record<string, unknown>;
       const painelRaw =
@@ -509,6 +522,11 @@ const Dashboard = () => {
               ),
             );
 
+      /** CMV: quantidade vendida × preço de custo do produto (relatório de margem). */
+      const custoProduto = Number(
+        (margemContribuicao?.totais?.custo_variavel ?? 0).toFixed(2),
+      );
+
       return {
         totalVendasEfetivas,
         totalFornecedores,
@@ -517,14 +535,7 @@ const Dashboard = () => {
         fornecedoresDemaisCompras,
         /** Centro de despesa no período (despesas gerais do DRE simplificado). */
         despesasGerais: somaCentroDespesaNoPeriodo,
-        /**
-         * Compras com fornecedor fora do centro de despesa.
-         * Sempre compras − CC (mesmo sem recorte mensal), para o funil de lucro.
-         */
-        custoProduto: Math.max(
-          0,
-          Number((totalFornecedores - somaCentroDespesaNoPeriodo).toFixed(2)),
-        ),
+        custoProduto,
       };
     },
     refetchInterval: 30000,
@@ -606,36 +617,13 @@ const Dashboard = () => {
     };
   }, [dreDadosReais]);
 
-  /** Funil: faturamento → custo produto → lucro bruto → despesas → lucro líquido.
-   * Lucro líquido = mesmo Resultado Efetivo do DRE (vendas − despesas efetivas).
-   * Custo + despesas gerais = total de despesas efetivas do DRE. */
+  /** Funil: faturamento → CMV (qtd × preço custo) → lucro bruto → despesas CC → lucro líquido. */
   const dreFaturamentoLucro = useMemo(() => {
     const faturamento = dreDadosReais?.totalVendasEfetivas ?? 0;
-    const totalDespesasEfetivas =
-      dreDadosReais?.totalDespesasEfetivasDre ??
-      dreDadosReais?.totalFornecedores ??
-      0;
-    const cc = dreDadosReais?.despesasGerais ?? 0;
-    const demais = dreDadosReais?.fornecedoresDemaisCompras ?? 0;
-    const porTipoLen = dreDadosReais?.fornecedoresPorTipo?.length ?? 0;
-
-    let despesasGerais: number;
-    let custoProduto: number;
-
-    if (porTipoLen === 0 && demais <= 0.005) {
-      despesasGerais = 0;
-      custoProduto = totalDespesasEfetivas;
-    } else {
-      despesasGerais = Math.min(cc, totalDespesasEfetivas);
-      custoProduto = Number(
-        (totalDespesasEfetivas - despesasGerais).toFixed(2),
-      );
-    }
-
+    const custoProduto = Number((dreDadosReais?.custoProduto ?? 0).toFixed(2));
+    const despesasGerais = Number((dreDadosReais?.despesasGerais ?? 0).toFixed(2));
     const lucroBruto = Number((faturamento - custoProduto).toFixed(2));
-    const lucroLiquido = Number(
-      (faturamento - totalDespesasEfetivas).toFixed(2),
-    );
+    const lucroLiquido = Number((lucroBruto - despesasGerais).toFixed(2));
 
     return {
       faturamento,
