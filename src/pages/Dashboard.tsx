@@ -960,27 +960,6 @@ const Dashboard = () => {
             mesAno={dreMesAnoFiltro}
             onMesAnoChange={setDreMesAnoFiltro}
             periodoLabel={parametrosDre.rotuloPeriodo}
-            filtersExtra={
-              <div className="flex min-w-[12rem] flex-col gap-1">
-                <Label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                  <ListFilter className="h-3.5 w-3.5 opacity-70" />
-                  Roça
-                </Label>
-                <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
-                  <SelectTrigger className="h-10 border-slate-200 bg-white dark:border-border dark:bg-background">
-                    <SelectValue placeholder="Todas as roças" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as roças</SelectItem>
-                    {rocasOpcoes.map((roca) => (
-                      <SelectItem key={roca.id} value={String(roca.id)}>
-                        {roca.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            }
           />
         </motion.div>
         </DashboardSectionErrorBoundary>
