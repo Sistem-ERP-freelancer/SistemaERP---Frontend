@@ -206,6 +206,10 @@ export function EmpresaConfigSection({
     spedyStatus?.integracao_ativa ||
     Boolean(tenantInfo?.configuracoes?.spedy?.apiKey);
 
+  const emissorCadastrado = Boolean(
+    spedyStatus?.emissor_cadastrado || spedyStatus?.company_id,
+  );
+
   const handleAtualizarCertificado = async () => {
     if (!certificadoFile) {
       toast.error('Selecione o arquivo do certificado digital (.pfx).');
@@ -236,13 +240,13 @@ export function EmpresaConfigSection({
 
   const podeMostrarAtivacao =
     canEdit &&
-    !integracaoAtiva &&
     spedyStatus?.cadastro_automatico_disponivel &&
     spedyStatus?.pode_ativar;
 
   const podeMostrarAtualizarCertificado =
     canEdit &&
     integracaoAtiva &&
+    emissorCadastrado &&
     (spedyStatus?.pode_atualizar_certificado ?? true);
 
   if (loading) {
@@ -632,10 +636,14 @@ export function EmpresaConfigSection({
                   {spedyStatus.ambiente === 'producao' ? 'Produção' : 'Homologação'}
                 </Badge>
               )}
-              {spedyStatus?.company_id && (
+              {emissorCadastrado ? (
                 <span className="text-xs text-muted-foreground">
-                  Emissor: {spedyStatus.company_id}
+                  Emissor: {spedyStatus?.company_id}
                 </span>
+              ) : (
+                <Badge variant="destructive" className="font-normal">
+                  Emissor não cadastrado na Spedy
+                </Badge>
               )}
             </div>
           )}
@@ -645,12 +653,17 @@ export function EmpresaConfigSection({
               <div className="flex items-start gap-3">
                 <ShieldCheck className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">Ativar emissão de NF-e na Spedy</p>
+                  <p className="text-sm font-medium">
+                    {integracaoAtiva
+                      ? 'Cadastrar empresa (emissor) na Spedy'
+                      : 'Ativar emissão de NF-e na Spedy'}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Cadastra automaticamente o emissor (POST /companies), habilita NF-e de
-                    produto e grava a API Key desta empresa. Para CPF, habilita
-                    allowNaturalPersonCompany antes do cadastro. Em homologação o certificado é
-                    opcional; em produção é obrigatório.
+                    Cria o emissor na Spedy via POST /companies com os dados desta
+                    tela (razão social, CPF/CNPJ, IE, endereço e fiscal). Em seguida
+                    grava a API Key gerada. Se o CPF/CNPJ já existir na conta Spedy,
+                    o sistema tenta reaproveitar o cadastro. Em homologação o
+                    certificado é opcional; em produção é obrigatório.
                   </p>
                 </div>
               </div>
@@ -719,12 +732,14 @@ export function EmpresaConfigSection({
                 {ativandoSpedy ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Ativando na Spedy...
+                    Cadastrando na Spedy...
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="h-4 w-4 mr-2" />
-                    Ativar emissão de NF-e
+                    {integracaoAtiva
+                      ? 'Cadastrar empresa na Spedy'
+                      : 'Ativar emissão de NF-e'}
                   </>
                 )}
               </Button>
@@ -818,10 +833,11 @@ export function EmpresaConfigSection({
             canEdit &&
             spedyStatus &&
             !spedyStatus.cadastro_automatico_disponivel &&
-            !integracaoAtiva && (
-              <p className="text-xs text-muted-foreground sm:col-span-2">
-                Cadastro automático indisponível no servidor. Cole a API Key manualmente abaixo
-                ou configure SPEDY_MASTER_API_KEY no backend.
+            !emissorCadastrado && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 sm:col-span-2">
+                Cadastro automático indisponível no servidor (falta SPEDY_MASTER_API_KEY).
+                Cadastre a empresa no painel Spedy e cole a API Key abaixo, ou configure a
+                chave master no backend para habilitar o botão de criar emissor.
               </p>
             )}
 

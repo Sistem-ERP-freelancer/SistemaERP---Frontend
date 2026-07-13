@@ -7,6 +7,7 @@ export interface SpedyTenantStatus {
   ambiente: 'homologacao' | 'producao';
   cadastro_automatico_disponivel: boolean;
   pode_ativar: boolean;
+  emissor_cadastrado?: boolean;
   pode_atualizar_certificado: boolean;
   send_email_to_customer: boolean;
 }
