@@ -450,6 +450,23 @@ const Dashboard = () => {
   const { data: dreDadosReais, isLoading: loadingDre } = useQuery({
     queryKey: ["dashboard", "dre-real", parametrosDre, rocaFiltro],
     queryFn: async () => {
+      /** Período do funil = mês do DRE, ou mês atual (igual à competência do painel). */
+      const periodoFunil = (() => {
+        if (!parametrosDre.semRecorteData) {
+          return {
+            data_inicial: parametrosDre.data_inicial,
+            data_final: parametrosDre.data_final,
+          };
+        }
+        const [ano, mes] = mesAnoAtualLocal().split("-").map(Number);
+        const primeiro = new Date(ano, mes - 1, 1);
+        const ultimo = new Date(ano, mes, 0);
+        return {
+          data_inicial: formatISODateLocal(primeiro),
+          data_final: formatISODateLocal(ultimo),
+        };
+      })();
+
       const filtrosCentroCusto = parametrosDre.semRecorteData
         ? { ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}) }
         : {
@@ -457,6 +474,12 @@ const Dashboard = () => {
             dataFinal: parametrosDre.data_final,
             ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
           };
+
+      const filtrosCentroCustoFunil = {
+        dataInicial: periodoFunil.data_inicial,
+        dataFinal: periodoFunil.data_final,
+        ...(rocaIdFiltro ? { rocaId: rocaIdFiltro } : {}),
+      };
 
       const paramsDashboard = parametrosDre.semRecorteData
         ? {
@@ -470,21 +493,20 @@ const Dashboard = () => {
             ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
           };
 
-      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao] =
+      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao, agregadoFunil] =
         await Promise.all([
           financeiroService.getDashboardUnificado(paramsDashboard),
           agregarCentroCustoParaDre(filtrosCentroCusto),
           pedidosService
             .getRelatorioMargemContribuicao({
-              ...(parametrosDre.semRecorteData
-                ? {}
-                : {
-                    data_inicial: parametrosDre.data_inicial,
-                    data_final: parametrosDre.data_final,
-                  }),
+              data_inicial: periodoFunil.data_inicial,
+              data_final: periodoFunil.data_final,
               ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
             })
             .catch(() => null),
+          parametrosDre.semRecorteData
+            ? agregarCentroCustoParaDre(filtrosCentroCustoFunil)
+            : Promise.resolve(null),
         ]);
 
       const resumoRaw = resumoFinanceiroMes as Record<string, unknown>;
@@ -522,14 +544,18 @@ const Dashboard = () => {
               ),
             );
 
-      /** CMV e faturamento do funil vêm da mesma base (itens de pedidos de venda).
-       * Evita misturar contas financeiras (data_emissao) com pedidos (data_pedido),
-       * o que fazia o custo parecer maior que o faturamento. */
+      /**
+       * CMV no mesmo mês das vendas de competência (painel).
+       * Antes, sem mês no DRE, o custo vinha de TODOS os pedidos e ficava > 200 mil
+       * enquanto as vendas do mês eram ~122 mil.
+       */
       const custoProduto = Number(
         (margemContribuicao?.totais?.custo_variavel ?? 0).toFixed(2),
       );
-      const faturamentoPedidos = Number(
-        (margemContribuicao?.totais?.receita ?? 0).toFixed(2),
+      const despesasGeraisFunil = Number(
+        (
+          (agregadoFunil?.total ?? somaCentroDespesaNoPeriodo) || 0
+        ).toFixed(2),
       );
 
       return {
@@ -538,10 +564,11 @@ const Dashboard = () => {
         totalDespesasEfetivasDre,
         fornecedoresPorTipo,
         fornecedoresDemaisCompras,
-        /** Centro de despesa no período (despesas gerais do DRE simplificado). */
+        /** Centro de despesa (tabela DRE; pode ser todo o período). */
         despesasGerais: somaCentroDespesaNoPeriodo,
+        /** Despesas do funil: mesmo mês do faturamento/CMV. */
+        despesasGeraisFunil,
         custoProduto,
-        faturamentoPedidos,
       };
     },
     refetchInterval: 30000,
@@ -623,17 +650,17 @@ const Dashboard = () => {
     };
   }, [dreDadosReais]);
 
-  /** Funil: mesma base de pedidos para faturamento e CMV (qtd × preço custo). */
+  /** Funil alinhado ao painel de competência: vendas do mês − CMV do mês − despesas do mês. */
   const dreFaturamentoLucro = useMemo(() => {
-    const faturamento = Number(
+    const faturamento = Number((dreDadosReais?.totalVendasEfetivas ?? 0).toFixed(2));
+    const custoProduto = Number((dreDadosReais?.custoProduto ?? 0).toFixed(2));
+    const despesasGerais = Number(
       (
-        dreDadosReais?.faturamentoPedidos ??
-        dreDadosReais?.totalVendasEfetivas ??
+        dreDadosReais?.despesasGeraisFunil ??
+        dreDadosReais?.despesasGerais ??
         0
       ).toFixed(2),
     );
-    const custoProduto = Number((dreDadosReais?.custoProduto ?? 0).toFixed(2));
-    const despesasGerais = Number((dreDadosReais?.despesasGerais ?? 0).toFixed(2));
     const lucroBruto = Number((faturamento - custoProduto).toFixed(2));
     const lucroLiquido = Number((lucroBruto - despesasGerais).toFixed(2));
 
