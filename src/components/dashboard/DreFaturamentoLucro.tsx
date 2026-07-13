@@ -1,5 +1,7 @@
 import { cn, formatCurrency } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
 import {
+  Calendar,
   DollarSign,
   Equal,
   Loader2,
@@ -10,6 +12,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 export type DreFaturamentoLucroProps = {
   faturamento: number;
@@ -19,6 +22,12 @@ export type DreFaturamentoLucroProps = {
   lucroLiquido: number;
   loading?: boolean;
   className?: string;
+  /** YYYY-MM; vazio = todo o período. */
+  mesAno?: string;
+  onMesAnoChange?: (value: string) => void;
+  /** Filtros extras à direita (ex.: roça). */
+  filtersExtra?: ReactNode;
+  periodoLabel?: string;
 };
 
 type CardTone = 'neutral' | 'cost' | 'gross' | 'expense' | 'net';
@@ -99,6 +108,10 @@ export function DreFaturamentoLucro({
   lucroLiquido,
   loading = false,
   className,
+  mesAno = '',
+  onMesAnoChange,
+  filtersExtra,
+  periodoLabel,
 }: DreFaturamentoLucroProps) {
   const cards: FunnelCard[] = [
     {
@@ -142,6 +155,8 @@ export function DreFaturamentoLucro({
     },
   ];
 
+  const showFilters = Boolean(onMesAnoChange) || Boolean(filtersExtra);
+
   return (
     <div
       className={cn(
@@ -149,7 +164,7 @@ export function DreFaturamentoLucro({
         className,
       )}
     >
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
             <PiggyBank className="h-3.5 w-3.5" />
@@ -162,17 +177,60 @@ export function DreFaturamentoLucro({
             Faturamento = vendas do mês (competência). Custo = quantidade
             vendida × preço de custo no mesmo período. Lucro bruto − Despesas
             gerais = Lucro líquido.
+            {periodoLabel ? (
+              <>
+                {' '}
+                Período: <span className="font-medium text-slate-600 dark:text-foreground">{periodoLabel}</span>.
+              </>
+            ) : null}
           </p>
         </div>
-        <div
-          className={cn(
-            'inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-bold tabular-nums text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400',
-            lucroLiquido < 0 &&
-              'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400',
-          )}
-        >
-          <PiggyBank className="h-4 w-4 shrink-0 opacity-90" />
-          {loading ? '…' : formatCurrency(lucroLiquido)}
+        <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end">
+          <div
+            className={cn(
+              'inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-bold tabular-nums text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 sm:self-end',
+              lucroLiquido < 0 &&
+                'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-400',
+            )}
+          >
+            <PiggyBank className="h-4 w-4 shrink-0 opacity-90" />
+            {loading ? '…' : formatCurrency(lucroLiquido)}
+          </div>
+          {showFilters ? (
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+              {onMesAnoChange ? (
+                <div className="flex min-w-[12rem] flex-col gap-1">
+                  <Label
+                    htmlFor="dre-funil-mes-ano"
+                    className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
+                  >
+                    <Calendar className="h-3.5 w-3.5 opacity-70" />
+                    Mês
+                  </Label>
+                  <div className="relative">
+                    <input
+                      id="dre-funil-mes-ano"
+                      type="month"
+                      value={mesAno}
+                      onChange={(e) => onMesAnoChange(e.target.value)}
+                      className={cn(
+                        'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-border dark:bg-background',
+                        mesAno
+                          ? 'text-foreground'
+                          : 'text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent',
+                      )}
+                    />
+                    {!mesAno ? (
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-slate-400">
+                        Todo o período
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              {filtersExtra}
+            </div>
+          ) : null}
         </div>
       </div>
 
