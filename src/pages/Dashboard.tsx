@@ -522,9 +522,14 @@ const Dashboard = () => {
               ),
             );
 
-      /** CMV: quantidade vendida × preço de custo do produto (relatório de margem). */
+      /** CMV e faturamento do funil vêm da mesma base (itens de pedidos de venda).
+       * Evita misturar contas financeiras (data_emissao) com pedidos (data_pedido),
+       * o que fazia o custo parecer maior que o faturamento. */
       const custoProduto = Number(
         (margemContribuicao?.totais?.custo_variavel ?? 0).toFixed(2),
+      );
+      const faturamentoPedidos = Number(
+        (margemContribuicao?.totais?.receita ?? 0).toFixed(2),
       );
 
       return {
@@ -536,6 +541,7 @@ const Dashboard = () => {
         /** Centro de despesa no período (despesas gerais do DRE simplificado). */
         despesasGerais: somaCentroDespesaNoPeriodo,
         custoProduto,
+        faturamentoPedidos,
       };
     },
     refetchInterval: 30000,
@@ -617,9 +623,15 @@ const Dashboard = () => {
     };
   }, [dreDadosReais]);
 
-  /** Funil: faturamento → CMV (qtd × preço custo) → lucro bruto → despesas CC → lucro líquido. */
+  /** Funil: mesma base de pedidos para faturamento e CMV (qtd × preço custo). */
   const dreFaturamentoLucro = useMemo(() => {
-    const faturamento = dreDadosReais?.totalVendasEfetivas ?? 0;
+    const faturamento = Number(
+      (
+        dreDadosReais?.faturamentoPedidos ??
+        dreDadosReais?.totalVendasEfetivas ??
+        0
+      ).toFixed(2),
+    );
     const custoProduto = Number((dreDadosReais?.custoProduto ?? 0).toFixed(2));
     const despesasGerais = Number((dreDadosReais?.despesasGerais ?? 0).toFixed(2));
     const lucroBruto = Number((faturamento - custoProduto).toFixed(2));
