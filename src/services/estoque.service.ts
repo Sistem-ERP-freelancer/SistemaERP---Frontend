@@ -205,6 +205,56 @@ class EstoqueService {
       throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
     }
   }
+
+  private buildRelatorioMovimentacoesQuery(params?: RelatorioMovimentacoesFiltros): string {
+    const q = new URLSearchParams();
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    if (params?.tipos && params.tipos.length > 0) {
+      q.append('tipos', params.tipos.join(','));
+    }
+    if (params?.natureza && params.natureza !== 'todos') {
+      q.append('natureza', params.natureza);
+    }
+    return q.toString();
+  }
+
+  /**
+   * Download do PDF do Relatório de Movimentações (com filtros).
+   */
+  async downloadRelatorioMovimentacoesPdf(
+    params?: RelatorioMovimentacoesFiltros
+  ): Promise<void> {
+    const query = this.buildRelatorioMovimentacoesQuery(params);
+    const blob = await apiClient.getBlob(
+      `/estoque/relatorio/movimentacoes/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-movimentacoes-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Abre o PDF do Relatório de Movimentações em uma nova aba para impressão.
+   */
+  async printRelatorioMovimentacoesPdf(
+    params?: RelatorioMovimentacoesFiltros
+  ): Promise<void> {
+    const query = this.buildRelatorioMovimentacoesQuery(params);
+    const blob = await apiClient.getBlob(
+      `/estoque/relatorio/movimentacoes/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
 }
 
 export interface RelatorioAcompanhamentoLinha {
@@ -215,6 +265,13 @@ export interface RelatorioAcompanhamentoLinha {
   total_compra: number;
   total_venda: number;
   estoque_atual: number;
+}
+
+export interface RelatorioMovimentacoesFiltros {
+  data_inicial?: string;
+  data_final?: string;
+  tipos?: TipoMovimentacao[];
+  natureza?: 'todos' | 'compra' | 'venda';
 }
 
 export const estoqueService = new EstoqueService();
