@@ -135,16 +135,6 @@ const Estoque = () => {
 
   const produtos: Produto[] = produtosData || [];
 
-  /** Valor total em estoque = Σ (estoque_atual × preço de custo) */
-  const valorTotalEstoque = useMemo(() => {
-    return produtos.reduce((acc, p) => {
-      const qtd = Number(p.estoque_atual) || 0;
-      const custo = Number(p.preco_custo) || 0;
-      if (qtd <= 0) return acc;
-      return acc + qtd * custo;
-    }, 0);
-  }, [produtos]);
-
   // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
   const validarParametrosPaginação = (page: number, limit: number): boolean => {
     if (page < 1) {
@@ -158,9 +148,9 @@ const Estoque = () => {
     return true;
   };
 
-  // Buscar todas as movimentações com paginação
+  // Buscar todas as movimentações (histórico completo; filtros no frontend)
   const { data: movimentacoesData, isLoading: isLoadingMovimentacoes } = useQuery({
-    queryKey: ["movimentacoes", filtroTipo, currentPage, itemsPerPage, produtos.length],
+    queryKey: ["movimentacoes", produtos.length],
     queryFn: async () => {
       // Validar parâmetros antes de fazer a requisição
       if (!validarParametrosPaginação(currentPage, itemsPerPage)) {
@@ -187,6 +177,9 @@ const Estoque = () => {
               
               if (historico?.movimentacoes && historico.movimentacoes.length > 0) {
                 const movimentacoesComProduto = historico.movimentacoes.map((mov) => {
+                  if (!mov.produto_id) {
+                    mov.produto_id = produto.id;
+                  }
                   // Adiciona informações do produto se não vierem
                   if (!mov.produto) {
                     mov.produto = {
@@ -232,18 +225,9 @@ const Estoque = () => {
         return db - da;
       });
 
-      // Filtra por tipo se necessário
-      let movimentacoesFiltradas = todasMovimentacoes;
-      if (filtroTipo !== "Todos") {
-        movimentacoesFiltradas = todasMovimentacoes.filter(
-          (mov) => mov.tipo === filtroTipo
-        );
-      }
-
-      // Retorna lista completa filtrada; paginação é aplicada no frontend
       return {
-        movimentacoes: movimentacoesFiltradas,
-        total: movimentacoesFiltradas.length,
+        movimentacoes: todasMovimentacoes,
+        total: todasMovimentacoes.length,
       };
     },
     enabled: produtos.length > 0,
@@ -264,9 +248,105 @@ const Estoque = () => {
   const movimentacoesOriginais: MovimentacaoEstoque[] = movimentacoesData?.movimentacoes || [];
   const totalMovimentacoesOriginais = movimentacoesData?.total || 0;
 
-  // Filtrar movimentações por busca, período e ordenação (lista + cards do dashboard)
+  const parseDataLocal = (isoDate: string, fimDoDia: boolean) => {
+    const [y, m, d] = isoDate.split("-").map(Number);
+    return fimDoDia
+      ? new Date(y, m - 1, d, 23, 59, 59, 999)
+      : new Date(y, m - 1, d, 0, 0, 0, 0);
+  };
+
+  /**
+   * Quantidade em estoque na data de referência, a partir do histórico.
+   * Usa estoque_atual da última movimentação <= data; se não houver,
+   * estoque_anterior da primeira movimentação posterior; senão o atual.
+   */
+  const quantidadeEstoqueNaData = (
+    movs: MovimentacaoEstoque[],
+    dataRef: Date,
+    estoqueAtual: number
+  ): number => {
+    if (!movs.length) return estoqueAtual;
+
+    let ultimaAteRef: MovimentacaoEstoque | null = null;
+    let primeiraAposRef: MovimentacaoEstoque | null = null;
+    const refMs = dataRef.getTime();
+
+    for (const mov of movs) {
+      const t = new Date(mov.criado_em).getTime();
+      if (Number.isNaN(t)) continue;
+      if (t <= refMs) {
+        if (
+          !ultimaAteRef ||
+          t >= new Date(ultimaAteRef.criado_em).getTime()
+        ) {
+          ultimaAteRef = mov;
+        }
+      } else if (
+        !primeiraAposRef ||
+        t < new Date(primeiraAposRef.criado_em).getTime()
+      ) {
+        primeiraAposRef = mov;
+      }
+    }
+
+    if (ultimaAteRef) return Number(ultimaAteRef.estoque_atual) || 0;
+    if (primeiraAposRef) return Number(primeiraAposRef.estoque_anterior) || 0;
+    return estoqueAtual;
+  };
+
+  /**
+   * Valor em estoque:
+   * - sem data final → estoque atual × custo
+   * - com data final → estoque reconstruído ao fim daquele dia × custo
+   */
+  const valorTotalEstoque = useMemo(() => {
+    const dataRefIso = dataFinalRelatorio || null;
+    const usarHistorico = Boolean(dataRefIso);
+
+    const movsPorProduto = new Map<number, MovimentacaoEstoque[]>();
+    if (usarHistorico) {
+      for (const mov of movimentacoesOriginais) {
+        const id = mov.produto_id ?? mov.produto?.id;
+        if (id == null) continue;
+        const lista = movsPorProduto.get(id) || [];
+        lista.push(mov);
+        movsPorProduto.set(id, lista);
+      }
+    }
+
+    const dataRef = dataRefIso
+      ? parseDataLocal(dataRefIso, true)
+      : null;
+
+    return produtos.reduce((acc, p) => {
+      const custo = Number(p.preco_custo) || 0;
+      if (custo <= 0) return acc;
+
+      let qtd = Number(p.estoque_atual) || 0;
+      if (dataRef) {
+        qtd = quantidadeEstoqueNaData(
+          movsPorProduto.get(p.id) || [],
+          dataRef,
+          qtd
+        );
+      }
+
+      if (qtd <= 0) return acc;
+      return acc + qtd * custo;
+    }, 0);
+  }, [
+    produtos,
+    movimentacoesOriginais,
+    dataFinalRelatorio,
+  ]);
+
+  // Filtrar movimentações por tipo, busca, período e ordenação (lista + cards)
   const movimentacoesFiltradas = useMemo(() => {
     let lista = movimentacoesOriginais;
+
+    if (filtroTipo !== "Todos") {
+      lista = lista.filter((mov) => mov.tipo === filtroTipo);
+    }
 
     if (searchTerm.trim()) {
       const termo = searchTerm.toLowerCase();
@@ -279,16 +359,10 @@ const Estoque = () => {
 
     if (dataInicialRelatorio || dataFinalRelatorio) {
       const inicio = dataInicialRelatorio
-        ? (() => {
-            const [y, m, d] = dataInicialRelatorio.split("-").map(Number);
-            return new Date(y, m - 1, d, 0, 0, 0, 0);
-          })()
+        ? parseDataLocal(dataInicialRelatorio, false)
         : null;
       const fim = dataFinalRelatorio
-        ? (() => {
-            const [y, m, d] = dataFinalRelatorio.split("-").map(Number);
-            return new Date(y, m - 1, d, 23, 59, 59, 999);
-          })()
+        ? parseDataLocal(dataFinalRelatorio, true)
         : null;
 
       lista = lista.filter((mov) => {
@@ -313,6 +387,7 @@ const Estoque = () => {
     return lista;
   }, [
     movimentacoesOriginais,
+    filtroTipo,
     searchTerm,
     ordenacaoMov,
     dataInicialRelatorio,
@@ -400,7 +475,9 @@ const Estoque = () => {
     return [
       {
         key: "valor-estoque",
-        label: "Valor em estoque",
+        label: dataFinalRelatorio
+          ? "Valor em estoque (fim do período)"
+          : "Valor em estoque",
         value: formatCurrency(valorTotalEstoque),
         Icon: CircleDollarSign,
         ...statTheme.emerald,
@@ -425,7 +502,7 @@ const Estoque = () => {
         },
       })),
     ];
-  }, [balanco, totaisPorTipo, filtroTipo, valorTotalEstoque]);
+  }, [balanco, totaisPorTipo, filtroTipo, valorTotalEstoque, dataFinalRelatorio]);
 
   // Mutation para criar movimentação
   const movimentarEstoqueMutation = useMutation({
