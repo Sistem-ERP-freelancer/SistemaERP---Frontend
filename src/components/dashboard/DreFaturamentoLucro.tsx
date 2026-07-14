@@ -92,10 +92,10 @@ function Operator({ kind }: { kind: 'minus' | 'equals' }) {
   const Icon = kind === 'minus' ? Minus : Equal;
   return (
     <div
-      className="hidden h-8 w-8 shrink-0 items-center justify-center self-center text-slate-400 xl:flex"
+      className="flex h-8 w-6 shrink-0 items-center justify-center self-center text-slate-400 sm:h-9 sm:w-8"
       aria-hidden
     >
-      <Icon className="h-4 w-4" strokeWidth={2.5} />
+      <Icon className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
     </div>
   );
 }
@@ -240,57 +240,61 @@ export function DreFaturamentoLucro({
           <span className="text-sm">Carregando visão de lucro…</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:flex-row xl:items-stretch xl:gap-2 2xl:gap-3">
-          {cards.map((card) => {
-            const styles = toneStyles[card.tone];
-            return (
-              <div
-                key={card.key}
-                className="flex min-w-0 flex-col gap-2 xl:contents"
-              >
+        <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
+          <div className="flex min-w-[52rem] items-stretch gap-1.5 px-1 sm:gap-2 xl:min-w-0 xl:gap-3">
+            {cards.map((card) => {
+              const styles = toneStyles[card.tone];
+              return (
                 <div
-                  className={cn(
-                    'flex min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-2xl border p-3 sm:p-4',
-                    styles.wrap,
-                  )}
+                  key={card.key}
+                  className="contents"
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div
+                    className={cn(
+                      'flex min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-2xl border p-3 sm:gap-3 sm:p-4',
+                      styles.wrap,
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p
+                        className={cn(
+                          'min-w-0 flex-1 text-[10px] font-semibold uppercase leading-snug tracking-wide sm:text-[11px]',
+                          styles.label,
+                        )}
+                      >
+                        {card.label}
+                      </p>
+                      <div
+                        className={cn(
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9',
+                          styles.iconWrap,
+                        )}
+                      >
+                        <card.Icon
+                          className={cn('h-3.5 w-3.5 sm:h-4 sm:w-4', styles.icon)}
+                        />
+                      </div>
+                    </div>
                     <p
                       className={cn(
-                        'min-w-0 flex-1 text-[10px] font-semibold uppercase leading-snug tracking-wide sm:text-[11px]',
-                        styles.label,
+                        'min-w-0 max-w-full truncate text-[clamp(0.85rem,1.6vw,1.35rem)] font-bold tabular-nums leading-snug tracking-tight',
+                        styles.value,
+                        card.value < 0 &&
+                          card.tone !== 'cost' &&
+                          card.tone !== 'expense'
+                          ? 'text-destructive'
+                          : null,
                       )}
+                      title={formatCurrency(card.value)}
                     >
-                      {card.label}
+                      {formatCurrency(card.value)}
                     </p>
-                    <div
-                      className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9',
-                        styles.iconWrap,
-                      )}
-                    >
-                      <card.Icon className={cn('h-3.5 w-3.5 sm:h-4 sm:w-4', styles.icon)} />
-                    </div>
                   </div>
-                  <p
-                    className={cn(
-                      'min-w-0 max-w-full break-words text-[clamp(0.95rem,2.2vw,1.35rem)] font-bold tabular-nums leading-snug tracking-tight',
-                      styles.value,
-                      card.value < 0 &&
-                        card.tone !== 'cost' &&
-                        card.tone !== 'expense'
-                        ? 'text-destructive'
-                        : null,
-                    )}
-                    title={formatCurrency(card.value)}
-                  >
-                    {formatCurrency(card.value)}
-                  </p>
+                  {card.after ? <Operator kind={card.after} /> : null}
                 </div>
-                {card.after ? <Operator kind={card.after} /> : null}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
