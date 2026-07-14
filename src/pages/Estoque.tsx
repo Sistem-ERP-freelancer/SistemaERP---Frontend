@@ -5,9 +5,9 @@ import {
   type ModuleStatCardItem,
 } from "@/components/layout/ModuleStatCards";
 import { statTheme } from "@/components/layout/module-stat-themes";
+import { RelatorioMovimentacoesDialog } from "@/components/reports/RelatorioMovimentacoesDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
     Dialog,
     DialogContent,
@@ -17,14 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  RelatorioAcoesFooter,
-  RelatorioCampoFiltro,
-  RelatorioFiltrosGrid,
-  RelatorioModalShell,
-  RelatorioPeriodoSection,
-  RelatorioResumoFiltrosPreview,
-} from "@/components/orders/RelatorioModalParts";
 import {
     Pagination,
     PaginationContent,
@@ -68,7 +60,7 @@ import {
 import { Produto, produtosService } from "@/services/produtos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { formatCurrency, formatISODateLocal } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import {
     AlertTriangle,
     ArrowDownCircle,
@@ -90,15 +82,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-const STATUS_RELATORIO: Array<{ value: TipoMovimentacao; label: string }> = [
-  { value: "ENTRADA", label: "Entrada" },
-  { value: "SAIDA", label: "Saída" },
-  { value: "AJUSTE", label: "Ajuste" },
-  { value: "DEVOLUCAO", label: "Devolução" },
-  { value: "PERDA", label: "Perda" },
-  { value: "TRANSFERENCIA", label: "Transferência" },
-];
-
 const Estoque = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
@@ -119,109 +102,6 @@ const Estoque = () => {
   const [dataInicialRelatorio, setDataInicialRelatorio] = useState<string>("");
   const [dataFinalRelatorio, setDataFinalRelatorio] = useState<string>("");
   const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
-  const [relatorioLoading, setRelatorioLoading] = useState<'download' | 'print' | null>(null);
-  const [relTipos, setRelTipos] = useState<TipoMovimentacao[]>([]);
-  const [relNatureza, setRelNatureza] = useState<"todos" | "compra" | "venda">("todos");
-  const [relDataInicial, setRelDataInicial] = useState("");
-  const [relDataFinal, setRelDataFinal] = useState("");
-  const [periodoRapidoRel, setPeriodoRapidoRel] = useState<
-    "all" | "custom" | "hoje" | "ontem" | "7d" | "mes_atual" | "mes_anterior"
-  >("all");
-
-  const abrirRelatorio = () => {
-    setRelDataInicial(dataInicialRelatorio);
-    setRelDataFinal(dataFinalRelatorio);
-    setRelTipos(
-      filtroTipo !== "Todos" ? [filtroTipo as TipoMovimentacao] : []
-    );
-    setRelNatureza("todos");
-    setPeriodoRapidoRel(
-      dataInicialRelatorio || dataFinalRelatorio ? "custom" : "all"
-    );
-    setRelatorioDialogOpen(true);
-  };
-
-  const aplicarPeriodoRapidoRel = (
-    tipo: "hoje" | "ontem" | "7d" | "mes_atual" | "mes_anterior"
-  ) => {
-    const agora = new Date();
-    const iso = (d: Date) => formatISODateLocal(d);
-    let inicial: string;
-    let final: string;
-    switch (tipo) {
-      case "hoje":
-        inicial = iso(agora);
-        final = iso(agora);
-        break;
-      case "ontem": {
-        const ontem = new Date(agora);
-        ontem.setDate(ontem.getDate() - 1);
-        inicial = iso(ontem);
-        final = iso(ontem);
-        break;
-      }
-      case "7d": {
-        const ini = new Date(agora);
-        ini.setDate(ini.getDate() - 6);
-        inicial = iso(ini);
-        final = iso(agora);
-        break;
-      }
-      case "mes_atual":
-        inicial = iso(new Date(agora.getFullYear(), agora.getMonth(), 1));
-        final = iso(agora);
-        break;
-      case "mes_anterior": {
-        const ini = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
-        const fim = new Date(agora.getFullYear(), agora.getMonth(), 0);
-        inicial = iso(ini);
-        final = iso(fim);
-        break;
-      }
-    }
-    setRelDataInicial(inicial);
-    setRelDataFinal(final);
-    setPeriodoRapidoRel(tipo);
-  };
-
-  const toggleRelTipo = (tipo: TipoMovimentacao) => {
-    setRelTipos((prev) =>
-      prev.includes(tipo) ? prev.filter((t) => t !== tipo) : [...prev, tipo]
-    );
-  };
-
-  const montarFiltrosRelatorioMov = () => ({
-    data_inicial: relDataInicial.trim() || undefined,
-    data_final: relDataFinal.trim() || undefined,
-    tipos: relTipos.length > 0 ? relTipos : undefined,
-    natureza: relNatureza,
-  });
-
-  const labelPeriodoRel = () => {
-    if (!relDataInicial && !relDataFinal) return "Qualquer período";
-    const fmt = (s: string) => {
-      const [y, m, d] = s.split("-");
-      return `${d}/${m}/${y}`;
-    };
-    if (relDataInicial && relDataFinal) {
-      return `${fmt(relDataInicial)} até ${fmt(relDataFinal)}`;
-    }
-    if (relDataInicial) return `A partir de ${fmt(relDataInicial)}`;
-    return `Até ${fmt(relDataFinal)}`;
-  };
-
-  const labelStatusRel = () => {
-    if (relTipos.length === 0) return "Todos";
-    return relTipos
-      .map((t) => STATUS_RELATORIO.find((s) => s.value === t)?.label || t)
-      .join(", ");
-  };
-
-  const labelNaturezaRel = () => {
-    if (relNatureza === "compra") return "Compras";
-    if (relNatureza === "venda") return "Vendas";
-    return "Todas";
-  };
 
   // Buscar produtos ativos (limit >= 100 + ATIVO retorna todos no backend)
   const { data: produtosData } = useQuery({
@@ -890,7 +770,7 @@ const Estoque = () => {
               <Button
                 variant="outline"
                 className="gap-2 shrink-0"
-                onClick={abrirRelatorio}
+                onClick={() => setRelatorioDialogOpen(true)}
               >
                 <FileText className="w-4 h-4" />
                 Relatório
@@ -1275,129 +1155,13 @@ const Estoque = () => {
             </DialogContent>
           </Dialog>
 
-            <Dialog open={relatorioDialogOpen} onOpenChange={setRelatorioDialogOpen}>
-              <RelatorioModalShell
-                icon={FileText}
-                title="Relatório de Movimentações"
-                description="Filtre por status, período e compras/vendas antes de baixar ou imprimir."
-                maxWidth="xl"
-                footer={
-                  <RelatorioAcoesFooter
-                    downloading={relatorioLoading === "download"}
-                    printing={relatorioLoading === "print"}
-                    disabled={relatorioLoading !== null}
-                    onDownload={async () => {
-                      try {
-                        setRelatorioLoading("download");
-                        await estoqueService.downloadRelatorioMovimentacoesPdf(
-                          montarFiltrosRelatorioMov()
-                        );
-                        toast.success("Relatório de movimentações baixado.");
-                        setRelatorioDialogOpen(false);
-                      } catch (e) {
-                        toast.error(
-                          e instanceof Error ? e.message : "Erro ao gerar relatório."
-                        );
-                      } finally {
-                        setRelatorioLoading(null);
-                      }
-                    }}
-                    onPrint={async () => {
-                      try {
-                        setRelatorioLoading("print");
-                        await estoqueService.printRelatorioMovimentacoesPdf(
-                          montarFiltrosRelatorioMov()
-                        );
-                        setRelatorioDialogOpen(false);
-                      } catch (e) {
-                        toast.error(
-                          e instanceof Error ? e.message : "Erro ao abrir relatório."
-                        );
-                      } finally {
-                        setRelatorioLoading(null);
-                      }
-                    }}
-                  />
-                }
-              >
-                <div className="space-y-4">
-                  <RelatorioPeriodoSection
-                    dataInicial={relDataInicial}
-                    dataFinal={relDataFinal}
-                    periodoAtivo={periodoRapidoRel}
-                    onDataInicial={(v) => {
-                      setRelDataInicial(v);
-                      setPeriodoRapidoRel("custom");
-                    }}
-                    onDataFinal={(v) => {
-                      setRelDataFinal(v);
-                      setPeriodoRapidoRel("custom");
-                    }}
-                    onPeriodoRapido={(key) => aplicarPeriodoRapidoRel(key)}
-                    onQualquerPeriodo={() => {
-                      setRelDataInicial("");
-                      setRelDataFinal("");
-                      setPeriodoRapidoRel("all");
-                    }}
-                  />
-
-                  <RelatorioFiltrosGrid>
-                    <RelatorioCampoFiltro label="Compras / Vendas" className="sm:col-span-2">
-                      <Select
-                        value={relNatureza}
-                        onValueChange={(v) =>
-                          setRelNatureza(v as "todos" | "compra" | "venda")
-                        }
-                      >
-                        <SelectTrigger className="bg-background">
-                          <SelectValue placeholder="Todas as operações" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="todos">Todas as operações</SelectItem>
-                          <SelectItem value="compra">
-                            O que comprei (compras / entradas)
-                          </SelectItem>
-                          <SelectItem value="venda">
-                            O que vendi (vendas / saídas)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </RelatorioCampoFiltro>
-
-                    <RelatorioCampoFiltro label="Status da movimentação" className="sm:col-span-2">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border border-border/70 bg-background/80 p-3">
-                        {STATUS_RELATORIO.map(({ value, label }) => {
-                          const checked = relTipos.includes(value);
-                          return (
-                            <label
-                              key={value}
-                              className="flex items-center gap-2 text-sm cursor-pointer select-none"
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={() => toggleRelTipo(value)}
-                              />
-                              <span>{label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <p className="text-xs text-muted-foreground pt-1">
-                        Nenhum selecionado = todos os status
-                      </p>
-                    </RelatorioCampoFiltro>
-                  </RelatorioFiltrosGrid>
-
-                  <RelatorioResumoFiltrosPreview
-                    linhas={[
-                      { label: "Período", valor: labelPeriodoRel() },
-                      { label: "Status", valor: labelStatusRel() },
-                      { label: "Operação", valor: labelNaturezaRel() },
-                    ]}
-                  />
-                </div>
-              </RelatorioModalShell>
-            </Dialog>
+            <RelatorioMovimentacoesDialog
+              open={relatorioDialogOpen}
+              onOpenChange={setRelatorioDialogOpen}
+              defaultDataInicial={dataInicialRelatorio}
+              defaultDataFinal={dataFinalRelatorio}
+              defaultTipo={filtroTipo}
+            />
           <div className="mt-4">
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
               <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
