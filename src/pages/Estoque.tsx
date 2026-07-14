@@ -264,7 +264,7 @@ const Estoque = () => {
   const movimentacoesOriginais: MovimentacaoEstoque[] = movimentacoesData?.movimentacoes || [];
   const totalMovimentacoesOriginais = movimentacoesData?.total || 0;
 
-  // Filtrar movimentações por busca (lista completa) e aplicar ordenação
+  // Filtrar movimentações por busca, período e ordenação (lista + cards do dashboard)
   const movimentacoesFiltradas = useMemo(() => {
     let lista = movimentacoesOriginais;
 
@@ -274,6 +274,29 @@ const Estoque = () => {
         const produtoNome = mov.produto?.nome?.toLowerCase() || "";
         const produtoSku = mov.produto?.sku?.toLowerCase() || "";
         return produtoNome.includes(termo) || produtoSku.includes(termo);
+      });
+    }
+
+    if (dataInicialRelatorio || dataFinalRelatorio) {
+      const inicio = dataInicialRelatorio
+        ? (() => {
+            const [y, m, d] = dataInicialRelatorio.split("-").map(Number);
+            return new Date(y, m - 1, d, 0, 0, 0, 0);
+          })()
+        : null;
+      const fim = dataFinalRelatorio
+        ? (() => {
+            const [y, m, d] = dataFinalRelatorio.split("-").map(Number);
+            return new Date(y, m - 1, d, 23, 59, 59, 999);
+          })()
+        : null;
+
+      lista = lista.filter((mov) => {
+        const dataMov = new Date(mov.criado_em);
+        if (Number.isNaN(dataMov.getTime())) return false;
+        if (inicio && dataMov < inicio) return false;
+        if (fim && dataMov > fim) return false;
+        return true;
       });
     }
 
@@ -288,7 +311,13 @@ const Estoque = () => {
     });
 
     return lista;
-  }, [movimentacoesOriginais, searchTerm, ordenacaoMov]);
+  }, [
+    movimentacoesOriginais,
+    searchTerm,
+    ordenacaoMov,
+    dataInicialRelatorio,
+    dataFinalRelatorio,
+  ]);
 
   const totalMovimentacoes = movimentacoesFiltradas.length;
   const totalPages = Math.ceil(totalMovimentacoes / itemsPerPage);
@@ -298,10 +327,10 @@ const Estoque = () => {
     return movimentacoesFiltradas.slice(startIndex, endIndex);
   }, [movimentacoesFiltradas, currentPage, itemsPerPage]);
 
-  // Resetar página quando filtro ou busca mudar
+  // Resetar página quando filtro, busca ou período mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [filtroTipo, searchTerm]);
+  }, [filtroTipo, searchTerm, dataInicialRelatorio, dataFinalRelatorio]);
 
   // Calcular totais gerais e por tipo
   const { totalEntradas, totalSaidas, balanco, totaisPorTipo } = useMemo(() => {
@@ -782,7 +811,7 @@ const Estoque = () => {
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Usada no relatório de acompanhamento
+                        Filtra a lista, o dashboard e o relatório
                       </p>
                     </div>
                     <div className="space-y-2">
