@@ -277,6 +277,22 @@ export interface FluxoCaixaResponse {
   linhas: FluxoCaixaLinha[];
 }
 
+export interface FluxoCaixaDetalheItem {
+  id: number;
+  tipo_parte: 'cliente' | 'fornecedor';
+  nome: string;
+  valor: number;
+  descricao?: string | null;
+}
+
+export interface FluxoCaixaDetalheResponse {
+  data: string;
+  linha_id: string;
+  label: string;
+  itens: FluxoCaixaDetalheItem[];
+  total: number;
+}
+
 class FinanceiroService {
   async listarAgrupado(params?: {
     page?: number;
@@ -725,6 +741,29 @@ class FinanceiroService {
       q.append('roca_id', String(params.roca_id));
     }
     return apiClient.get<FluxoCaixaResponse>(`/financeiro/fluxo-caixa?${q.toString()}`);
+  }
+
+  /**
+   * GET /financeiro/fluxo-caixa/detalhe — lançamentos (nome + valor) de uma célula.
+   */
+  async obterFluxoCaixaDetalhe(params: {
+    data: string;
+    linha_id: string;
+    tipo_id?: number;
+    roca_id?: number;
+  }): Promise<FluxoCaixaDetalheResponse> {
+    const q = new URLSearchParams();
+    q.append('data', params.data);
+    q.append('linha_id', params.linha_id);
+    if (params.tipo_id != null && params.tipo_id > 0) {
+      q.append('tipo_id', String(params.tipo_id));
+    }
+    if (params.roca_id != null && params.roca_id > 0) {
+      q.append('roca_id', String(params.roca_id));
+    }
+    return apiClient.get<FluxoCaixaDetalheResponse>(
+      `/financeiro/fluxo-caixa/detalhe?${q.toString()}`,
+    );
   }
 }
 

@@ -31,6 +31,7 @@ import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import {
   financeiroService,
+  type FluxoCaixaDetalheResponse,
   type FluxoCaixaLinha,
 } from '@/services/financeiro.service';
 import type { Roca } from '@/types/roca';
@@ -46,6 +47,7 @@ import {
   FileSpreadsheet,
   Filter,
   LineChart,
+  ListTree,
   Loader2,
   Wallet,
 } from 'lucide-react';
@@ -59,6 +61,15 @@ type DiaColuna = {
 };
 
 type LinhaTabela = FluxoCaixaLinha;
+
+type CelulaDetalheSelecionada = {
+  data: string;
+  labelData: string;
+  linhaId: string;
+  labelLinha: string;
+  tipoId?: number;
+  valorCelula: number;
+};
 
 const GRADE_BORDA = 'border border-slate-200';
 
@@ -156,6 +167,82 @@ function corValorCelula(
   return 'text-slate-800';
 }
 
+function DetalheCelulaConteudo({
+  data,
+  valorCelula,
+}: {
+  data?: FluxoCaixaDetalheResponse;
+  valorCelula?: number;
+}) {
+  const itens = data?.itens ?? [];
+  const total = data?.total ?? 0;
+  const tipoParte = itens[0]?.tipo_parte;
+  const colunaNome =
+    tipoParte === 'fornecedor'
+      ? 'Fornecedor'
+      : tipoParte === 'cliente'
+        ? 'Cliente'
+        : 'Nome';
+
+  if (itens.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+        Nenhum lançamento encontrado para esta célula.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-xl border border-border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="px-3 py-2.5">{colunaNome}</th>
+              <th className="px-3 py-2.5 text-right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {itens.map((item) => (
+              <tr
+                key={`${item.tipo_parte}-${item.id}`}
+                className="border-b border-border/70 last:border-0"
+              >
+                <td className="px-3 py-2.5">
+                  <div className="font-medium text-foreground">{item.nome}</div>
+                  {item.descricao ? (
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {item.descricao}
+                    </div>
+                  ) : null}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-medium text-foreground">
+                  {formatCurrency(item.valor)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-border bg-muted/30">
+              <td className="px-3 py-2.5 text-sm font-semibold text-foreground">
+                Total
+              </td>
+              <td className="px-3 py-2.5 text-right text-sm font-bold tabular-nums text-[#003366]">
+                {formatCurrency(total)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {valorCelula != null && Math.abs(valorCelula - total) > 0.05 ? (
+        <p className="text-xs text-muted-foreground">
+          Valor na grade: {formatCurrency(valorCelula)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function FluxoDeCaixaTabela({
   linhas,
   dias,
@@ -163,6 +250,7 @@ function FluxoDeCaixaTabela({
   saidasAberto,
   onToggleEntradas,
   onToggleSaidas,
+  onCelulaClick,
   isLoading,
 }: {
   linhas: LinhaTabela[];
@@ -171,6 +259,7 @@ function FluxoDeCaixaTabela({
   saidasAberto: boolean;
   onToggleEntradas: () => void;
   onToggleSaidas: () => void;
+  onCelulaClick?: (sel: CelulaDetalheSelecionada) => void;
   isLoading?: boolean;
 }) {
   const linhasVisiveis = useMemo(() => {
@@ -294,24 +383,54 @@ function FluxoDeCaixaTabela({
                 'font-bold text-[#003366]',
             );
 
+            const celulaClicavel = linha.tipo === 'item' && !!onCelulaClick;
+
             return (
               <tr key={linha.id}>
                 <td className={labelClass}>{linha.label}</td>
-                {linha.valores.map((valor, idx) => (
-                  <td
-                    key={`${linha.id}-${dias[idx]?.key ?? idx}`}
-                    className={cn(
-                      celulaGrade,
-                      'bg-white text-center tabular-nums',
-                      corValorCelula(valor, linha.tipo, linha.id),
-                      linha.tipo === 'subtotal' && 'bg-rose-50/30',
-                      linha.tipo === 'saldo-dia' && 'bg-slate-50/50',
-                      linha.tipo === 'saldo-acumulado' && 'bg-sky-50/40',
-                    )}
-                  >
-                    {formatValorCelula(valor)}
-                  </td>
-                ))}
+                {linha.valores.map((valor, idx) => {
+                  const dia = dias[idx];
+                  const temValor = valor != null && Math.abs(valor) > 0.009;
+                  const podeClicar = celulaClicavel && temValor && !!dia;
+
+                  return (
+                    <td
+                      key={`${linha.id}-${dia?.key ?? idx}`}
+                      className={cn(
+                        celulaGrade,
+                        'bg-white text-center tabular-nums',
+                        corValorCelula(valor, linha.tipo, linha.id),
+                        linha.tipo === 'subtotal' && 'bg-rose-50/30',
+                        linha.tipo === 'saldo-dia' && 'bg-slate-50/50',
+                        linha.tipo === 'saldo-acumulado' && 'bg-sky-50/40',
+                        podeClicar &&
+                          'cursor-pointer transition-colors hover:bg-sky-50 hover:underline focus-within:bg-sky-50',
+                      )}
+                    >
+                      {podeClicar ? (
+                        <button
+                          type="button"
+                          className="w-full rounded-sm px-0.5 py-0.5 text-inherit focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#003366]/40"
+                          onClick={() =>
+                            onCelulaClick?.({
+                              data: dia.key,
+                              labelData: `${dia.label} (${dia.weekday})`,
+                              linhaId: linha.id,
+                              labelLinha: linha.label,
+                              tipoId: linha.tipo_id,
+                              valorCelula: valor as number,
+                            })
+                          }
+                          aria-label={`Ver detalhe de ${linha.label} em ${dia.label}`}
+                        >
+                          {formatValorCelula(valor)}
+                        </button>
+                      ) : (
+                        formatValorCelula(valor)
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}
@@ -330,6 +449,11 @@ export default function FluxoDeCaixa() {
   const [formDataInicial, setFormDataInicial] = useState(padrao.dataInicial);
   const [formDataFinal, setFormDataFinal] = useState(padrao.dataFinal);
   const [formRocaId, setFormRocaId] = useState<string>('todas');
+
+  const [detalheSel, setDetalheSel] = useState<CelulaDetalheSelecionada | null>(
+    null,
+  );
+  const [detalheOpen, setDetalheOpen] = useState(false);
 
   const [filtros, setFiltros] = useState({
     dataInicial: padrao.dataInicial,
@@ -391,6 +515,35 @@ export default function FluxoDeCaixa() {
       }),
     staleTime: 30_000,
   });
+
+  const {
+    data: detalheData,
+    isLoading: detalheLoading,
+    isFetching: detalheFetching,
+    error: detalheError,
+  } = useQuery({
+    queryKey: [
+      'fluxo-caixa-detalhe',
+      detalheSel?.data,
+      detalheSel?.linhaId,
+      detalheSel?.tipoId ?? null,
+      filtros.rocaId ?? 'todas',
+    ],
+    queryFn: () =>
+      financeiroService.obterFluxoCaixaDetalhe({
+        data: detalheSel!.data,
+        linha_id: detalheSel!.linhaId,
+        tipo_id: detalheSel!.tipoId,
+        roca_id: filtros.rocaId,
+      }),
+    enabled: detalheOpen && !!detalheSel,
+    staleTime: 15_000,
+  });
+
+  const abrirDetalheCelula = useCallback((sel: CelulaDetalheSelecionada) => {
+    setDetalheSel(sel);
+    setDetalheOpen(true);
+  }, []);
 
   const dias: DiaColuna[] = useMemo(
     () =>
@@ -716,8 +869,54 @@ export default function FluxoDeCaixa() {
               saidasAberto={saidasAberto}
               onToggleEntradas={() => setEntradasAberto((v) => !v)}
               onToggleSaidas={() => setSaidasAberto((v) => !v)}
+              onCelulaClick={abrirDetalheCelula}
               isLoading={isLoading}
             />
+
+            <Sheet
+              open={detalheOpen}
+              onOpenChange={(open) => {
+                setDetalheOpen(open);
+                if (!open) setDetalheSel(null);
+              }}
+            >
+              <SheetContent
+                side="right"
+                className="w-[400px] max-w-full overflow-y-auto sm:w-[480px]"
+              >
+                <SheetHeader className="mb-6">
+                  <div className="mb-2 flex items-center gap-3">
+                    <div className="rounded-lg bg-primary/10 p-2">
+                      <ListTree className="h-5 w-5 text-primary" />
+                    </div>
+                    <SheetTitle className="text-xl">
+                      {detalheSel?.labelLinha ?? 'Detalhe'}
+                    </SheetTitle>
+                  </div>
+                  <SheetDescription>
+                    {detalheSel
+                      ? `${formatDate(detalheSel.data)} · ${detalheSel.labelData}`
+                      : 'Lançamentos da célula'}
+                  </SheetDescription>
+                </SheetHeader>
+
+                {detalheLoading || detalheFetching ? (
+                  <div className="flex min-h-[160px] items-center justify-center py-10">
+                    <Loader2 className="h-7 w-7 animate-spin text-[#003366]" />
+                  </div>
+                ) : detalheError ? (
+                  <p className="text-sm text-rose-600">
+                    {extractApiErrorMessage(detalheError) ||
+                      'Não foi possível carregar o detalhe.'}
+                  </p>
+                ) : (
+                  <DetalheCelulaConteudo
+                    data={detalheData}
+                    valorCelula={detalheSel?.valorCelula}
+                  />
+                )}
+              </SheetContent>
+            </Sheet>
 
             <div className="flex flex-col items-center gap-1 border-t border-slate-200 bg-slate-50/40 px-4 py-2.5">
               <p className="text-xs text-slate-500">Role para ver mais centros ↓</p>
