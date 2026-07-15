@@ -101,7 +101,7 @@ export function getAppMenu(isSuperAdmin: boolean): MenuEntry[] {
       ],
     },
     { kind: "link", icon: Boxes, label: "Movimentações", href: "/estoque" },
-    { kind: "link", icon: Sprout, label: "Controle de Roça", href: "/controle-roca" },
+    { kind: "link", icon: Sprout, label: "Controle de Empresa", href: "/controle-roca" },
     {
       kind: "group",
       id: "sistema",

@@ -678,7 +678,7 @@ const Dashboard = () => {
   const rocaDreNome = useMemo(() => {
     if (!rocaIdFiltro) return undefined;
     const roca = rocasOpcoes.find((r) => r.id === rocaIdFiltro);
-    return roca?.nome ?? `Roça #${rocaIdFiltro}`;
+    return roca?.nome ?? `Empresa #${rocaIdFiltro}`;
   }, [rocaIdFiltro, rocasOpcoes]);
 
   const drePdfPayload = useMemo(
@@ -842,18 +842,18 @@ const Dashboard = () => {
                           <motion.div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:min-w-[16rem] dark:bg-background/50">
                             <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                               <ListFilter className="h-3.5 w-3.5 opacity-70" />
-                              Roça
+                              Empresa
                             </Label>
                             <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
                               <SelectTrigger
                                 id="dashboard-painel-roca"
                                 className="h-10"
-                                aria-label="Filtrar painel por roça"
+                                aria-label="Filtrar painel por empresa"
                               >
-                                <SelectValue placeholder="Todas as roças" />
+                                <SelectValue placeholder="Todas as empresas" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="all">Todas as roças</SelectItem>
+                                <SelectItem value="all">Todas as empresas</SelectItem>
                                 {rocasOpcoes.map((roca) => (
                                   <SelectItem key={roca.id} value={String(roca.id)}>
                                     {roca.nome}
@@ -1050,14 +1050,14 @@ const Dashboard = () => {
                   <div className="flex min-w-[12rem] flex-col gap-1">
                     <Label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                       <ListFilter className="h-3.5 w-3.5 opacity-70" />
-                      Roça
+                      Empresa
                     </Label>
                     <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
                       <SelectTrigger className="h-10 border-slate-200 bg-white dark:border-border dark:bg-background">
-                        <SelectValue placeholder="Todas as roças" />
+                        <SelectValue placeholder="Todas as empresas" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas as roças</SelectItem>
+                        <SelectItem value="all">Todas as empresas</SelectItem>
                         {rocasOpcoes.map((roca) => (
                           <SelectItem key={roca.id} value={String(roca.id)}>
                             {roca.nome}
