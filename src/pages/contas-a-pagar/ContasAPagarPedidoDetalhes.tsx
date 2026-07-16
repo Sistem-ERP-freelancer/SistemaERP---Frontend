@@ -150,6 +150,7 @@ const ContasAPagarPedidoDetalhes = () => {
       valor: Number(
         (c as any).valor_total ?? c.valor_original ?? c.valor_restante ?? 0,
       ),
+      data_vencimento: c.data_vencimento ?? undefined,
     }));
   const formasParaExibir =
     formasPagamentoPlano.length > 0
@@ -225,6 +226,7 @@ const ContasAPagarPedidoDetalhes = () => {
                     <TableRow>
                       <TableHead>Conta</TableHead>
                       <TableHead>Forma</TableHead>
+                      <TableHead>Vencimento</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
@@ -238,6 +240,11 @@ const ContasAPagarPedidoDetalhes = () => {
                         <TableCell>
                           {c.forma_pagamento
                             ? formatarFormaPagamento(c.forma_pagamento)
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {c.data_vencimento
+                            ? formatarDataBR(c.data_vencimento)
                             : '—'}
                         </TableCell>
                         <TableCell className="text-right font-medium whitespace-nowrap">
@@ -254,7 +261,7 @@ const ContasAPagarPedidoDetalhes = () => {
                       </TableRow>
                     ))}
                     <TableRow>
-                      <TableCell colSpan={2} className="font-semibold">
+                      <TableCell colSpan={3} className="font-semibold">
                         Total
                       </TableCell>
                       <TableCell className="text-right font-semibold whitespace-nowrap">
@@ -288,6 +295,7 @@ const ContasAPagarPedidoDetalhes = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Forma</TableHead>
+                      <TableHead>Vencimento</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -297,13 +305,20 @@ const ContasAPagarPedidoDetalhes = () => {
                         <TableCell>
                           {formatarFormaPagamento(fp.forma_pagamento)}
                         </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {fp.data_vencimento
+                            ? formatarDataBR(fp.data_vencimento)
+                            : '—'}
+                        </TableCell>
                         <TableCell className="text-right font-medium whitespace-nowrap">
                           {formatCurrency(Number(fp.valor || 0))}
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
-                      <TableCell className="font-semibold">Total</TableCell>
+                      <TableCell colSpan={2} className="font-semibold">
+                        Total
+                      </TableCell>
                       <TableCell className="text-right font-semibold whitespace-nowrap">
                         {formatCurrency(
                           formasParaExibir.reduce(

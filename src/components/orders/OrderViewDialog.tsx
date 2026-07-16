@@ -442,6 +442,7 @@ export function OrderViewDialog({
                       <TableHeader>
                         <TableRow>
                           <TableHead>Forma</TableHead>
+                          <TableHead>Vencimento</TableHead>
                           <TableHead className="text-right">Valor</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -451,13 +452,22 @@ export function OrderViewDialog({
                             <TableCell>
                               {getFormaPagamentoLabel(fp.forma_pagamento)}
                             </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {fp.data_vencimento
+                                ? formatDate(fp.data_vencimento)
+                                : order.data_vencimento_base
+                                  ? formatDate(order.data_vencimento_base)
+                                  : '—'}
+                            </TableCell>
                             <TableCell className="text-right font-medium">
                               {formatCurrency(Number(fp.valor || 0))}
                             </TableCell>
                           </TableRow>
                         ))}
                         <TableRow>
-                          <TableCell className="font-semibold">Total</TableCell>
+                          <TableCell colSpan={2} className="font-semibold">
+                            Total
+                          </TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(
                               order.formas_pagamento.reduce(
