@@ -111,8 +111,13 @@ export interface ContaFinanceiraAgrupada {
   tipo: 'RECEBER' | 'PAGAR';
   categoria: string;
   valor_total: number;
+  valor_pago?: number;
   status: string;
   roca_nome?: string | null;
+  numero_pedido?: string | null;
+  qtd_parcelas?: number;
+  primeira_data_vencimento?: string | null;
+  ultima_data_vencimento?: string | null;
 }
 
 export interface ContasAgrupadasResponse {

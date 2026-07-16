@@ -67,12 +67,13 @@ import {
     parseDateOnlyLocal,
 } from "@/lib/utils";
 import {
-  contaTemSaldoAberto,
-  fimDoMesYMD,
-  toYMD,
-} from "@/lib/contas-financeiras-listagem";
+  agruparContasPorPedido,
+  formatarVencimentoAgrupado,
+  type ContaFinanceiraExibicao,
+} from "@/lib/agrupar-contas-por-pedido";
 import {
   type ContaFinanceira,
+  type ContaFinanceiraAgrupada,
   CreateContaFinanceiraDto,
   financeiroService,
 } from "@/services/financeiro.service";
@@ -111,7 +112,18 @@ import { relatoriosClienteService } from "@/services/relatorios-cliente.service"
 import { centroCustoService } from "@/services/centro-custo.service";
 import { toast } from "sonner";
 import { contaEhDespesaSemPedido } from "@/pages/contas-a-pagar/despesaContaUtils";
-import { calcularResumoCardsPagar } from "@/lib/contas-financeiras-listagem";
+import { calcularResumoCardsPagar, contaTemSaldoAberto, fimDoMesYMD, toYMD } from "@/lib/contas-financeiras-listagem";
+
+function formatarVencimentoItemAgrupado(item: ContaFinanceiraAgrupada): string {
+  const qtd = item.qtd_parcelas ?? 1;
+  const first = item.primeira_data_vencimento;
+  const last = item.ultima_data_vencimento;
+  if (!first) return "N/A";
+  if (!last || first === last) {
+    return qtd > 1 ? `${formatDate(first)} (${qtd} parcelas)` : formatDate(first);
+  }
+  return `${formatDate(first)} – ${formatDate(last)} (${qtd} parcelas)`;
+}
 
 /** Evita linhas repetidas se a API devolver duplicatas (mesmo id ou mesmo numero_conta). */
 function dedupeContasFinanceirasPagar(contas: ContaFinanceira[]): ContaFinanceira[] {
@@ -679,10 +691,11 @@ function ContasAPagar() {
               ...pagasTotal,
               ...pagasParcial,
             ]);
+            const agrupado = agruparContasPorPedido(merged);
             const start = (currentPage - 1) * pageSize;
             return {
-              data: merged.slice(start, start + pageSize),
-              total: merged.length,
+              data: agrupado.slice(start, start + pageSize),
+              total: agrupado.length,
             };
           }
           if (activeCardFilter === "a_pagar") {
@@ -727,10 +740,11 @@ function ContasAPagar() {
             };
           }
           const paginateLocal = (merged: ContaFinanceira[]) => {
+            const agrupado = agruparContasPorPedido(merged);
             const start = (currentPage - 1) * pageSize;
             return {
-              data: merged.slice(start, start + pageSize),
-              total: merged.length,
+              data: agrupado.slice(start, start + pageSize),
+              total: agrupado.length,
             };
           };
 
@@ -783,6 +797,30 @@ function ContasAPagar() {
             });
             return paginateLocal(filtered);
           }
+        }
+
+        const usaVisaoAgrupada =
+          !tipoDespesaArg &&
+          !proximidadeVencimento &&
+          !activeCardFilter;
+
+        if (usaVisaoAgrupada) {
+          const response = await financeiroService.listarAgrupado({
+            page: currentPage,
+            limit: pageSize,
+            tipo: "PAGAR",
+            status,
+            fornecedor_id: fornecedorArg,
+            roca_id: rocaArg,
+            data_inicial: dataInicialArg,
+            data_final: dataFinalArg,
+          });
+          return {
+            data: [] as ContaFinanceira[],
+            itensAgrupados: response.itens ?? [],
+            total: response.total ?? 0,
+            agrupado: true as const,
+          };
         }
 
         const response = await financeiroService.listar({
@@ -843,18 +881,31 @@ function ContasAPagar() {
   const totalContas = contasResponse?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalContas / pageSize));
 
+  const contasResponseTyped = contasResponse as {
+    data?: ContaFinanceira[];
+    itensAgrupados?: ContaFinanceiraAgrupada[];
+    agrupado?: boolean;
+    total?: number;
+  } | undefined;
+
+  const itensAgrupadosApi =
+    contasResponseTyped?.agrupado && contasResponseTyped.itensAgrupados
+      ? contasResponseTyped.itensAgrupados
+      : null;
+
   const contasFallback = useMemo(
     () => dedupeContasFinanceirasPagar(contasResponse?.data || []),
     [contasResponse],
   );
 
   const contasExibir = useMemo(() => {
-    if (rocaFilterId == null || rocaFilterId <= 0) return contasFallback;
+    let base = agruparContasPorPedido(contasFallback);
+    if (rocaFilterId == null || rocaFilterId <= 0) return base;
     const nomeRoca = rocasLista
       .find((r) => r.id === rocaFilterId)
       ?.nome?.trim()
       .toLowerCase();
-    return contasFallback.filter((c) => {
+    return base.filter((c) => {
       if (Number(c.roca_id) === rocaFilterId) return true;
       if (
         nomeRoca &&
@@ -1574,9 +1625,69 @@ function ContasAPagar() {
     return { texto: `Vence em ${dias} dias`, cor: "text-gray-600", bgColor: "bg-gray-100" };
   };
 
-  // Uma linha por conta em tb_conta_financeira (PAGAR): alinhado ao dashboard e ao centro de custo.
+  // Uma linha por pedido (agrupado) ou por conta avulsa/centro de custo
   const transacoesDisplay = useMemo(() => {
+    const statusMap: Record<string, string> = {
+      PENDENTE: "Pendente",
+      ABERTO: "Pendente",
+      PAGO_PARCIAL: "Pago Parcial",
+      PARCIAL: "Pago Parcial",
+      PAGO_TOTAL: "Pago Total",
+      QUITADO: "Quitado",
+      VENCIDO: "Vencido",
+      CANCELADO: "Cancelado",
+    };
+
+    if (itensAgrupadosApi && itensAgrupadosApi.length > 0) {
+      return itensAgrupadosApi.map((item) => {
+        const valorTotal = Number(item.valor_total ?? 0);
+        const valorPago = Number(item.valor_pago ?? 0);
+        const abertoFallback = Math.max(0, valorTotal - valorPago);
+        const stO = String(item.status ?? "").toUpperCase();
+        const numeroPedido =
+          item.numero_pedido ||
+          item.descricao.match(/Pedido\s+(\S+)/i)?.[1] ||
+          null;
+        const podePagarConta =
+          abertoFallback > 0.009 &&
+          stO !== "QUITADO" &&
+          stO !== "PAGO_TOTAL" &&
+          stO !== "CANCELADO";
+
+        return {
+          id: numeroPedido || `PED-${item.pedido_id ?? item.id}`,
+          rowKey: item.pedido_id ? `pedido-${item.pedido_id}` : `conta-${item.id}`,
+          descricao: item.descricao,
+          categoria: item.categoria,
+          origemConta: item.pedido_id ? ("COMPRA" as const) : ("DESPESA" as const),
+          valor: new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(valorTotal),
+          valorPago: new Intl.NumberFormat("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }).format(valorPago),
+          data: formatarVencimentoItemAgrupado(item),
+          status: statusMap[item.status] || item.status,
+          statusOriginal: item.status,
+          contaId: item.id,
+          fornecedor: item.cliente_nome || "N/A",
+          diasAteVencimento: null,
+          vencimentoStatus: { texto: "", cor: "", bgColor: "" },
+          valorEmAberto: abertoFallback,
+          podePagar: podePagarConta,
+          pedidoId:
+            item.pedido_id != null && Number.isFinite(Number(item.pedido_id))
+              ? Number(item.pedido_id)
+              : undefined,
+          roca_nome: item.roca_nome ?? null,
+        };
+      });
+    }
+
     return contasExibir.map((conta) => {
+      const ex = conta as ContaFinanceiraExibicao;
       let nomeFornecedor = "N/A";
       const temPedido = !!(conta as any).pedido_id;
       let categoria = temPedido ? "Compras" : "Centro de custo";
@@ -1601,9 +1712,11 @@ function ContasAPagar() {
         currency: 'BRL'
       }).format(valorPagoConta);
 
-      const dataFormatada = conta.data_vencimento
-        ? formatDate(conta.data_vencimento)
-        : "N/A";
+      const dataFormatada = ex._agrupadoPedido
+        ? formatarVencimentoAgrupado(ex)
+        : conta.data_vencimento
+          ? formatDate(conta.data_vencimento)
+          : "N/A";
 
       const statusMap: Record<string, string> = {
         PENDENTE: "Pendente",
@@ -1679,7 +1792,9 @@ function ContasAPagar() {
       const origemConta = temPedido ? ("COMPRA" as const) : ("DESPESA" as const);
 
       return {
-        id: conta.numero_conta || `CONTA-${conta.id}`,
+        id: ex._agrupadoPedido
+          ? ex.numero_conta || `PED-${conta.pedido_id ?? conta.id}`
+          : conta.numero_conta || `CONTA-${conta.id}`,
         rowKey: `conta-${conta.id}`,
         descricao: conta.descricao,
         categoria: categoria,
@@ -1699,7 +1814,7 @@ function ContasAPagar() {
         roca_nome: (conta as { roca_nome?: string | null }).roca_nome ?? null,
       };
     });
-  }, [contasExibir, fornecedores]);
+  }, [contasExibir, fornecedores, itensAgrupadosApi]);
 
   const isNumericSearch = !isNaN(Number(searchTerm)) && searchTerm.trim() !== "";
   const searchId = isNumericSearch ? Number(searchTerm) : null;
