@@ -1304,13 +1304,14 @@ const ContasAReceber = () => {
     dadosAtualizacao.data_emissao = editConta.data_emissao;
     dadosAtualizacao.data_vencimento = editConta.data_vencimento;
     
-    // Campos opcionais - apenas se definidos
-    if (editConta.cliente_id !== undefined && editConta.cliente_id !== null) {
-      dadosAtualizacao.cliente_id = editConta.cliente_id;
-    }
-    if (editConta.pedido_id !== undefined && editConta.pedido_id !== null) {
-      dadosAtualizacao.pedido_id = editConta.pedido_id;
-    }
+    dadosAtualizacao.cliente_id =
+      editConta.cliente_id != null && editConta.cliente_id > 0
+        ? editConta.cliente_id
+        : null;
+    dadosAtualizacao.pedido_id =
+      editConta.pedido_id != null && editConta.pedido_id > 0
+        ? editConta.pedido_id
+        : null;
     dadosAtualizacao.roca_id =
       editConta.roca_id != null && editConta.roca_id > 0 ? editConta.roca_id : null;
     if (editConta.forma_pagamento) {

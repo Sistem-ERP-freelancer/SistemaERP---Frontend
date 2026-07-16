@@ -2057,7 +2057,7 @@ const Financeiro = () => {
                         onValueChange={(value) =>
                           setEditConta({
                             ...editConta,
-                            cliente_id: value && value !== "none" ? Number(value) : undefined,
+                            cliente_id: value && value !== "none" ? Number(value) : null,
                           })
                         }
                       >
@@ -2085,7 +2085,7 @@ const Financeiro = () => {
                         onValueChange={(value) =>
                           setEditConta({
                             ...editConta,
-                            fornecedor_id: value && value !== "none" ? Number(value) : undefined,
+                            fornecedor_id: value && value !== "none" ? Number(value) : null,
                           })
                         }
                       >
@@ -2113,7 +2113,7 @@ const Financeiro = () => {
                         onValueChange={(value) =>
                           setEditConta({
                             ...editConta,
-                            pedido_id: value && value !== "none" ? Number(value) : undefined,
+                            pedido_id: value && value !== "none" ? Number(value) : null,
                           })
                         }
                       >
@@ -2152,7 +2152,7 @@ const Financeiro = () => {
                             roca_id:
                               value && value !== "none"
                                 ? Number(value)
-                                : undefined,
+                                : null,
                           })
                         }
                       >

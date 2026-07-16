@@ -1457,12 +1457,14 @@ function ContasAPagar() {
     dadosAtualizacao.data_vencimento = editConta.data_vencimento;
     
     // Campos opcionais - apenas se definidos
-    if (editConta.fornecedor_id !== undefined && editConta.fornecedor_id !== null) {
-      dadosAtualizacao.fornecedor_id = editConta.fornecedor_id;
-    }
-    if (editConta.pedido_id !== undefined && editConta.pedido_id !== null) {
-      dadosAtualizacao.pedido_id = editConta.pedido_id;
-    }
+    dadosAtualizacao.fornecedor_id =
+      editConta.fornecedor_id != null && editConta.fornecedor_id > 0
+        ? editConta.fornecedor_id
+        : null;
+    dadosAtualizacao.pedido_id =
+      editConta.pedido_id != null && editConta.pedido_id > 0
+        ? editConta.pedido_id
+        : null;
     dadosAtualizacao.roca_id =
       editConta.roca_id != null && editConta.roca_id > 0 ? editConta.roca_id : null;
     if (editConta.forma_pagamento) {

@@ -38,10 +38,10 @@ export interface ContaFinanceira {
 
 export interface CreateContaFinanceiraDto {
   tipo: 'RECEBER' | 'PAGAR';
-  pedido_id?: number;
-  cliente_id?: number;
-  fornecedor_id?: number;
-  roca_id?: number;
+  pedido_id?: number | null;
+  cliente_id?: number | null;
+  fornecedor_id?: number | null;
+  roca_id?: number | null;
   descricao: string;
   valor_original: number;
   previsao?: boolean;
@@ -439,9 +439,23 @@ class FinanceiroService {
     }
     
     if (shouldInclude(data.forma_pagamento)) payload.forma_pagamento = data.forma_pagamento;
-    if (shouldInclude(data.cliente_id)) payload.cliente_id = Number(data.cliente_id);
-    if (shouldInclude(data.fornecedor_id)) payload.fornecedor_id = Number(data.fornecedor_id);
-    if (shouldInclude(data.pedido_id)) payload.pedido_id = Number(data.pedido_id);
+    const includeOptionalId = (
+      field: 'cliente_id' | 'fornecedor_id' | 'pedido_id',
+    ) => {
+      const value = data[field];
+      if (value === undefined) return;
+      if (value === null) {
+        payload[field] = null;
+        return;
+      }
+      const id = Number(value);
+      if (Number.isFinite(id) && id > 0) {
+        payload[field] = id;
+      }
+    };
+    includeOptionalId('cliente_id');
+    includeOptionalId('fornecedor_id');
+    includeOptionalId('pedido_id');
     /** Obrigatório para validação PAGAR (fornecedor | roça | pedido); antes era omitido e o PATCH falhava. */
     if (data.roca_id !== undefined) {
       if (data.roca_id === null) {
