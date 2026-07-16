@@ -35,6 +35,7 @@ import {
 } from "@/lib/menu-config";
 import { filterMenuEntriesByRole } from "@/lib/role-access";
 import { cn } from "@/lib/utils";
+import { useRotuloRoca } from "@/hooks/useRotuloRoca";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -67,11 +68,24 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isSuperAdmin } = useAuth();
+  const { ocultarMenuControleRoca, menuControle } = useRotuloRoca();
 
-  const menuEntries = useMemo(
-    () => filterMenuEntriesByRole(getAppMenu(isSuperAdmin), user?.role),
-    [isSuperAdmin, user?.role],
-  );
+  const menuEntries = useMemo(() => {
+    const base = filterMenuEntriesByRole(getAppMenu(isSuperAdmin), user?.role);
+    return base
+      .filter((entry) => {
+        if (ocultarMenuControleRoca && entry.kind === "link" && entry.href === "/controle-roca") {
+          return false;
+        }
+        return true;
+      })
+      .map((entry) => {
+        if (entry.kind === "link" && entry.href === "/controle-roca") {
+          return { ...entry, label: menuControle };
+        }
+        return entry;
+      });
+  }, [isSuperAdmin, user?.role, ocultarMenuControleRoca, menuControle]);
 
   useEffect(() => {
     setExpandedGroups((prev) => {

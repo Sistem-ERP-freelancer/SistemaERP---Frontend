@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/sheet';
 import { useOrders } from '@/hooks/useOrders';
 import { useRelatorioPedidos } from '@/hooks/useRelatorioPedidos';
+import { useRotuloRoca } from '@/hooks/useRotuloRoca';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
@@ -55,6 +56,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export default function Pedidos() {
+  const rotulo = useRotuloRoca();
   const navigate = useNavigate();
   const {
     orders,
@@ -216,7 +218,7 @@ export default function Pedidos() {
     if (rocaRelPed === 'all') return 'Não informado';
     return (
       rocasFiltro.find((r) => Number(r.id) === Number(rocaRelPed))?.nome ??
-      `Roça #${rocaRelPed}`
+      rotulo.comId(rocaRelPed)
     );
   };
 
@@ -399,7 +401,7 @@ export default function Pedidos() {
 
   const labelRocaFiltro = () => {
     if (filters.roca_id == null || filters.roca_id <= 0) return null;
-    return rocasFiltro.find((r) => r.id === filters.roca_id)?.nome ?? `Roça #${filters.roca_id}`;
+    return rocasFiltro.find((r) => r.id === filters.roca_id)?.nome ?? rotulo.comId(filters.roca_id);
   };
 
   const labelPeriodoFiltro = () => {
@@ -620,7 +622,7 @@ export default function Pedidos() {
             <div className="relative flex-1 min-w-0 flex items-center">
               <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
               <Input
-                placeholder="Buscar por número, cliente, fornecedor ou roça..."
+                placeholder={`Buscar por número, cliente, fornecedor ou ${rotulo.singularLower}...`}
                 className="h-11 sm:h-12 w-full rounded-none border-0 border-r-0 pl-10 sm:pl-11 pr-3 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm sm:text-base"
                 value={searchTerm}
                 onChange={(e) => handleSearch(e.target.value)}
@@ -667,12 +669,12 @@ export default function Pedidos() {
               )}
               {labelRocaFiltro() && (
                 <span className="inline-flex items-center max-w-[200px] truncate rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
-                  Roça: {labelRocaFiltro()}
+                  {rotulo.singular}: {labelRocaFiltro()}
                 </span>
               )}
               {filters.somente_com_roca && (
                 <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground">
-                  Com roça
+                  Com {rotulo.singularLower}
                 </span>
               )}
               <Button
@@ -700,7 +702,7 @@ export default function Pedidos() {
                 <SheetTitle className="text-xl">Filtros</SheetTitle>
               </div>
               <SheetDescription>
-                Status, cliente, período, roça e demais critérios da listagem.
+                Status, cliente, período, {rotulo.singularLower} e demais critérios da listagem.
               </SheetDescription>
             </SheetHeader>
 
@@ -777,7 +779,7 @@ export default function Pedidos() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Roça</Label>
+                <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                 <Select
                   value={
                     filters.roca_id != null && filters.roca_id > 0
@@ -791,7 +793,7 @@ export default function Pedidos() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Todas as roças" />
+                    <SelectValue placeholder={rotulo.todas} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
@@ -813,7 +815,7 @@ export default function Pedidos() {
                       })
                     }
                   />
-                  Somente pedidos com roça vinculada
+                  Somente pedidos com {rotulo.singularLower} vinculada
                 </label>
               </div>
 
@@ -1126,13 +1128,13 @@ export default function Pedidos() {
                   </Select>
                 </RelatorioCampoFiltro>
 
-                <RelatorioCampoFiltro label="Roça" className="sm:col-span-2">
+                <RelatorioCampoFiltro label={rotulo.singular} className="sm:col-span-2">
                   <Select value={rocaRelPed} onValueChange={setRocaRelPed}>
                     <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Todas as roças" />
+                      <SelectValue placeholder={rotulo.todas} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todas as roças</SelectItem>
+                      <SelectItem value="all">{rotulo.todas}</SelectItem>
                       {rocasFiltro.map((roca) => (
                         <SelectItem key={roca.id} value={String(roca.id)}>
                           {roca.nome}
@@ -1153,7 +1155,7 @@ export default function Pedidos() {
                   { label: 'Período', valor: labelPeriodoRelatorioPdf() },
                   { label: 'Cliente', valor: labelClienteRelatorioPdf() },
                   { label: 'Fornecedor', valor: labelFornecedorRelatorioPdf() },
-                  { label: 'Roça', valor: labelRocaRelatorioPdf() },
+                  { label: rotulo.singular, valor: labelRocaRelatorioPdf() },
                 ]}
               />
             </div>

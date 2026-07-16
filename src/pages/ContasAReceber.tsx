@@ -71,6 +71,7 @@ import { cn, formatDate, formatarStatus, parseDateOnlyLocal } from "@/lib/utils"
 import ContasAReceberListaClientes from "@/pages/contas-a-receber/ContasAReceberListaClientes";
 import { Cliente, clientesService } from "@/services/clientes.service";
 import { controleRocaService } from "@/services/controle-roca.service";
+import { useRotuloRoca } from "@/hooks/useRotuloRoca";
 import { ContaFinanceira, CreateContaFinanceiraDto, financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import type { Roca } from "@/types/roca";
@@ -103,6 +104,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const ContasAReceber = () => {
+  const rotulo = useRotuloRoca();
   const [viewMode, setViewMode] = useState<"clientes" | "pedidos">("pedidos");
   /** Guia: card Total a Receber preferir soma da lista de clientes (bate com a tabela). */
   const [totalAReceberFromLista, setTotalAReceberFromLista] = useState<number | null>(null);
@@ -2002,7 +2004,7 @@ const ContasAReceber = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Roça (opcional)</Label>
+                      <Label>{rotulo.singular} (opcional)</Label>
                       <Select
                         value={
                           newTransacao.roca_id != null
@@ -2020,7 +2022,7 @@ const ContasAReceber = () => {
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma roça" />
+                          <SelectValue placeholder={rotulo.selecione} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
@@ -2210,7 +2212,7 @@ const ContasAReceber = () => {
 
                   {/* Roça */}
                   <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                     <Select
                       value={rocaFilterId == null ? "todos" : String(rocaFilterId)}
                       onValueChange={(v) =>
@@ -2218,10 +2220,10 @@ const ContasAReceber = () => {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Todas as roças" />
+                        <SelectValue placeholder={rotulo.todas} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="todos">Todas as roças</SelectItem>
+                        <SelectItem value="todos">{rotulo.todas}</SelectItem>
                         {rocasLista
                           .filter((r) => r.ativo !== false)
                           .map((roca) => (
@@ -2323,7 +2325,7 @@ const ContasAReceber = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número do pedido, cliente, roça..."
+                placeholder={`Buscar por número do pedido, cliente, ${rotulo.singularLower}...`}
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -2662,7 +2664,7 @@ const ContasAReceber = () => {
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Roça</TableHead>
+                <TableHead>{rotulo.singular}</TableHead>
                 <TableHead>Valor</TableHead>
                 <TableHead>Valor Pago</TableHead>
                 <TableHead>Data Vencimento</TableHead>
@@ -3198,7 +3200,7 @@ const ContasAReceber = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Roça (opcional)</Label>
+                  <Label>{rotulo.singular} (opcional)</Label>
                   <Select
                     value={
                       editConta.roca_id != null && editConta.roca_id > 0
@@ -3214,7 +3216,7 @@ const ContasAReceber = () => {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma roça" />
+                      <SelectValue placeholder={rotulo.selecione} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>

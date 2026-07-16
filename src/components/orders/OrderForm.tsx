@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Cliente, clientesService } from '@/services/clientes.service';
 import { controleRocaService } from '@/services/controle-roca.service';
+import { useRotuloRoca } from '@/hooks/useRotuloRoca';
 import { Fornecedor } from '@/services/fornecedores.service';
 import { Produto, produtosService } from '@/services/produtos.service';
 import { CondicaoPagamento } from '@/shared/types/condicao-pagamento.types';
@@ -134,6 +135,7 @@ export function OrderForm({
   transportadoras,
   draftFromPrevisao = null,
 }: OrderFormProps) {
+  const rotulo = useRotuloRoca();
   const queryClient = useQueryClient();
   const formActive = layout === 'page' || isOpen;
   const [clientesLista, setClientesLista] = useState(clientes);
@@ -1072,7 +1074,7 @@ export function OrderForm({
           <FormSection
             icon={ShoppingCart}
             title="Informações básicas"
-            description="Cliente ou fornecedor, roça e data do pedido."
+            description={`Cliente ou fornecedor, ${rotulo.singularLower} e data do pedido.`}
           >
             <div className="space-y-4">
               {tipo === 'VENDA' ? (
@@ -1184,7 +1186,7 @@ export function OrderForm({
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Roça (opcional)</Label>
+                  <Label>{rotulo.singular} (opcional)</Label>
                   <Select
                     value={rocaId != null ? String(rocaId) : 'none'}
                     onValueChange={(value) =>
@@ -1192,7 +1194,7 @@ export function OrderForm({
                     }
                   >
                     <SelectTrigger className={inputClass}>
-                      <SelectValue placeholder="Selecione uma roça" />
+                      <SelectValue placeholder={rotulo.selecione} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>

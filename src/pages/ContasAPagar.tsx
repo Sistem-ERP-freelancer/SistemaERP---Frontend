@@ -77,6 +77,7 @@ import {
   financeiroService,
 } from "@/services/financeiro.service";
 import { controleRocaService } from "@/services/controle-roca.service";
+import { useRotuloRoca } from "@/hooks/useRotuloRoca";
 import { Fornecedor, fornecedoresService } from "@/services/fornecedores.service";
 import type { Roca } from "@/types/roca";
 import { pedidosService } from "@/services/pedidos.service";
@@ -198,6 +199,7 @@ function rowKeyContasPagar(transacao: {
 }
 
 function ContasAPagar() {
+  const rotulo = useRotuloRoca();
   const dataInicialFiltroRef = useRef<HTMLInputElement | null>(null);
   const dataFinalFiltroRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState("Todos");
@@ -1958,7 +1960,7 @@ function ContasAPagar() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Roça (opcional)</Label>
+                      <Label>{rotulo.singular} (opcional)</Label>
                       <Select
                         value={
                           newTransacao.roca_id != null
@@ -1976,7 +1978,7 @@ function ContasAPagar() {
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma roça" />
+                          <SelectValue placeholder={rotulo.selecione} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
@@ -2165,7 +2167,7 @@ function ContasAPagar() {
 
                   {/* Roça */}
                   <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                     <Select
                       value={rocaFilterId == null ? "todos" : String(rocaFilterId)}
                       onValueChange={(v) =>
@@ -2173,10 +2175,10 @@ function ContasAPagar() {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Todas as roças" />
+                        <SelectValue placeholder={rotulo.todas} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="todos">Todas as roças</SelectItem>
+                        <SelectItem value="todos">{rotulo.todas}</SelectItem>
                         {rocasLista
                           .filter((r) => r.ativo !== false)
                           .map((roca) => (
@@ -2333,7 +2335,7 @@ function ContasAPagar() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por número da conta, descrição, fornecedor, roça..."
+                placeholder={`Buscar por número da conta, descrição, fornecedor, ${rotulo.singularLower}...`}
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -2377,7 +2379,7 @@ function ContasAPagar() {
                 <TableHead>ID</TableHead>
                 <TableHead className="w-[120px] min-w-[120px]">Tipo</TableHead>
                 <TableHead>Fornecedor</TableHead>
-                <TableHead>Roça</TableHead>
+                <TableHead>{rotulo.singular}</TableHead>
                 <TableHead>Valor</TableHead>
                 <TableHead>Valor Pago</TableHead>
                 <TableHead>Data Vencimento</TableHead>
@@ -2759,7 +2761,7 @@ function ContasAPagar() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Roça (opcional)</Label>
+                  <Label>{rotulo.singular} (opcional)</Label>
                   <Select
                     value={
                       editConta.roca_id != null && editConta.roca_id > 0
@@ -2775,7 +2777,7 @@ function ContasAPagar() {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma roça" />
+                      <SelectValue placeholder={rotulo.selecione} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>

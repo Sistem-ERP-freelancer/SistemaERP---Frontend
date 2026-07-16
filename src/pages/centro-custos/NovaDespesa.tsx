@@ -34,6 +34,7 @@ import {
 } from "@/lib/parse-valor-monetario";
 import { cn, formatCurrency } from "@/lib/utils";
 import { controleRocaService } from "@/services/controle-roca.service";
+import { useRotuloRoca } from "@/hooks/useRotuloRoca";
 import type { Roca } from "@/types/roca";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -170,6 +171,7 @@ function ResumoScrollFollower({
 }
 
 const NovaDespesa = () => {
+  const rotulo = useRotuloRoca();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { adicionarDespesa, adicionarTipo, tiposOpcoes } = useCentroCustos();
@@ -257,7 +259,7 @@ const NovaDespesa = () => {
       return;
     }
     if (!rocaSel) {
-      toast.error("Selecione a roça.");
+      toast.error(`Selecione a ${rotulo.singularLower}.`);
       return;
     }
     if (!Number.isFinite(v) || v <= 0) {
@@ -315,7 +317,7 @@ const NovaDespesa = () => {
                   Nova Despesa
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Lance uma despesa de centro de custo vinculada à roça
+                  Lance uma despesa de centro de custo vinculada à {rotulo.singularLower}
                 </p>
               </div>
             </div>
@@ -361,7 +363,7 @@ const NovaDespesa = () => {
             <div>
               <p className="font-semibold text-foreground">Centro de Custo</p>
               <p className="text-xs text-muted-foreground">
-                Despesa vinculada à roça — sincronizada com Contas a pagar
+                Despesa vinculada à {rotulo.singularLower} — sincronizada com Contas a pagar
               </p>
             </div>
           </div>
@@ -405,7 +407,7 @@ const NovaDespesa = () => {
               <FormSection
                 icon={Layers}
                 title="Classificação"
-                description="Tipo de custo e roça onde a despesa será registrada."
+                description={`Tipo de custo e ${rotulo.singularLower} onde a despesa será registrada.`}
               >
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
@@ -473,7 +475,7 @@ const NovaDespesa = () => {
                     ) : null}
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label>Roça (ativas) *</Label>
+                    <Label>{rotulo.singular} (ativas) *</Label>
                     <Popover open={rocaPopOpen} onOpenChange={setRocaPopOpen}>
                       <PopoverTrigger asChild>
                         <Button
@@ -487,7 +489,7 @@ const NovaDespesa = () => {
                               ? rocaSel.nome
                               : loadingRocas
                                 ? "Carregando…"
-                                : "Buscar roça por nome…"}
+                                : `Buscar ${rotulo.singularLower} por nome…`}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -497,12 +499,12 @@ const NovaDespesa = () => {
                         align="start"
                       >
                         <Command>
-                          <CommandInput placeholder="Pesquisar roça…" />
+                          <CommandInput placeholder={`Pesquisar ${rotulo.singularLower}…`} />
                           <CommandList>
                             <CommandEmpty>
                               {loadingRocas
-                                ? "Carregando roças…"
-                                : "Nenhuma roça ativa encontrada."}
+                                ? `Carregando ${rotulo.pluralLower}…`
+                                : `Nenhuma ${rotulo.singularLower} ativa encontrada.`}
                             </CommandEmpty>
                             <CommandGroup>
                               {rocasAtivas.map((r) => (
@@ -610,7 +612,7 @@ const NovaDespesa = () => {
                       ) : null}
                       {resumo.rocaNome ? (
                         <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">Roça</span>
+                          <span className="text-muted-foreground">{rotulo.singular}</span>
                           <span className="max-w-[55%] truncate text-right font-medium">
                             {resumo.rocaNome}
                           </span>

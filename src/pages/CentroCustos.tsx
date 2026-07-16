@@ -98,6 +98,7 @@ import {
   type ApiCentroCustoDespesa,
 } from '@/services/centro-custo.service';
 import { controleRocaService } from '@/services/controle-roca.service';
+import { useRotuloRoca } from '@/hooks/useRotuloRoca';
 import { relatoriosClienteService } from '@/services/relatorios-cliente.service';
 import type { Roca } from '@/types/roca';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -190,6 +191,7 @@ function DespesasTable({
   /** Quando a lista veio vazia e há filtros ativos. */
   emptyMessage?: string;
 }) {
+  const rotulo = useRotuloRoca();
   const dataPagamentoExibicao = (d: CentroCustoDespesa): string => {
     if (d.dataPagamentoManual?.trim()) {
       return d.dataPagamentoManual.trim().slice(0, 10);
@@ -217,7 +219,7 @@ function DespesasTable({
         <TableHeader>
           <TableRow>
             <TableHead>Descrição</TableHead>
-            <TableHead className="text-center">Roça</TableHead>
+            <TableHead className="text-center">{rotulo.singular}</TableHead>
             <TableHead className="text-center">Tipo</TableHead>
             <TableHead className="text-center">Valor</TableHead>
             <TableHead className="text-center">Data</TableHead>
@@ -472,7 +474,7 @@ const RELATORIO_DESPESA_META: Record<
 > = {
   analitico: {
     titulo: 'Relatório analítico de despesas',
-    descricao: 'Listagem detalhada por período, tipo, roça e status de pagamento.',
+    descricao: 'Listagem detalhada por período, tipo e status de pagamento.',
   },
   resumo_periodo: {
     titulo: 'Resumo por período',
@@ -549,6 +551,7 @@ function DespesasFiltrosBar({
   rocasAtivas: Roca[];
   loadingRocas: boolean;
 }) {
+  const rotulo = useRotuloRoca();
   const {
     despesasFiltro,
     aplicarFiltrosDespesas,
@@ -695,7 +698,17 @@ function DespesasFiltrosBar({
     }
   };
 
-  const relatorioMeta = relatorioKind ? RELATORIO_DESPESA_META[relatorioKind] : null;
+  const relatorioMeta = useMemo(() => {
+    if (!relatorioKind) return null;
+    const base = RELATORIO_DESPESA_META[relatorioKind];
+    if (relatorioKind === 'analitico') {
+      return {
+        ...base,
+        descricao: `Listagem detalhada por período, tipo, ${rotulo.singularLower} e status de pagamento.`,
+      };
+    }
+    return base;
+  }, [relatorioKind, rotulo.singularLower]);
   const totalRelatorioValor =
     relatorioRows?.reduce((s, d) => s + (Number(d.valor) || 0), 0) ?? 0;
   const porMes = relatorioRows ? agregarDespesasPorMes(relatorioRows) : [];
@@ -862,7 +875,7 @@ function DespesasFiltrosBar({
               <Separator />
 
               <div className="space-y-3">
-                <Label className="text-sm font-semibold">Roça</Label>
+                <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                 <Select
                   value={rocaFiltro != null && rocaFiltro > 0 ? String(rocaFiltro) : 'todas'}
                   onValueChange={(v) => {
@@ -876,10 +889,10 @@ function DespesasFiltrosBar({
                   disabled={loadingRocas}
                 >
                   <SelectTrigger className="w-full rounded-xl border-2">
-                    <SelectValue placeholder="Todas as roças" />
+                    <SelectValue placeholder={rotulo.todas} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todas">Todas as roças</SelectItem>
+                    <SelectItem value="todas">{rotulo.todas}</SelectItem>
                     {rocasAtivas.map((r) => (
                       <SelectItem key={r.id} value={String(r.id)}>
                         {r.nome}
@@ -972,7 +985,7 @@ function DespesasFiltrosBar({
         <div className="relative order-2 min-w-0 w-full sm:flex-1 sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Buscar por descrição, tipo, roça, número (id)…"
+            placeholder={`Buscar por descrição, tipo, ${rotulo.singularLower}, número (id)…`}
             className="pl-10"
             value={qLocal}
             onChange={(e) => setQLocal(e.target.value)}
@@ -1237,7 +1250,7 @@ function DespesasFiltrosBar({
 
               <div className="space-y-1.5">
                 <Label htmlFor="cc-rel-roca" className="text-xs font-medium text-foreground">
-                  Roça
+                  {rotulo.singular}
                 </Label>
                 <Select
                   value={rRocaFiltro != null && rRocaFiltro > 0 ? String(rRocaFiltro) : 'todas'}
@@ -1255,10 +1268,10 @@ function DespesasFiltrosBar({
                     id="cc-rel-roca"
                     className="h-9 w-full rounded-lg border-2 border-primary/35 bg-background shadow-none"
                   >
-                    <SelectValue placeholder="Todas as roças" />
+                    <SelectValue placeholder={rotulo.todas} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todas">Todas as roças</SelectItem>
+                    <SelectItem value="todas">{rotulo.todas}</SelectItem>
                     {rocasAtivas.map((r) => (
                       <SelectItem key={r.id} value={String(r.id)}>
                         {r.nome}
@@ -1375,7 +1388,7 @@ function DespesasFiltrosBar({
                         <TableHead className="whitespace-nowrap">Data</TableHead>
                         <TableHead>Descrição</TableHead>
                         <TableHead>Tipo</TableHead>
-                        <TableHead>Roça</TableHead>
+                        <TableHead>{rotulo.singular}</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
@@ -1524,6 +1537,7 @@ function msgErro(e: unknown, fallback: string): string {
 }
 
 export default function CentroCustos() {
+  const rotulo = useRotuloRoca();
   const {
     tipos,
     tiposOpcoes,
@@ -1663,7 +1677,7 @@ export default function CentroCustos() {
       return;
     }
     if (!rocaSel) {
-      toast.error('Selecione a roça.');
+      toast.error(`Selecione a ${rotulo.singularLower}.`);
       return;
     }
     if (!Number.isFinite(v) || v < totalPagoNaDespesa(editDesp)) {
@@ -1827,7 +1841,7 @@ export default function CentroCustos() {
           title="Centro de Despesa"
           subtitle={
             <>
-              Cadastro de <span className="whitespace-nowrap">tipos de custo</span> e despesas por roça,
+              Cadastro de <span className="whitespace-nowrap">tipos de custo</span> e despesas por {rotulo.singularLower},
               sincronizado com o banco do seu tenant.
             </>
           }
@@ -1967,7 +1981,7 @@ export default function CentroCustos() {
           <TabsContent value="despesas" className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground max-w-xl">
-                Despesas por roça e tipo de custo, sincronizadas com Contas a pagar.
+                Despesas por {rotulo.singularLower} e tipo de custo, sincronizadas com Contas a pagar.
               </p>
               <Button
                 className="shrink-0 rounded-xl gap-2"
@@ -2065,7 +2079,7 @@ export default function CentroCustos() {
                 </Popover>
               </div>
               <div className="space-y-1">
-                <Label>Roça</Label>
+                <Label>{rotulo.singular}</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-full justify-between font-normal">
@@ -2075,7 +2089,7 @@ export default function CentroCustos() {
                   </PopoverTrigger>
                   <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]">
                     <Command shouldFilter={false}>
-                      <CommandInput placeholder="Pesquisar roça…" />
+                      <CommandInput placeholder={`Pesquisar ${rotulo.singularLower}…`} />
                       <CommandList>
                         <CommandGroup>
                           {rocasAtivas.map((r) => (

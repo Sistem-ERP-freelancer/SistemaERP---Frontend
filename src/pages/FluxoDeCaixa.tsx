@@ -27,6 +27,7 @@ import {
 import { exportarFluxoCaixaExcel } from '@/lib/fluxo-caixa-export';
 import { fimDoMesYMD, toYMD } from '@/lib/contas-financeiras-listagem';
 import { extractApiErrorMessage } from '@/lib/api-error-message';
+import { useRotuloRoca } from '@/hooks/useRotuloRoca';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import { controleRocaService } from '@/services/controle-roca.service';
 import {
@@ -85,8 +86,11 @@ function periodoPadrao() {
   };
 }
 
-function rotuloRoca(r: Pick<Roca, 'nome' | 'codigo'>): string {
-  const nome = r.nome?.trim() || 'Roça';
+function rotuloRoca(
+  r: Pick<Roca, 'nome' | 'codigo'>,
+  fallbackSingular = 'Roça',
+): string {
+  const nome = r.nome?.trim() || fallbackSingular;
   return r.codigo ? `${nome} (${r.codigo})` : nome;
 }
 
@@ -441,6 +445,7 @@ function FluxoDeCaixaTabela({
 }
 
 export default function FluxoDeCaixa() {
+  const rotulo = useRotuloRoca();
   const padrao = useMemo(() => periodoPadrao(), []);
   const [entradasAberto, setEntradasAberto] = useState(true);
   const [saidasAberto, setSaidasAberto] = useState(true);
@@ -490,9 +495,9 @@ export default function FluxoDeCaixa() {
     setFiltros((prev) =>
       prev.rocaId == null || prev.rocaLabel
         ? prev
-        : { ...prev, rocaLabel: rotuloRoca(roca) },
+        : { ...prev, rocaLabel: rotuloRoca(roca, rotulo.singular) },
     );
-  }, [filtros.rocaId, filtros.rocaLabel, rocasPorId]);
+  }, [filtros.rocaId, filtros.rocaLabel, rocasPorId, rotulo.singular]);
 
   const {
     data: fluxoData,
@@ -611,7 +616,7 @@ export default function FluxoDeCaixa() {
     const rocaId =
       formRocaId !== 'todas' ? Number.parseInt(formRocaId, 10) : undefined;
     if (formRocaId !== 'todas' && (!rocaId || Number.isNaN(rocaId))) {
-      toast.error('Selecione uma roça válida.');
+      toast.error(`${rotulo.selecione} válida.`);
       return false;
     }
     const rocaSelecionada =
@@ -620,10 +625,12 @@ export default function FluxoDeCaixa() {
       dataInicial: formDataInicial,
       dataFinal: formDataFinal,
       rocaId: rocaId && rocaId > 0 ? rocaId : undefined,
-      rocaLabel: rocaSelecionada ? rotuloRoca(rocaSelecionada) : undefined,
+      rocaLabel: rocaSelecionada
+        ? rotuloRoca(rocaSelecionada, rotulo.singular)
+        : undefined,
     });
     return true;
-  }, [formDataInicial, formDataFinal, formRocaId, rocasPorId]);
+  }, [formDataInicial, formDataFinal, formRocaId, rocasPorId, rotulo]);
 
   const abrirSheetFiltros = useCallback(() => {
     setFormDataInicial(filtros.dataInicial);
@@ -664,11 +671,13 @@ export default function FluxoDeCaixa() {
     (filtros.rocaId != null ? 1 : 0);
 
   const rocaAplicadaNome = useMemo(() => {
-    if (filtros.rocaId == null) return 'Todas as roças';
+    if (filtros.rocaId == null) return rotulo.todas;
     if (filtros.rocaLabel) return filtros.rocaLabel;
     const roca = rocasPorId.get(Number(filtros.rocaId));
-    return roca ? rotuloRoca(roca) : `Roça #${filtros.rocaId}`;
-  }, [filtros.rocaId, filtros.rocaLabel, rocasPorId]);
+    return roca
+      ? rotuloRoca(roca, rotulo.singular)
+      : rotulo.comId(filtros.rocaId);
+  }, [filtros.rocaId, filtros.rocaLabel, rocasPorId, rotulo]);
 
   const exportarExcel = useCallback(() => {
     if (!fluxoData) {
@@ -680,7 +689,7 @@ export default function FluxoDeCaixa() {
         ? filtros.rocaLabel ??
           (() => {
             const roca = rocasPorId.get(Number(filtros.rocaId));
-            return roca ? rotuloRoca(roca) : undefined;
+            return roca ? rotuloRoca(roca, rotulo.singular) : undefined;
           })()
         : undefined;
     try {
@@ -689,7 +698,7 @@ export default function FluxoDeCaixa() {
     } catch (e) {
       toast.error(extractApiErrorMessage(e) || 'Não foi possível exportar.');
     }
-  }, [fluxoData, filtros.rocaId, filtros.rocaLabel, rocasPorId]);
+  }, [fluxoData, filtros.rocaId, filtros.rocaLabel, rocasPorId, rotulo.singular]);
 
   const erroMsg = error ? extractApiErrorMessage(error) : null;
 
@@ -777,16 +786,16 @@ export default function FluxoDeCaixa() {
                   <Separator />
 
                   <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                     <Select value={formRocaId} onValueChange={setFormRocaId}>
                       <SelectTrigger className="w-full rounded-xl border-2">
-                        <SelectValue placeholder="Todas as roças" />
+                        <SelectValue placeholder={rotulo.todas} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="todas">Todas as roças</SelectItem>
+                        <SelectItem value="todas">{rotulo.todas}</SelectItem>
                         {rocasAtivas.map((r) => (
                           <SelectItem key={r.id} value={String(r.id)}>
-                            {rotuloRoca(r)}
+                            {rotuloRoca(r, rotulo.singular)}
                           </SelectItem>
                         ))}
                       </SelectContent>

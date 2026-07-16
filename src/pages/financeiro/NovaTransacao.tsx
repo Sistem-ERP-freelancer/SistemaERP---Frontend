@@ -35,6 +35,7 @@ import {
   type ApiCentroCustoTipo,
 } from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
+import { useRotuloRoca } from "@/hooks/useRotuloRoca";
 import {
   CreateContaFinanceiraDto,
   financeiroService,
@@ -210,6 +211,7 @@ const initialForm = (): NovaTransacaoForm => ({
 });
 
 const NovaTransacao = () => {
+  const rotulo = useRotuloRoca();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modo, setModo] = useState<ModoLancamento>("RECEBER");
@@ -426,7 +428,7 @@ const NovaTransacao = () => {
         return;
       }
       if (!form.roca_id) {
-        toast.error("Selecione a roça (centro de custo)");
+        toast.error(`Selecione a ${rotulo.singularLower} (centro de custo)`);
         return;
       }
       setSalvandoDespesaCc(true);
@@ -678,8 +680,8 @@ const NovaTransacao = () => {
                   title="Relacionamentos"
                   description={
                     ehDespesa
-                      ? "Vincule fornecedor, pedido, roça ou centro de custo quando aplicável."
-                      : "Vincule cliente, fornecedor, pedido ou roça quando aplicável."
+                      ? `Vincule fornecedor, pedido, ${rotulo.singularLower} ou centro de custo quando aplicável.`
+                      : `Vincule cliente, fornecedor, pedido ou ${rotulo.singularLower} quando aplicável.`
                   }
                 >
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -755,7 +757,7 @@ const NovaTransacao = () => {
                           </p>
                         ) : (
                           <p className="text-xs text-muted-foreground">
-                            Opcional. Se selecionar, informe também a roça — a despesa entra em
+                            Opcional. Se selecionar, informe também a {rotulo.singularLower} — a despesa entra em
                             Centro de Custos e Contas a pagar.
                           </p>
                         )}
@@ -854,7 +856,7 @@ const NovaTransacao = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Roça{temCentroCusto ? " *" : ""}</Label>
+                      <Label>{rotulo.singular}{temCentroCusto ? " *" : ""}</Label>
                       <Select
                         value={form.roca_id != null ? String(form.roca_id) : "none"}
                         onValueChange={(value) =>
@@ -866,7 +868,7 @@ const NovaTransacao = () => {
                         }
                       >
                         <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Selecione uma roça" />
+                          <SelectValue placeholder={rotulo.selecione} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
@@ -1124,7 +1126,7 @@ const NovaTransacao = () => {
                       ) : null}
                       {resumo.rocaNome ? (
                         <div className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">Roça</span>
+                          <span className="text-muted-foreground">{rotulo.singular}</span>
                           <span className="max-w-[55%] truncate text-right font-medium">
                             {resumo.rocaNome}
                           </span>

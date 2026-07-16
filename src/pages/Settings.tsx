@@ -37,7 +37,9 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/AuthContext";
+import { ROTULO_ROCA_PADRAO, buildRotulosRoca } from "@/lib/rotulo-roca";
 import { formatDate } from "@/lib/utils";
 import { Configuracoes, configuracoesService } from "@/services/configuracoes.service";
 import { tenantsService } from "@/services/tenants.service";
@@ -48,6 +50,7 @@ import {
     ArrowLeft,
     Building2,
     Edit,
+    EyeOff,
     Loader2,
     Plus,
     Power,
@@ -56,10 +59,11 @@ import {
     Save,
     Search,
     Settings as SettingsIcon,
+    Sprout,
     Trash2,
     Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -78,6 +82,8 @@ const Settings = () => {
     role: "VENDEDOR",
     ativo: true,
   });
+  const [rotuloRocaDraft, setRotuloRocaDraft] = useState(ROTULO_ROCA_PADRAO);
+  const [ocultarControleRocaDraft, setOcultarControleRocaDraft] = useState(false);
 
   // Buscar usuários
   const { data: usuarios, isLoading: loadingUsuarios } = useQuery({
@@ -92,6 +98,14 @@ const Settings = () => {
     queryFn: () => configuracoesService.obter(),
     enabled: activeTab === "configuracoes" && (user?.role === "ADMIN" || user?.role === "GERENTE"),
   });
+
+  useEffect(() => {
+    if (!configuracoes) return;
+    setRotuloRocaDraft(
+      String(configuracoes.rotulo_roca ?? "").trim() || ROTULO_ROCA_PADRAO,
+    );
+    setOcultarControleRocaDraft(Boolean(configuracoes.ocultar_menu_controle_roca));
+  }, [configuracoes]);
 
   // Buscar informações do tenant usando o novo endpoint
   const { data: tenantInfo, isLoading: loadingTenant, error: tenantError } = useQuery({
@@ -258,15 +272,20 @@ const Settings = () => {
       moeda: configuracoes?.moeda || "BRL",
       fuso_horario: configuracoes?.fuso_horario || "America/Sao_Paulo",
       idioma: configuracoes?.idioma || "pt-BR",
+      rotulo_roca: rotuloRocaDraft.trim() || ROTULO_ROCA_PADRAO,
+      ocultar_menu_controle_roca: ocultarControleRocaDraft,
     });
   };
 
   const handleRestoreConfig = () => {
-    // Restaura para valores padrão
+    setRotuloRocaDraft(ROTULO_ROCA_PADRAO);
+    setOcultarControleRocaDraft(false);
     updateConfigMutation.mutate({
       moeda: "BRL",
       fuso_horario: "America/Sao_Paulo",
       idioma: "pt-BR",
+      rotulo_roca: ROTULO_ROCA_PADRAO,
+      ocultar_menu_controle_roca: false,
     });
   };
 
@@ -636,6 +655,94 @@ const Settings = () => {
                             <SelectItem value="es-ES">Español</SelectItem>
                           </SelectContent>
                         </Select>
+                      </CardContent>
+                    </Card>
+
+                    {/* Rótulo Roça → Empresa (ou personalizado) */}
+                    <Card className="md:col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Sprout className="h-4 w-4" />
+                          Nome no lugar de &quot;Roça&quot;
+                        </CardTitle>
+                        <CardDescription>
+                          Troca o texto &quot;Roça&quot; no Dashboard, Financeiro, Comercial e
+                          Movimentações. O módulo Controle de Roça continua com o nome original.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                          <div className="flex-1 space-y-2">
+                            <Label htmlFor="rotulo-roca">Nome exibido</Label>
+                            <Input
+                              id="rotulo-roca"
+                              value={rotuloRocaDraft}
+                              maxLength={40}
+                              disabled={!canEditConfig}
+                              placeholder="Ex.: Empresa, Unidade, Fazenda…"
+                              onChange={(e) => setRotuloRocaDraft(e.target.value)}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!canEditConfig}
+                            onClick={() => {
+                              setRotuloRocaDraft("Empresa");
+                              if (canEditConfig) {
+                                updateConfigMutation.mutate({
+                                  rotulo_roca: "Empresa",
+                                  ocultar_menu_controle_roca: ocultarControleRocaDraft,
+                                });
+                              }
+                            }}
+                          >
+                            Usar &quot;Empresa&quot;
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {(() => {
+                            const preview = buildRotulosRoca(rotuloRocaDraft);
+                            return `Exemplos na tela: "${preview.singular}", "${preview.todas}". Clique em Salvar para aplicar em todo o sistema.`;
+                          })()}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Ocultar Controle de Roça */}
+                    <Card className="md:col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <EyeOff className="h-4 w-4" />
+                          Menu Controle de Roça
+                        </CardTitle>
+                        <CardDescription>
+                          Oculta o item &quot;Controle de Roça&quot; do menu lateral para todos os usuários.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3">
+                          <div>
+                            <p className="text-sm font-medium">Ocultar Controle de Roça</p>
+                            <p className="text-xs text-muted-foreground">
+                              Quando ativo, o módulo some do menu (a rota direta continua existindo).
+                            </p>
+                          </div>
+                          <Switch
+                            checked={ocultarControleRocaDraft}
+                            disabled={!canEditConfig}
+                            onCheckedChange={(checked) => {
+                              setOcultarControleRocaDraft(checked);
+                              if (canEditConfig) {
+                                updateConfigMutation.mutate({
+                                  ocultar_menu_controle_roca: checked,
+                                  rotulo_roca:
+                                    rotuloRocaDraft.trim() || ROTULO_ROCA_PADRAO,
+                                });
+                              }
+                            }}
+                          />
+                        </div>
                       </CardContent>
                     </Card>
                   </div>

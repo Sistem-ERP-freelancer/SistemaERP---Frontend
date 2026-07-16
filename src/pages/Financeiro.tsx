@@ -51,6 +51,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useRotuloRoca } from "@/hooks/useRotuloRoca";
 import { cn, compareRocaPorCodigo, formatDate } from "@/lib/utils";
 import {
   calcularStatsFinanceiroFiltrado,
@@ -190,6 +191,7 @@ function mapContaApiParaEdicao(
 }
 
 const Financeiro = () => {
+  const rotulo = useRotuloRoca();
   const navigate = useNavigate();
   const dataInicialFiltroRef = useRef<HTMLInputElement | null>(null);
   const dataFinalFiltroRef = useRef<HTMLInputElement | null>(null);
@@ -1368,7 +1370,7 @@ const Financeiro = () => {
 
                   {/* Roça */}
                   <div className="space-y-3">
-                    <Label className="text-sm font-semibold">Roça</Label>
+                    <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                     <Select
                       value={rocaFilterId == null ? "todos" : String(rocaFilterId)}
                       onValueChange={(v) => {
@@ -1377,13 +1379,13 @@ const Financeiro = () => {
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Todas as roças" />
+                        <SelectValue placeholder={rotulo.todas} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="todos">Todas as roças</SelectItem>
+                        <SelectItem value="todos">{rotulo.todas}</SelectItem>
                         {rocasFiltroOrdenadas.map((r) => (
                           <SelectItem key={r.id} value={String(r.id)}>
-                            {(r.codigo ? `${r.codigo} – ` : "") + (r.nome ?? `Roça ${r.id}`)}
+                            {(r.codigo ? `${r.codigo} – ` : "") + (r.nome ?? rotulo.comId(r.id))}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1536,7 +1538,7 @@ const Financeiro = () => {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Roça</TableHead>
+                <TableHead>{rotulo.singular}</TableHead>
                 <TableHead>Valor (total)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
@@ -1802,7 +1804,7 @@ const Financeiro = () => {
                       <div className="text-sm font-medium">{contaDetalhe.relacionamentos?.pedido_numero ?? 'N/A'}</div>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">Roça</Label>
+                      <Label className="text-muted-foreground">{rotulo.singular}</Label>
                       <div className="text-sm font-medium">
                         {contaDetalhe.relacionamentos?.roca_nome?.trim()
                           ? contaDetalhe.relacionamentos.roca_nome
@@ -2137,7 +2139,7 @@ const Financeiro = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Roça</Label>
+                      <Label className="text-sm font-semibold">{rotulo.singular}</Label>
                       <Select
                         value={
                           editConta.roca_id != null
@@ -2155,7 +2157,7 @@ const Financeiro = () => {
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma roça" />
+                          <SelectValue placeholder={rotulo.selecione} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Nenhuma</SelectItem>
