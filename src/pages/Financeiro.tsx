@@ -1,4 +1,5 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
+import { EditarContaFinanceiraDialog } from "@/components/financeiro/EditarContaFinanceiraDialog";
 import { GerarPedidoDePrevisaoDialog } from "@/components/financeiro/GerarPedidoDePrevisaoDialog";
 import AppLayout from "@/components/layout/AppLayout";
 import {
@@ -101,92 +102,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-/** Valor para input type="date" (YYYY-MM-DD). */
-function toDateInputValue(val: unknown): string {
-  if (val == null || val === "") return "";
-  if (typeof val === "string") {
-    const ymd = val.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (ymd) return ymd[1];
-    const d = new Date(val);
-    if (!Number.isNaN(d.getTime())) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    }
-  }
-  if (val instanceof Date) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, "0");
-    const day = String(val.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }
-  return "";
-}
-
-function toEditValorOriginal(val: unknown): number {
-  if (val == null || val === "") return 0;
-  if (typeof val === "number" && Number.isFinite(val)) return val;
-  if (typeof val === "string") {
-    const t = val.trim();
-    if (t.includes(",") && !/\.\d{2}$/.test(t)) {
-      return parseFloat(t.replace(/\./g, "").replace(",", ".")) || 0;
-    }
-    return parseFloat(t.replace(",", ".")) || 0;
-  }
-  const n = Number(val);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function pickOptionalId(...candidates: unknown[]): number | undefined {
-  for (const c of candidates) {
-    if (c == null || c === "") continue;
-    const n = typeof c === "number" ? c : parseInt(String(c), 10);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return undefined;
-}
-
 /** Período do mês corrente (mesmo critério dos cards Receita/Despesas do Mês). */
 function periodoMesAtualYMD(ref = new Date()) {
   return {
     dataInicial: toYMD(new Date(ref.getFullYear(), ref.getMonth(), 1)),
     dataFinal: fimDoMesYMD(ref),
-  };
-}
-
-/** Normaliza GET /contas-financeiras/:id para o formulário (snake_case, camelCase, decimal como string, relações aninhadas). */
-function mapContaApiParaEdicao(
-  raw: ContaFinanceira | Record<string, unknown>,
-): CreateContaFinanceiraDto & { data_emissao: string; data_prevista?: string } {
-  const r = raw as Record<string, unknown>;
-  const cliente = r.cliente as { id?: number } | undefined;
-  const fornecedor = r.fornecedor as { id?: number } | undefined;
-  const pedido = r.pedido as { id?: number } | undefined;
-
-  return {
-    tipo: (r.tipo as CreateContaFinanceiraDto["tipo"]) || "PAGAR",
-    previsao: r.previsao === true || r.previsao === "t",
-    descricao: String(r.descricao ?? ""),
-    valor_original: toEditValorOriginal(r.valor_original),
-    data_emissao: toDateInputValue(r.data_emissao),
-    data_vencimento: toDateInputValue(r.data_vencimento),
-    data_prevista: toDateInputValue(r.data_prevista),
-    data_pagamento: r.data_pagamento
-      ? toDateInputValue(r.data_pagamento)
-      : undefined,
-    cliente_id: pickOptionalId(r.cliente_id, cliente?.id, r.clienteId),
-    fornecedor_id: pickOptionalId(
-      r.fornecedor_id,
-      fornecedor?.id,
-      r.fornecedorId,
-    ),
-    pedido_id: pickOptionalId(r.pedido_id, pedido?.id, r.pedidoId),
-    roca_id: pickOptionalId(r.roca_id, r.rocaId),
-    forma_pagamento:
-      (r.forma_pagamento as CreateContaFinanceiraDto["forma_pagamento"]) ??
-      undefined,
-    observacoes: r.observacoes != null ? String(r.observacoes) : undefined,
   };
 }
 
@@ -906,17 +826,6 @@ const Financeiro = () => {
     dataFinalFilter,
   ]);
 
-  // Query para buscar conta por ID (usado apenas no formulário de Edição - GET :id)
-  const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
-    queryKey: ["conta-financeira", selectedContaId],
-    queryFn: async () => {
-      if (!selectedContaId) return null;
-      return await financeiroService.buscarPorId(selectedContaId);
-    },
-    enabled: !!selectedContaId && editDialogOpen,
-    retry: false,
-  });
-
   // Query para detalhe enriquecido (usado apenas no modal Visualizar - GET :id/detalhe)
   const { data: contaDetalhe, isLoading: isLoadingDetalhe } = useQuery({
     queryKey: ["conta-financeira-detalhe", selectedContaId],
@@ -928,93 +837,11 @@ const Financeiro = () => {
     retry: false,
   });
 
-  // Mutation para atualizar conta financeira
-  const updateContaMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<CreateContaFinanceiraDto> }) => {
-      return await financeiroService.atualizar(id, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
-      queryClient.invalidateQueries({ queryKey: ["fluxo-caixa"] });
-      queryClient.invalidateQueries({ queryKey: ["conta-financeira", selectedContaId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-receber"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo"] });
-      toast.success("Conta atualizada com sucesso!");
-      setEditDialogOpen(false);
-      setSelectedContaId(null);
-      setEditConta(null);
-    },
-    onError: (error: any) => {
-      toast.error(error?.response?.data?.message || "Erro ao atualizar conta");
-    },
-  });
-
-  // Estado para edição
-  const [editConta, setEditConta] = useState<
-    (CreateContaFinanceiraDto & { data_emissao: string; data_prevista?: string }) | null
-  >(null);
-
-  const isEditPrevisao = Boolean(
-    contaSelecionada?.previsao ||
-      contaSelecionada?.status === "PREVISAO" ||
-      editConta?.previsao,
-  );
-
-  // Quando a conta for carregada, preencher o formulário (evita exibir dados da edição anterior)
-  useEffect(() => {
-    if (
-      !contaSelecionada ||
-      !editDialogOpen ||
-      selectedContaId == null ||
-      contaSelecionada.id !== selectedContaId
-    ) {
-      return;
-    }
-    setEditConta(mapContaApiParaEdicao(contaSelecionada));
-  }, [contaSelecionada, editDialogOpen, selectedContaId]);
-
   const handleEditDialogOpenChange = (open: boolean) => {
     setEditDialogOpen(open);
     if (!open) {
       setSelectedContaId(null);
-      setEditConta(null);
     }
-  };
-
-  const handleUpdate = () => {
-    if (!selectedContaId || !editConta) return;
-
-    if (isEditPrevisao) {
-      if (!editConta.descricao?.trim() || !editConta.valor_original || !editConta.data_prevista) {
-        toast.error("Preencha descrição, valor e data prevista");
-        return;
-      }
-      updateContaMutation.mutate({
-        id: selectedContaId,
-        data: {
-          descricao: editConta.descricao,
-          valor_original: Number(editConta.valor_original),
-          data_prevista: editConta.data_prevista,
-          data_emissao: editConta.data_emissao || undefined,
-          cliente_id: editConta.cliente_id,
-          roca_id: editConta.roca_id,
-          forma_pagamento: editConta.forma_pagamento,
-          observacoes: editConta.observacoes,
-        },
-      });
-      return;
-    }
-
-    if (!editConta.descricao || !editConta.valor_original || !editConta.data_vencimento) {
-      toast.error("Preencha os campos obrigatórios");
-      return;
-    }
-
-    updateContaMutation.mutate({
-      id: selectedContaId,
-      data: editConta,
-    });
   };
 
   const abrirGerarPedidoDePrevisao = (contaId: number) => {
@@ -1626,7 +1453,6 @@ const Financeiro = () => {
                           ) : null}
                           <DropdownMenuItem
                             onClick={() => {
-                              setEditConta(null);
                               setSelectedContaId(transacao.contaId);
                               setEditDialogOpen(true);
                             }}
@@ -1925,420 +1751,22 @@ const Financeiro = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de Edição - mesmo design do Editar Cliente */}
-        <Dialog open={editDialogOpen} onOpenChange={handleEditDialogOpenChange}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                    Editar Conta Financeira
-                    {isEditPrevisao ? (
-                      <span className="rounded-full bg-violet-500/10 px-2.5 py-0.5 text-xs font-semibold text-violet-600">
-                        Previsão
-                      </span>
-                    ) : null}
-                  </DialogTitle>
-                  <DialogDescription className="mt-1">
-                    Edite os campos desejados da conta financeira
-                  </DialogDescription>
-                </div>
-                {contaSelecionada && editConta && (
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEditConta(mapContaApiParaEdicao(contaSelecionada));
-                      }}
-                    >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Limpar
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </DialogHeader>
-
-            {isLoadingConta ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : editConta ? (
-              <div className="space-y-8 pt-6">
-                {/* Seção: Informações Básicas */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <FileText className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Informações Básicas
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Dados principais da conta
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                        Descrição *
-                      </Label>
-                      <Input
-                        placeholder="Ex: Pedido VEND-2026-00001 - Parcela 1/4"
-                        value={editConta.descricao}
-                        onChange={(e) => setEditConta({ ...editConta, descricao: e.target.value })}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {!isEditPrevisao ? (
-                        <div className="space-y-2">
-                          <Label className="text-sm font-semibold">Tipo *</Label>
-                          <Select
-                            value={editConta.tipo}
-                            onValueChange={(value: "RECEBER" | "PAGAR") =>
-                              setEditConta({ ...editConta, tipo: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="RECEBER">Receita</SelectItem>
-                              <SelectItem value="PAGAR">Despesa</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : null}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-semibold">
-                          {isEditPrevisao ? "Valor previsto *" : "Valor Original *"}
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={editConta.valor_original || ""}
-                          onChange={(e) => setEditConta({ ...editConta, valor_original: e.target.value ? Number(e.target.value) : 0 })}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Seção: Relacionamentos */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-green-500/10">
-                      <ShoppingCart className="w-5 h-5 text-green-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Relacionamentos
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Cliente, fornecedor e pedido vinculados
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Cliente</Label>
-                      <Select
-                        value={
-                          editConta.cliente_id != null
-                            ? String(editConta.cliente_id)
-                            : "none"
-                        }
-                        onValueChange={(value) =>
-                          setEditConta({
-                            ...editConta,
-                            cliente_id: value && value !== "none" ? Number(value) : null,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um cliente" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {clientes.map((cliente) => (
-                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                              {cliente.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Fornecedor</Label>
-                      <Select
-                        value={
-                          editConta.fornecedor_id != null
-                            ? String(editConta.fornecedor_id)
-                            : "none"
-                        }
-                        onValueChange={(value) =>
-                          setEditConta({
-                            ...editConta,
-                            fornecedor_id: value && value !== "none" ? Number(value) : null,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um fornecedor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {fornecedores.map((fornecedor) => (
-                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                              {fornecedor.nome_fantasia}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Pedido</Label>
-                      <Select
-                        value={
-                          editConta.pedido_id != null
-                            ? String(editConta.pedido_id)
-                            : "none"
-                        }
-                        onValueChange={(value) =>
-                          setEditConta({
-                            ...editConta,
-                            pedido_id: value && value !== "none" ? Number(value) : null,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um pedido" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {(pedidos || [])
-                            .filter((pedido) => {
-                              const pedidoId = (pedido as any).pedido_id ?? pedido.id;
-                              return pedidoId != null;
-                            })
-                            .map((pedido) => {
-                              const pedidoId = (pedido as any).pedido_id ?? pedido.id;
-                              return (
-                                <SelectItem key={pedidoId} value={pedidoId.toString()}>
-                                  {pedido.numero_pedido || `PED-${pedidoId}`}
-                                </SelectItem>
-                              );
-                            })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">{rotulo.singular}</Label>
-                      <Select
-                        value={
-                          editConta.roca_id != null
-                            ? String(editConta.roca_id)
-                            : "none"
-                        }
-                        onValueChange={(value) =>
-                          setEditConta({
-                            ...editConta,
-                            roca_id:
-                              value && value !== "none"
-                                ? Number(value)
-                                : null,
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={rotulo.selecione} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhuma</SelectItem>
-                          {rocasLista
-                            .filter((r) => r.ativo !== false)
-                            .map((roca) => (
-                              <SelectItem key={roca.id} value={String(roca.id)}>
-                                {roca.nome}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Seção: Datas */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-amber-500/10">
-                      <Calendar className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Datas
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {isEditPrevisao
-                          ? "Criação e data prevista de entrada"
-                          : "Emissão, vencimento e pagamento"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">
-                        Data de Emissão{isEditPrevisao ? "" : " *"}
-                      </Label>
-                      <Input
-                        type="date"
-                        value={editConta.data_emissao}
-                        onChange={(e) => setEditConta({ ...editConta, data_emissao: e.target.value })}
-                      />
-                    </div>
-                    {isEditPrevisao ? (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-semibold text-violet-700">
-                          Data prevista *
-                        </Label>
-                        <Input
-                          type="date"
-                          className="border-violet-200 focus-visible:ring-violet-400"
-                          value={editConta.data_prevista || ""}
-                          onChange={(e) =>
-                            setEditConta({ ...editConta, data_prevista: e.target.value })
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-semibold">Data de Vencimento *</Label>
-                          <Input
-                            type="date"
-                            value={editConta.data_vencimento}
-                            onChange={(e) =>
-                              setEditConta({ ...editConta, data_vencimento: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-semibold">Data de Pagamento</Label>
-                          <Input
-                            type="date"
-                            value={editConta.data_pagamento || ""}
-                            onChange={(e) =>
-                              setEditConta({
-                                ...editConta,
-                                data_pagamento: e.target.value || undefined,
-                              })
-                            }
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Seção: Pagamento */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-yellow-500/10">
-                      <CreditCard className="w-5 h-5 text-yellow-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Pagamento
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Forma de pagamento
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold">Forma de Pagamento</Label>
-                    <Select
-                      value={editConta.forma_pagamento ?? "none"}
-                      onValueChange={(value) =>
-                        setEditConta({
-                          ...editConta,
-                          forma_pagamento:
-                            value === "none" ? undefined : (value as any),
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a forma de pagamento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhuma</SelectItem>
-                        <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
-                        <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                        <SelectItem value="CHEQUE">Cheque</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Seção: Observações */}
-                <div className="bg-card border rounded-lg p-6 space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-gray-500/10">
-                      <Info className="w-5 h-5 text-gray-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Observações
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Informações adicionais sobre a transação
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold">Observações</Label>
-                    <Textarea
-                      placeholder="Observações adicionais sobre a transação"
-                      value={editConta.observacoes || ""}
-                      onChange={(e) => setEditConta({ ...editConta, observacoes: e.target.value || undefined })}
-                      rows={4}
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleUpdate}
-                  className="w-full"
-                  variant="gradient"
-                  disabled={updateContaMutation.isPending}
-                >
-                  {updateContaMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Atualizando...
-                    </>
-                  ) : (
-                    "Atualizar Conta"
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-muted-foreground">
-                Carregando dados da conta...
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        <EditarContaFinanceiraDialog
+          open={editDialogOpen}
+          onOpenChange={handleEditDialogOpenChange}
+          contaId={selectedContaId}
+          allowTipoChange
+          clientes={clientes}
+          fornecedores={fornecedores}
+          pedidos={pedidos}
+          invalidateQueryKeys={[
+            ["contas-financeiras"],
+            ["fluxo-caixa"],
+            ["dashboard-receber"],
+            ["dashboard-pagar"],
+            ["dashboard-resumo"],
+          ]}
+        />
 
         <Dialog
           open={relatorioClientePdfOpen}

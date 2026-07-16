@@ -1,3 +1,4 @@
+import { EditarContaFinanceiraDialog } from "@/components/financeiro/EditarContaFinanceiraDialog";
 import AppLayout from "@/components/layout/AppLayout";
 import { TableRowActionsMenu } from "@/components/TableRowActionsMenu";
 import { ModulePageHeader } from "@/components/layout/ModulePageHeader";
@@ -1221,24 +1222,13 @@ function ContasAPagar() {
     }));
   }, [stats, activeCardFilter]);
 
-  // Query para buscar conta financeira por ID
-  const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
-    queryKey: ["conta-financeira", selectedContaId],
-    queryFn: async () => {
-      if (!selectedContaId) return null;
-      return await financeiroService.buscarPorId(selectedContaId);
-    },
-    enabled: !!selectedContaId && editDialogOpen,
-    retry: false,
-  });
-
-  const contaParaTituloModal = useMemo(() => {
-    if (contaSelecionada) return contaSelecionada;
-    if (selectedContaId != null) {
-      return contasFallback.find((c) => c.id === selectedContaId) ?? null;
-    }
-    return null;
-  }, [contaSelecionada, selectedContaId, contasFallback]);
+  const editDialogTitle = useMemo(() => {
+    if (selectedContaId == null) return "Editar Conta a Pagar";
+    const conta = contasFallback.find((c) => c.id === selectedContaId);
+    return contaEhDespesaSemPedido(conta)
+      ? "Editar Despesa"
+      : "Editar Conta a Pagar";
+  }, [selectedContaId, contasFallback]);
 
   // Mutation para criar conta financeira
   const createContaMutation = useMutation({
@@ -1262,43 +1252,6 @@ function ContasAPagar() {
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Erro ao registrar conta a pagar");
-    },
-  });
-
-  // Mutation para atualizar conta financeira
-  const updateContaMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<CreateContaFinanceiraDto> }) => {
-      return await financeiroService.atualizar(id, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contas-financeiras"] });
-      queryClient.invalidateQueries({ queryKey: ["conta-financeira", selectedContaId] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-pagar"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-resumo-financeiro"] });
-      toast.success("Conta atualizada com sucesso!");
-      setEditDialogOpen(false);
-      setSelectedContaId(null);
-    },
-    onError: (error: any) => {
-      const errorMessage = 
-        error?.response?.data?.message ||
-        error?.response?.data?.error?.message ||
-        error?.response?.data?.error ||
-        (Array.isArray(error?.response?.data?.message) 
-          ? error.response.data.message.join(', ') 
-          : null) ||
-        (error?.response?.status === 500 
-          ? "Erro interno do servidor. Verifique os dados e tente novamente." 
-          : "Erro ao atualizar conta");
-      
-      console.error('❌ [ContasAPagar] Erro ao atualizar conta:', {
-        error,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        message: errorMessage,
-      });
-      
-      toast.error(errorMessage);
     },
   });
 
@@ -1394,146 +1347,12 @@ function ContasAPagar() {
     updateStatusMutation.mutate({ id: contaId, status: newStatus });
   };
 
-  // Estado para edição
-  const [editConta, setEditConta] = useState<CreateContaFinanceiraDto & { data_emissao: string } | null>(null);
-
   const abrirDatePicker = (input: HTMLInputElement | null) => {
     if (!input) return;
     input.focus();
     if (typeof input.showPicker === "function") {
       input.showPicker();
     }
-  };
-
-  // Função auxiliar para converter data para formato ISO (YYYY-MM-DD)
-  const converterDataParaISO = (data: string | undefined): string => {
-    if (!data) return '';
-    
-    try {
-      // Se já está no formato ISO (YYYY-MM-DD), retornar como está
-      if (/^\d{4}-\d{2}-\d{2}/.test(data)) {
-        return data.split('T')[0].split(' ')[0];
-      }
-      
-      // Se está no formato brasileiro (DD/MM/YYYY), converter
-      if (/^\d{2}\/\d{2}\/\d{4}/.test(data)) {
-        const [dia, mes, ano] = data.split('/');
-        return `${ano}-${mes}-${dia}`;
-      }
-      
-      // Tentar parsear como Date e converter
-      const dateObj = new Date(data);
-      if (!isNaN(dateObj.getTime())) {
-        const year = dateObj.getFullYear();
-        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const day = String(dateObj.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }
-      
-      return '';
-    } catch (error) {
-      console.error('Erro ao converter data:', error);
-      return '';
-    }
-  };
-
-  // Quando a conta for carregada, preencher o formulário de edição
-  useEffect(() => {
-    if (contaSelecionada && editDialogOpen) {
-      setEditConta({
-        tipo: contaSelecionada.tipo,
-        descricao: contaSelecionada.descricao,
-        valor_original: contaSelecionada.valor_original,
-        data_emissao: converterDataParaISO(contaSelecionada.data_emissao),
-        data_vencimento: converterDataParaISO(contaSelecionada.data_vencimento),
-        cliente_id: contaSelecionada.cliente_id,
-        fornecedor_id: contaSelecionada.fornecedor_id,
-        pedido_id: contaSelecionada.pedido_id,
-        roca_id: contaSelecionada.roca_id ?? undefined,
-        forma_pagamento: contaSelecionada.forma_pagamento,
-        data_pagamento: contaSelecionada.data_pagamento ? converterDataParaISO(contaSelecionada.data_pagamento) : undefined,
-        observacoes: contaSelecionada.observacoes,
-      });
-    }
-  }, [contaSelecionada, editDialogOpen]);
-
-  const handleUpdate = () => {
-    if (!selectedContaId || !editConta) {
-      toast.error("Erro: Conta não selecionada");
-      return;
-    }
-    
-    // Validar campos obrigatórios
-    if (!editConta.descricao || !editConta.descricao.trim()) {
-      toast.error("Preencha a descrição");
-      return;
-    }
-    
-    if (!editConta.valor_original || editConta.valor_original <= 0) {
-      toast.error("Preencha um valor original válido");
-      return;
-    }
-    
-    if (!editConta.data_emissao || !editConta.data_emissao.trim()) {
-      toast.error("Preencha a data de emissão");
-      return;
-    }
-    
-    if (!editConta.data_vencimento || !editConta.data_vencimento.trim()) {
-      toast.error("Preencha a data de vencimento");
-      return;
-    }
-
-    // Validar formato das datas (deve estar em formato ISO YYYY-MM-DD)
-    const dataEmissaoRegex = /^\d{4}-\d{2}-\d{2}$/;
-    const dataVencimentoRegex = /^\d{4}-\d{2}-\d{2}$/;
-    
-    if (!dataEmissaoRegex.test(editConta.data_emissao)) {
-      toast.error("A data de emissão deve estar no formato ISO (YYYY-MM-DD), por exemplo: 2025-12-01");
-      return;
-    }
-    
-    if (!dataVencimentoRegex.test(editConta.data_vencimento)) {
-      toast.error("A data de vencimento deve estar no formato ISO (YYYY-MM-DD), por exemplo: 2025-12-01");
-      return;
-    }
-
-    // Preparar dados para envio - apenas campos definidos
-    const dadosAtualizacao: Partial<CreateContaFinanceiraDto> = {};
-    
-    // Campos obrigatórios sempre enviados
-    dadosAtualizacao.descricao = editConta.descricao.trim();
-    dadosAtualizacao.valor_original = editConta.valor_original;
-    dadosAtualizacao.data_emissao = editConta.data_emissao;
-    dadosAtualizacao.data_vencimento = editConta.data_vencimento;
-    
-    // Campos opcionais - apenas se definidos
-    dadosAtualizacao.fornecedor_id =
-      editConta.fornecedor_id != null && editConta.fornecedor_id > 0
-        ? editConta.fornecedor_id
-        : null;
-    dadosAtualizacao.pedido_id =
-      editConta.pedido_id != null && editConta.pedido_id > 0
-        ? editConta.pedido_id
-        : null;
-    dadosAtualizacao.roca_id =
-      editConta.roca_id != null && editConta.roca_id > 0 ? editConta.roca_id : null;
-    if (editConta.forma_pagamento) {
-      dadosAtualizacao.forma_pagamento = editConta.forma_pagamento;
-    }
-    if (editConta.data_pagamento && editConta.data_pagamento.trim()) {
-      dadosAtualizacao.data_pagamento = editConta.data_pagamento;
-    }
-    if (editConta.observacoes && editConta.observacoes.trim()) {
-      dadosAtualizacao.observacoes = editConta.observacoes.trim();
-    }
-
-    console.log('📝 [ContasAPagar] Atualizando conta:', { id: selectedContaId, data: dadosAtualizacao });
-
-    updateContaMutation.mutate({
-      id: selectedContaId,
-      data: dadosAtualizacao,
-    });
   };
 
   // Função para obter cor do status ativo
@@ -2640,6 +2459,38 @@ function ContasAPagar() {
                             <Eye className="w-4 h-4 mr-2" />
                             Ver detalhes
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              try {
+                                let contaId: number | null = null;
+                                if ((transacao as any).pedidoId != null) {
+                                  contaId = await financeiroService.getContaIdPorPedidoId(
+                                    (transacao as any).pedidoId,
+                                    "PAGAR",
+                                  );
+                                } else {
+                                  contaId = transacao.contaId ?? null;
+                                }
+                                if (contaId == null) {
+                                  toast.error(
+                                    "Conta financeira não encontrada para este item.",
+                                  );
+                                  return;
+                                }
+                                setSelectedContaId(contaId);
+                                setEditDialogOpen(true);
+                              } catch (e) {
+                                toast.error(
+                                  e instanceof Error
+                                    ? e.message
+                                    : "Não foi possível abrir a edição.",
+                                );
+                              }
+                            }}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
                           {(transacao as any).podePagar &&
                             ((transacao as any).pedidoId ? (
                               <DropdownMenuItem
@@ -2836,129 +2687,25 @@ function ContasAPagar() {
           )}
         </motion.div>
 
-        {/* Dialog de Edição - Similar ao Financeiro.tsx mas simplificado */}
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Edit className="w-5 h-5 text-primary" />
-                {contaEhDespesaSemPedido(contaParaTituloModal ?? undefined)
-                  ? "Editar Despesa"
-                  : "Editar Conta a Pagar"}
-              </DialogTitle>
-            </DialogHeader>
-
-            {isLoadingConta ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : editConta ? (
-              <div className="space-y-6 pt-4">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Descrição *</Label>
-                    <Input 
-                      placeholder="Ex: Pagamento de fornecedor"
-                      value={editConta.descricao}
-                      onChange={(e) => setEditConta({...editConta, descricao: e.target.value})}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Valor Original *</Label>
-                      <Input 
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={editConta.valor_original || ""}
-                        onChange={(e) => setEditConta({...editConta, valor_original: e.target.value ? Number(e.target.value) : 0})}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{rotulo.singular} (opcional)</Label>
-                  <Select
-                    value={
-                      editConta.roca_id != null && editConta.roca_id > 0
-                        ? String(editConta.roca_id)
-                        : "none"
-                    }
-                    onValueChange={(value) =>
-                      setEditConta({
-                        ...editConta,
-                        roca_id:
-                          value && value !== "none" ? Number(value) : undefined,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={rotulo.selecione} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {rocasLista
-                        .filter((r) => r.ativo !== false)
-                        .map((roca) => (
-                          <SelectItem key={roca.id} value={String(roca.id)}>
-                            {roca.nome}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Data de Emissão *</Label>
-                    <Input 
-                      type="date"
-                      value={editConta.data_emissao}
-                      onChange={(e) => setEditConta({...editConta, data_emissao: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Data de Vencimento *</Label>
-                    <Input 
-                      type="date"
-                      value={editConta.data_vencimento}
-                      onChange={(e) => setEditConta({...editConta, data_vencimento: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Data de Pagamento</Label>
-                    <Input 
-                      type="date"
-                      value={editConta.data_pagamento || ""}
-                      onChange={(e) => setEditConta({...editConta, data_pagamento: e.target.value || undefined})}
-                    />
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={handleUpdate} 
-                  className="w-full" 
-                  variant="gradient"
-                  disabled={updateContaMutation.isPending}
-                >
-                  {updateContaMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Atualizando...
-                    </>
-                  ) : (
-                    "Atualizar Conta"
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-muted-foreground">
-                Carregando dados da conta...
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        <EditarContaFinanceiraDialog
+          open={editDialogOpen}
+          onOpenChange={(open) => {
+            setEditDialogOpen(open);
+            if (!open) setSelectedContaId(null);
+          }}
+          contaId={selectedContaId}
+          title={editDialogTitle}
+          description="Edite os campos desejados da conta a pagar"
+          tipoFixo="PAGAR"
+          fornecedores={fornecedores}
+          pedidos={pedidos}
+          invalidateQueryKeys={[
+            ["contas-financeiras"],
+            ["dashboard-pagar"],
+            ["dashboard-resumo-financeiro"],
+            ["pedidos", "contas-pagar"],
+          ]}
+        />
         <Dialog
           open={relatorioFornecedorPdfOpen}
           onOpenChange={(open) => {
