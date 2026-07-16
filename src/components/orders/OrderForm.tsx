@@ -79,13 +79,20 @@ type FormaPagamentoLinha = {
   forma: FormaPagamentoOpcao | '';
   /** Vazio = sistema divide igualmente */
   valor: string;
+  /** Data de vencimento desta forma (YYYY-MM-DD) */
+  data_vencimento: string;
 };
 
-function novaLinhaForma(forma: FormaPagamentoOpcao | '' = ''): FormaPagamentoLinha {
+function novaLinhaForma(
+  forma: FormaPagamentoOpcao | '' = '',
+  valor = '',
+  data_vencimento = '',
+): FormaPagamentoLinha {
   return {
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     forma,
-    valor: '',
+    valor,
+    data_vencimento,
   };
 }
 
@@ -317,7 +324,9 @@ export function OrderForm({
           ? 'PIX' // Fallback: Transferência mapeia para PIX
           : undefined;
     setFormaPagamentoSelecionada(formaParaSelect);
-    setFormasPagamentoLinhas([novaLinhaForma(formaParaSelect || '')]);
+    setFormasPagamentoLinhas([
+      novaLinhaForma(formaParaSelect || '', '', dataVencimento || dataPedido),
+    ]);
 
     // Forma estrutural: à vista para condições não parceladas
     if (!cond.parcelado || (cond.forma_pagamento !== 'CARTAO_CREDITO' && cond.forma_pagamento !== 'DINHEIRO' && cond.forma_pagamento !== 'PIX')) {
@@ -440,9 +449,47 @@ export function OrderForm({
           formaEstruturalOrder === 'BOLETO_DESCONTADO'
             ? 'BOLETO_DESCONTADO'
             : (order.forma_pagamento as 'PIX' | 'BOLETO' | 'CHEQUE' | 'DINHEIRO' | 'CARTAO_DEBITO' | undefined);
-        if (formaSelecionada && ['PIX', 'BOLETO', 'BOLETO_DESCONTADO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'].includes(formaSelecionada)) {
+        const formasOrder = order.formas_pagamento;
+        if (formasOrder && formasOrder.length > 0) {
+          setFormasPagamentoLinhas(
+            formasOrder.map((fp) => {
+              const formaUi =
+                fp.forma_pagamento === 'BOLETO' &&
+                formaEstruturalOrder === 'BOLETO_DESCONTADO'
+                  ? 'BOLETO_DESCONTADO'
+                  : (fp.forma_pagamento as FormaPagamentoOpcao);
+              return novaLinhaForma(
+                formaUi || '',
+                fp.valor != null && fp.valor > 0 ? String(fp.valor) : '',
+                fp.data_vencimento?.split('T')[0]?.split(' ')[0] ||
+                  dataVencimentoOnly,
+              );
+            }),
+          );
+          const primeira = formasOrder[0];
+          const formaSel =
+            primeira.forma_pagamento === 'BOLETO' &&
+            formaEstruturalOrder === 'BOLETO_DESCONTADO'
+              ? 'BOLETO_DESCONTADO'
+              : (primeira.forma_pagamento as FormaPagamentoOpcao);
+          if (
+            formaSel &&
+            ['PIX', 'BOLETO', 'BOLETO_DESCONTADO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'].includes(
+              formaSel,
+            )
+          ) {
+            setFormaPagamentoSelecionada(formaSel);
+          }
+        } else if (
+          formaSelecionada &&
+          ['PIX', 'BOLETO', 'BOLETO_DESCONTADO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'].includes(
+            formaSelecionada,
+          )
+        ) {
           setFormaPagamentoSelecionada(formaSelecionada);
-          setFormasPagamentoLinhas([novaLinhaForma(formaSelecionada)]);
+          setFormasPagamentoLinhas([
+            novaLinhaForma(formaSelecionada, '', dataVencimentoOnly),
+          ]);
         } else {
           setFormasPagamentoLinhas([novaLinhaForma()]);
         }
@@ -527,7 +574,7 @@ export function OrderForm({
       const formasUi = ['PIX', 'BOLETO', 'CHEQUE', 'DINHEIRO', 'CARTAO_DEBITO'] as const;
       if (formasUi.includes(fp as (typeof formasUi)[number])) {
         setFormaPagamentoSelecionada(fp as (typeof formasUi)[number]);
-        setFormasPagamentoLinhas([novaLinhaForma(fp as FormaPagamentoOpcao)]);
+        setFormasPagamentoLinhas([novaLinhaForma(fp as FormaPagamentoOpcao, '', dataPrev || '')]);
       }
       setFormaPagamentoEstrutural('AVISTA');
     }
@@ -748,7 +795,18 @@ export function OrderForm({
 
     setFormasPagamentoLinhas((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], forma: formaEfetiva };
+      const dataPadrao =
+        next[index]?.data_vencimento?.trim() ||
+        prev[0]?.data_vencimento?.trim() ||
+        dataVencimento ||
+        dataPedido;
+      next[index] = {
+        ...next[index],
+        forma: formaEfetiva,
+        data_vencimento: next[index].data_vencimento?.trim()
+          ? next[index].data_vencimento
+          : dataPadrao,
+      };
       return next;
     });
 
@@ -812,26 +870,44 @@ export function OrderForm({
       }
     }
 
-    // Validação: data de vencimento obrigatória (exceto BOLETO_DESCONTADO, que usa data do pedido)
+    const usaDataPorLinha =
+      formaPagamentoEstrutural !== 'BOLETO_DESCONTADO' &&
+      (multiFormas || formaPagamentoEstrutural === 'AVISTA');
+
+    // Validação: data de vencimento
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const dataPedidoDate = parseDataLocal(dataPedido);
     dataPedidoDate.setHours(0, 0, 0, 0);
     const pedidoRetrospectivo = dataPedidoDate.getTime() < hoje.getTime();
-    if (formaPagamentoEstrutural !== 'BOLETO_DESCONTADO') {
-      if (!dataVencimento?.trim()) {
-        toast.error('Informe a Data de Vencimento inicial.');
-        return;
+    const limiteMinimoVencimento = pedidoRetrospectivo ? dataPedidoDate : hoje;
+
+    const validarDataVencimento = (dataStr: string, contexto: string): boolean => {
+      if (!dataStr?.trim()) {
+        toast.error(contexto);
+        return false;
       }
-      const dataVencimentoDate = parseDataLocal(dataVencimento);
+      const dataVencimentoDate = parseDataLocal(dataStr);
       dataVencimentoDate.setHours(0, 0, 0, 0);
-      const limiteMinimoVencimento = pedidoRetrospectivo ? dataPedidoDate : hoje;
       if (dataVencimentoDate.getTime() < limiteMinimoVencimento.getTime()) {
         toast.error(
           pedidoRetrospectivo
             ? 'A data de vencimento não pode ser anterior à data do pedido.'
-            : 'A data de vencimento não pode ser anterior ao dia atual.'
+            : 'A data de vencimento não pode ser anterior ao dia atual.',
         );
+        return false;
+      }
+      return true;
+    };
+
+    if (usaDataPorLinha) {
+      for (const l of linhasValidas) {
+        if (!validarDataVencimento(l.data_vencimento, 'Informe a data de vencimento para cada forma de pagamento.')) {
+          return;
+        }
+      }
+    } else if (formaPagamentoEstrutural !== 'BOLETO_DESCONTADO') {
+      if (!validarDataVencimento(dataVencimento, 'Informe a Data de Vencimento inicial.')) {
         return;
       }
     }
@@ -846,11 +922,6 @@ export function OrderForm({
         toast.error('Limite de compra excedido');
         return;
       }
-    }
-
-    if (formaPagamentoEstrutural === 'AVISTA' && !dataVencimento?.trim()) {
-      toast.error('Informe a Data de Vencimento para pedido à vista.');
-      return;
     }
 
     if (formaPagamentoEstrutural === 'PARCELADO') {
@@ -919,17 +990,24 @@ export function OrderForm({
     }
 
     const dataVencBase =
-      dataVencimento ||
-      (formaEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) ||
-      undefined;
+      usaDataPorLinha
+        ? linhasValidas[0]?.data_vencimento || dataVencimento || dataPedido
+        : dataVencimento ||
+          (formaEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) ||
+          undefined;
 
     const formasPagamentoPayload = linhasValidas.map((l, i) => {
       const formaApi: FormaPagamento =
         l.forma === 'BOLETO_DESCONTADO' ? 'BOLETO' : (l.forma as FormaPagamento);
+      const dataVencLinha =
+        l.data_vencimento?.trim() ||
+        (formaEstrutural === 'PARCELADO' ? dataVencimento : undefined) ||
+        (formaEstrutural === 'BOLETO_DESCONTADO' ? dataPedido : undefined) ||
+        dataVencBase;
       return {
         forma_pagamento: formaApi,
         valor: valoresFormasPreview[i] ?? 0,
-        ...(dataVencBase ? { data_vencimento: dataVencBase } : {}),
+        ...(dataVencLinha ? { data_vencimento: dataVencLinha } : {}),
       };
     });
 
@@ -1459,10 +1537,20 @@ export function OrderForm({
                 </div>
 
                 <div className="space-y-3">
-                  {formasPagamentoLinhas.map((linha, index) => (
+                  {formasPagamentoLinhas.map((linha, index) => {
+                    const exibirDataLinha =
+                      !!linha.forma &&
+                      linha.forma !== 'BOLETO_DESCONTADO' &&
+                      (multiFormas || formaPagamentoEstrutural === 'AVISTA');
+                    return (
                     <div
                       key={linha.key}
-                      className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-2 items-end"
+                      className={cn(
+                        'grid grid-cols-1 gap-2 items-end',
+                        exibirDataLinha
+                          ? 'sm:grid-cols-[1fr_120px_150px_auto]'
+                          : 'sm:grid-cols-[1fr_140px_auto]',
+                      )}
                     >
                       <div className="space-y-1.5">
                         {index === 0 && (
@@ -1517,6 +1605,32 @@ export function OrderForm({
                           }}
                         />
                       </div>
+                      {exibirDataLinha && (
+                        <div className="space-y-1.5">
+                          {index === 0 && (
+                            <Label className="text-xs text-muted-foreground">
+                              Vencimento *
+                            </Label>
+                          )}
+                          <Input
+                            type="date"
+                            value={linha.data_vencimento}
+                            min={minDataVencimento}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setFormasPagamentoLinhas((prev) => {
+                                const next = [...prev];
+                                next[index] = { ...next[index], data_vencimento: v };
+                                return next;
+                              });
+                              if (index === 0 && !multiFormas) {
+                                setDataVencimento(v);
+                              }
+                            }}
+                            required
+                          />
+                        </div>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -1545,7 +1659,8 @@ export function OrderForm({
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1565,7 +1680,13 @@ export function OrderForm({
                           setFormaPagamentoEstrutural('AVISTA');
                           setValorAdiantado('');
                         }
-                        next.push(novaLinhaForma());
+                        next.push(
+                          novaLinhaForma(
+                            '',
+                            '',
+                            prev[0]?.data_vencimento || dataVencimento || dataPedido,
+                          ),
+                        );
                         return next;
                       });
                     }}
@@ -1594,36 +1715,7 @@ export function OrderForm({
                 </div>
               </div>
 
-              {/* Campos condicionais baseados na forma estrutural (somente 1 forma) */}
-              {!multiFormas && formaPagamentoEstrutural === 'AVISTA' && (
-                <div className="space-y-2">
-                  <Label>Data de Vencimento *</Label>
-                  <Input
-                    type="date"
-                    value={dataVencimento}
-                    onChange={(e) => setDataVencimento(e.target.value)}
-                    min={minDataVencimento}
-                    required
-                  />
-                </div>
-              )}
-
-              {multiFormas && (
-                <div className="space-y-2">
-                  <Label>Data de Vencimento *</Label>
-                  <Input
-                    type="date"
-                    value={dataVencimento}
-                    onChange={(e) => setDataVencimento(e.target.value)}
-                    min={minDataVencimento}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Aplicada a todas as contas geradas pelas formas de pagamento.
-                  </p>
-                </div>
-              )}
-
+              {/* Parcelado: data do 1º vencimento (global) */}
               {!multiFormas && formaPagamentoEstrutural === 'PARCELADO' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -1879,6 +1971,13 @@ export function OrderForm({
                               <span className="text-muted-foreground font-normal">
                                 {' '}
                                 · {formatCurrency(valoresFormasPreview[i] ?? 0)}
+                                {l.data_vencimento ? (
+                                  <>
+                                    {' '}
+                                    · venc.{' '}
+                                    {parseDataLocal(l.data_vencimento).toLocaleDateString('pt-BR')}
+                                  </>
+                                ) : null}
                               </span>
                             </div>
                           ))
