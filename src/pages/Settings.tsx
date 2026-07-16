@@ -523,38 +523,14 @@ const Settings = () => {
               </Card>
             ) : (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                      <SettingsIcon className="h-5 w-5" />
-                      Configurações Gerais
-                    </h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Personalize as preferências do sistema
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleRestoreConfig}>
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      Restaurar
-                    </Button>
-                    <Button
-                      onClick={handleSaveConfig}
-                      disabled={!canEditConfig || updateConfigMutation.isPending}
-                    >
-                      {updateConfigMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Salvando...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Salvar
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                    <SettingsIcon className="h-5 w-5" />
+                    Configurações Gerais
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Personalize as preferências do sistema
+                  </p>
                 </div>
 
                 {loadingConfig ? (
@@ -747,6 +723,29 @@ const Settings = () => {
                     </Card>
                   </div>
                 )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={handleRestoreConfig}>
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Restaurar
+                  </Button>
+                  <Button
+                    onClick={handleSaveConfig}
+                    disabled={!canEditConfig || updateConfigMutation.isPending}
+                  >
+                    {updateConfigMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Salvar
+                      </>
+                    )}
+                  </Button>
+                </div>
 
                 {!canEditConfig && (
                   <Card className="border-amber-500/20 bg-amber-500/5">
