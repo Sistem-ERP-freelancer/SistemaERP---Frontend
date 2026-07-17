@@ -1123,7 +1123,7 @@ const ContasAReceber = () => {
     if (s === "em aberto" || s === "aberto") return "bg-blue-500/10 text-blue-500";
     if (s === "pago parcial" || s.includes("parcial")) return "bg-blue-500/10 text-blue-500";
     if (s === "quitado" || s === "concluído" || s === "pago total") return "bg-green-500/10 text-green-500";
-    if (s === "vencido") return "bg-red-500/10 text-red-500";
+    if (s === "vencido" || s === "vencida") return "bg-red-500/10 text-red-500";
     if (s === "cancelado") return "bg-slate-600/10 text-slate-600";
     return "bg-muted text-muted-foreground";
   };
@@ -1375,14 +1375,15 @@ const ContasAReceber = () => {
         primeira?.data_vencimento;
 
       const stConta = String(primeira?.status ?? "").toUpperCase();
+      const valorPagoGrupo = parcelas.reduce((s, p) => s + valorPagoConta(p), 0);
+      const semValorPago = valorPagoGrupo <= 0.009;
       let statusConsolidado = "Pendente";
       const ehPrevisao = parcelas.some((p) => contaEhPrevisao(p));
       if (ehPrevisao) statusConsolidado = "Previsão";
       else if (stConta === "CANCELADO") statusConsolidado = "Cancelado";
-      else if (stConta === "VENCIDO") statusConsolidado = "Vencido";
       else if (restantes === 0 && pagas > 0) statusConsolidado = "Pago Total";
-      else if (pagas > 0 || parcelas.some((p) => valorPagoConta(p) > 0.009))
-        statusConsolidado = "Pago Parcial";
+      else if (!semValorPago) statusConsolidado = "Pago Parcial";
+      else statusConsolidado = "Vencida"; // sem nenhum valor pago
 
       const pedidoIdNum =
         primeira?.pedido_id != null && Number(primeira.pedido_id) > 0
