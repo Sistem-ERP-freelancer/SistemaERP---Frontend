@@ -1336,9 +1336,14 @@ const ContasAReceber = () => {
   const gruposContas = useMemo(() => {
     const gruposMap = new Map<string, ContaFinanceira[]>();
 
-    // Sempre 1 linha por conta/parcela — nunca ocultar parcelas agrupando por pedido
+    // Uma linha por pedido (parcelas do mesmo pedido somam no total)
     contasExibir.forEach((conta) => {
-      const key = `conta-${conta.id}`;
+      const pedidoIdNum =
+        conta.pedido_id != null && Number(conta.pedido_id) > 0
+          ? Number(conta.pedido_id)
+          : null;
+      const key =
+        pedidoIdNum != null ? `pedido-${pedidoIdNum}` : `avulso-${conta.id}`;
       const list = gruposMap.get(key) || [];
       list.push(conta);
       gruposMap.set(key, list);
@@ -1374,20 +1379,19 @@ const ContasAReceber = () => {
           ?.data_vencimento ??
         primeira?.data_vencimento;
 
-      const stConta = String(primeira?.status ?? "").toUpperCase();
+      const todasCanceladas =
+        parcelas.length > 0 &&
+        parcelas.every((p) => String(p.status ?? "").toUpperCase() === "CANCELADO");
       const valorPagoGrupo = parcelas.reduce((s, p) => s + valorPagoConta(p), 0);
       const semValorPago = valorPagoGrupo <= 0.009;
-      const jaVenceu =
-        stConta === "VENCIDO" ||
-        parcelas.some((p) => contaEstaVencidaLocal(p));
+      const jaVenceu = parcelas.some((p) => contaEstaVencidaLocal(p));
       let statusConsolidado = "Pendente";
       const ehPrevisao = parcelas.some((p) => contaEhPrevisao(p));
       if (ehPrevisao) statusConsolidado = "Previsão";
-      else if (stConta === "CANCELADO") statusConsolidado = "Cancelado";
+      else if (todasCanceladas) statusConsolidado = "Cancelado";
       else if (restantes === 0 && pagas > 0) statusConsolidado = "Pago Total";
       else if (!semValorPago) statusConsolidado = "Pago Parcial";
       else if (semValorPago && jaVenceu) statusConsolidado = "Vencida";
-      // sem valor pago e ainda não venceu → Pendente
 
       const pedidoIdNum =
         primeira?.pedido_id != null && Number(primeira.pedido_id) > 0
@@ -1425,7 +1429,7 @@ const ContasAReceber = () => {
       return (
         g.descricaoBase.toLowerCase().includes(term) ||
         g.cliente_nome.toLowerCase().includes(term) ||
-        (g.parcelas[0]?.numero_conta ?? "").toLowerCase().includes(term) ||
+        g.parcelas.some((p) => (p.numero_conta ?? "").toLowerCase().includes(term)) ||
         rocaTxt.includes(term)
       );
     });
@@ -1559,7 +1563,22 @@ const ContasAReceber = () => {
         0,
       );
       const primeiraParcela = g.parcelas[0];
+      const numeroPedido =
+        g.parcelas
+          .map((p) => {
+            const fromPedido = (p as ContaFinanceira & {
+              pedido?: { numero_pedido?: string };
+              numero_pedido?: string;
+            }).pedido?.numero_pedido
+              ?? (p as ContaFinanceira & { numero_pedido?: string }).numero_pedido;
+            if (fromPedido?.trim()) return fromPedido.trim();
+            const desc = String(p.descricao ?? "");
+            const m = desc.match(/\b((?:VEND|PED)[- ]?\d{4}[- ]?\d+)\b/i);
+            return m?.[1] ?? null;
+          })
+          .find((n): n is string => !!n) ?? null;
       const idExibicao =
+        numeroPedido ||
         primeiraParcela?.numero_conta ||
         g.descricaoBase?.split(" ")[0] ||
         g.key;
@@ -2901,7 +2920,7 @@ const ContasAReceber = () => {
             <div className="border-t border-border p-4">
               <div className="text-center text-sm text-muted-foreground">
                 {usarFallbackContasFinanceiras
-                  ? `${transacoesDisplayGrupos.length} conta(s)`
+                  ? `${transacoesDisplayGrupos.length} pedido(s)`
                   : `${transacoesDisplayReceber.length} pedido(s)`}
               </div>
             </div>
