@@ -1377,13 +1377,17 @@ const ContasAReceber = () => {
       const stConta = String(primeira?.status ?? "").toUpperCase();
       const valorPagoGrupo = parcelas.reduce((s, p) => s + valorPagoConta(p), 0);
       const semValorPago = valorPagoGrupo <= 0.009;
+      const jaVenceu =
+        stConta === "VENCIDO" ||
+        parcelas.some((p) => contaEstaVencidaLocal(p));
       let statusConsolidado = "Pendente";
       const ehPrevisao = parcelas.some((p) => contaEhPrevisao(p));
       if (ehPrevisao) statusConsolidado = "Previsão";
       else if (stConta === "CANCELADO") statusConsolidado = "Cancelado";
       else if (restantes === 0 && pagas > 0) statusConsolidado = "Pago Total";
       else if (!semValorPago) statusConsolidado = "Pago Parcial";
-      else statusConsolidado = "Vencida"; // sem nenhum valor pago
+      else if (semValorPago && jaVenceu) statusConsolidado = "Vencida";
+      // sem valor pago e ainda não venceu → Pendente
 
       const pedidoIdNum =
         primeira?.pedido_id != null && Number(primeira.pedido_id) > 0
