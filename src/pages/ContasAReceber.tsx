@@ -43,14 +43,6 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet";
 import {
-    Pagination,
-    PaginationContent,
-    PaginationItem,
-    PaginationLink,
-    PaginationNext,
-    PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
     Table,
     TableBody,
     TableCell,
@@ -152,8 +144,6 @@ const ContasAReceber = () => {
   >(null);
   const [relatorioProdutosClienteOpen, setRelatorioProdutosClienteOpen] =
     useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(15);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -604,11 +594,6 @@ const ContasAReceber = () => {
     });
   }, [contas, rocaFilterId, rocasLista, pedidosContasReceber]);
   const totalContas = contasResponse?.total || 0;
-
-  // Resetar página quando filtro ou busca mudar
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeCardFilter, searchTerm, clienteFilterId, rocaFilterId, statusFilter, dataInicialFilter, dataFinalFilter]);
 
   const temFiltrosAtivos =
     (clienteFilterId != null && clienteFilterId > 0) ||
@@ -1350,22 +1335,10 @@ const ContasAReceber = () => {
 
   const gruposContas = useMemo(() => {
     const gruposMap = new Map<string, ContaFinanceira[]>();
-    /** Cards de vencimento contam parcelas — exibir 1 linha por conta para bater com o card. */
-    const expandirPorConta =
-      activeCardFilter === "vencidas" ||
-      activeCardFilter === "vencendo_hoje" ||
-      activeCardFilter === "vencendo_este_mes";
 
+    // Sempre 1 linha por conta/parcela — nunca ocultar parcelas agrupando por pedido
     contasExibir.forEach((conta) => {
-      const pedidoIdNum =
-        conta.pedido_id != null && Number(conta.pedido_id) > 0
-          ? Number(conta.pedido_id)
-          : null;
-      const key = expandirPorConta
-        ? `conta-${conta.id}`
-        : pedidoIdNum != null
-          ? `pedido-${pedidoIdNum}`
-          : `avulso-${conta.id}`;
+      const key = `conta-${conta.id}`;
       const list = gruposMap.get(key) || [];
       list.push(conta);
       gruposMap.set(key, list);
@@ -1391,17 +1364,22 @@ const ContasAReceber = () => {
       const valorAberto = parcelas.reduce((s, p) => s + saldoAbertoConta(p), 0);
       const descricaoBase = primeira?.descricao?.replace(/\s*-\s*\d+\/\d+\s*$/, "").trim() || primeira?.numero_conta || `Conta ${primeira?.id}`;
       const pendentes = parcelas.filter((p) => p.status !== "CANCELADO" && !isPaga(p));
-      const primeiraVenc = pendentes
-        .sort((a, b) => {
-          const ka = String(a.data_vencimento ?? "").split(/[T ]/)[0];
-          const kb = String(b.data_vencimento ?? "").split(/[T ]/)[0];
-          return ka.localeCompare(kb);
-        })[0]
-        ?.data_vencimento;
+      const primeiraVenc =
+        pendentes
+          .sort((a, b) => {
+            const ka = String(a.data_vencimento ?? "").split(/[T ]/)[0];
+            const kb = String(b.data_vencimento ?? "").split(/[T ]/)[0];
+            return ka.localeCompare(kb);
+          })[0]
+          ?.data_vencimento ??
+        primeira?.data_vencimento;
 
+      const stConta = String(primeira?.status ?? "").toUpperCase();
       let statusConsolidado = "Pendente";
       const ehPrevisao = parcelas.some((p) => contaEhPrevisao(p));
       if (ehPrevisao) statusConsolidado = "Previsão";
+      else if (stConta === "CANCELADO") statusConsolidado = "Cancelado";
+      else if (stConta === "VENCIDO") statusConsolidado = "Vencido";
       else if (restantes === 0 && pagas > 0) statusConsolidado = "Pago Total";
       else if (pagas > 0 || parcelas.some((p) => valorPagoConta(p) > 0.009))
         statusConsolidado = "Pago Parcial";
@@ -1420,7 +1398,10 @@ const ContasAReceber = () => {
         parcelas_pagas: pagas,
         parcelas_restantes: restantes,
         valor_aberto: valorAberto,
-        cliente_nome: cliente?.nome || "—",
+        cliente_nome:
+          (primeira as ContaFinanceira & { cliente_nome?: string })?.cliente_nome ||
+          cliente?.nome ||
+          "—",
         categoria: pedidoIdNum != null ? "Vendas" : "Avulso",
         primeira_vencimento: primeiraVenc,
         statusConsolidado,
@@ -1439,10 +1420,11 @@ const ContasAReceber = () => {
       return (
         g.descricaoBase.toLowerCase().includes(term) ||
         g.cliente_nome.toLowerCase().includes(term) ||
+        (g.parcelas[0]?.numero_conta ?? "").toLowerCase().includes(term) ||
         rocaTxt.includes(term)
       );
     });
-  }, [contasExibir, clientes, searchTerm, activeCardFilter]);
+  }, [contasExibir, clientes, searchTerm]);
 
   // Filtrar linhas e grupos pelo card clicado e pela folha de filtros (status)
   const filteredLinhasPedidos = useMemo(() => {
@@ -1607,15 +1589,6 @@ const ContasAReceber = () => {
       };
     });
   }, [filteredGruposContas]);
-
-  // Paginação por pedido (grupo): a busca traz a base inteira; aqui fatiamos para exibição.
-  const totalPedidosGrupos = transacoesDisplayGrupos.length;
-  const totalPages = Math.max(1, Math.ceil(totalPedidosGrupos / pageSize));
-  const paginaAtualGrupos = Math.min(currentPage, totalPages);
-  const transacoesDisplayGruposPagina = useMemo(() => {
-    const start = (paginaAtualGrupos - 1) * pageSize;
-    return transacoesDisplayGrupos.slice(start, start + pageSize);
-  }, [transacoesDisplayGrupos, paginaAtualGrupos, pageSize]);
 
   // Filtrar por busca e por card ativo (mantido para fallback contas-financeiras)
   const filteredTransacoes = useMemo(() => {
@@ -2560,7 +2533,7 @@ const ContasAReceber = () => {
                   </TableCell>
                 </TableRow>
               ) : usarFallbackContasFinanceiras ? (
-                transacoesDisplayGruposPagina.map((transacao) => {
+                transacoesDisplayGrupos.map((transacao) => {
                   const grupo = gruposContas.find((g) => g.key === (transacao as any).grupoKey);
                   return (
                     <TableRow
@@ -2917,67 +2890,13 @@ const ContasAReceber = () => {
             </TableBody>
           </Table>
           
-          {/* Paginação + contador */}
+          {/* Contador — lista completa, sem paginação que oculte contas */}
           {((!usarFallbackContasFinanceiras && transacoesDisplayReceber.length > 0) ||
             (usarFallbackContasFinanceiras && transacoesDisplayGrupos.length > 0)) && (
             <div className="border-t border-border p-4">
-              {usarFallbackContasFinanceiras && totalPages > 1 && (
-                <Pagination className="mb-2">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        className={paginaAtualGrupos === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum: number;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (paginaAtualGrupos <= 3) {
-                        pageNum = i + 1;
-                      } else if (paginaAtualGrupos >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = paginaAtualGrupos - 2 + i;
-                      }
-
-                      return (
-                        <PaginationItem key={pageNum}>
-                          <PaginationLink
-                            onClick={() => setCurrentPage(pageNum)}
-                            isActive={paginaAtualGrupos === pageNum}
-                            className="cursor-pointer"
-                          >
-                            {pageNum}
-                          </PaginationLink>
-                        </PaginationItem>
-                      );
-                    })}
-
-                    <PaginationItem>
-                      <PaginationNext
-                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                        className={paginaAtualGrupos === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              )}
               <div className="text-center text-sm text-muted-foreground">
                 {usarFallbackContasFinanceiras
-                  ? (() => {
-                      const labelUnidade =
-                        activeCardFilter === "vencidas" ||
-                        activeCardFilter === "vencendo_hoje" ||
-                        activeCardFilter === "vencendo_este_mes"
-                          ? "conta(s)"
-                          : "pedido(s)";
-                      return totalPages > 1
-                        ? `Mostrando ${(paginaAtualGrupos - 1) * pageSize + 1} a ${Math.min(paginaAtualGrupos * pageSize, totalPedidosGrupos)} de ${totalPedidosGrupos} ${labelUnidade}`
-                        : `${totalPedidosGrupos} ${labelUnidade}`;
-                    })()
+                  ? `${transacoesDisplayGrupos.length} conta(s)`
                   : `${transacoesDisplayReceber.length} pedido(s)`}
               </div>
             </div>
