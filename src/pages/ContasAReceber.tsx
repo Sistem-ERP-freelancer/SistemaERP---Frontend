@@ -43,6 +43,14 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet";
 import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
     Table,
     TableBody,
     TableCell,
@@ -405,27 +413,14 @@ const ContasAReceber = () => {
     retry: false,
   });
 
-  // Validar parâmetros de paginação
-  const validarParametrosPaginação = (page: number, limit: number): boolean => {
-    if (page < 1) {
-      console.error('Page deve ser maior ou igual a 1');
-      return false;
-    }
-    if (limit < 1 || limit > 100) {
-      console.error('Limit deve estar entre 1 e 100');
-      return false;
-    }
-    return true;
-  };
-
-  // Buscar contas a receber filtradas para exibir na tabela com paginação (fallback contas-financeiras)
+  // Buscar TODAS as contas a receber filtradas (a paginação é feita por pedido, no cliente,
+  // para que a tabela e os cards usem a mesma base de dados)
   const { data: contasResponse, isLoading: isLoadingContas } = useQuery({
     queryKey: [
       "contas-financeiras",
       "receber",
       "tabela",
       activeCardFilter,
-      currentPage,
       clienteFilterId,
       rocaFilterId,
       statusFilter,
@@ -433,10 +428,6 @@ const ContasAReceber = () => {
       dataFinalFilter,
     ],
     queryFn: async () => {
-      if (!validarParametrosPaginação(currentPage, pageSize)) {
-        throw new Error('Parâmetros de paginação inválidos');
-      }
-
       try {
         const clienteArg =
           clienteFilterId != null && clienteFilterId > 0
@@ -460,13 +451,10 @@ const ContasAReceber = () => {
           data_final: dataFinalArg,
         };
 
-        const paginateLocal = (merged: ContaFinanceira[]) => {
-          const start = (currentPage - 1) * pageSize;
-          return {
-            data: merged.slice(start, start + pageSize),
-            total: merged.length,
-          };
-        };
+        const comoResposta = (merged: ContaFinanceira[]) => ({
+          data: merged,
+          total: merged.length,
+        });
 
         const filtroFolhaAtivo =
           !!statusFilter &&
@@ -487,7 +475,7 @@ const ContasAReceber = () => {
               seen.add(id);
               return contaEstaPaga(c);
             });
-            return paginateLocal(merged);
+            return comoResposta(merged);
           }
           if (activeCardFilter === "a_receber") {
             const [pendentes, parciais] = await Promise.all([
@@ -501,21 +489,21 @@ const ContasAReceber = () => {
               seen.add(id);
               return contaTemSaldoAberto(c);
             });
-            return paginateLocal(merged);
+            return comoResposta(merged);
           }
           if (activeCardFilter === "vencidas") {
             const merged = await listarContasTodasAsPaginas({
               ...baseArgs,
               proximidade_vencimento: "VENCIDA",
             });
-            return paginateLocal(merged.filter(contaTemSaldoAberto));
+            return comoResposta(merged.filter(contaTemSaldoAberto));
           }
           if (activeCardFilter === "vencendo_hoje") {
             const merged = await listarContasTodasAsPaginas({
               ...baseArgs,
               proximidade_vencimento: "VENCE_HOJE",
             });
-            return paginateLocal(merged.filter(contaTemSaldoAberto));
+            return comoResposta(merged.filter(contaTemSaldoAberto));
           }
           if (activeCardFilter === "vencendo_este_mes") {
             const merged = await listarContasTodasAsPaginas({
@@ -536,7 +524,7 @@ const ContasAReceber = () => {
               dv.setHours(0, 0, 0, 0);
               return dv > hoje && dv <= fimMes;
             });
-            return paginateLocal(filtered);
+            return comoResposta(filtered);
           }
         }
 
@@ -551,10 +539,10 @@ const ContasAReceber = () => {
           else if (statusFilter === "QUITADO") status = "QUITADO";
         }
 
-        const response = await financeiroService.listar({
+        // Buscar todas as páginas: os cards somam a base inteira, então a tabela
+        // também precisa da base inteira para os números baterem.
+        const todas = await listarContasTodasAsPaginas({
           ...baseArgs,
-          page: currentPage,
-          limit: pageSize,
           status,
           proximidade_vencimento: proximidadeVencimento as
             | "VENCIDA"
@@ -562,22 +550,7 @@ const ContasAReceber = () => {
             | undefined,
         });
 
-        let contasData: ContaFinanceira[] = [];
-        let totalData = 0;
-
-        if (Array.isArray(response)) {
-          contasData = response;
-          totalData = response.length;
-        } else if (response?.data && Array.isArray(response.data)) {
-          contasData = response.data;
-          totalData = response.total || response.data.length;
-        } else if ((response as { contas?: ContaFinanceira[] })?.contas) {
-          const contas = (response as { contas: ContaFinanceira[]; total?: number }).contas;
-          contasData = contas;
-          totalData = (response as { total?: number }).total || contas.length;
-        }
-
-        return { data: contasData, total: totalData };
+        return comoResposta(todas);
       } catch (error) {
         console.warn("API de contas financeiras não disponível:", error);
         return { data: [], total: 0 };
@@ -618,7 +591,6 @@ const ContasAReceber = () => {
     });
   }, [contas, rocaFilterId, rocasLista, pedidosContasReceber]);
   const totalContas = contasResponse?.total || 0;
-  const totalPages = Math.ceil(totalContas / pageSize);
 
   // Resetar página quando filtro ou busca mudar
   useEffect(() => {
@@ -1606,6 +1578,15 @@ const ContasAReceber = () => {
     });
   }, [filteredGruposContas]);
 
+  // Paginação por pedido (grupo): a busca traz a base inteira; aqui fatiamos para exibição.
+  const totalPedidosGrupos = transacoesDisplayGrupos.length;
+  const totalPages = Math.max(1, Math.ceil(totalPedidosGrupos / pageSize));
+  const paginaAtualGrupos = Math.min(currentPage, totalPages);
+  const transacoesDisplayGruposPagina = useMemo(() => {
+    const start = (paginaAtualGrupos - 1) * pageSize;
+    return transacoesDisplayGrupos.slice(start, start + pageSize);
+  }, [transacoesDisplayGrupos, paginaAtualGrupos, pageSize]);
+
   // Filtrar por busca e por card ativo (mantido para fallback contas-financeiras)
   const filteredTransacoes = useMemo(() => {
     let filtered = transacoesDisplay;
@@ -2549,7 +2530,7 @@ const ContasAReceber = () => {
                   </TableCell>
                 </TableRow>
               ) : usarFallbackContasFinanceiras ? (
-                transacoesDisplayGrupos.map((transacao) => {
+                transacoesDisplayGruposPagina.map((transacao) => {
                   const grupo = gruposContas.find((g) => g.key === (transacao as any).grupoKey);
                   return (
                     <TableRow
@@ -2906,13 +2887,59 @@ const ContasAReceber = () => {
             </TableBody>
           </Table>
           
-          {/* Contador */}
+          {/* Paginação + contador */}
           {((!usarFallbackContasFinanceiras && transacoesDisplayReceber.length > 0) ||
             (usarFallbackContasFinanceiras && transacoesDisplayGrupos.length > 0)) && (
             <div className="border-t border-border p-4">
+              {usarFallbackContasFinanceiras && totalPages > 1 && (
+                <Pagination className="mb-2">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        className={paginaAtualGrupos === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (paginaAtualGrupos <= 3) {
+                        pageNum = i + 1;
+                      } else if (paginaAtualGrupos >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = paginaAtualGrupos - 2 + i;
+                      }
+
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(pageNum)}
+                            isActive={paginaAtualGrupos === pageNum}
+                            className="cursor-pointer"
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        className={paginaAtualGrupos === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
               <div className="text-center text-sm text-muted-foreground">
                 {usarFallbackContasFinanceiras
-                  ? `${transacoesDisplayGrupos.length} pedido(s)`
+                  ? totalPages > 1
+                    ? `Mostrando ${(paginaAtualGrupos - 1) * pageSize + 1} a ${Math.min(paginaAtualGrupos * pageSize, totalPedidosGrupos)} de ${totalPedidosGrupos} pedido(s)`
+                    : `${totalPedidosGrupos} pedido(s)`
                   : `${transacoesDisplayReceber.length} pedido(s)`}
               </div>
             </div>
