@@ -113,7 +113,7 @@ import { relatoriosClienteService } from "@/services/relatorios-cliente.service"
 import { centroCustoService } from "@/services/centro-custo.service";
 import { toast } from "sonner";
 import { contaEhDespesaSemPedido } from "@/pages/contas-a-pagar/despesaContaUtils";
-import { calcularResumoCardsPagar, contaTemSaldoAberto, fimDoMesYMD, toYMD } from "@/lib/contas-financeiras-listagem";
+import { calcularResumoCardsPagar, contaTemSaldoAberto, contaVenceEsteMesLocal, fimDoMesYMD, toYMD } from "@/lib/contas-financeiras-listagem";
 
 function formatarVencimentoItemAgrupado(item: ContaFinanceiraAgrupada): string {
   const qtd = item.qtd_parcelas ?? 1;
@@ -783,20 +783,7 @@ function ContasAPagar() {
               data_inicial: hojeStr,
               data_final: fimDoMesYMD(),
             });
-            const fimMes = new Date();
-            fimMes.setMonth(fimMes.getMonth() + 1, 0);
-            fimMes.setHours(23, 59, 59, 999);
-            const hoje = new Date();
-            hoje.setHours(0, 0, 0, 0);
-            const filtered = merged.filter((c) => {
-              if (!contaTemSaldoAberto(c)) return false;
-              if (c.dias_ate_vencimento != null) return c.dias_ate_vencimento > 0;
-              const dv = parseDateOnlyLocal(c.data_vencimento);
-              if (!dv) return false;
-              dv.setHours(0, 0, 0, 0);
-              return dv > hoje && dv <= fimMes;
-            });
-            return paginateLocal(filtered);
+            return paginateLocal(merged.filter(contaVenceEsteMesLocal));
           }
         }
 

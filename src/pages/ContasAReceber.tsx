@@ -68,8 +68,10 @@ import {
 import {
   calcularResumoCardsReceber,
   contaEstaPaga,
+  contaEstaVencidaLocal,
   contaTemSaldoAberto,
-  fimDoMesYMD,
+  contaVenceEsteMesLocal,
+  contaVenceHojeLocal,
   listarContasTodasAsPaginas,
   saldoAbertoConta,
   toYMD,
@@ -492,39 +494,50 @@ const ContasAReceber = () => {
             return comoResposta(merged);
           }
           if (activeCardFilter === "vencidas") {
-            const merged = await listarContasTodasAsPaginas({
-              ...baseArgs,
-              proximidade_vencimento: "VENCIDA",
+            // Busca contas em aberto e filtra vencidas no cliente (data local).
+            // Evita fuso do backend e garante que o total bata com o card.
+            const [pendentes, parciais, vencidos] = await Promise.all([
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PENDENTE" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_PARCIAL" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "VENCIDO" }),
+            ]);
+            const seen = new Set<number>();
+            const merged = [...pendentes, ...parciais, ...vencidos].filter((c) => {
+              const id = Number(c.id);
+              if (!Number.isFinite(id) || seen.has(id)) return false;
+              seen.add(id);
+              return contaEstaVencidaLocal(c);
             });
-            return comoResposta(merged.filter(contaTemSaldoAberto));
+            return comoResposta(merged);
           }
           if (activeCardFilter === "vencendo_hoje") {
-            const merged = await listarContasTodasAsPaginas({
-              ...baseArgs,
-              proximidade_vencimento: "VENCE_HOJE",
+            const [pendentes, parciais, vencidos] = await Promise.all([
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PENDENTE" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_PARCIAL" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "VENCIDO" }),
+            ]);
+            const seen = new Set<number>();
+            const merged = [...pendentes, ...parciais, ...vencidos].filter((c) => {
+              const id = Number(c.id);
+              if (!Number.isFinite(id) || seen.has(id)) return false;
+              seen.add(id);
+              return contaVenceHojeLocal(c);
             });
-            return comoResposta(merged.filter(contaTemSaldoAberto));
+            return comoResposta(merged);
           }
           if (activeCardFilter === "vencendo_este_mes") {
-            const merged = await listarContasTodasAsPaginas({
-              ...baseArgs,
-              data_inicial: toYMD(new Date()),
-              data_final: fimDoMesYMD(),
+            const [pendentes, parciais] = await Promise.all([
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PENDENTE" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_PARCIAL" }),
+            ]);
+            const seen = new Set<number>();
+            const merged = [...pendentes, ...parciais].filter((c) => {
+              const id = Number(c.id);
+              if (!Number.isFinite(id) || seen.has(id)) return false;
+              seen.add(id);
+              return contaVenceEsteMesLocal(c);
             });
-            const fimMes = new Date();
-            fimMes.setMonth(fimMes.getMonth() + 1, 0);
-            fimMes.setHours(23, 59, 59, 999);
-            const hoje = new Date();
-            hoje.setHours(0, 0, 0, 0);
-            const filtered = merged.filter((c) => {
-              if (!contaTemSaldoAberto(c)) return false;
-              if (c.dias_ate_vencimento != null) return c.dias_ate_vencimento > 0;
-              const dv = parseDateOnlyLocal(c.data_vencimento);
-              if (!dv) return false;
-              dv.setHours(0, 0, 0, 0);
-              return dv > hoje && dv <= fimMes;
-            });
-            return comoResposta(filtered);
+            return comoResposta(merged);
           }
         }
 
@@ -1337,14 +1350,22 @@ const ContasAReceber = () => {
 
   const gruposContas = useMemo(() => {
     const gruposMap = new Map<string, ContaFinanceira[]>();
+    /** Cards de vencimento contam parcelas — exibir 1 linha por conta para bater com o card. */
+    const expandirPorConta =
+      activeCardFilter === "vencidas" ||
+      activeCardFilter === "vencendo_hoje" ||
+      activeCardFilter === "vencendo_este_mes";
 
     contasExibir.forEach((conta) => {
       const pedidoIdNum =
         conta.pedido_id != null && Number(conta.pedido_id) > 0
           ? Number(conta.pedido_id)
           : null;
-      const key =
-        pedidoIdNum != null ? `pedido-${pedidoIdNum}` : `avulso-${conta.id}`;
+      const key = expandirPorConta
+        ? `conta-${conta.id}`
+        : pedidoIdNum != null
+          ? `pedido-${pedidoIdNum}`
+          : `avulso-${conta.id}`;
       const list = gruposMap.get(key) || [];
       list.push(conta);
       gruposMap.set(key, list);
@@ -1421,7 +1442,7 @@ const ContasAReceber = () => {
         rocaTxt.includes(term)
       );
     });
-  }, [contasExibir, clientes, searchTerm]);
+  }, [contasExibir, clientes, searchTerm, activeCardFilter]);
 
   // Filtrar linhas e grupos pelo card clicado e pela folha de filtros (status)
   const filteredLinhasPedidos = useMemo(() => {
@@ -1478,6 +1499,15 @@ const ContasAReceber = () => {
       if (activeCardFilter === "a_receber") return g.valor_aberto > 0.009;
       if (activeCardFilter === "valor_pago") {
         return g.statusConsolidado === "Pago Parcial" || g.statusConsolidado === "Pago Total";
+      }
+      if (activeCardFilter === "vencidas") {
+        return g.parcelas.some((p) => contaEstaVencidaLocal(p)) && g.valor_aberto > 0.009;
+      }
+      if (activeCardFilter === "vencendo_hoje") {
+        return g.parcelas.some((p) => contaVenceHojeLocal(p)) && g.valor_aberto > 0.009;
+      }
+      if (activeCardFilter === "vencendo_este_mes") {
+        return g.parcelas.some((p) => contaVenceEsteMesLocal(p)) && g.valor_aberto > 0.009;
       }
       return true;
     });
@@ -2937,9 +2967,17 @@ const ContasAReceber = () => {
               )}
               <div className="text-center text-sm text-muted-foreground">
                 {usarFallbackContasFinanceiras
-                  ? totalPages > 1
-                    ? `Mostrando ${(paginaAtualGrupos - 1) * pageSize + 1} a ${Math.min(paginaAtualGrupos * pageSize, totalPedidosGrupos)} de ${totalPedidosGrupos} pedido(s)`
-                    : `${totalPedidosGrupos} pedido(s)`
+                  ? (() => {
+                      const labelUnidade =
+                        activeCardFilter === "vencidas" ||
+                        activeCardFilter === "vencendo_hoje" ||
+                        activeCardFilter === "vencendo_este_mes"
+                          ? "conta(s)"
+                          : "pedido(s)";
+                      return totalPages > 1
+                        ? `Mostrando ${(paginaAtualGrupos - 1) * pageSize + 1} a ${Math.min(paginaAtualGrupos * pageSize, totalPedidosGrupos)} de ${totalPedidosGrupos} ${labelUnidade}`
+                        : `${totalPedidosGrupos} ${labelUnidade}`;
+                    })()
                   : `${transacoesDisplayReceber.length} pedido(s)`}
               </div>
             </div>

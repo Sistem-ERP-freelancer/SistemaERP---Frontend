@@ -95,6 +95,55 @@ export function contaEstaPaga(c: ContaFinanceira): boolean {
   );
 }
 
+/** Dias até o vencimento com data local (não usa fuso do servidor). */
+export function diasAteVencimentoLocal(
+  dataVencimento?: string | Date | null,
+  ref: Date = new Date(),
+): number | null {
+  const vencimento = parseDateOnlyLocal(dataVencimento ?? undefined);
+  if (!vencimento) return null;
+  const hoje = new Date(ref);
+  hoje.setHours(0, 0, 0, 0);
+  vencimento.setHours(0, 0, 0, 0);
+  return Math.round(
+    (vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+  );
+}
+
+/** Conta em aberto com vencimento anterior a hoje (regra alinhada ao card Vencidas). */
+export function contaEstaVencidaLocal(c: ContaFinanceira, ref?: Date): boolean {
+  const st = String(c.status ?? '').toUpperCase();
+  if (st === 'QUITADO' || st === 'PAGO_TOTAL' || st === 'CANCELADO') return false;
+  if (!contaTemSaldoAberto(c)) return false;
+  if (st === 'VENCIDO') return true;
+  const dias = diasAteVencimentoLocal(c.data_vencimento, ref);
+  return dias != null && dias < 0;
+}
+
+export function contaVenceHojeLocal(c: ContaFinanceira, ref?: Date): boolean {
+  const st = String(c.status ?? '').toUpperCase();
+  if (st === 'QUITADO' || st === 'PAGO_TOTAL' || st === 'CANCELADO') return false;
+  if (!contaTemSaldoAberto(c)) return false;
+  const dias = diasAteVencimentoLocal(c.data_vencimento, ref);
+  return dias === 0;
+}
+
+/** Vence neste mês civil e ainda não venceu (alinha ao card Vencendo Este Mês). */
+export function contaVenceEsteMesLocal(c: ContaFinanceira, ref: Date = new Date()): boolean {
+  const st = String(c.status ?? '').toUpperCase();
+  if (st === 'QUITADO' || st === 'PAGO_TOTAL' || st === 'CANCELADO') return false;
+  if (!contaTemSaldoAberto(c)) return false;
+  const vencimento = parseDateOnlyLocal(c.data_vencimento);
+  if (!vencimento) return false;
+  const hoje = new Date(ref);
+  hoje.setHours(0, 0, 0, 0);
+  vencimento.setHours(0, 0, 0, 0);
+  if (vencimento.getMonth() !== hoje.getMonth() || vencimento.getFullYear() !== hoje.getFullYear()) {
+    return false;
+  }
+  return vencimento.getTime() >= hoje.getTime();
+}
+
 export function valorPrincipalConta(c: ContaFinanceira): number {
   const total = Number(
     (c as { valor_total?: number | string | null }).valor_total ??
@@ -161,11 +210,6 @@ function calcularResumoCardsPorTipo(
   vencendoHoje: number;
   vencendoEsteMes: number;
 } {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const mesAtual = hoje.getMonth();
-  const anoAtual = hoje.getFullYear();
-
   let totalPendente = 0;
   let valorPago = 0;
   let vencidas = 0;
@@ -183,36 +227,18 @@ function calcularResumoCardsPorTipo(
 
     totalPendente += saldoAbertoConta(conta);
 
-    const diasAte =
-      conta.dias_ate_vencimento !== undefined && conta.dias_ate_vencimento !== null
-        ? conta.dias_ate_vencimento
-        : (() => {
-            const vencimento = parseDateOnlyLocal(conta.data_vencimento);
-            if (!vencimento) return null;
-            vencimento.setHours(0, 0, 0, 0);
-            return Math.round(
-              (vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-            );
-          })();
-
-    if (st === 'VENCIDO' || (diasAte != null && diasAte < 0)) {
+    if (contaEstaVencidaLocal(conta)) {
       vencidas += 1;
       continue;
     }
 
-    if (diasAte === 0) {
+    if (contaVenceHojeLocal(conta)) {
       vencendoHoje += 1;
     }
 
-    if (diasAte != null && diasAte > 0) {
-      const vencimento = parseDateOnlyLocal(conta.data_vencimento);
-      if (
-        vencimento &&
-        vencimento.getMonth() === mesAtual &&
-        vencimento.getFullYear() === anoAtual
-      ) {
-        vencendoEsteMes += 1;
-      }
+    // Inclui "vence hoje" no mês civil (mesma regra do card / filtro da tabela)
+    if (contaVenceEsteMesLocal(conta)) {
+      vencendoEsteMes += 1;
     }
   }
 
