@@ -2208,104 +2208,75 @@ const ContasAReceber = () => {
           </div>
         </div>
         <Dialog open={relatorioDialogOpen} onOpenChange={setRelatorioDialogOpen}>
-          <DialogContent className="max-w-lg p-0 overflow-hidden">
-            <DialogHeader className="flex flex-row items-start gap-3 space-y-0 px-6 pt-5 pb-4 border-b bg-card">
-              <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                <FileText className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  Relatório de Pedidos em Aberto
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  Defina o período e escolha baixar o relatório em PDF ou abrir para impressão.
-                </DialogDescription>
-              </div>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório em aberto</DialogTitle>
+              <DialogDescription>
+                Inclui dados da empresa e os lançamentos de contas a receber em aberto
+                conforme o período selecionado (filtro por data de vencimento).
+              </DialogDescription>
             </DialogHeader>
-
-            <div className="px-6 py-5 space-y-5">
-              {/* Filtros de período do relatório */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-foreground">Período</Label>
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Data inicial</span>
-                    <Input
-                      type="date"
-                      className="w-[140px]"
-                      value={relatorioDataInicial}
-                      onChange={(e) => {
-                        setRelatorioDataInicial(e.target.value);
-                        setRelatorioPeriodoRapido("custom");
-                      }}
-                    />
+            <div className="space-y-4 pt-2">
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <Input
+                        type="date"
+                        className="rounded-lg border-border/80 bg-muted/50"
+                        value={relatorioDataInicial}
+                        onChange={(e) => {
+                          setRelatorioDataInicial(e.target.value);
+                          setRelatorioPeriodoRapido("custom");
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <Input
+                        type="date"
+                        className="rounded-lg border-border/80 bg-muted/50"
+                        value={relatorioDataFinal}
+                        onChange={(e) => {
+                          setRelatorioDataFinal(e.target.value);
+                          setRelatorioPeriodoRapido("custom");
+                        }}
+                      />
+                    </div>
                   </div>
-                  <span className="text-muted-foreground pb-2">até</span>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Data final</span>
-                    <Input
-                      type="date"
-                      className="w-[140px]"
-                      value={relatorioDataFinal}
-                      onChange={(e) => {
-                        setRelatorioDataFinal(e.target.value);
-                        setRelatorioPeriodoRapido("custom");
-                      }}
-                    />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(
+                      [
+                        ["hoje", "Hoje"],
+                        ["ontem", "Ontem"],
+                        ["7d", "Últimos 7 dias"],
+                        ["mes_atual", "Mês atual"],
+                        ["mes_anterior", "Mês anterior"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant={relatorioPeriodoRapido === key ? "default" : "outline"}
+                        size="sm"
+                        className="rounded-full h-8 px-3 text-xs"
+                        onClick={() => aplicarPeriodoRapidoRelatorio(key)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button
-                    type="button"
-                    variant={relatorioPeriodoRapido === "hoje" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => aplicarPeriodoRapidoRelatorio("hoje")}
-                  >
-                    Hoje
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={relatorioPeriodoRapido === "ontem" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => aplicarPeriodoRapidoRelatorio("ontem")}
-                  >
-                    Ontem
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={relatorioPeriodoRapido === "7d" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => aplicarPeriodoRapidoRelatorio("7d")}
-                  >
-                    Últimos 7 dias
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={relatorioPeriodoRapido === "mes_atual" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => aplicarPeriodoRapidoRelatorio("mes_atual")}
-                  >
-                    Mês atual
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={relatorioPeriodoRapido === "mes_anterior" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => aplicarPeriodoRapidoRelatorio("mes_anterior")}
-                  >
-                    Mês anterior
-                  </Button>
                 </div>
               </div>
 
-              {/* Ações do relatório */}
-              <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">Ações do relatório</p>
-                <div className="flex flex-col gap-2">
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                   <Button
                     type="button"
-                    variant="outline"
-                    className="justify-start gap-2 bg-background hover:bg-accent"
+                    variant="relatorioPrimary"
+                    className="flex-1 gap-2"
                     disabled={relatorioLoadingAction !== null}
                     onClick={async () => {
                       try {
@@ -2314,24 +2285,28 @@ const ContasAReceber = () => {
                           relatorioDataInicial || undefined,
                           relatorioDataFinal || undefined,
                         );
-                        toast.success("Relatório de pedidos em aberto baixado.");
+                        toast.success("Relatório em aberto baixado.");
                         setRelatorioDialogOpen(false);
                       } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "Erro ao gerar relatório.");
+                        toast.error(
+                          e instanceof Error ? e.message : "Erro ao gerar relatório.",
+                        );
                       } finally {
                         setRelatorioLoadingAction(null);
                       }
                     }}
                   >
-                    <Download className="w-4 h-4" />
-                    <span className="text-sm">
-                      {relatorioLoadingAction === "download" ? "Baixando..." : "Baixar PDF"}
-                    </span>
+                    {relatorioLoadingAction === "download" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    {relatorioLoadingAction === "download" ? "Baixando..." : "Baixar PDF"}
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
-                    className="justify-start gap-2 bg-background hover:bg-accent"
+                    variant="relatorioSecondary"
+                    className="flex-1 gap-2"
                     disabled={relatorioLoadingAction !== null}
                     onClick={async () => {
                       try {
@@ -2342,16 +2317,20 @@ const ContasAReceber = () => {
                         );
                         setRelatorioDialogOpen(false);
                       } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "Erro ao abrir relatório.");
+                        toast.error(
+                          e instanceof Error ? e.message : "Erro ao abrir relatório.",
+                        );
                       } finally {
                         setRelatorioLoadingAction(null);
                       }
                     }}
                   >
-                    <Printer className="w-4 h-4" />
-                    <span className="text-sm">
-                      {relatorioLoadingAction === "print" ? "Abrindo..." : "Imprimir"}
-                    </span>
+                    {relatorioLoadingAction === "print" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Printer className="h-4 w-4" />
+                    )}
+                    {relatorioLoadingAction === "print" ? "Abrindo..." : "Abrir para imprimir"}
                   </Button>
                 </div>
               </div>
@@ -2376,8 +2355,8 @@ const ContasAReceber = () => {
             <DialogHeader>
               <DialogTitle>Relatório financeiro por cliente</DialogTitle>
               <DialogDescription>
-                Inclui dados da empresa, cadastro do cliente e lançamentos das contas financeiras
-                vinculadas a ele (campos já existentes no sistema).
+                Inclui dados da empresa e todos os lançamentos de contas a receber do cliente
+                conforme os filtros selecionados (período por data de vencimento e status).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">

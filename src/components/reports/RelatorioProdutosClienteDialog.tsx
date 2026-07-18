@@ -123,12 +123,12 @@ export function RelatorioProdutosClienteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Relatório de produtos por cliente</DialogTitle>
           <DialogDescription>
-            Lista itens de pedidos de venda no período (data do pedido), com filtro opcional
-            pelo status do pedido.
+            Inclui dados da empresa e os itens de pedidos de venda do cliente no período
+            (data do pedido), conforme os filtros selecionados.
           </DialogDescription>
         </DialogHeader>
 
