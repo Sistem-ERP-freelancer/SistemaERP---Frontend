@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   calcularResumoCardsReceber,
+  contarPedidosPorVencimento,
   contaEstaPaga,
   contaEstaVencidaLocal,
   contaTemSaldoAberto,
@@ -509,12 +510,15 @@ const ContasAReceber = () => {
             return comoResposta(merged);
           }
           if (activeCardFilter === "vencendo_este_mes") {
-            const [pendentes, parciais] = await Promise.all([
+            // Inclui ABERTO/PARCIAL (modelo por saldo) além dos status legados.
+            const [pendentes, parciais, abertos, parciaisSaldo] = await Promise.all([
               listarContasTodasAsPaginas({ ...baseArgs, status: "PENDENTE" }),
               listarContasTodasAsPaginas({ ...baseArgs, status: "PAGO_PARCIAL" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "ABERTO" }),
+              listarContasTodasAsPaginas({ ...baseArgs, status: "PARCIAL" }),
             ]);
             const seen = new Set<number>();
-            const merged = [...pendentes, ...parciais].filter((c) => {
+            const merged = [...pendentes, ...parciais, ...abertos, ...parciaisSaldo].filter((c) => {
               const id = Number(c.id);
               if (!Number.isFinite(id) || seen.has(id)) return false;
               seen.add(id);
@@ -681,6 +685,20 @@ const ContasAReceber = () => {
     return calcularResumoCardsReceber(contasFiltradasParaCards);
   }, [temFiltrosAtivos, contasFiltradasParaCards]);
 
+  /**
+   * Contagens por pedido a partir da listagem carregada (mesma base da tabela).
+   * Quando um card de vencimento está ativo, a listagem já é o recorte desse card.
+   */
+  const contagensListagem = useMemo(() => {
+    if (!usarFallbackContasFinanceiras || contasExibir.length === 0) return null;
+    return contarPedidosPorVencimento(contasExibir);
+  }, [usarFallbackContasFinanceiras, contasExibir]);
+
+  const resumoCardsListagem = useMemo(() => {
+    if (!usarFallbackContasFinanceiras || contasExibir.length === 0) return null;
+    return calcularResumoCardsReceber(contasExibir);
+  }, [usarFallbackContasFinanceiras, contasExibir]);
+
   // Função auxiliar para verificar se uma conta está vencida
   const isContaVencida = (conta: any): boolean => {
     if (!conta || conta.tipo !== "RECEBER") return false;
@@ -779,25 +797,47 @@ const ContasAReceber = () => {
       return isNaN(num) ? 0 : num;
     };
 
-    // Com filtros ativos, cards refletem a mesma base da tabela (listagem filtrada).
+    // Com filtros / listagem carregada, cards usam a mesma base da tabela (por pedido).
     const totalReceber =
       resumoCardsFiltrado != null
         ? resumoCardsFiltrado.totalReceber
         : viewMode === "clientes" && totalAReceberFromLista !== null
           ? totalAReceberFromLista
-          : parseValor(dashboardReceber?.valor_total_pendente) ?? 0;
-    const totalVencidas =
-      resumoCardsFiltrado != null
-        ? resumoCardsFiltrado.vencidas
-        : Number(dashboardReceber?.vencidas) ?? 0;
-    const totalVencendoHoje =
-      resumoCardsFiltrado != null
-        ? resumoCardsFiltrado.vencendoHoje
-        : Number(dashboardReceber?.vencendo_hoje) ?? 0;
-    const totalVencendoEsteMes =
-      resumoCardsFiltrado != null
-        ? resumoCardsFiltrado.vencendoEsteMes
-        : Number(dashboardReceber?.vencendo_este_mes) ?? 0;
+          : activeCardFilter === "todos" && resumoCardsListagem != null
+            ? resumoCardsListagem.totalReceber
+            : parseValor(dashboardReceber?.valor_total_pendente) ?? 0;
+
+    const contagemCard = (
+      campo: "vencidas" | "vencendoHoje" | "vencendoEsteMes",
+      filtroCard: typeof activeCardFilter,
+      dashboardValor: number,
+    ) => {
+      if (resumoCardsFiltrado != null) return resumoCardsFiltrado[campo];
+      // Card ativo: a listagem já é o recorte — conta pedidos nessa base.
+      if (
+        contagensListagem != null &&
+        (activeCardFilter === "todos" || activeCardFilter === filtroCard)
+      ) {
+        return contagensListagem[campo];
+      }
+      return dashboardValor;
+    };
+
+    const totalVencidas = contagemCard(
+      "vencidas",
+      "vencidas",
+      Number(dashboardReceber?.vencidas) ?? 0,
+    );
+    const totalVencendoHoje = contagemCard(
+      "vencendoHoje",
+      "vencendo_hoje",
+      Number(dashboardReceber?.vencendo_hoje) ?? 0,
+    );
+    const totalVencendoEsteMes = contagemCard(
+      "vencendoEsteMes",
+      "vencendo_este_mes",
+      Number(dashboardReceber?.vencendo_este_mes) ?? 0,
+    );
     const valorPagoFromPedidos =
       !usarFallbackContasFinanceiras && pedidos.length > 0
         ? pedidos.reduce((s, p) => s + (Number((p as ContaReceber).valor_pago) || 0), 0)
@@ -805,9 +845,11 @@ const ContasAReceber = () => {
     const valorPago =
       resumoCardsFiltrado != null
         ? resumoCardsFiltrado.valorRecebido
-        : valorPagoFromPedidos !== null
-          ? valorPagoFromPedidos
-          : parseValor(dashboardReceber?.valor_total_recebido) ?? 0;
+        : activeCardFilter === "todos" && resumoCardsListagem != null
+          ? resumoCardsListagem.valorRecebido
+          : valorPagoFromPedidos !== null
+            ? valorPagoFromPedidos
+            : parseValor(dashboardReceber?.valor_total_recebido) ?? 0;
     const formatarMoedaCard = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
     return [
@@ -859,6 +901,9 @@ const ContasAReceber = () => {
     usarFallbackContasFinanceiras,
     pedidos,
     resumoCardsFiltrado,
+    resumoCardsListagem,
+    contagensListagem,
+    activeCardFilter,
   ]);
 
   const totalReceberTooltip = (
@@ -887,25 +932,8 @@ const ContasAReceber = () => {
     </TooltipProvider>
   );
 
-  const statsCardItems = useMemo((): ModuleStatCardItem[] => {
-    return stats.map((stat) => ({
-      key: stat.key,
-      label: stat.label,
-      value: stat.value,
-      iconWrap: stat.iconWrap,
-      iconClass: stat.iconClass,
-      valueClass: stat.valueClass,
-      cardClassName: stat.cardClassName,
-      labelClassName: stat.labelClassName,
-      Icon: stat.Icon,
-      labelExtra: stat.key === "a_receber" ? totalReceberTooltip : undefined,
-      active: activeCardFilter === stat.filterKey,
-      onClick: () =>
-        setActiveCardFilter((prev) =>
-          prev === stat.filterKey ? "todos" : stat.filterKey,
-        ),
-    }));
-  }, [stats, activeCardFilter, totalReceberTooltip]);
+  // statsCardItems é montado após transacoesDisplayGrupos para sincronizar
+  // a contagem do card ativo com o rodapé da tabela (pedidos, não parcelas).
 
   // Query para buscar conta financeira por ID
   const { data: contaSelecionada, isLoading: isLoadingConta } = useQuery({
@@ -1606,6 +1634,48 @@ const ContasAReceber = () => {
       };
     });
   }, [filteredGruposContas]);
+
+  /** Card ativo de vencimento: valor = quantidade de pedidos na tabela (rodapé). */
+  const qtdPedidosNaTabela = usarFallbackContasFinanceiras
+    ? transacoesDisplayGrupos.length
+    : transacoesDisplayReceber.length;
+
+  const statsCardItems = useMemo((): ModuleStatCardItem[] => {
+    const valorCardAtivo = (filterKey: string, fallback: string) => {
+      if (
+        activeCardFilter === filterKey &&
+        (filterKey === "vencidas" ||
+          filterKey === "vencendo_hoje" ||
+          filterKey === "vencendo_este_mes")
+      ) {
+        return String(qtdPedidosNaTabela);
+      }
+      return fallback;
+    };
+
+    return stats.map((stat) => ({
+      key: stat.key,
+      label: stat.label,
+      value: valorCardAtivo(stat.filterKey, stat.value),
+      iconWrap: stat.iconWrap,
+      iconClass: stat.iconClass,
+      valueClass: stat.valueClass,
+      cardClassName: stat.cardClassName,
+      labelClassName: stat.labelClassName,
+      Icon: stat.Icon,
+      labelExtra: stat.key === "a_receber" ? totalReceberTooltip : undefined,
+      active: activeCardFilter === stat.filterKey,
+      onClick: () =>
+        setActiveCardFilter((prev) =>
+          prev === stat.filterKey ? "todos" : stat.filterKey,
+        ),
+    }));
+  }, [
+    stats,
+    activeCardFilter,
+    totalReceberTooltip,
+    qtdPedidosNaTabela,
+  ]);
 
   // Filtrar por busca e por card ativo (mantido para fallback contas-financeiras)
   const filteredTransacoes = useMemo(() => {

@@ -200,6 +200,51 @@ export function saldoAbertoConta(c: ContaFinanceira): number {
   return 0;
 }
 
+/** Chave de agrupamento alinhada à tabela (1 linha = 1 pedido ou 1 avulso). */
+export function chaveGrupoContaFinanceira(c: ContaFinanceira): string {
+  const pedidoId =
+    c.pedido_id != null && Number(c.pedido_id) > 0 ? Number(c.pedido_id) : null;
+  return pedidoId != null ? `pedido-${pedidoId}` : `avulso-${c.id}`;
+}
+
+/**
+ * Conta pedidos/avulsos (não parcelas) com a mesma regra dos filtros da tabela.
+ * Usado pelos cards Vencidas / Vencendo Hoje / Vencendo Este Mês.
+ */
+export function contarPedidosPorVencimento(contas: ContaFinanceira[]): {
+  vencidas: number;
+  vencendoHoje: number;
+  vencendoEsteMes: number;
+} {
+  const grupos = new Map<string, ContaFinanceira[]>();
+
+  for (const conta of contas) {
+    const st = String(conta.status ?? '').toUpperCase();
+    if (st === 'CANCELADO') continue;
+    if (!contaTemSaldoAberto(conta)) continue;
+
+    const key = chaveGrupoContaFinanceira(conta);
+    const list = grupos.get(key) ?? [];
+    list.push(conta);
+    grupos.set(key, list);
+  }
+
+  let vencidas = 0;
+  let vencendoHoje = 0;
+  let vencendoEsteMes = 0;
+
+  for (const parcelas of grupos.values()) {
+    const valorAberto = parcelas.reduce((s, p) => s + saldoAbertoConta(p), 0);
+    if (valorAberto <= 0.009) continue;
+
+    if (parcelas.some((p) => contaEstaVencidaLocal(p))) vencidas += 1;
+    if (parcelas.some((p) => contaVenceHojeLocal(p))) vencendoHoje += 1;
+    if (parcelas.some((p) => contaVenceEsteMesLocal(p))) vencendoEsteMes += 1;
+  }
+
+  return { vencidas, vencendoHoje, vencendoEsteMes };
+}
+
 function calcularResumoCardsPorTipo(
   contas: ContaFinanceira[],
   tipo: 'RECEBER' | 'PAGAR',
@@ -212,12 +257,11 @@ function calcularResumoCardsPorTipo(
 } {
   let totalPendente = 0;
   let valorPago = 0;
-  let vencidas = 0;
-  let vencendoHoje = 0;
-  let vencendoEsteMes = 0;
+  const contasDoTipo: ContaFinanceira[] = [];
 
   for (const conta of contas) {
-    if (conta.tipo !== tipo) continue;
+    // Listagens já filtradas por tipo podem omitir o campo `tipo`.
+    if (conta.tipo != null && conta.tipo !== tipo) continue;
     const st = String(conta.status ?? '').toUpperCase();
     if (st === 'CANCELADO') continue;
 
@@ -226,28 +270,17 @@ function calcularResumoCardsPorTipo(
     if (!contaTemSaldoAberto(conta)) continue;
 
     totalPendente += saldoAbertoConta(conta);
-
-    if (contaEstaVencidaLocal(conta)) {
-      vencidas += 1;
-      continue;
-    }
-
-    if (contaVenceHojeLocal(conta)) {
-      vencendoHoje += 1;
-    }
-
-    // Inclui "vence hoje" no mês civil (mesma regra do card / filtro da tabela)
-    if (contaVenceEsteMesLocal(conta)) {
-      vencendoEsteMes += 1;
-    }
+    contasDoTipo.push(conta);
   }
+
+  const contagens = contarPedidosPorVencimento(contasDoTipo);
 
   return {
     totalPendente: Number(totalPendente.toFixed(2)),
     valorPago: Number(valorPago.toFixed(2)),
-    vencidas,
-    vencendoHoje,
-    vencendoEsteMes,
+    vencidas: contagens.vencidas,
+    vencendoHoje: contagens.vencendoHoje,
+    vencendoEsteMes: contagens.vencendoEsteMes,
   };
 }
 
