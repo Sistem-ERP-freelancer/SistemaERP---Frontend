@@ -156,7 +156,7 @@ export function OrderStats({
       label: 'Saldo em Aberto (Vendas)',
       value: formatCurrencyValue(resumo?.valor_em_aberto_venda?.valor),
       subtitle: `${resumo?.valor_em_aberto_venda?.quantidade || 0} pedidos`,
-      description: 'Pedidos atendidos com valor ainda a receber',
+      description: 'Pedidos abertos e atendidos com valor ainda a receber',
       icon: FileText,
       color: 'text-blue-600 dark:text-blue-400',
       bgColor: 'bg-blue-100 dark:bg-blue-900/20',

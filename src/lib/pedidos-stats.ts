@@ -22,6 +22,15 @@ export type ResumoHeroPedidos = Pick<
 
 function saldoAbertoPedido(p: PedidoComSaldo): number {
   if (p.status === 'CANCELADO') return 0;
+  // Aberto ainda não gera conta: se valor_em_aberto veio 0, usa o total do pedido.
+  if (p.status === 'ABERTO') {
+    const emAberto =
+      p.valor_em_aberto != null ? Number(p.valor_em_aberto) : NaN;
+    if (Number.isFinite(emAberto) && emAberto > 0.009) {
+      return Math.max(0, emAberto);
+    }
+    return Math.max(0, Number(p.valor_total ?? 0));
+  }
   if (p.valor_em_aberto != null) return Math.max(0, Number(p.valor_em_aberto));
   const pago = Number(p.valor_pago ?? 0);
   return Math.max(0, Number(p.valor_total ?? 0) - pago);
@@ -86,16 +95,17 @@ export async function listarPedidosTodasPaginas(
   return acc;
 }
 
-/** Pedido atendido com saldo financeiro ainda em aberto (a receber/pagar). */
+/** Pedido com valor ainda em aberto: status Aberto ou Atendido com saldo. */
 export function pedidoComSaldoEmAberto(p: PedidoComSaldo): boolean {
+  if (p.status === 'ABERTO') return saldoAbertoPedido(p) > 0.009;
   return pedidoAtendido(p) && saldoAbertoPedido(p) > 0.009;
 }
 
 /**
  * Resumo dos cards de Pedidos a partir da listagem filtrada.
  * - Faturamento: pedidos Atendidos (valor total)
- * - Valor em Aberto: Atendidos com saldo > 0 (não inclui status Aberto — esses são "em andamento")
- * - Em Andamento: status Aberto
+ * - Saldo em Aberto: Aberto (total do pedido) + Atendidos com saldo > 0
+ * - Pedidos Abertos: status Aberto
  * - Cancelados: status Cancelado
  */
 export function calcularResumoCardsPedidos(

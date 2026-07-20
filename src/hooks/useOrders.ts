@@ -147,9 +147,15 @@ export function useOrders() {
             o.status === 'PARCIAL'),
       );
     } else if (filters.card_filtro === 'aberto_venda') {
-      // Saldo a receber: atendidos com valor em aberto (não confundir com status Aberto)
+      // Saldo em aberto: status Aberto + Atendidos com saldo
       ordersList = ordersList.filter((o) => {
         if (o.tipo !== 'VENDA') return false;
+        if (o.status === 'ABERTO') {
+          const total = Number(o.valor_total ?? 0);
+          const emAberto =
+            o.valor_em_aberto != null ? Number(o.valor_em_aberto) : 0;
+          return total > 0.009 || emAberto > 0.009;
+        }
         const atendido =
           o.status === 'ATENDIDO' ||
           o.status === 'QUITADO' ||
