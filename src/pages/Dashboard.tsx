@@ -523,8 +523,8 @@ const Dashboard = () => {
         (painelRaw.linhaRegistrado as Record<string, unknown>) ??
         {};
       /**
-       * Faturamento = contas a receber emitidas no período
-       * (= receitas Visão Geral + pedidos ATENDIDO; ABERTO não gera conta).
+       * Faturamento = pedidos ATENDIDO (data_pedido no período)
+       *              + receitas Visão Geral (contas RECEBER sem pedido).
        */
       const totalVendasEfetivas = numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
