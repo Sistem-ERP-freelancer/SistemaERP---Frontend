@@ -95,16 +95,15 @@ export async function listarPedidosTodasPaginas(
   return acc;
 }
 
-/** Pedido com valor ainda em aberto: status Aberto ou Atendido com saldo. */
+/** Pedido com status Aberto e valor > 0 (saldo operacional em aberto). */
 export function pedidoComSaldoEmAberto(p: PedidoComSaldo): boolean {
-  if (p.status === 'ABERTO') return saldoAbertoPedido(p) > 0.009;
-  return pedidoAtendido(p) && saldoAbertoPedido(p) > 0.009;
+  return p.status === 'ABERTO' && saldoAbertoPedido(p) > 0.009;
 }
 
 /**
  * Resumo dos cards de Pedidos a partir da listagem filtrada.
  * - Faturamento: pedidos Atendidos (valor total)
- * - Saldo em Aberto: Aberto (total do pedido) + Atendidos com saldo > 0
+ * - Saldo em Aberto: só status Aberto (não inclui Atendido com saldo — isso é Contas a Receber)
  * - Pedidos Abertos: status Aberto
  * - Cancelados: status Cancelado
  */
@@ -117,8 +116,8 @@ export function calcularResumoCardsPedidos(
     : pedidos;
 
   const atendidos = escopo.filter((p) => pedidoAtendido(p));
-  const comSaldoAberto = escopo.filter((p) => pedidoComSaldoEmAberto(p));
-  const emAndamento = escopo.filter((p) => p.status === 'ABERTO');
+  const abertos = escopo.filter((p) => p.status === 'ABERTO');
+  const comSaldoAberto = abertos.filter((p) => pedidoComSaldoEmAberto(p));
   const cancelados = escopo.filter((p) => p.status === 'CANCELADO');
 
   return {
@@ -136,7 +135,7 @@ export function calcularResumoCardsPedidos(
       quantidade: comSaldoAberto.length,
     },
     pedidos_em_andamento: {
-      quantidade: emAndamento.length,
+      quantidade: abertos.length,
       detalhes: { pendente: 0, aprovado: 0, em_processamento: 0 },
     },
     pedidos_cancelados: {

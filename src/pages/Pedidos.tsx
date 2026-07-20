@@ -491,8 +491,7 @@ export default function Pedidos() {
         updateFilters({ ...base, tipo: 'VENDA', status: undefined });
         break;
       case 'aberto_venda':
-        // Atendidos com saldo; filtrado no cliente
-        updateFilters({ ...base, tipo: 'VENDA', status: undefined });
+        updateFilters({ ...base, tipo: 'VENDA', status: 'ABERTO' });
         break;
       case 'em_andamento':
         updateFilters({ ...base, status: 'ABERTO' });

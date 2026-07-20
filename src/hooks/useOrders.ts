@@ -41,9 +41,8 @@ export function useOrders() {
     queryFn: async () => {
       try {
         const cardFiltro = filters.card_filtro;
-        // Cards com múltiplos status / regra de saldo: buscar lote maior e filtrar no cliente
-        const cardFiltroCliente =
-          cardFiltro === 'faturamento_venda' || cardFiltro === 'aberto_venda';
+        // Faturamento: múltiplos status — buscar lote maior e filtrar no cliente
+        const cardFiltroCliente = cardFiltro === 'faturamento_venda';
         const hasBusca = !!(filters.numero_pedido || filters.busca);
         const needsWideFetch = hasBusca || cardFiltroCliente;
         const limit = needsWideFetch ? 2000 : itemsPerPage;
@@ -56,7 +55,7 @@ export function useOrders() {
         } else if (cardFiltro === 'cancelados') {
           apiFilters = { ...apiFilters, status: 'CANCELADO', tipo: undefined };
         } else if (cardFiltro === 'aberto_venda') {
-          apiFilters = { ...apiFilters, tipo: 'VENDA', status: undefined };
+          apiFilters = { ...apiFilters, tipo: 'VENDA', status: 'ABERTO' };
         } else if (cardFiltro === 'em_andamento') {
           apiFilters = { ...apiFilters, status: 'ABERTO' };
         }
@@ -146,27 +145,6 @@ export function useOrders() {
             o.status === 'QUITADO' ||
             o.status === 'PARCIAL'),
       );
-    } else if (filters.card_filtro === 'aberto_venda') {
-      // Saldo em aberto: status Aberto + Atendidos com saldo
-      ordersList = ordersList.filter((o) => {
-        if (o.tipo !== 'VENDA') return false;
-        if (o.status === 'ABERTO') {
-          const total = Number(o.valor_total ?? 0);
-          const emAberto =
-            o.valor_em_aberto != null ? Number(o.valor_em_aberto) : 0;
-          return total > 0.009 || emAberto > 0.009;
-        }
-        const atendido =
-          o.status === 'ATENDIDO' ||
-          o.status === 'QUITADO' ||
-          o.status === 'PARCIAL';
-        if (!atendido) return false;
-        const saldo =
-          o.valor_em_aberto != null
-            ? Math.max(0, Number(o.valor_em_aberto))
-            : Math.max(0, Number(o.valor_total ?? 0) - Number(o.valor_pago ?? 0));
-        return saldo > 0.009;
-      });
     }
 
     if (filters.numero_pedido && !filters.busca) {
@@ -198,9 +176,7 @@ export function useOrders() {
     filters.tipo,
   ]);
 
-  const needsClientPagination =
-    filters.card_filtro === 'faturamento_venda' ||
-    filters.card_filtro === 'aberto_venda';
+  const needsClientPagination = filters.card_filtro === 'faturamento_venda';
 
   const orders = useMemo(() => {
     if (!needsClientPagination) return filteredOrders;
