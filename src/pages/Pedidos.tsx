@@ -377,10 +377,11 @@ export default function Pedidos() {
   const labelStatusFiltro = (s?: StatusPedido) => {
     if (!s) return null;
     const map: Record<StatusPedido, string> = {
-      ABERTO: 'Pendente',
-      PARCIAL: 'Aberto',
-      QUITADO: 'Quitado',
+      ABERTO: 'Aberto',
+      ATENDIDO: 'Atendido',
       CANCELADO: 'Cancelado',
+      PARCIAL: 'Atendido',
+      QUITADO: 'Atendido',
     };
     return map[s];
   };
@@ -486,7 +487,7 @@ export default function Pedidos() {
     const base: Partial<FiltrosPedidos> = { card_filtro: key };
     switch (key) {
       case 'faturamento_venda':
-        updateFilters({ ...base, tipo: 'VENDA', status: 'QUITADO' });
+        updateFilters({ ...base, tipo: 'VENDA', status: 'ATENDIDO' });
         break;
       case 'aberto_venda':
         updateFilters({ ...base, tipo: 'VENDA', status: undefined });
@@ -722,9 +723,8 @@ export default function Pedidos() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos os status</SelectItem>
-                    <SelectItem value="ABERTO">Pendente</SelectItem>
-                    <SelectItem value="PARCIAL">Aberto</SelectItem>
-                    <SelectItem value="QUITADO">Quitado</SelectItem>
+                    <SelectItem value="ABERTO">Aberto</SelectItem>
+                    <SelectItem value="ATENDIDO">Atendido</SelectItem>
                     <SelectItem value="CANCELADO">Cancelado</SelectItem>
                   </SelectContent>
                 </Select>

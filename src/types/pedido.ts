@@ -1,11 +1,18 @@
 export type TipoPedido = 'VENDA' | 'COMPRA';
 
-/** Status do pedido (valores da API). Exibição: Pendente, Aberto, Quitado, Cancelado. */
+/**
+ * Status operacional do pedido (atendimento).
+ * ABERTO → sem contas e sem estoque
+ * ATENDIDO → gera contas e movimenta estoque
+ * CANCELADO → sem contas e sem estoque
+ * PARCIAL/QUITADO = legado (exibidos como Atendido)
+ */
 export type StatusPedido =
-  | 'ABERTO'     // exibe "Pendente" — acabou de criar, nada pago
-  | 'PARCIAL'    // exibe "Aberto" — pedido em aberto (parte paga)
-  | 'QUITADO'    // exibe "Quitado" — concluído
-  | 'CANCELADO'; // exibe "Cancelado"
+  | 'ABERTO'
+  | 'ATENDIDO'
+  | 'CANCELADO'
+  | 'PARCIAL'
+  | 'QUITADO';
 
 export type FormaPagamento = 
   | 'DINHEIRO'

@@ -174,9 +174,9 @@ export function DreFaturamentoLucro({
             Do faturamento ao lucro líquido
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
-            Faturamento = vendas do mês (competência). Custo = quantidade
-            vendida × preço de custo no mesmo período. Lucro bruto − Despesas
-            gerais = Lucro líquido.
+            Faturamento = receitas da Visão Geral + pedidos Atendidos (contas
+            emitidas no mês). Custo = quantidade vendida × preço de custo.
+            Lucro bruto − Despesas gerais = Lucro líquido.
             {periodoLabel ? (
               <>
                 {' '}

@@ -143,14 +143,15 @@ export function formatarDataBR(date: string | Date): string {
 }
 
 /**
- * Formata status do pedido para exibição (apenas 4 statuses).
- * Backend: ABERTO | PARCIAL | QUITADO | CANCELADO.
+ * Formata status operacional do pedido para exibição.
+ * Backend: ABERTO | ATENDIDO | CANCELADO (legado PARCIAL/QUITADO → Atendido).
  */
 export function formatarStatus(status: string): string {
   const statusMap: Record<string, string> = {
-    ABERTO: 'Pendente',
-    PARCIAL: 'Aberto',
-    QUITADO: 'Quitado',
+    ABERTO: 'Aberto',
+    ATENDIDO: 'Atendido',
+    PARCIAL: 'Atendido',
+    QUITADO: 'Atendido',
     VENCIDO: 'Vencido',
     CANCELADO: 'Cancelado',
   };

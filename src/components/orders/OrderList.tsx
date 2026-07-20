@@ -121,9 +121,13 @@ export function OrderList({
             : '--');
 
   const renderActions = (order: Pedido) => {
+    const isAtendido =
+      order.status === 'ATENDIDO' ||
+      order.status === 'QUITADO' ||
+      order.status === 'PARCIAL';
     const canEditOrCancel =
-      order.status !== 'CANCELADO' && order.status !== 'QUITADO';
-    const canDelete = order.status !== 'QUITADO';
+      order.status !== 'CANCELADO' && !isAtendido;
+    const canDelete = !isAtendido;
     const canEmitNf =
       !!podeEmitirNf &&
       !!onEmitNotaFiscal &&
@@ -196,27 +200,36 @@ export function OrderList({
     );
   };
 
-  const renderStatus = (order: Pedido) =>
-    onStatusChange ? (
+  const renderStatus = (order: Pedido) => {
+    const statusSelectValue =
+      order.status === 'PARCIAL' || order.status === 'QUITADO'
+        ? 'ATENDIDO'
+        : order.status;
+    const statusLabel =
+      statusSelectValue === 'ABERTO'
+        ? 'Aberto'
+        : statusSelectValue === 'ATENDIDO'
+          ? 'Atendido'
+          : 'Cancelado';
+    const statusTriggerClass =
+      statusSelectValue === 'ABERTO'
+        ? 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+        : statusSelectValue === 'ATENDIDO'
+          ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+          : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800';
+
+    return onStatusChange ? (
       <Select
-        value={order.status}
+        value={statusSelectValue}
         onValueChange={(value) => {
-          if (value !== order.status) {
+          if (value !== statusSelectValue) {
             onStatusChange(order.id, value as StatusPedido);
           }
         }}
         disabled={updatingStatusId === order.id}
       >
         <SelectTrigger
-          className={`h-7 w-full max-w-[130px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${
-            order.status === 'ABERTO'
-              ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
-              : order.status === 'PARCIAL'
-                ? 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
-                : order.status === 'QUITADO'
-                  ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-                  : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
-          }`}
+          className={`h-7 w-full max-w-[130px] text-xs font-medium rounded-full border-0 shadow-none hover:opacity-80 transition-opacity ${statusTriggerClass}`}
         >
           <SelectValue>
             {updatingStatusId === order.id ? (
@@ -225,35 +238,21 @@ export function OrderList({
                 <span>Atualizando...</span>
               </div>
             ) : (
-              <span>
-                {order.status === 'ABERTO'
-                  ? 'Pendente'
-                  : order.status === 'PARCIAL'
-                    ? 'Aberto'
-                    : order.status === 'QUITADO'
-                      ? 'Quitado'
-                      : 'Cancelado'}
-              </span>
+              <span>{statusLabel}</span>
             )}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="ABERTO">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-yellow-500" />
-              Pendente
-            </div>
-          </SelectItem>
-          <SelectItem value="PARCIAL">
-            <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-500" />
               Aberto
             </div>
           </SelectItem>
-          <SelectItem value="QUITADO">
+          <SelectItem value="ATENDIDO">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500" />
-              Quitado
+              Atendido
             </div>
           </SelectItem>
           <SelectItem value="CANCELADO">
@@ -267,6 +266,7 @@ export function OrderList({
     ) : (
       <StatusBadge status={order.status} />
     );
+  };
 
   return (
     <>

@@ -21,10 +21,16 @@ export type ResumoHeroPedidos = Pick<
 };
 
 function saldoAbertoPedido(p: PedidoComSaldo): number {
-  if (p.status === 'QUITADO' || p.status === 'CANCELADO') return 0;
+  if (p.status === 'CANCELADO') return 0;
   if (p.valor_em_aberto != null) return Math.max(0, Number(p.valor_em_aberto));
   const pago = Number(p.valor_pago ?? 0);
   return Math.max(0, Number(p.valor_total ?? 0) - pago);
+}
+
+function pedidoAtendido(p: Pedido): boolean {
+  return (
+    p.status === 'ATENDIDO' || p.status === 'QUITADO' || p.status === 'PARCIAL'
+  );
 }
 
 function parsePedidosResponse(response: unknown): Pedido[] {
@@ -92,22 +98,20 @@ export function calcularResumoCardsPedidos(
     ? pedidos.filter((p) => p.tipo === tipoFiltro)
     : pedidos;
 
-  const quitados = escopo.filter((p) => p.status === 'QUITADO');
+  const atendidos = escopo.filter((p) => pedidoAtendido(p));
   const emAberto = escopo.filter(
-    (p) => p.status !== 'QUITADO' && p.status !== 'CANCELADO',
+    (p) => p.status === 'ABERTO' || (pedidoAtendido(p) && saldoAbertoPedido(p) > 0.009),
   );
-  const emAndamento = escopo.filter(
-    (p) => p.status === 'ABERTO' || p.status === 'PARCIAL',
-  );
+  const emAndamento = escopo.filter((p) => p.status === 'ABERTO');
   const cancelados = escopo.filter((p) => p.status === 'CANCELADO');
 
   return {
     modoCard: inferirModoCard(pedidos, tipoFiltro),
     faturamento_confirmado_venda: {
       valor: Number(
-        quitados.reduce((s, p) => s + Number(p.valor_total ?? 0), 0).toFixed(2),
+        atendidos.reduce((s, p) => s + Number(p.valor_total ?? 0), 0).toFixed(2),
       ),
-      quantidade: quitados.length,
+      quantidade: atendidos.length,
     },
     valor_em_aberto_venda: {
       valor: Number(

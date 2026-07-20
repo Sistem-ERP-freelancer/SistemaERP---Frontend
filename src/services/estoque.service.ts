@@ -220,6 +220,30 @@ class EstoqueService {
   }
 
   /**
+   * Faturamento oficial = saídas de estoque com motivo Venda no período.
+   */
+  async getFaturamentoSaidasVenda(params?: {
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<{
+    faturamento: number;
+    custo: number;
+    registros: number;
+    quantidade: number;
+  }> {
+    const q = new URLSearchParams();
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    const query = q.toString();
+    return apiClient.get<{
+      faturamento: number;
+      custo: number;
+      registros: number;
+      quantidade: number;
+    }>(`/estoque/faturamento-saidas-venda${query ? `?${query}` : ''}`);
+  }
+
+  /**
    * Download do PDF do Relatório de Movimentações (com filtros).
    */
   async downloadRelatorioMovimentacoesPdf(

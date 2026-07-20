@@ -522,6 +522,10 @@ const Dashboard = () => {
         (painelRaw.linha_registrado as Record<string, unknown>) ??
         (painelRaw.linhaRegistrado as Record<string, unknown>) ??
         {};
+      /**
+       * Faturamento = contas a receber emitidas no período
+       * (= receitas Visão Geral + pedidos ATENDIDO; ABERTO não gera conta).
+       */
       const totalVendasEfetivas = numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
@@ -548,11 +552,6 @@ const Dashboard = () => {
               ),
             );
 
-      /**
-       * CMV no mesmo mês das vendas de competência (painel).
-       * Aplica a margem dos itens (custo/receita) sobre o faturamento por competência,
-       * para o CMV acompanhar a mesma base das vendas do card (contas a receber).
-       */
       const receitaItens = Number(margemContribuicao?.totais?.receita ?? 0);
       const custoItens = Number(margemContribuicao?.totais?.custo_variavel ?? 0);
       const custoProduto =
