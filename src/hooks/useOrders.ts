@@ -41,9 +41,9 @@ export function useOrders() {
     queryFn: async () => {
       try {
         const cardFiltro = filters.card_filtro;
+        // Cards com múltiplos status / regra de saldo: buscar lote maior e filtrar no cliente
         const cardFiltroCliente =
-          cardFiltro === 'aberto_venda' || cardFiltro === 'em_andamento';
-        // Busca ou cards com múltiplos status: buscar lote maior e filtrar no cliente
+          cardFiltro === 'faturamento_venda' || cardFiltro === 'aberto_venda';
         const hasBusca = !!(filters.numero_pedido || filters.busca);
         const needsWideFetch = hasBusca || cardFiltroCliente;
         const limit = needsWideFetch ? 2000 : itemsPerPage;
@@ -52,13 +52,13 @@ export function useOrders() {
         let apiFilters: FiltrosPedidos = { ...restFilters };
 
         if (cardFiltro === 'faturamento_venda') {
-          apiFilters = { ...apiFilters, tipo: 'VENDA', status: 'QUITADO' };
+          apiFilters = { ...apiFilters, tipo: 'VENDA', status: undefined };
         } else if (cardFiltro === 'cancelados') {
           apiFilters = { ...apiFilters, status: 'CANCELADO', tipo: undefined };
         } else if (cardFiltro === 'aberto_venda') {
           apiFilters = { ...apiFilters, tipo: 'VENDA', status: undefined };
         } else if (cardFiltro === 'em_andamento') {
-          apiFilters = { ...apiFilters, status: undefined };
+          apiFilters = { ...apiFilters, status: 'ABERTO' };
         }
 
         const params = {
@@ -138,20 +138,29 @@ export function useOrders() {
       return [];
     }
 
-    if (filters.card_filtro === 'aberto_venda') {
+    if (filters.card_filtro === 'faturamento_venda') {
       ordersList = ordersList.filter(
         (o) =>
           o.tipo === 'VENDA' &&
-          o.status !== 'QUITADO' &&
-          o.status !== 'CANCELADO',
+          (o.status === 'ATENDIDO' ||
+            o.status === 'QUITADO' ||
+            o.status === 'PARCIAL'),
       );
-    } else if (filters.card_filtro === 'em_andamento') {
-      ordersList = ordersList.filter(
-        (o) => o.status === 'ABERTO' || o.status === 'PARCIAL',
-      );
-      if (filters.tipo) {
-        ordersList = ordersList.filter((o) => o.tipo === filters.tipo);
-      }
+    } else if (filters.card_filtro === 'aberto_venda') {
+      // Saldo a receber: atendidos com valor em aberto (não confundir com status Aberto)
+      ordersList = ordersList.filter((o) => {
+        if (o.tipo !== 'VENDA') return false;
+        const atendido =
+          o.status === 'ATENDIDO' ||
+          o.status === 'QUITADO' ||
+          o.status === 'PARCIAL';
+        if (!atendido) return false;
+        const saldo =
+          o.valor_em_aberto != null
+            ? Math.max(0, Number(o.valor_em_aberto))
+            : Math.max(0, Number(o.valor_total ?? 0) - Number(o.valor_pago ?? 0));
+        return saldo > 0.009;
+      });
     }
 
     if (filters.numero_pedido && !filters.busca) {
@@ -184,8 +193,8 @@ export function useOrders() {
   ]);
 
   const needsClientPagination =
-    filters.card_filtro === 'aberto_venda' ||
-    filters.card_filtro === 'em_andamento';
+    filters.card_filtro === 'faturamento_venda' ||
+    filters.card_filtro === 'aberto_venda';
 
   const orders = useMemo(() => {
     if (!needsClientPagination) return filteredOrders;

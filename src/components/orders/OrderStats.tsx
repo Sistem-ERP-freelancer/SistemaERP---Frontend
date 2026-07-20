@@ -105,7 +105,7 @@ export function OrderStats({
       },
       {
         key: 'aberto_venda',
-        label: `Valor em Aberto · ${qtdAberto} pedido${qtdAberto === 1 ? '' : 's'}`,
+        label: `Saldo em Aberto · ${qtdAberto} pedido${qtdAberto === 1 ? '' : 's'}`,
         value: isLoading ? '—' : formatCurrencyValue(resumo?.valor_em_aberto_venda?.valor),
         Icon: FileText,
         ...statTheme.sky,
@@ -114,7 +114,7 @@ export function OrderStats({
       },
       {
         key: 'em_andamento',
-        label: `Pedidos em Andamento · ${qtdAndamento} pedido${qtdAndamento === 1 ? '' : 's'}`,
+        label: `Pedidos Abertos · ${qtdAndamento} pedido${qtdAndamento === 1 ? '' : 's'}`,
         value: isLoading ? '—' : String(qtdAndamento),
         Icon: Package,
         ...statTheme.violet,
@@ -153,10 +153,10 @@ export function OrderStats({
       bgColor: 'bg-green-100 dark:bg-green-900/20',
     },
     {
-      label: 'Valor em Aberto (Vendas)',
+      label: 'Saldo em Aberto (Vendas)',
       value: formatCurrencyValue(resumo?.valor_em_aberto_venda?.valor),
       subtitle: `${resumo?.valor_em_aberto_venda?.quantidade || 0} pedidos`,
-      description: 'Pedidos de venda aguardando pagamento ou faturamento',
+      description: 'Pedidos atendidos com valor ainda a receber',
       icon: FileText,
       color: 'text-blue-600 dark:text-blue-400',
       bgColor: 'bg-blue-100 dark:bg-blue-900/20',
@@ -186,10 +186,10 @@ export function OrderStats({
 
   const operacionalCards = [
     {
-      label: 'Pedidos em Andamento',
+      label: 'Pedidos Abertos',
       value: (resumo?.pedidos_em_andamento?.quantidade || 0).toString(),
       subtitle: `${resumo?.pedidos_em_andamento?.quantidade || 0} pedidos`,
-      description: 'Pedidos criados, mas não finalizados',
+      description: 'Pedidos ainda não atendidos (status Aberto)',
       icon: Package,
       color: 'text-purple-600 dark:text-purple-400',
       bgColor: 'bg-purple-100 dark:bg-purple-900/20',

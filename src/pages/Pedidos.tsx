@@ -487,13 +487,15 @@ export default function Pedidos() {
     const base: Partial<FiltrosPedidos> = { card_filtro: key };
     switch (key) {
       case 'faturamento_venda':
-        updateFilters({ ...base, tipo: 'VENDA', status: 'ATENDIDO' });
+        // Status filtrado no cliente (ATENDIDO + legado QUITADO/PARCIAL)
+        updateFilters({ ...base, tipo: 'VENDA', status: undefined });
         break;
       case 'aberto_venda':
+        // Atendidos com saldo; filtrado no cliente
         updateFilters({ ...base, tipo: 'VENDA', status: undefined });
         break;
       case 'em_andamento':
-        updateFilters({ ...base, status: undefined });
+        updateFilters({ ...base, status: 'ABERTO' });
         break;
       case 'cancelados':
         updateFilters({ ...base, status: 'CANCELADO', tipo: undefined });
