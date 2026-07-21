@@ -278,7 +278,7 @@ export function OrderStats({
       value: formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
       subtitle: `${resumo?.faturamento_confirmado_venda?.quantidade || 0} pedidos`,
       description:
-        'Mesma base da Margem (pedidos não cancelados) + Visão Geral',
+        'Somente pedidos Atendidos + receitas da Visão Geral (Aberto não entra)',
       icon: DollarSign,
       color: 'text-green-600 dark:text-green-400',
       bgColor: 'bg-green-100 dark:bg-green-900/20',

@@ -157,10 +157,9 @@ export function calcularResumoCardsPedidos(
         ? compras
         : pedidos;
 
+  const atendidosVenda = vendas.filter((p) => pedidoAtendido(p));
   const abertosVenda = vendas.filter((p) => p.status === 'ABERTO');
   const saldoVenda = abertosVenda.filter((p) => pedidoComSaldoEmAberto(p));
-  // Faturamento operacional na listagem: todos os não cancelados (bate com Margem).
-  const faturaveisVenda = vendas.filter((p) => p.status !== 'CANCELADO');
 
   const atendidosCompra = compras.filter((p) => pedidoAtendido(p));
   const abertosCompra = compras.filter((p) => p.status === 'ABERTO');
@@ -173,11 +172,11 @@ export function calcularResumoCardsPedidos(
     modoCard: inferirModoCard(pedidos, tipoFiltro),
     faturamento_confirmado_venda: {
       valor: Number(
-        faturaveisVenda
+        atendidosVenda
           .reduce((s, p) => s + Number(p.valor_total ?? 0), 0)
           .toFixed(2),
       ),
-      quantidade: faturaveisVenda.length,
+      quantidade: atendidosVenda.length,
     },
     valor_em_aberto_venda: {
       valor: Number(

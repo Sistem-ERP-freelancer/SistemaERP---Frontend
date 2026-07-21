@@ -174,10 +174,9 @@ export function DreFaturamentoLucro({
             Do faturamento ao lucro líquido
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
-            Faturamento = mesma receita do Relatório de Margem de Contribuição
-            (pedidos de venda não cancelados no mês) + receitas da Visão
-            Geral. Custo = mesmo relatório. Lucro bruto − Despesas gerais =
-            Lucro líquido.
+            Faturamento = pedidos Atendidos no mês + receitas da Visão Geral
+            (sem pedido). Pedidos Abertos não entram. Custo = Margem de
+            Contribuição. Lucro bruto − Despesas gerais = Lucro líquido.
             {periodoLabel ? (
               <>
                 {' '}

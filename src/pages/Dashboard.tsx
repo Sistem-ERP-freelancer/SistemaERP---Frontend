@@ -523,15 +523,10 @@ const Dashboard = () => {
         (painelRaw.linhaRegistrado as Record<string, unknown>) ??
         {};
       /**
-       * Faturamento = mesma receita do Relatório de Margem
-       * (itens de pedidos VENDA não cancelados) + Visão Geral no backend.
-       * Preferimos a margem no funil para bater 1:1 com o PDF.
+       * Faturamento = pedidos ATENDIDO (itens no período) + receitas Visão Geral.
+       * Pedidos Aberto não entram.
        */
-      const receitaMargem = Number(
-        Number(margemContribuicao?.totais?.receita ?? 0).toFixed(2),
-      );
-      const totalVendasEfetivas =
-        receitaMargem > 0.009 ? receitaMargem : numPainel(linhaReg.vendas);
+      const totalVendasEfetivas = numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
       const fornecedoresPorTipo = agregadoCentroCusto.items;
@@ -559,8 +554,13 @@ const Dashboard = () => {
 
       const receitaItens = Number(margemContribuicao?.totais?.receita ?? 0);
       const custoItens = Number(margemContribuicao?.totais?.custo_variavel ?? 0);
-      // Custo = mesmo do Relatório de Margem (sem escala).
-      const custoProduto = Number(custoItens.toFixed(2));
+      // Custo pela Margem, escalado ao faturamento (só Atendidos + Visão).
+      const custoProduto =
+        receitaItens > 0.009 && totalVendasEfetivas > 0.009
+          ? Number(
+              (totalVendasEfetivas * (custoItens / receitaItens)).toFixed(2),
+            )
+          : Number(custoItens.toFixed(2));
       const despesasGeraisFunil = Number(
         (
           (agregadoFunil?.total ?? somaCentroDespesaNoPeriodo) || 0
