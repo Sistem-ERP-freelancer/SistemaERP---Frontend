@@ -16,12 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  RelatorioPeriodoFinanceiro,
-  datasPeriodoRapido,
-  type PeriodoRapidoAtivo,
-  type PeriodoRapidoKey,
-} from "@/components/reports/RelatorioPeriodoFinanceiro";
+import { RelatorioPeriodoFinanceiro } from "@/components/reports/RelatorioPeriodoFinanceiro";
 import type { StatusFiltroProdutosCliente } from "@/lib/relatorio-produtos-cliente";
 import type { Cliente } from "@/services/clientes.service";
 import { pedidosService } from "@/services/pedidos.service";
@@ -61,8 +56,6 @@ export function RelatorioProdutosClienteDialog({
   const [clienteId, setClienteId] = useState("");
   const [dataInicial, setDataInicial] = useState(defInicio);
   const [dataFinal, setDataFinal] = useState(defFim);
-  const [periodoRapido, setPeriodoRapido] =
-    useState<PeriodoRapidoAtivo>("mes_atual");
   const [statusFiltro, setStatusFiltro] =
     useState<StatusFiltroProdutosCliente>("Todos");
   const [pdfLoading, setPdfLoading] = useState<"download" | "print" | null>(
@@ -73,7 +66,6 @@ export function RelatorioProdutosClienteDialog({
     if (!open) return;
     setDataInicial(defInicio);
     setDataFinal(defFim);
-    setPeriodoRapido("mes_atual");
     setStatusFiltro("Todos");
     setClienteId(
       defaultClienteId != null && defaultClienteId > 0
@@ -160,21 +152,8 @@ export function RelatorioProdutosClienteDialog({
             <RelatorioPeriodoFinanceiro
               dataInicial={dataInicial}
               dataFinal={dataFinal}
-              periodoAtivo={periodoRapido}
-              onDataInicial={(v) => {
-                setDataInicial(v);
-                setPeriodoRapido("custom");
-              }}
-              onDataFinal={(v) => {
-                setDataFinal(v);
-                setPeriodoRapido("custom");
-              }}
-              onPeriodoRapido={(key: PeriodoRapidoKey) => {
-                const { inicial, final } = datasPeriodoRapido(key);
-                setDataInicial(inicial);
-                setDataFinal(final);
-                setPeriodoRapido(key);
-              }}
+              onDataInicial={setDataInicial}
+              onDataFinal={setDataFinal}
             />
 
             <Separator />

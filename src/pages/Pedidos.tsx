@@ -11,11 +11,7 @@ import {
   RelatorioPedidoCamposSection,
   type RelatorioPedidoCampos,
 } from '@/components/orders/RelatorioModalParts';
-import {
-  RelatorioPeriodoFinanceiro,
-  datasPeriodoRapido,
-  type PeriodoRapidoKey,
-} from '@/components/reports/RelatorioPeriodoFinanceiro';
+import { RelatorioPeriodoFinanceiro } from '@/components/reports/RelatorioPeriodoFinanceiro';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -115,9 +111,6 @@ export default function Pedidos() {
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
   const [dataInicialMargem, setDataInicialMargem] = useState('');
   const [dataFinalMargem, setDataFinalMargem] = useState('');
-  const [periodoRapidoAtivo, setPeriodoRapidoAtivo] = useState<
-    'custom' | 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior'
-  >('custom');
   const [loadingMargemPdf, setLoadingMargemPdf] = useState(false);
   const [margemDialogOpen, setMargemDialogOpen] = useState(false);
   const [margemLoadingAction, setMargemLoadingAction] = useState<'download' | 'print' | null>(null);
@@ -125,9 +118,6 @@ export default function Pedidos() {
   const [relatorioPedidosDialogOpen, setRelatorioPedidosDialogOpen] = useState(false);
   const [dataInicialRelPed, setDataInicialRelPed] = useState('');
   const [dataFinalRelPed, setDataFinalRelPed] = useState('');
-  const [periodoRapidoRelPed, setPeriodoRapidoRelPed] = useState<
-    'all' | 'custom' | 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior'
-  >('all');
   const [clienteRelPed, setClienteRelPed] = useState<string>('all');
   const [fornecedorRelPed, setFornecedorRelPed] = useState<string>('all');
   const [rocaRelPed, setRocaRelPed] = useState<string>('all');
@@ -159,13 +149,6 @@ export default function Pedidos() {
   const mesAnteriorInicio = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); return toYMD(d); })();
   const mesAnteriorFim = (() => { const d = new Date(); d.setDate(0); return toYMD(d); })();
 
-  const aplicarPeriodoRapidoRelPed = (tipo: PeriodoRapidoKey) => {
-    const { inicial, final } = datasPeriodoRapido(tipo);
-    setDataInicialRelPed(inicial);
-    setDataFinalRelPed(final);
-    setPeriodoRapidoRelPed(tipo);
-  };
-
   const montarFiltrosRelatorioPedidos = () => ({
     data_inicial: dataInicialRelPed?.trim() || undefined,
     data_final: dataFinalRelPed?.trim() || undefined,
@@ -176,12 +159,6 @@ export default function Pedidos() {
     roca_id: rocaRelPed !== 'all' ? Number(rocaRelPed) : undefined,
     campos: camposRelPed,
   });
-
-  const limparPeriodoRelPed = () => {
-    setDataInicialRelPed('');
-    setDataFinalRelPed('');
-    setPeriodoRapidoRelPed('all');
-  };
 
   const abrirDialogRelatorioPedidos = () => {
     if (clienteRelPed === 'all' && filters.cliente_id) {
@@ -197,12 +174,10 @@ export default function Pedidos() {
     if (filters.roca_id) {
       setDataInicialRelPed('');
       setDataFinalRelPed('');
-      setPeriodoRapidoRelPed('all');
-    } else if (!dataInicialRelPed && !dataFinalRelPed && periodoRapidoRelPed === 'all') {
+    } else if (!dataInicialRelPed && !dataFinalRelPed) {
       if (filters.data_inicial || filters.data_final) {
         setDataInicialRelPed(filters.data_inicial ?? '');
         setDataFinalRelPed(filters.data_final ?? '');
-        setPeriodoRapidoRelPed('custom');
       }
     }
     setRelatorioPedidosDialogOpen(true);
@@ -252,14 +227,6 @@ export default function Pedidos() {
     } finally {
       setReportingOrderId(null);
     }
-  };
-
-  const aplicarPeriodoRapido = (tipo: PeriodoRapidoKey) => {
-    const { inicial, final } = datasPeriodoRapido(tipo);
-    setDataInicialMargem(inicial);
-    setDataFinalMargem(final);
-    setPeriodoRapidoAtivo(tipo);
-    // Período usado apenas para o relatório de margem (PDF); não altera os filtros da lista de pedidos.
   };
 
   const handleDownloadMargemPdf = async () => {
@@ -946,16 +913,8 @@ export default function Pedidos() {
                 <RelatorioPeriodoFinanceiro
                   dataInicial={dataInicialMargem}
                   dataFinal={dataFinalMargem}
-                  periodoAtivo={periodoRapidoAtivo}
-                  onDataInicial={(v) => {
-                    setDataInicialMargem(v);
-                    setPeriodoRapidoAtivo('custom');
-                  }}
-                  onDataFinal={(v) => {
-                    setDataFinalMargem(v);
-                    setPeriodoRapidoAtivo('custom');
-                  }}
-                  onPeriodoRapido={aplicarPeriodoRapido}
+                  onDataInicial={setDataInicialMargem}
+                  onDataFinal={setDataFinalMargem}
                 />
               </div>
 
@@ -1079,17 +1038,8 @@ export default function Pedidos() {
                 <RelatorioPeriodoFinanceiro
                   dataInicial={dataInicialRelPed}
                   dataFinal={dataFinalRelPed}
-                  periodoAtivo={periodoRapidoRelPed}
-                  onDataInicial={(v) => {
-                    setDataInicialRelPed(v);
-                    setPeriodoRapidoRelPed('custom');
-                  }}
-                  onDataFinal={(v) => {
-                    setDataFinalRelPed(v);
-                    setPeriodoRapidoRelPed('custom');
-                  }}
-                  onPeriodoRapido={aplicarPeriodoRapidoRelPed}
-                  onQualquerPeriodo={limparPeriodoRelPed}
+                  onDataInicial={setDataInicialRelPed}
+                  onDataFinal={setDataFinalRelPed}
                 />
 
                 <Separator />

@@ -1,10 +1,5 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
-import {
-  RelatorioPeriodoFinanceiro,
-  datasPeriodoRapido,
-  type PeriodoRapidoAtivo,
-  type PeriodoRapidoKey,
-} from "@/components/reports/RelatorioPeriodoFinanceiro";
+import { RelatorioPeriodoFinanceiro } from "@/components/reports/RelatorioPeriodoFinanceiro";
 import { EditarContaFinanceiraDialog } from "@/components/financeiro/EditarContaFinanceiraDialog";
 import { GerarPedidoDePrevisaoDialog } from "@/components/financeiro/GerarPedidoDePrevisaoDialog";
 import AppLayout from "@/components/layout/AppLayout";
@@ -142,15 +137,11 @@ const Financeiro = () => {
   const [relatorioDataInicial, setRelatorioDataInicial] = useState("");
   const [relatorioDataFinal, setRelatorioDataFinal] = useState("");
   const [relatorioStatusFiltro, setRelatorioStatusFiltro] = useState<string>("Todos");
-  const [relatorioClientePeriodoRapido, setRelatorioClientePeriodoRapido] =
-    useState<PeriodoRapidoAtivo>("all");
   const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
   const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState("");
   const [relatorioFornecedorPdfLoading, setRelatorioFornecedorPdfLoading] = useState(false);
   const [relatorioFornecedorDataInicial, setRelatorioFornecedorDataInicial] = useState("");
   const [relatorioFornecedorDataFinal, setRelatorioFornecedorDataFinal] = useState("");
-  const [relatorioFornecedorPeriodoRapido, setRelatorioFornecedorPeriodoRapido] =
-    useState<PeriodoRapidoAtivo>("all");
   const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
     useState<string>("Todos");
   const [relatorioProdutosClienteOpen, setRelatorioProdutosClienteOpen] =
@@ -1786,7 +1777,6 @@ const Financeiro = () => {
               setRelatorioDataInicial("");
               setRelatorioDataFinal("");
               setRelatorioStatusFiltro("Todos");
-              setRelatorioClientePeriodoRapido("all");
               setRelatorioClienteIdSelect(
                 clienteFilterId != null ? String(clienteFilterId) : "",
               );
@@ -1825,26 +1815,8 @@ const Financeiro = () => {
                 <RelatorioPeriodoFinanceiro
                   dataInicial={relatorioDataInicial}
                   dataFinal={relatorioDataFinal}
-                  periodoAtivo={relatorioClientePeriodoRapido}
-                  onDataInicial={(v) => {
-                    setRelatorioDataInicial(v);
-                    setRelatorioClientePeriodoRapido("custom");
-                  }}
-                  onDataFinal={(v) => {
-                    setRelatorioDataFinal(v);
-                    setRelatorioClientePeriodoRapido("custom");
-                  }}
-                  onPeriodoRapido={(key: PeriodoRapidoKey) => {
-                    const { inicial, final } = datasPeriodoRapido(key);
-                    setRelatorioDataInicial(inicial);
-                    setRelatorioDataFinal(final);
-                    setRelatorioClientePeriodoRapido(key);
-                  }}
-                  onQualquerPeriodo={() => {
-                    setRelatorioDataInicial("");
-                    setRelatorioDataFinal("");
-                    setRelatorioClientePeriodoRapido("all");
-                  }}
+                  onDataInicial={setRelatorioDataInicial}
+                  onDataFinal={setRelatorioDataFinal}
                 />
 
                 <Separator />
@@ -2021,7 +1993,6 @@ const Financeiro = () => {
               setRelatorioFornecedorDataInicial("");
               setRelatorioFornecedorDataFinal("");
               setRelatorioFornecedorStatusFiltro("Todos");
-              setRelatorioFornecedorPeriodoRapido("all");
               setRelatorioFornecedorIdSelect(
                 fornecedorFilterId != null ? String(fornecedorFilterId) : "",
               );
@@ -2060,26 +2031,8 @@ const Financeiro = () => {
                 <RelatorioPeriodoFinanceiro
                   dataInicial={relatorioFornecedorDataInicial}
                   dataFinal={relatorioFornecedorDataFinal}
-                  periodoAtivo={relatorioFornecedorPeriodoRapido}
-                  onDataInicial={(v) => {
-                    setRelatorioFornecedorDataInicial(v);
-                    setRelatorioFornecedorPeriodoRapido("custom");
-                  }}
-                  onDataFinal={(v) => {
-                    setRelatorioFornecedorDataFinal(v);
-                    setRelatorioFornecedorPeriodoRapido("custom");
-                  }}
-                  onPeriodoRapido={(key: PeriodoRapidoKey) => {
-                    const { inicial, final } = datasPeriodoRapido(key);
-                    setRelatorioFornecedorDataInicial(inicial);
-                    setRelatorioFornecedorDataFinal(final);
-                    setRelatorioFornecedorPeriodoRapido(key);
-                  }}
-                  onQualquerPeriodo={() => {
-                    setRelatorioFornecedorDataInicial("");
-                    setRelatorioFornecedorDataFinal("");
-                    setRelatorioFornecedorPeriodoRapido("all");
-                  }}
+                  onDataInicial={setRelatorioFornecedorDataInicial}
+                  onDataFinal={setRelatorioFornecedorDataFinal}
                 />
 
                 <Separator />
