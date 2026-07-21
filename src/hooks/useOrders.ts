@@ -145,11 +145,7 @@ export function useOrders() {
 
     if (filters.card_filtro === 'faturamento_venda') {
       ordersList = ordersList.filter(
-        (o) =>
-          o.tipo === 'VENDA' &&
-          (o.status === 'ATENDIDO' ||
-            o.status === 'QUITADO' ||
-            o.status === 'PARCIAL'),
+        (o) => o.tipo === 'VENDA' && o.status !== 'CANCELADO',
       );
     } else if (filters.card_filtro === 'compras_confirmadas') {
       ordersList = ordersList.filter(

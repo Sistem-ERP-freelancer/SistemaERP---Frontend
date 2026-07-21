@@ -523,10 +523,15 @@ const Dashboard = () => {
         (painelRaw.linhaRegistrado as Record<string, unknown>) ??
         {};
       /**
-       * Faturamento = pedidos ATENDIDO (data_pedido no período)
-       *              + receitas Visão Geral (contas RECEBER sem pedido).
+       * Faturamento = mesma receita do Relatório de Margem
+       * (itens de pedidos VENDA não cancelados) + Visão Geral no backend.
+       * Preferimos a margem no funil para bater 1:1 com o PDF.
        */
-      const totalVendasEfetivas = numPainel(linhaReg.vendas);
+      const receitaMargem = Number(
+        Number(margemContribuicao?.totais?.receita ?? 0).toFixed(2),
+      );
+      const totalVendasEfetivas =
+        receitaMargem > 0.009 ? receitaMargem : numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
       const fornecedoresPorTipo = agregadoCentroCusto.items;
@@ -554,14 +559,8 @@ const Dashboard = () => {
 
       const receitaItens = Number(margemContribuicao?.totais?.receita ?? 0);
       const custoItens = Number(margemContribuicao?.totais?.custo_variavel ?? 0);
-      // Custo = Relatório de Margem (limita preco_custo inválido).
-      // Escala se o faturamento (Atendidos + Visão) divergir da receita da margem.
-      const custoProduto =
-        receitaItens > 0.009 && totalVendasEfetivas > 0.009
-          ? Number(
-              (totalVendasEfetivas * (custoItens / receitaItens)).toFixed(2),
-            )
-          : Number(custoItens.toFixed(2));
+      // Custo = mesmo do Relatório de Margem (sem escala).
+      const custoProduto = Number(custoItens.toFixed(2));
       const despesasGeraisFunil = Number(
         (
           (agregadoFunil?.total ?? somaCentroDespesaNoPeriodo) || 0
