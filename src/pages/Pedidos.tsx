@@ -6,13 +6,9 @@ import { OrderStats, type PedidoCardFilterKey } from '@/components/orders/OrderS
 import { OrderViewDialog } from '@/components/orders/OrderViewDialog';
 import {
   RelatorioAcoesFooter,
-  RelatorioCampoFiltro,
-  RelatorioFiltrosGrid,
   RelatorioHubCard,
   RelatorioModalShell,
   RelatorioPedidoCamposSection,
-  RelatorioPeriodoSection,
-  RelatorioResumoFiltrosPreview,
   type RelatorioPedidoCampos,
 } from '@/components/orders/RelatorioModalParts';
 import { Button } from '@/components/ui/button';
@@ -33,7 +29,9 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import {
     Sheet,
     SheetContent,
@@ -49,7 +47,19 @@ import { controleRocaService } from '@/services/controle-roca.service';
 import { pedidosService } from '@/services/pedidos.service';
 import { FiltrosPedidos, Pedido, StatusPedido, TipoPedido } from '@/types/pedido';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Filter, Loader2, Plus, Search, ShoppingCart, Trash2, XCircle } from 'lucide-react';
+import {
+  Calendar,
+  Download,
+  FileText,
+  Filter,
+  Loader2,
+  Plus,
+  Printer,
+  Search,
+  ShoppingCart,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -186,41 +196,6 @@ export default function Pedidos() {
     roca_id: rocaRelPed !== 'all' ? Number(rocaRelPed) : undefined,
     campos: camposRelPed,
   });
-
-  const formatarDataRelatorio = (data: string) => {
-    const [y, m, d] = data.split('-');
-    return `${d}/${m}/${y}`;
-  };
-
-  const labelPeriodoRelatorioPdf = () => {
-    const ini = dataInicialRelPed?.trim();
-    const fim = dataFinalRelPed?.trim();
-    if (ini && fim) return `${formatarDataRelatorio(ini)} a ${formatarDataRelatorio(fim)}`;
-    if (ini || fim) return ini || fim || 'Não informado';
-    return 'Não informado';
-  };
-
-  const labelClienteRelatorioPdf = () => {
-    if (clienteRelPed === 'all') return 'Não informado';
-    return (
-      clientes.find((c) => Number(c.id) === Number(clienteRelPed))?.nome ??
-      `Cliente #${clienteRelPed}`
-    );
-  };
-
-  const labelFornecedorRelatorioPdf = () => {
-    if (fornecedorRelPed === 'all') return 'Não informado';
-    const f = fornecedores.find((x) => Number(x.id) === Number(fornecedorRelPed));
-    return f?.nome_fantasia || f?.nome_razao || `Fornecedor #${fornecedorRelPed}`;
-  };
-
-  const labelRocaRelatorioPdf = () => {
-    if (rocaRelPed === 'all') return 'Não informado';
-    return (
-      rocasFiltro.find((r) => Number(r.id) === Number(rocaRelPed))?.nome ??
-      rotulo.comId(rocaRelPed)
-    );
-  };
 
   const limparPeriodoRelPed = () => {
     setDataInicialRelPed('');
@@ -994,173 +969,359 @@ export default function Pedidos() {
         </Dialog>
 
         <Dialog open={margemDialogOpen} onOpenChange={setMargemDialogOpen}>
-          <RelatorioModalShell
-            icon={FileText}
-            title="Margem de contribuição"
-            description="Defina o período e gere o PDF com receita, custo e margem por produto."
-            footer={
-              <RelatorioAcoesFooter
-                downloading={margemLoadingAction === 'download'}
-                printing={margemLoadingAction === 'print'}
-                disabled={margemLoadingAction !== null}
-                onDownload={async () => {
-                  try {
-                    setMargemLoadingAction('download');
-                    await handleDownloadMargemPdf();
-                  } finally {
-                    setMargemLoadingAction(null);
-                  }
-                }}
-                onPrint={async () => {
-                  try {
-                    setMargemLoadingAction('print');
-                    await pedidosService.printRelatorioMargemContribuicaoPdf(
-                      dataInicialMargem?.trim() || undefined,
-                      dataFinalMargem?.trim() || undefined,
-                    );
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
-                  } finally {
-                    setMargemLoadingAction(null);
-                  }
-                }}
-              />
-            }
-          >
-            <RelatorioPeriodoSection
-              dataInicial={dataInicialMargem}
-              dataFinal={dataFinalMargem}
-              periodoAtivo={periodoRapidoAtivo}
-              onDataInicial={(v) => {
-                setDataInicialMargem(v);
-                setPeriodoRapidoAtivo('custom');
-              }}
-              onDataFinal={(v) => {
-                setDataFinalMargem(v);
-                setPeriodoRapidoAtivo('custom');
-              }}
-              onPeriodoRapido={(key) => aplicarPeriodoRapido(key)}
-            />
-          </RelatorioModalShell>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Margem de contribuição</DialogTitle>
+              <DialogDescription>
+                Defina o período e gere o PDF com receita, custo e margem por produto.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <div className="relative">
+                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
+                          value={dataInicialMargem}
+                          onChange={(e) => {
+                            setDataInicialMargem(e.target.value || '');
+                            setPeriodoRapidoAtivo('custom');
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <div className="relative">
+                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
+                          value={dataFinalMargem}
+                          onChange={(e) => {
+                            setDataFinalMargem(e.target.value || '');
+                            setPeriodoRapidoAtivo('custom');
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(
+                      [
+                        ['hoje', 'Hoje'],
+                        ['ontem', 'Ontem'],
+                        ['7d', 'Últimos 7 dias'],
+                        ['mes_atual', 'Mês atual'],
+                        ['mes_anterior', 'Mês anterior'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        size="sm"
+                        variant={periodoRapidoAtivo === key ? 'default' : 'outline'}
+                        className="h-8 rounded-full px-3.5 text-xs font-medium"
+                        onClick={() => aplicarPeriodoRapido(key)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                <Button
+                  type="button"
+                  variant="relatorioPrimary"
+                  className="flex-1 gap-2"
+                  disabled={margemLoadingAction !== null}
+                  onClick={async () => {
+                    try {
+                      setMargemLoadingAction('download');
+                      await handleDownloadMargemPdf();
+                    } finally {
+                      setMargemLoadingAction(null);
+                    }
+                  }}
+                >
+                  {margemLoadingAction === 'download' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Baixar PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="relatorioSecondary"
+                  className="flex-1 gap-2"
+                  disabled={margemLoadingAction !== null}
+                  onClick={async () => {
+                    try {
+                      setMargemLoadingAction('print');
+                      await pedidosService.printRelatorioMargemContribuicaoPdf(
+                        dataInicialMargem?.trim() || undefined,
+                        dataFinalMargem?.trim() || undefined,
+                      );
+                    } catch (e) {
+                      toast.error(
+                        e instanceof Error ? e.message : 'Erro ao abrir relatório.',
+                      );
+                    } finally {
+                      setMargemLoadingAction(null);
+                    }
+                  }}
+                >
+                  {margemLoadingAction === 'print' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  Abrir para imprimir
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
         </Dialog>
 
         <Dialog open={relatorioPedidosDialogOpen} onOpenChange={setRelatorioPedidosDialogOpen}>
-          <RelatorioModalShell
-            icon={Filter}
-            title="Relatório de pedidos"
-            description="PDF consolidado — um pedido por página."
-            maxWidth="xl"
-            footer={
-              <RelatorioAcoesFooter
-                downloading={relPedLoadingAction === 'download' || loadingRelatorio}
-                printing={relPedLoadingAction === 'print'}
-                disabled={relPedLoadingAction !== null || loadingRelatorio}
-                onDownload={async () => {
-                  try {
-                    setRelPedLoadingAction('download');
-                    await downloadRelatorio(montarFiltrosRelatorioPedidos());
-                  } finally {
-                    setRelPedLoadingAction(null);
-                  }
-                }}
-                onPrint={async () => {
-                  try {
-                    setRelPedLoadingAction('print');
-                    await pedidosService.printRelatorioPDF(montarFiltrosRelatorioPedidos());
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Erro ao abrir relatório.');
-                  } finally {
-                    setRelPedLoadingAction(null);
-                  }
-                }}
-              />
-            }
-          >
-            <div className="space-y-4">
-              <RelatorioPeriodoSection
-                dataInicial={dataInicialRelPed}
-                dataFinal={dataFinalRelPed}
-                periodoAtivo={periodoRapidoRelPed}
-                onDataInicial={(v) => {
-                  setDataInicialRelPed(v);
-                  setPeriodoRapidoRelPed('custom');
-                }}
-                onDataFinal={(v) => {
-                  setDataFinalRelPed(v);
-                  setPeriodoRapidoRelPed('custom');
-                }}
-                onPeriodoRapido={(key) => aplicarPeriodoRapidoRelPed(key)}
-                onQualquerPeriodo={limparPeriodoRelPed}
-              />
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Relatório de pedidos</DialogTitle>
+              <DialogDescription>
+                PDF consolidado — um pedido por página, com itens e totais conforme os filtros
+                selecionados.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="relatorio-pedidos-cliente">Cliente</Label>
+                <Select value={clienteRelPed} onValueChange={setClienteRelPed}>
+                  <SelectTrigger id="relatorio-pedidos-cliente">
+                    <SelectValue placeholder="Todos os clientes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os clientes</SelectItem>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <RelatorioFiltrosGrid>
-                <RelatorioCampoFiltro label="Cliente">
-                  <Select
-                    value={clienteRelPed}
-                    onValueChange={(v) => setClienteRelPed(v)}
+              <div className="space-y-2">
+                <Label htmlFor="relatorio-pedidos-fornecedor">Fornecedor</Label>
+                <Select value={fornecedorRelPed} onValueChange={setFornecedorRelPed}>
+                  <SelectTrigger id="relatorio-pedidos-fornecedor">
+                    <SelectValue placeholder="Todos os fornecedores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os fornecedores</SelectItem>
+                    {fornecedores.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        {f.nome_fantasia || f.nome_razao || `Fornecedor #${f.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="relatorio-pedidos-roca">{rotulo.singular}</Label>
+                <Select value={rocaRelPed} onValueChange={setRocaRelPed}>
+                  <SelectTrigger id="relatorio-pedidos-roca">
+                    <SelectValue placeholder={rotulo.todas} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{rotulo.todas}</SelectItem>
+                    {rocasFiltro.map((roca) => (
+                      <SelectItem key={roca.id} value={String(roca.id)}>
+                        {roca.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                      <div className="relative">
+                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
+                          value={dataInicialRelPed}
+                          onChange={(e) => {
+                            setDataInicialRelPed(e.target.value || '');
+                            setPeriodoRapidoRelPed('custom');
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Data Final</Label>
+                      <div className="relative">
+                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
+                          value={dataFinalRelPed}
+                          onChange={(e) => {
+                            setDataFinalRelPed(e.target.value || '');
+                            setPeriodoRapidoRelPed('custom');
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={periodoRapidoRelPed === 'all' ? 'default' : 'outline'}
+                      className="h-8 rounded-full px-3.5 text-xs font-medium"
+                      onClick={limparPeriodoRelPed}
+                    >
+                      Qualquer período
+                    </Button>
+                    {(
+                      [
+                        ['hoje', 'Hoje'],
+                        ['ontem', 'Ontem'],
+                        ['7d', 'Últimos 7 dias'],
+                        ['mes_atual', 'Mês atual'],
+                        ['mes_anterior', 'Mês anterior'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        size="sm"
+                        variant={periodoRapidoRelPed === key ? 'default' : 'outline'}
+                        className="h-8 rounded-full px-3.5 text-xs font-medium"
+                        onClick={() => aplicarPeriodoRapidoRelPed(key)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">
+                    Conteúdo do relatório
+                  </Label>
+                  <RadioGroup
+                    value={camposRelPed}
+                    onValueChange={(v) => setCamposRelPed(v as RelatorioPedidoCampos)}
+                    className="space-y-2"
                   >
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Todos os clientes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os clientes</SelectItem>
-                      {clientes.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </RelatorioCampoFiltro>
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem
+                        value="completo"
+                        id="relatorio-pedidos-campos-completo"
+                        className="mt-0.5"
+                      />
+                      <Label
+                        htmlFor="relatorio-pedidos-campos-completo"
+                        className="cursor-pointer space-y-0.5 font-normal"
+                      >
+                        <span className="block text-sm font-medium text-[#1A3B70]">
+                          Todos os campos
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          Inclui endereço e contato do cliente ou fornecedor.
+                        </span>
+                      </Label>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem
+                        value="principais"
+                        id="relatorio-pedidos-campos-principais"
+                        className="mt-0.5"
+                      />
+                      <Label
+                        htmlFor="relatorio-pedidos-campos-principais"
+                        className="cursor-pointer space-y-0.5 font-normal"
+                      >
+                        <span className="block text-sm font-medium text-[#1A3B70]">
+                          Apenas campos principais
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          Omite endereço e contato; mantém cliente, detalhes e itens.
+                        </span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              </div>
 
-                <RelatorioCampoFiltro label="Fornecedor">
-                  <Select value={fornecedorRelPed} onValueChange={setFornecedorRelPed}>
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Todos os fornecedores" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os fornecedores</SelectItem>
-                      {fornecedores.map((f) => (
-                        <SelectItem key={f.id} value={String(f.id)}>
-                          {f.nome_fantasia || f.nome_razao || `Fornecedor #${f.id}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </RelatorioCampoFiltro>
-
-                <RelatorioCampoFiltro label={rotulo.singular} className="sm:col-span-2">
-                  <Select value={rocaRelPed} onValueChange={setRocaRelPed}>
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder={rotulo.todas} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{rotulo.todas}</SelectItem>
-                      {rocasFiltro.map((roca) => (
-                        <SelectItem key={roca.id} value={String(roca.id)}>
-                          {roca.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </RelatorioCampoFiltro>
-              </RelatorioFiltrosGrid>
-
-              <RelatorioPedidoCamposSection
-                value={camposRelPed}
-                onChange={setCamposRelPed}
-              />
-
-              <RelatorioResumoFiltrosPreview
-                linhas={[
-                  { label: 'Período', valor: labelPeriodoRelatorioPdf() },
-                  { label: 'Cliente', valor: labelClienteRelatorioPdf() },
-                  { label: 'Fornecedor', valor: labelFornecedorRelatorioPdf() },
-                  { label: rotulo.singular, valor: labelRocaRelatorioPdf() },
-                ]}
-              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                <Button
+                  type="button"
+                  variant="relatorioPrimary"
+                  className="flex-1 gap-2"
+                  disabled={relPedLoadingAction !== null || loadingRelatorio}
+                  onClick={async () => {
+                    try {
+                      setRelPedLoadingAction('download');
+                      await downloadRelatorio(montarFiltrosRelatorioPedidos());
+                    } finally {
+                      setRelPedLoadingAction(null);
+                    }
+                  }}
+                >
+                  {relPedLoadingAction === 'download' || loadingRelatorio ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Baixar PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="relatorioSecondary"
+                  className="flex-1 gap-2"
+                  disabled={relPedLoadingAction !== null || loadingRelatorio}
+                  onClick={async () => {
+                    try {
+                      setRelPedLoadingAction('print');
+                      await pedidosService.printRelatorioPDF(montarFiltrosRelatorioPedidos());
+                    } catch (e) {
+                      toast.error(
+                        e instanceof Error ? e.message : 'Erro ao abrir relatório.',
+                      );
+                    } finally {
+                      setRelPedLoadingAction(null);
+                    }
+                  }}
+                >
+                  {relPedLoadingAction === 'print' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  Abrir para imprimir
+                </Button>
+              </div>
             </div>
-          </RelatorioModalShell>
+          </DialogContent>
         </Dialog>
 
         <Dialog
