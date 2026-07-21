@@ -23,7 +23,6 @@ import {
   type ApiCentroCustoDespesa,
 } from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
-import { estoqueService } from "@/services/estoque.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
@@ -498,7 +497,7 @@ const Dashboard = () => {
             ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
           };
 
-      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao, agregadoFunil, faturamentoSaidas] =
+      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao, agregadoFunil] =
         await Promise.all([
           financeiroService.getDashboardUnificado(paramsDashboard),
           agregarCentroCustoParaDre(filtrosCentroCusto),
@@ -512,12 +511,6 @@ const Dashboard = () => {
           parametrosDre.semRecorteData
             ? agregarCentroCustoParaDre(filtrosCentroCustoFunil)
             : Promise.resolve(null),
-          estoqueService
-            .getFaturamentoSaidasVenda({
-              data_inicial: periodoFunil.data_inicial,
-              data_final: periodoFunil.data_final,
-            })
-            .catch(() => null),
         ]);
 
       const resumoRaw = resumoFinanceiroMes as Record<string, unknown>;
@@ -530,13 +523,10 @@ const Dashboard = () => {
         (painelRaw.linhaRegistrado as Record<string, unknown>) ??
         {};
       /**
-       * Faturamento = saídas de estoque motivo Venda no período
-       * (mesmo número do Relatório de Movimentações: Saída + Venda).
+       * Faturamento = pedidos ATENDIDO (data_pedido no período)
+       *              + receitas Visão Geral (contas RECEBER sem pedido).
        */
-      const totalVendasEfetivas =
-        faturamentoSaidas != null
-          ? Number(Number(faturamentoSaidas.faturamento || 0).toFixed(2))
-          : numPainel(linhaReg.vendas);
+      const totalVendasEfetivas = numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
       const fornecedoresPorTipo = agregadoCentroCusto.items;
@@ -564,8 +554,8 @@ const Dashboard = () => {
 
       const receitaItens = Number(margemContribuicao?.totais?.receita ?? 0);
       const custoItens = Number(margemContribuicao?.totais?.custo_variavel ?? 0);
-      // Custo = mesma base do Relatório de Margem (já limita preco_custo absurdo).
-      // Se o faturamento (saídas) divergir da receita da margem, escala na mesma proporção.
+      // Custo = Relatório de Margem (limita preco_custo inválido).
+      // Escala se o faturamento (Atendidos + Visão) divergir da receita da margem.
       const custoProduto =
         receitaItens > 0.009 && totalVendasEfetivas > 0.009
           ? Number(

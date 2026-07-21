@@ -9,7 +9,7 @@ import {
   type ResumoHeroPedidos,
 } from '@/lib/pedidos-stats';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
-import { estoqueService } from '@/services/estoque.service';
+import { financeiroService } from '@/services/financeiro.service';
 import { pedidosService } from '@/services/pedidos.service';
 import type { FiltrosPedidos } from '@/types/pedido';
 import { useQuery } from '@tanstack/react-query';
@@ -44,6 +44,11 @@ interface OrderStatsProps {
   temFiltrosListagemAtivos?: boolean;
 }
 
+function numPainel(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Number(n.toFixed(2)) : 0;
+}
+
 export function OrderStats({
   tipoFiltro,
   variant = 'full',
@@ -76,10 +81,16 @@ export function OrderStats({
     [filtrosParaCards.data_inicial, filtrosParaCards.data_final],
   );
 
-  /** Faturamento oficial = saídas de estoque motivo Venda (bate com o relatório). */
-  const { data: faturamentoSaidas, isLoading: isLoadingFaturamento } = useQuery({
-    queryKey: ['estoque', 'faturamento-saidas-venda', periodoFaturamento],
-    queryFn: () => estoqueService.getFaturamentoSaidasVenda(periodoFaturamento),
+  /** Faturamento oficial = pedidos Atendidos + receitas Visão Geral. */
+  const { data: resumoFinanceiro, isLoading: isLoadingFaturamento } = useQuery({
+    queryKey: ['financeiro', 'faturamento-oficial', periodoFaturamento],
+    queryFn: () =>
+      financeiroService.getDashboardUnificado({
+        ...periodoFaturamento,
+        ...(filtrosParaCards.roca_id != null
+          ? { roca_id: filtrosParaCards.roca_id }
+          : {}),
+      }),
     staleTime: 30000,
   });
 
@@ -100,20 +111,35 @@ export function OrderStats({
 
   const resumoBase = resumoFiltrado ?? dashboard;
 
+  const faturamentoOficial = useMemo(() => {
+    if (!resumoFinanceiro) return null;
+    const raw = resumoFinanceiro as Record<string, unknown>;
+    const receber = (raw.contas_receber as Record<string, unknown>) ?? {};
+    const painel =
+      (raw.painel_acompanhamento as Record<string, unknown>) ??
+      (raw.painelAcompanhamento as Record<string, unknown>) ??
+      {};
+    const linha =
+      (painel.linha_registrado as Record<string, unknown>) ??
+      (painel.linhaRegistrado as Record<string, unknown>) ??
+      {};
+    const valor =
+      numPainel(receber.receita_mes) || numPainel(linha.vendas);
+    return valor;
+  }, [resumoFinanceiro]);
+
   const resumo = useMemo(() => {
     if (!resumoBase) return resumoBase;
-    if (!faturamentoSaidas) return resumoBase;
+    if (faturamentoOficial == null) return resumoBase;
     return {
       ...resumoBase,
       faturamento_confirmado_venda: {
-        valor: Number(Number(faturamentoSaidas.faturamento || 0).toFixed(2)),
+        valor: faturamentoOficial,
         quantidade:
-          Number(faturamentoSaidas.registros || 0) ||
-          resumoBase.faturamento_confirmado_venda?.quantidade ||
-          0,
+          resumoBase.faturamento_confirmado_venda?.quantidade || 0,
       },
     };
-  }, [resumoBase, faturamentoSaidas]);
+  }, [resumoBase, faturamentoOficial]);
 
   const isLoading =
     (temFiltrosListagemAtivos ? isLoadingFiltrados : isLoadingDashboard) ||
@@ -123,8 +149,6 @@ export function OrderStats({
     formatCurrency(normalizeCurrency(value, false));
 
   const qtd = (n: number) => `${n} pedido${n === 1 ? '' : 's'}`;
-  const qtdMov = (n: number) =>
-    `${n} movimentaç${n === 1 ? 'ão' : 'ões'}`;
 
   if (variant === 'hero') {
     const tab = tipoFiltro === 'COMPRA' || tipoFiltro === 'VENDA' ? tipoFiltro : 'all';
@@ -138,7 +162,7 @@ export function OrderStats({
 
     const cardFaturamentoVenda: ModuleStatCardItem = {
       key: 'faturamento_venda',
-      label: `Faturamento (Vendas) · ${qtdMov(qtdFatVenda)}`,
+      label: `Faturamento (Vendas) · ${qtd(qtdFatVenda)}`,
       value: isLoading
         ? '—'
         : formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
@@ -252,9 +276,9 @@ export function OrderStats({
     {
       label: 'Faturamento Confirmado (Vendas)',
       value: formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
-      subtitle: `${resumo?.faturamento_confirmado_venda?.quantidade || 0} movimentações`,
+      subtitle: `${resumo?.faturamento_confirmado_venda?.quantidade || 0} pedidos`,
       description:
-        'Saídas de estoque com motivo Venda (mesmo total do Relatório de Movimentações)',
+        'Pedidos Atendidos + receitas lançadas na Visão Geral',
       icon: DollarSign,
       color: 'text-green-600 dark:text-green-400',
       bgColor: 'bg-green-100 dark:bg-green-900/20',
