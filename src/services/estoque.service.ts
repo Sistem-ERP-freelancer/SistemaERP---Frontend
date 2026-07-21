@@ -244,18 +244,28 @@ class EstoqueService {
   }
 
   /**
-   * Métricas de estoque para o DRE: atual + fim do mês anterior ao `mes` (YYYY-MM).
+   * Posição de estoque: atual + início/fim do período (data_inicial / data_final).
    */
-  async getMetricasDre(params?: { mes?: string }): Promise<{
+  async getMetricasDre(params?: {
+    mes?: string;
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<{
     atual: { quantidade: number; valor: number };
-    fimMesAnterior: { data: string; quantidade: number; valor: number };
+    inicioPeriodo: { data: string; quantidade: number; valor: number };
+    fimPeriodo: { data: string; quantidade: number; valor: number };
+    fimMesAnterior?: { data: string; quantidade: number; valor: number };
   }> {
     const q = new URLSearchParams();
     if (params?.mes?.trim()) q.append('mes', params.mes.trim());
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
     const query = q.toString();
     return apiClient.get<{
       atual: { quantidade: number; valor: number };
-      fimMesAnterior: { data: string; quantidade: number; valor: number };
+      inicioPeriodo: { data: string; quantidade: number; valor: number };
+      fimPeriodo: { data: string; quantidade: number; valor: number };
+      fimMesAnterior?: { data: string; quantidade: number; valor: number };
     }>(`/estoque/metricas-dre${query ? `?${query}` : ''}`);
   }
 

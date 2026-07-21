@@ -230,6 +230,14 @@ const Dashboard = () => {
   const [dreMesAnoFiltro, setDreMesAnoFiltro] = useState<string>(() =>
     mesAnoAtualLocal(),
   );
+  /** Período do bloco Posição de Estoque (De / Até). */
+  const [estoqueDataInicial, setEstoqueDataInicial] = useState(() => {
+    const [ano, mes] = mesAnoAtualLocal().split("-").map(Number);
+    return formatISODateLocal(new Date(ano, mes - 1, 1));
+  });
+  const [estoqueDataFinal, setEstoqueDataFinal] = useState(() =>
+    formatISODateLocal(new Date()),
+  );
   const [drePdfLoading, setDrePdfLoading] = useState<"download" | "print" | null>(
     null,
   );
@@ -684,19 +692,25 @@ const Dashboard = () => {
     };
   }, [dreDadosReais]);
 
-  const mesEstoqueDre = useMemo(() => {
-    const m = dreMesAnoFiltro?.trim();
-    if (m) return m;
-    return mesAnoAtualLocal();
-  }, [dreMesAnoFiltro]);
-
   const { data: metricasEstoqueDre, isLoading: loadingMetricasEstoque } =
     useQuery({
-      queryKey: ["dashboard", "dre-estoque", mesEstoqueDre],
-      queryFn: () => estoqueService.getMetricasDre({ mes: mesEstoqueDre }),
+      queryKey: [
+        "dashboard",
+        "posicao-estoque",
+        estoqueDataInicial,
+        estoqueDataFinal,
+      ],
+      queryFn: () =>
+        estoqueService.getMetricasDre({
+          data_inicial: estoqueDataInicial,
+          data_final: estoqueDataFinal,
+        }),
       staleTime: 0,
       retry: false,
-      enabled: acessoFinanceiro,
+      enabled:
+        acessoFinanceiro &&
+        !!estoqueDataInicial?.trim() &&
+        !!estoqueDataFinal?.trim(),
     });
 
   const rocaDreNome = useMemo(() => {
@@ -988,7 +1002,7 @@ const Dashboard = () => {
         </motion.div>
         </DashboardSectionErrorBoundary>
 
-        <DashboardSectionErrorBoundary label="DRE estoque">
+        <DashboardSectionErrorBoundary label="Posição de estoque">
         <motion.div
           initial={false}
           animate={{ opacity: 1, y: 0 }}
@@ -997,17 +1011,19 @@ const Dashboard = () => {
           <DreEstoqueMetricas
             atualQuantidade={metricasEstoqueDre?.atual?.quantidade ?? 0}
             atualValor={metricasEstoqueDre?.atual?.valor ?? 0}
-            fimMesAnteriorData={metricasEstoqueDre?.fimMesAnterior?.data}
-            fimMesAnteriorQuantidade={
-              metricasEstoqueDre?.fimMesAnterior?.quantidade ?? 0
+            inicioData={metricasEstoqueDre?.inicioPeriodo?.data}
+            inicioQuantidade={
+              metricasEstoqueDre?.inicioPeriodo?.quantidade ?? 0
             }
-            fimMesAnteriorValor={
-              metricasEstoqueDre?.fimMesAnterior?.valor ?? 0
-            }
+            inicioValor={metricasEstoqueDre?.inicioPeriodo?.valor ?? 0}
+            fimData={metricasEstoqueDre?.fimPeriodo?.data}
+            fimQuantidade={metricasEstoqueDre?.fimPeriodo?.quantidade ?? 0}
+            fimValor={metricasEstoqueDre?.fimPeriodo?.valor ?? 0}
             loading={loadingMetricasEstoque}
-            mesAno={dreMesAnoFiltro}
-            onMesAnoChange={setDreMesAnoFiltro}
-            periodoLabel={parametrosDre.rotuloPeriodo}
+            dataInicial={estoqueDataInicial}
+            dataFinal={estoqueDataFinal}
+            onDataInicial={setEstoqueDataInicial}
+            onDataFinal={setEstoqueDataFinal}
           />
         </motion.div>
         </DashboardSectionErrorBoundary>

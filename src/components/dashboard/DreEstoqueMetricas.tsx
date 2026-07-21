@@ -1,24 +1,23 @@
 import { cn, formatCurrency } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Calendar,
-  Loader2,
-  Package,
-  Wallet,
-} from 'lucide-react';
+import { Calendar, Loader2, Package, Wallet } from 'lucide-react';
 
-export type DreEstoqueMetricasProps = {
+export type PosicaoEstoqueMetricasProps = {
   atualQuantidade: number;
   atualValor: number;
-  fimMesAnteriorData?: string;
-  fimMesAnteriorQuantidade: number;
-  fimMesAnteriorValor: number;
+  inicioData?: string;
+  inicioQuantidade: number;
+  inicioValor: number;
+  fimData?: string;
+  fimQuantidade: number;
+  fimValor: number;
   loading?: boolean;
   className?: string;
-  /** YYYY-MM; vazio = mês calendário atual para o “mês anterior”. */
-  mesAno?: string;
-  onMesAnoChange?: (value: string) => void;
-  periodoLabel?: string;
+  dataInicial: string;
+  dataFinal: string;
+  onDataInicial: (value: string) => void;
+  onDataFinal: (value: string) => void;
 };
 
 function fmtQtd(n: number): string {
@@ -34,24 +33,71 @@ function fmtDataBr(iso?: string): string {
   return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
-export function DreEstoqueMetricas({
+/** @deprecated use PosicaoEstoqueMetricas */
+export type DreEstoqueMetricasProps = PosicaoEstoqueMetricasProps;
+
+export function PosicaoEstoqueMetricas({
   atualQuantidade,
   atualValor,
-  fimMesAnteriorData,
-  fimMesAnteriorQuantidade,
-  fimMesAnteriorValor,
+  inicioData,
+  inicioQuantidade,
+  inicioValor,
+  fimData,
+  fimQuantidade,
+  fimValor,
   loading = false,
   className,
-  mesAno = '',
-  onMesAnoChange,
-  periodoLabel,
-}: DreEstoqueMetricasProps) {
+  dataInicial,
+  dataFinal,
+  onDataInicial,
+  onDataFinal,
+}: PosicaoEstoqueMetricasProps) {
   const cards = [
+    {
+      key: 'qtd-inicio',
+      label: 'Qtd. no início do período',
+      value: loading ? '…' : fmtQtd(inicioQuantidade),
+      hint: inicioData
+        ? `Posição em ${fmtDataBr(inicioData)}`
+        : 'Estoque na data inicial',
+      Icon: Package,
+      tone: 'slate' as const,
+    },
+    {
+      key: 'valor-inicio',
+      label: 'Valor no início do período',
+      value: loading ? '…' : formatCurrency(inicioValor),
+      hint: inicioData
+        ? `Em ${fmtDataBr(inicioData)} × custo atual`
+        : 'Quantidade × preço de custo',
+      Icon: Wallet,
+      tone: 'amber' as const,
+    },
+    {
+      key: 'qtd-fim',
+      label: 'Qtd. no fim do período',
+      value: loading ? '…' : fmtQtd(fimQuantidade),
+      hint: fimData
+        ? `Posição em ${fmtDataBr(fimData)}`
+        : 'Estoque na data final',
+      Icon: Package,
+      tone: 'sky' as const,
+    },
+    {
+      key: 'valor-fim',
+      label: 'Valor no fim do período',
+      value: loading ? '…' : formatCurrency(fimValor),
+      hint: fimData
+        ? `Em ${fmtDataBr(fimData)} × custo atual`
+        : 'Quantidade × preço de custo',
+      Icon: Wallet,
+      tone: 'emerald' as const,
+    },
     {
       key: 'qtd-atual',
       label: 'Qtd. estoque atual',
       value: loading ? '…' : fmtQtd(atualQuantidade),
-      hint: 'Soma do estoque dos produtos ativos',
+      hint: 'Soma do estoque dos produtos ativos (hoje)',
       Icon: Package,
       tone: 'sky' as const,
     },
@@ -59,29 +105,9 @@ export function DreEstoqueMetricas({
       key: 'valor-atual',
       label: 'Valor estoque atual',
       value: loading ? '…' : formatCurrency(atualValor),
-      hint: 'Quantidade × preço de custo',
+      hint: 'Quantidade atual × preço de custo',
       Icon: Wallet,
       tone: 'emerald' as const,
-    },
-    {
-      key: 'qtd-anterior',
-      label: 'Qtd. fim mês anterior',
-      value: loading ? '…' : fmtQtd(fimMesAnteriorQuantidade),
-      hint: fimMesAnteriorData
-        ? `Posição em ${fmtDataBr(fimMesAnteriorData)}`
-        : 'Último dia do mês anterior',
-      Icon: Package,
-      tone: 'slate' as const,
-    },
-    {
-      key: 'valor-anterior',
-      label: 'Valor fim mês anterior',
-      value: loading ? '…' : formatCurrency(fimMesAnteriorValor),
-      hint: fimMesAnteriorData
-        ? `Em ${fmtDataBr(fimMesAnteriorData)} × custo atual`
-        : 'Quantidade × preço de custo',
-      Icon: Wallet,
-      tone: 'amber' as const,
     },
   ];
 
@@ -122,43 +148,54 @@ export function DreEstoqueMetricas({
             Estoque
           </span>
           <h3 className="text-xl font-bold tracking-tight text-[#003366] dark:text-foreground sm:text-2xl">
-            DRE — Estoque
+            Posição de Estoque
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
-            Quantidade e valor do estoque atual, e a posição no último dia do
-            mês anterior ao período selecionado.
-            {periodoLabel ? (
-              <>
-                {' '}
-                Período DRE:{' '}
-                <span className="font-medium text-slate-600 dark:text-foreground">
-                  {periodoLabel}
-                </span>
-                .
-              </>
-            ) : null}
+            Quantidade e valor no início e no fim do período selecionado, além
+            do estoque atual (hoje). Valor = quantidade × preço de custo.
           </p>
         </div>
-        {onMesAnoChange ? (
-          <div className="flex min-w-[12rem] flex-col gap-1">
-            <Label
-              htmlFor="dre-estoque-mes-ano"
-              className="text-xs font-medium text-slate-500"
-            >
-              Mês
-            </Label>
-            <div className="relative">
-              <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                id="dre-estoque-mes-ano"
-                type="month"
-                value={mesAno}
-                onChange={(e) => onMesAnoChange(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-[#003366] shadow-sm outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100 dark:border-border dark:bg-background dark:text-foreground"
-              />
+        <div className="w-full shrink-0 space-y-2 sm:w-auto sm:min-w-[18rem]">
+          <Label className="text-xs font-medium text-slate-500">Período</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label
+                htmlFor="posicao-estoque-de"
+                className="text-[11px] text-muted-foreground"
+              >
+                De
+              </Label>
+              <div className="relative">
+                <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Input
+                  id="posicao-estoque-de"
+                  type="date"
+                  className="h-10 rounded-lg border-slate-200 bg-white pl-8 text-sm dark:border-border dark:bg-background"
+                  value={dataInicial}
+                  onChange={(e) => onDataInicial(e.target.value || '')}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label
+                htmlFor="posicao-estoque-ate"
+                className="text-[11px] text-muted-foreground"
+              >
+                Até
+              </Label>
+              <div className="relative">
+                <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Input
+                  id="posicao-estoque-ate"
+                  type="date"
+                  className="h-10 rounded-lg border-slate-200 bg-white pl-8 text-sm dark:border-border dark:bg-background"
+                  value={dataFinal}
+                  onChange={(e) => onDataFinal(e.target.value || '')}
+                />
+              </div>
             </div>
           </div>
-        ) : null}
+        </div>
       </div>
 
       {loading ? (
@@ -167,16 +204,13 @@ export function DreEstoqueMetricas({
           Carregando estoque…
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => {
             const t = toneClass[card.tone];
             return (
               <div
                 key={card.key}
-                className={cn(
-                  'rounded-xl border p-4 shadow-sm',
-                  t.wrap,
-                )}
+                className={cn('rounded-xl border p-4 shadow-sm', t.wrap)}
               >
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-muted-foreground">
@@ -211,4 +245,6 @@ export function DreEstoqueMetricas({
   );
 }
 
-export default DreEstoqueMetricas;
+/** Alias para imports antigos. */
+export const DreEstoqueMetricas = PosicaoEstoqueMetricas;
+export default PosicaoEstoqueMetricas;
