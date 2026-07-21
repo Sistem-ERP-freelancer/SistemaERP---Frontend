@@ -244,6 +244,22 @@ class EstoqueService {
   }
 
   /**
+   * Métricas de estoque para o DRE: atual + fim do mês anterior ao `mes` (YYYY-MM).
+   */
+  async getMetricasDre(params?: { mes?: string }): Promise<{
+    atual: { quantidade: number; valor: number };
+    fimMesAnterior: { data: string; quantidade: number; valor: number };
+  }> {
+    const q = new URLSearchParams();
+    if (params?.mes?.trim()) q.append('mes', params.mes.trim());
+    const query = q.toString();
+    return apiClient.get<{
+      atual: { quantidade: number; valor: number };
+      fimMesAnterior: { data: string; quantidade: number; valor: number };
+    }>(`/estoque/metricas-dre${query ? `?${query}` : ''}`);
+  }
+
+  /**
    * Download do PDF do Relatório de Movimentações (com filtros).
    */
   async downloadRelatorioMovimentacoesPdf(

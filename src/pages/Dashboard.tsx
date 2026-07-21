@@ -1,5 +1,6 @@
 import AppLayout from "@/components/layout/AppLayout";
 import { DashboardSectionErrorBoundary } from "@/components/dashboard/DashboardSectionErrorBoundary";
+import { DreEstoqueMetricas } from "@/components/dashboard/DreEstoqueMetricas";
 import { DreFaturamentoLucro } from "@/components/dashboard/DreFaturamentoLucro";
 import { ModuleStatCard } from "@/components/layout/ModuleStatCards";
 import { OrderStats } from "@/components/orders/OrderStats";
@@ -23,6 +24,7 @@ import {
   type ApiCentroCustoDespesa,
 } from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
+import { estoqueService } from "@/services/estoque.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
@@ -682,6 +684,21 @@ const Dashboard = () => {
     };
   }, [dreDadosReais]);
 
+  const mesEstoqueDre = useMemo(() => {
+    const m = dreMesAnoFiltro?.trim();
+    if (m) return m;
+    return mesAnoAtualLocal();
+  }, [dreMesAnoFiltro]);
+
+  const { data: metricasEstoqueDre, isLoading: loadingMetricasEstoque } =
+    useQuery({
+      queryKey: ["dashboard", "dre-estoque", mesEstoqueDre],
+      queryFn: () => estoqueService.getMetricasDre({ mes: mesEstoqueDre }),
+      staleTime: 0,
+      retry: false,
+      enabled: acessoFinanceiro,
+    });
+
   const rocaDreNome = useMemo(() => {
     if (!rocaIdFiltro) return undefined;
     const roca = rocasOpcoes.find((r) => r.id === rocaIdFiltro);
@@ -964,6 +981,30 @@ const Dashboard = () => {
             despesasGerais={dreFaturamentoLucro.despesasGerais}
             lucroLiquido={dreFaturamentoLucro.lucroLiquido}
             loading={loadingDre}
+            mesAno={dreMesAnoFiltro}
+            onMesAnoChange={setDreMesAnoFiltro}
+            periodoLabel={parametrosDre.rotuloPeriodo}
+          />
+        </motion.div>
+        </DashboardSectionErrorBoundary>
+
+        <DashboardSectionErrorBoundary label="DRE estoque">
+        <motion.div
+          initial={false}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <DreEstoqueMetricas
+            atualQuantidade={metricasEstoqueDre?.atual?.quantidade ?? 0}
+            atualValor={metricasEstoqueDre?.atual?.valor ?? 0}
+            fimMesAnteriorData={metricasEstoqueDre?.fimMesAnterior?.data}
+            fimMesAnteriorQuantidade={
+              metricasEstoqueDre?.fimMesAnterior?.quantidade ?? 0
+            }
+            fimMesAnteriorValor={
+              metricasEstoqueDre?.fimMesAnterior?.valor ?? 0
+            }
+            loading={loadingMetricasEstoque}
             mesAno={dreMesAnoFiltro}
             onMesAnoChange={setDreMesAnoFiltro}
             periodoLabel={parametrosDre.rotuloPeriodo}
