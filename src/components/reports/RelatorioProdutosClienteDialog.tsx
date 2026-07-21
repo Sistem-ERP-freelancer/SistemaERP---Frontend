@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -17,11 +16,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  RelatorioPeriodoFinanceiro,
+  datasPeriodoRapido,
+  type PeriodoRapidoAtivo,
+  type PeriodoRapidoKey,
+} from "@/components/reports/RelatorioPeriodoFinanceiro";
 import type { StatusFiltroProdutosCliente } from "@/lib/relatorio-produtos-cliente";
 import type { Cliente } from "@/services/clientes.service";
 import { pedidosService } from "@/services/pedidos.service";
 import {
-  Calendar,
   Circle,
   Download,
   Loader2,
@@ -57,6 +61,8 @@ export function RelatorioProdutosClienteDialog({
   const [clienteId, setClienteId] = useState("");
   const [dataInicial, setDataInicial] = useState(defInicio);
   const [dataFinal, setDataFinal] = useState(defFim);
+  const [periodoRapido, setPeriodoRapido] =
+    useState<PeriodoRapidoAtivo>("mes_atual");
   const [statusFiltro, setStatusFiltro] =
     useState<StatusFiltroProdutosCliente>("Todos");
   const [pdfLoading, setPdfLoading] = useState<"download" | "print" | null>(
@@ -67,6 +73,7 @@ export function RelatorioProdutosClienteDialog({
     if (!open) return;
     setDataInicial(defInicio);
     setDataFinal(defFim);
+    setPeriodoRapido("mes_atual");
     setStatusFiltro("Todos");
     setClienteId(
       defaultClienteId != null && defaultClienteId > 0
@@ -150,35 +157,25 @@ export function RelatorioProdutosClienteDialog({
           </div>
 
           <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                      type="date"
-                      className="pl-10 rounded-lg border-border/80 bg-muted/50"
-                      value={dataInicial}
-                      onChange={(e) => setDataInicial(e.target.value || "")}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Data Final</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                    <Input
-                      type="date"
-                      className="pl-10 rounded-lg border-border/80 bg-muted/50"
-                      value={dataFinal}
-                      onChange={(e) => setDataFinal(e.target.value || "")}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RelatorioPeriodoFinanceiro
+              dataInicial={dataInicial}
+              dataFinal={dataFinal}
+              periodoAtivo={periodoRapido}
+              onDataInicial={(v) => {
+                setDataInicial(v);
+                setPeriodoRapido("custom");
+              }}
+              onDataFinal={(v) => {
+                setDataFinal(v);
+                setPeriodoRapido("custom");
+              }}
+              onPeriodoRapido={(key: PeriodoRapidoKey) => {
+                const { inicial, final } = datasPeriodoRapido(key);
+                setDataInicial(inicial);
+                setDataFinal(final);
+                setPeriodoRapido(key);
+              }}
+            />
 
             <Separator />
 

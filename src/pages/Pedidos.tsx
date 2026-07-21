@@ -11,6 +11,11 @@ import {
   RelatorioPedidoCamposSection,
   type RelatorioPedidoCampos,
 } from '@/components/orders/RelatorioModalParts';
+import {
+  RelatorioPeriodoFinanceiro,
+  datasPeriodoRapido,
+  type PeriodoRapidoKey,
+} from '@/components/reports/RelatorioPeriodoFinanceiro';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -154,33 +159,8 @@ export default function Pedidos() {
   const mesAnteriorInicio = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); d.setDate(1); return toYMD(d); })();
   const mesAnteriorFim = (() => { const d = new Date(); d.setDate(0); return toYMD(d); })();
 
-  const aplicarPeriodoRapidoRelPed = (
-    tipo: 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior',
-  ) => {
-    let inicial: string;
-    let final: string;
-    switch (tipo) {
-      case 'hoje':
-        inicial = hoje;
-        final = hoje;
-        break;
-      case 'ontem':
-        inicial = ontem;
-        final = ontem;
-        break;
-      case '7d':
-        inicial = ultimos7;
-        final = hoje;
-        break;
-      case 'mes_atual':
-        inicial = mesAtualInicio;
-        final = hoje;
-        break;
-      case 'mes_anterior':
-        inicial = mesAnteriorInicio;
-        final = mesAnteriorFim;
-        break;
-    }
+  const aplicarPeriodoRapidoRelPed = (tipo: PeriodoRapidoKey) => {
+    const { inicial, final } = datasPeriodoRapido(tipo);
     setDataInicialRelPed(inicial);
     setDataFinalRelPed(final);
     setPeriodoRapidoRelPed(tipo);
@@ -274,31 +254,8 @@ export default function Pedidos() {
     }
   };
 
-  const aplicarPeriodoRapido = (tipo: 'hoje' | 'ontem' | '7d' | 'mes_atual' | 'mes_anterior') => {
-    let inicial: string;
-    let final: string;
-    switch (tipo) {
-      case 'hoje':
-        inicial = hoje;
-        final = hoje;
-        break;
-      case 'ontem':
-        inicial = ontem;
-        final = ontem;
-        break;
-      case '7d':
-        inicial = ultimos7;
-        final = hoje;
-        break;
-      case 'mes_atual':
-        inicial = mesAtualInicio;
-        final = hoje;
-        break;
-      case 'mes_anterior':
-        inicial = mesAnteriorInicio;
-        final = mesAnteriorFim;
-        break;
-    }
+  const aplicarPeriodoRapido = (tipo: PeriodoRapidoKey) => {
+    const { inicial, final } = datasPeriodoRapido(tipo);
     setDataInicialMargem(inicial);
     setDataFinalMargem(final);
     setPeriodoRapidoAtivo(tipo);
@@ -986,63 +943,20 @@ export default function Pedidos() {
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                      <div className="relative">
-                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          type="date"
-                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
-                          value={dataInicialMargem}
-                          onChange={(e) => {
-                            setDataInicialMargem(e.target.value || '');
-                            setPeriodoRapidoAtivo('custom');
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Final</Label>
-                      <div className="relative">
-                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          type="date"
-                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
-                          value={dataFinalMargem}
-                          onChange={(e) => {
-                            setDataFinalMargem(e.target.value || '');
-                            setPeriodoRapidoAtivo('custom');
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {(
-                      [
-                        ['hoje', 'Hoje'],
-                        ['ontem', 'Ontem'],
-                        ['7d', 'Últimos 7 dias'],
-                        ['mes_atual', 'Mês atual'],
-                        ['mes_anterior', 'Mês anterior'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <Button
-                        key={key}
-                        type="button"
-                        size="sm"
-                        variant={periodoRapidoAtivo === key ? 'default' : 'outline'}
-                        className="h-8 rounded-full px-3.5 text-xs font-medium"
-                        onClick={() => aplicarPeriodoRapido(key)}
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                <RelatorioPeriodoFinanceiro
+                  dataInicial={dataInicialMargem}
+                  dataFinal={dataFinalMargem}
+                  periodoAtivo={periodoRapidoAtivo}
+                  onDataInicial={(v) => {
+                    setDataInicialMargem(v);
+                    setPeriodoRapidoAtivo('custom');
+                  }}
+                  onDataFinal={(v) => {
+                    setDataFinalMargem(v);
+                    setPeriodoRapidoAtivo('custom');
+                  }}
+                  onPeriodoRapido={aplicarPeriodoRapido}
+                />
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -1162,72 +1076,21 @@ export default function Pedidos() {
               </div>
 
               <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                      <div className="relative">
-                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          type="date"
-                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
-                          value={dataInicialRelPed}
-                          onChange={(e) => {
-                            setDataInicialRelPed(e.target.value || '');
-                            setPeriodoRapidoRelPed('custom');
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Final</Label>
-                      <div className="relative">
-                        <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          type="date"
-                          className="rounded-lg border-border/80 bg-muted/50 pl-10"
-                          value={dataFinalRelPed}
-                          onChange={(e) => {
-                            setDataFinalRelPed(e.target.value || '');
-                            setPeriodoRapidoRelPed('custom');
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={periodoRapidoRelPed === 'all' ? 'default' : 'outline'}
-                      className="h-8 rounded-full px-3.5 text-xs font-medium"
-                      onClick={limparPeriodoRelPed}
-                    >
-                      Qualquer período
-                    </Button>
-                    {(
-                      [
-                        ['hoje', 'Hoje'],
-                        ['ontem', 'Ontem'],
-                        ['7d', 'Últimos 7 dias'],
-                        ['mes_atual', 'Mês atual'],
-                        ['mes_anterior', 'Mês anterior'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <Button
-                        key={key}
-                        type="button"
-                        size="sm"
-                        variant={periodoRapidoRelPed === key ? 'default' : 'outline'}
-                        className="h-8 rounded-full px-3.5 text-xs font-medium"
-                        onClick={() => aplicarPeriodoRapidoRelPed(key)}
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                <RelatorioPeriodoFinanceiro
+                  dataInicial={dataInicialRelPed}
+                  dataFinal={dataFinalRelPed}
+                  periodoAtivo={periodoRapidoRelPed}
+                  onDataInicial={(v) => {
+                    setDataInicialRelPed(v);
+                    setPeriodoRapidoRelPed('custom');
+                  }}
+                  onDataFinal={(v) => {
+                    setDataFinalRelPed(v);
+                    setPeriodoRapidoRelPed('custom');
+                  }}
+                  onPeriodoRapido={aplicarPeriodoRapidoRelPed}
+                  onQualquerPeriodo={limparPeriodoRelPed}
+                />
 
                 <Separator />
 

@@ -1,4 +1,10 @@
 import { RelatorioProdutosClienteDialog } from "@/components/reports/RelatorioProdutosClienteDialog";
+import {
+  RelatorioPeriodoFinanceiro,
+  datasPeriodoRapido,
+  type PeriodoRapidoAtivo,
+  type PeriodoRapidoKey,
+} from "@/components/reports/RelatorioPeriodoFinanceiro";
 import { EditarContaFinanceiraDialog } from "@/components/financeiro/EditarContaFinanceiraDialog";
 import { GerarPedidoDePrevisaoDialog } from "@/components/financeiro/GerarPedidoDePrevisaoDialog";
 import AppLayout from "@/components/layout/AppLayout";
@@ -136,11 +142,15 @@ const Financeiro = () => {
   const [relatorioDataInicial, setRelatorioDataInicial] = useState("");
   const [relatorioDataFinal, setRelatorioDataFinal] = useState("");
   const [relatorioStatusFiltro, setRelatorioStatusFiltro] = useState<string>("Todos");
+  const [relatorioClientePeriodoRapido, setRelatorioClientePeriodoRapido] =
+    useState<PeriodoRapidoAtivo>("all");
   const [relatorioFornecedorPdfOpen, setRelatorioFornecedorPdfOpen] = useState(false);
   const [relatorioFornecedorIdSelect, setRelatorioFornecedorIdSelect] = useState("");
   const [relatorioFornecedorPdfLoading, setRelatorioFornecedorPdfLoading] = useState(false);
   const [relatorioFornecedorDataInicial, setRelatorioFornecedorDataInicial] = useState("");
   const [relatorioFornecedorDataFinal, setRelatorioFornecedorDataFinal] = useState("");
+  const [relatorioFornecedorPeriodoRapido, setRelatorioFornecedorPeriodoRapido] =
+    useState<PeriodoRapidoAtivo>("all");
   const [relatorioFornecedorStatusFiltro, setRelatorioFornecedorStatusFiltro] =
     useState<string>("Todos");
   const [relatorioProdutosClienteOpen, setRelatorioProdutosClienteOpen] =
@@ -1776,6 +1786,7 @@ const Financeiro = () => {
               setRelatorioDataInicial("");
               setRelatorioDataFinal("");
               setRelatorioStatusFiltro("Todos");
+              setRelatorioClientePeriodoRapido("all");
               setRelatorioClienteIdSelect(
                 clienteFilterId != null ? String(clienteFilterId) : "",
               );
@@ -1811,35 +1822,30 @@ const Financeiro = () => {
               </div>
 
               <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                          type="date"
-                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
-                          value={relatorioDataInicial}
-                          onChange={(e) => setRelatorioDataInicial(e.target.value || "")}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Final</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                          type="date"
-                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
-                          value={relatorioDataFinal}
-                          onChange={(e) => setRelatorioDataFinal(e.target.value || "")}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <RelatorioPeriodoFinanceiro
+                  dataInicial={relatorioDataInicial}
+                  dataFinal={relatorioDataFinal}
+                  periodoAtivo={relatorioClientePeriodoRapido}
+                  onDataInicial={(v) => {
+                    setRelatorioDataInicial(v);
+                    setRelatorioClientePeriodoRapido("custom");
+                  }}
+                  onDataFinal={(v) => {
+                    setRelatorioDataFinal(v);
+                    setRelatorioClientePeriodoRapido("custom");
+                  }}
+                  onPeriodoRapido={(key: PeriodoRapidoKey) => {
+                    const { inicial, final } = datasPeriodoRapido(key);
+                    setRelatorioDataInicial(inicial);
+                    setRelatorioDataFinal(final);
+                    setRelatorioClientePeriodoRapido(key);
+                  }}
+                  onQualquerPeriodo={() => {
+                    setRelatorioDataInicial("");
+                    setRelatorioDataFinal("");
+                    setRelatorioClientePeriodoRapido("all");
+                  }}
+                />
 
                 <Separator />
 
@@ -2015,6 +2021,7 @@ const Financeiro = () => {
               setRelatorioFornecedorDataInicial("");
               setRelatorioFornecedorDataFinal("");
               setRelatorioFornecedorStatusFiltro("Todos");
+              setRelatorioFornecedorPeriodoRapido("all");
               setRelatorioFornecedorIdSelect(
                 fornecedorFilterId != null ? String(fornecedorFilterId) : "",
               );
@@ -2050,35 +2057,30 @@ const Financeiro = () => {
               </div>
 
               <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                          type="date"
-                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
-                          value={relatorioFornecedorDataInicial}
-                          onChange={(e) => setRelatorioFornecedorDataInicial(e.target.value || "")}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Data Final</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                          type="date"
-                          className="pl-10 rounded-lg border-border/80 bg-muted/50"
-                          value={relatorioFornecedorDataFinal}
-                          onChange={(e) => setRelatorioFornecedorDataFinal(e.target.value || "")}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <RelatorioPeriodoFinanceiro
+                  dataInicial={relatorioFornecedorDataInicial}
+                  dataFinal={relatorioFornecedorDataFinal}
+                  periodoAtivo={relatorioFornecedorPeriodoRapido}
+                  onDataInicial={(v) => {
+                    setRelatorioFornecedorDataInicial(v);
+                    setRelatorioFornecedorPeriodoRapido("custom");
+                  }}
+                  onDataFinal={(v) => {
+                    setRelatorioFornecedorDataFinal(v);
+                    setRelatorioFornecedorPeriodoRapido("custom");
+                  }}
+                  onPeriodoRapido={(key: PeriodoRapidoKey) => {
+                    const { inicial, final } = datasPeriodoRapido(key);
+                    setRelatorioFornecedorDataInicial(inicial);
+                    setRelatorioFornecedorDataFinal(final);
+                    setRelatorioFornecedorPeriodoRapido(key);
+                  }}
+                  onQualquerPeriodo={() => {
+                    setRelatorioFornecedorDataInicial("");
+                    setRelatorioFornecedorDataFinal("");
+                    setRelatorioFornecedorPeriodoRapido("all");
+                  }}
+                />
 
                 <Separator />
 
