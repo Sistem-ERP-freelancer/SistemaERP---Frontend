@@ -564,14 +564,14 @@ const Dashboard = () => {
 
       const receitaItens = Number(margemContribuicao?.totais?.receita ?? 0);
       const custoItens = Number(margemContribuicao?.totais?.custo_variavel ?? 0);
+      // Custo = mesma base do Relatório de Margem (já limita preco_custo absurdo).
+      // Se o faturamento (saídas) divergir da receita da margem, escala na mesma proporção.
       const custoProduto =
-        faturamentoSaidas != null
-          ? Number(Number(faturamentoSaidas.custo || 0).toFixed(2))
-          : receitaItens > 0.009 && totalVendasEfetivas > 0.009
-            ? Number(
-                (totalVendasEfetivas * (custoItens / receitaItens)).toFixed(2),
-              )
-            : Number(custoItens.toFixed(2));
+        receitaItens > 0.009 && totalVendasEfetivas > 0.009
+          ? Number(
+              (totalVendasEfetivas * (custoItens / receitaItens)).toFixed(2),
+            )
+          : Number(custoItens.toFixed(2));
       const despesasGeraisFunil = Number(
         (
           (agregadoFunil?.total ?? somaCentroDespesaNoPeriodo) || 0

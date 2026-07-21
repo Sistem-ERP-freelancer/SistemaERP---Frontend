@@ -175,8 +175,8 @@ export function DreFaturamentoLucro({
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
             Faturamento = saídas de estoque com motivo Venda no mês (mesmo
-            total do Relatório de Movimentações: Saída + Venda). Custo =
-            quantidade vendida × preço de custo. Lucro bruto − Despesas
+            total do Relatório de Movimentações: Saída + Venda). Custo = mesmo
+            do Relatório de Margem de Contribuição. Lucro bruto − Despesas
             gerais = Lucro líquido.
             {periodoLabel ? (
               <>
