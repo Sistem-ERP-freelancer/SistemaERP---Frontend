@@ -61,7 +61,7 @@ export function OrderStats({
     queryKey: ['pedidos', 'dashboard'],
     queryFn: () => pedidosService.obterDashboard(),
     refetchInterval: 30000,
-    staleTime: 30000,
+    staleTime: 0,
     enabled: !temFiltrosListagemAtivos,
   });
 
@@ -91,13 +91,14 @@ export function OrderStats({
           ? { roca_id: filtrosParaCards.roca_id }
           : {}),
       }),
-    staleTime: 30000,
+    staleTime: 0,
   });
 
   const { data: pedidosFiltrados, isLoading: isLoadingFiltrados } = useQuery({
     queryKey: ['pedidos', 'cards', filtrosParaCards],
     queryFn: () => listarPedidosParaCards(filtrosParaCards),
     enabled: temFiltrosListagemAtivos,
+    staleTime: 0,
     retry: false,
   });
 

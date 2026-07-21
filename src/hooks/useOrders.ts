@@ -31,6 +31,38 @@ export function useOrders() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
 
+  /** Cards de Pedidos + DRE: refetch imediato após criar/editar/status/cancelar. */
+  const invalidarDashboardsFaturamento = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['pedidos'] }),
+      queryClient.invalidateQueries({ queryKey: ['pedidos', 'dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['pedidos', 'cards'] }),
+      queryClient.invalidateQueries({
+        queryKey: ['financeiro', 'faturamento-oficial'],
+      }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'dre-real'] }),
+    ]);
+    await Promise.all([
+      queryClient.refetchQueries({
+        queryKey: ['pedidos', 'dashboard'],
+        type: 'active',
+      }),
+      queryClient.refetchQueries({
+        queryKey: ['pedidos', 'cards'],
+        type: 'active',
+      }),
+      queryClient.refetchQueries({
+        queryKey: ['financeiro', 'faturamento-oficial'],
+        type: 'active',
+      }),
+      queryClient.refetchQueries({
+        queryKey: ['dashboard', 'dre-real'],
+        type: 'active',
+      }),
+    ]);
+  };
+
   // Query para listar pedidos
   const {
     data: ordersResponse,
@@ -409,19 +441,13 @@ export function useOrders() {
       return await pedidosService.criar(data);
     },
     onSuccess: async () => {
-      // Invalidar e refetch todas as queries relacionadas
+      await invalidarDashboardsFaturamento();
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['pedidos'] }),
         queryClient.invalidateQueries({ queryKey: ['pedidos', 'all'] }),
-        queryClient.invalidateQueries({ queryKey: ['pedidos', 'dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['contas-financeiras'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] }),
       ]);
-      
-      // Forçar refetch imediato do dashboard
-      await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });
       
       toast.success('Pedido criado com sucesso!');
       setIsFormOpen(false);
@@ -507,6 +533,7 @@ export function useOrders() {
           queryKey: ['pedidos', variables.id, 'resumo-financeiro'],
         }),
       ]);
+      await invalidarDashboardsFaturamento();
 
       // Garantir que o pedido atualizado (resposta do PATCH) permaneça no cache da lista após o refetch.
       // O refetch pode devolver lista com item ainda "À vista"; reaplicar updatedOrder nesse item.
@@ -578,7 +605,6 @@ export function useOrders() {
         }
       );
 
-      // Invalidar listas e dashboards para o pedido sair das telas Contas a Receber / Contas a Pagar
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['pedidos'] }),
         queryClient.invalidateQueries({ queryKey: ['pedidos', 'all'] }),
@@ -590,7 +616,7 @@ export function useOrders() {
         queryClient.invalidateQueries({ queryKey: ['pedidos', 'contas-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['contas-receber'] }),
       ]);
-      await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });
+      await invalidarDashboardsFaturamento();
 
       toast.success('Pedido cancelado com sucesso!');
       setIsCancelDialogOpen(false);
@@ -639,7 +665,7 @@ export function useOrders() {
         queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] }),
       ]);
-      await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });
+      await invalidarDashboardsFaturamento();
 
       toast.success('Pedido excluído com sucesso!');
       setIsDeleteDialogOpen(false);
@@ -667,20 +693,15 @@ export function useOrders() {
       return await pedidosService.atualizar(id, { status });
     },
     onSuccess: async (_, variables) => {
-      // Invalidar e refetch todas as queries relacionadas
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['pedidos'] }),
-        queryClient.invalidateQueries({ queryKey: ['pedidos', 'all'] }),
-        queryClient.invalidateQueries({ queryKey: ['pedidos', 'dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['contas-financeiras', 'pedido', variables.id] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['contas-financeiras', 'pedido', variables.id],
+        }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-receber'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-pagar'] }),
       ]);
-      
-      // Forçar refetch imediato do dashboard
-      await queryClient.refetchQueries({ queryKey: ['pedidos', 'dashboard'] });
-      
+      await invalidarDashboardsFaturamento();
+
       toast.success('Status do pedido atualizado com sucesso!');
       setUpdatingStatusId(null);
     },
