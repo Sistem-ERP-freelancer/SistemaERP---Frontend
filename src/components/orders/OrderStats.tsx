@@ -5,7 +5,7 @@ import {
 import { statTheme } from '@/components/layout/module-stat-themes';
 import {
   calcularResumoCardsPedidos,
-  listarPedidosTodasPaginas,
+  listarPedidosParaCards,
   type ResumoHeroPedidos,
 } from '@/lib/pedidos-stats';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
@@ -22,6 +22,7 @@ import {
   ShoppingCart,
   XCircle,
 } from 'lucide-react';
+import { useMemo } from 'react';
 
 export type PedidoCardFilterKey =
   | 'faturamento_venda'
@@ -58,10 +59,17 @@ export function OrderStats({
     enabled: !temFiltrosListagemAtivos,
   });
 
-  const filtrosParaCards = filtrosListagem ?? {};
+  const filtrosParaCards = useMemo(() => {
+    const f = filtrosListagem ?? {};
+    // Cards ignoram status: a listagem oculta cancelados por padrão, e o filtro
+    // de status (ex.: card Cancelados) só deve afetar a tabela, não zerar os totais.
+    const { status: _status, card_filtro: _card, ...rest } = f;
+    return rest;
+  }, [filtrosListagem]);
+
   const { data: pedidosFiltrados, isLoading: isLoadingFiltrados } = useQuery({
     queryKey: ['pedidos', 'cards', filtrosParaCards],
-    queryFn: () => listarPedidosTodasPaginas(filtrosParaCards),
+    queryFn: () => listarPedidosParaCards(filtrosParaCards),
     enabled: temFiltrosListagemAtivos,
     retry: false,
   });

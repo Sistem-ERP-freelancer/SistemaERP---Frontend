@@ -97,6 +97,35 @@ export async function listarPedidosTodasPaginas(
   return acc;
 }
 
+/**
+ * Listagem para cards: a API exclui CANCELADO por padrão.
+ * Sem status explícito, busca ativos + cancelados para o card de cancelados não zerar.
+ */
+export async function listarPedidosParaCards(
+  filtros: FiltrosPedidos,
+): Promise<Pedido[]> {
+  const { card_filtro: _card, page: _page, limit: _limit, status, ...rest } =
+    filtros;
+
+  if (status) {
+    return listarPedidosTodasPaginas({ ...rest, status });
+  }
+
+  const [ativos, cancelados] = await Promise.all([
+    listarPedidosTodasPaginas(rest),
+    listarPedidosTodasPaginas({ ...rest, status: 'CANCELADO' }),
+  ]);
+
+  const seen = new Set<number>();
+  const merged: Pedido[] = [];
+  for (const p of [...ativos, ...cancelados]) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    merged.push(p);
+  }
+  return merged;
+}
+
 /** Pedido com status Aberto e valor > 0 (saldo operacional em aberto). */
 export function pedidoComSaldoEmAberto(p: PedidoComSaldo): boolean {
   return p.status === 'ABERTO' && saldoAbertoPedido(p) > 0.009;
