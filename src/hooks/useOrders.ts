@@ -57,7 +57,7 @@ export function useOrders() {
         } else if (cardFiltro === 'compras_confirmadas') {
           apiFilters = { ...apiFilters, tipo: 'COMPRA', status: undefined };
         } else if (cardFiltro === 'cancelados') {
-          apiFilters = { ...apiFilters, status: 'CANCELADO', tipo: undefined };
+          apiFilters = { ...apiFilters, status: 'CANCELADO' };
         } else if (cardFiltro === 'aberto_venda') {
           apiFilters = { ...apiFilters, tipo: 'VENDA', status: 'ABERTO' };
         } else if (cardFiltro === 'compras_em_aberto') {

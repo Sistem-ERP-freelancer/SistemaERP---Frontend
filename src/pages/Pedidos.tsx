@@ -478,7 +478,8 @@ export default function Pedidos() {
         updateFilters({ ...base, status: 'ABERTO' });
         break;
       case 'cancelados':
-        updateFilters({ ...base, status: 'CANCELADO', tipo: undefined });
+        // Mantém o tipo da aba atual (Vendas/Compras); em Todos lista os dois
+        updateFilters({ ...base, status: 'CANCELADO' });
         break;
     }
   };
