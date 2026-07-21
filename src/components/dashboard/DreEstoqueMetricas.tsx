@@ -4,14 +4,10 @@ import { Label } from '@/components/ui/label';
 import { Calendar, Loader2, Package, Wallet } from 'lucide-react';
 
 export type PosicaoEstoqueMetricasProps = {
-  atualQuantidade: number;
-  atualValor: number;
-  inicioData?: string;
-  inicioQuantidade: number;
-  inicioValor: number;
-  fimData?: string;
-  fimQuantidade: number;
-  fimValor: number;
+  /** Posição na data final do período filtrado */
+  quantidade: number;
+  valor: number;
+  dataPosicao?: string;
   loading?: boolean;
   className?: string;
   dataInicial: string;
@@ -37,14 +33,9 @@ function fmtDataBr(iso?: string): string {
 export type DreEstoqueMetricasProps = PosicaoEstoqueMetricasProps;
 
 export function PosicaoEstoqueMetricas({
-  atualQuantidade,
-  atualValor,
-  inicioData,
-  inicioQuantidade,
-  inicioValor,
-  fimData,
-  fimQuantidade,
-  fimValor,
+  quantidade,
+  valor,
+  dataPosicao,
   loading = false,
   className,
   dataInicial,
@@ -52,60 +43,26 @@ export function PosicaoEstoqueMetricas({
   onDataInicial,
   onDataFinal,
 }: PosicaoEstoqueMetricasProps) {
+  const dataHint = dataPosicao
+    ? `Posição em ${fmtDataBr(dataPosicao)}`
+    : dataFinal
+      ? `Posição em ${fmtDataBr(dataFinal)}`
+      : 'Posição no fim do período';
+
   const cards = [
     {
-      key: 'qtd-inicio',
-      label: 'Qtd. no início do período',
-      value: loading ? '…' : fmtQtd(inicioQuantidade),
-      hint: inicioData
-        ? `Posição em ${fmtDataBr(inicioData)}`
-        : 'Estoque na data inicial',
-      Icon: Package,
-      tone: 'slate' as const,
-    },
-    {
-      key: 'valor-inicio',
-      label: 'Valor no início do período',
-      value: loading ? '…' : formatCurrency(inicioValor),
-      hint: inicioData
-        ? `Em ${fmtDataBr(inicioData)} × custo atual`
-        : 'Quantidade × preço de custo',
-      Icon: Wallet,
-      tone: 'amber' as const,
-    },
-    {
-      key: 'qtd-fim',
-      label: 'Qtd. no fim do período',
-      value: loading ? '…' : fmtQtd(fimQuantidade),
-      hint: fimData
-        ? `Posição em ${fmtDataBr(fimData)}`
-        : 'Estoque na data final',
+      key: 'quantidade',
+      label: 'Quantidade do estoque',
+      value: loading ? '…' : fmtQtd(quantidade),
+      hint: dataHint,
       Icon: Package,
       tone: 'sky' as const,
     },
     {
-      key: 'valor-fim',
-      label: 'Valor no fim do período',
-      value: loading ? '…' : formatCurrency(fimValor),
-      hint: fimData
-        ? `Em ${fmtDataBr(fimData)} × custo atual`
-        : 'Quantidade × preço de custo',
-      Icon: Wallet,
-      tone: 'emerald' as const,
-    },
-    {
-      key: 'qtd-atual',
-      label: 'Qtd. estoque atual',
-      value: loading ? '…' : fmtQtd(atualQuantidade),
-      hint: 'Soma do estoque dos produtos ativos (hoje)',
-      Icon: Package,
-      tone: 'sky' as const,
-    },
-    {
-      key: 'valor-atual',
-      label: 'Valor estoque atual',
-      value: loading ? '…' : formatCurrency(atualValor),
-      hint: 'Quantidade atual × preço de custo',
+      key: 'valor',
+      label: 'Valor de estoque',
+      value: loading ? '…' : formatCurrency(valor),
+      hint: `${dataHint} × custo atual`,
       Icon: Wallet,
       tone: 'emerald' as const,
     },
@@ -121,16 +78,6 @@ export function PosicaoEstoqueMetricas({
       wrap: 'border-emerald-100 bg-emerald-50/90 dark:border-emerald-900/40 dark:bg-emerald-950/25',
       icon: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400',
       value: 'text-emerald-800 dark:text-emerald-300',
-    },
-    slate: {
-      wrap: 'border-slate-200 bg-white dark:border-border dark:bg-card',
-      icon: 'bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground',
-      value: 'text-[#003366] dark:text-foreground',
-    },
-    amber: {
-      wrap: 'border-amber-100 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/25',
-      icon: 'bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400',
-      value: 'text-amber-800 dark:text-amber-300',
     },
   };
 
@@ -151,8 +98,8 @@ export function PosicaoEstoqueMetricas({
             Posição de Estoque
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
-            Quantidade e valor no início e no fim do período selecionado, além
-            do estoque atual (hoje). Valor = quantidade × preço de custo.
+            Quantidade e valor na data final do período filtrado. Valor =
+            quantidade × preço de custo.
           </p>
         </div>
         <div className="w-full shrink-0 space-y-2 sm:w-auto sm:min-w-[18rem]">
@@ -204,7 +151,7 @@ export function PosicaoEstoqueMetricas({
           Carregando estoque…
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {cards.map((card) => {
             const t = toneClass[card.tone];
             return (

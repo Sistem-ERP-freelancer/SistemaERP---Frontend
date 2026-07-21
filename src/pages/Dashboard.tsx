@@ -1009,16 +1009,9 @@ const Dashboard = () => {
           className="mb-6"
         >
           <DreEstoqueMetricas
-            atualQuantidade={metricasEstoqueDre?.atual?.quantidade ?? 0}
-            atualValor={metricasEstoqueDre?.atual?.valor ?? 0}
-            inicioData={metricasEstoqueDre?.inicioPeriodo?.data}
-            inicioQuantidade={
-              metricasEstoqueDre?.inicioPeriodo?.quantidade ?? 0
-            }
-            inicioValor={metricasEstoqueDre?.inicioPeriodo?.valor ?? 0}
-            fimData={metricasEstoqueDre?.fimPeriodo?.data}
-            fimQuantidade={metricasEstoqueDre?.fimPeriodo?.quantidade ?? 0}
-            fimValor={metricasEstoqueDre?.fimPeriodo?.valor ?? 0}
+            quantidade={metricasEstoqueDre?.fimPeriodo?.quantidade ?? 0}
+            valor={metricasEstoqueDre?.fimPeriodo?.valor ?? 0}
+            dataPosicao={metricasEstoqueDre?.fimPeriodo?.data}
             loading={loadingMetricasEstoque}
             dataInicial={estoqueDataInicial}
             dataFinal={estoqueDataFinal}
