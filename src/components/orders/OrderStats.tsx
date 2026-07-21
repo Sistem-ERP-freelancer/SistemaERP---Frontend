@@ -9,8 +9,9 @@ import {
   type ResumoHeroPedidos,
 } from '@/lib/pedidos-stats';
 import { formatCurrency, normalizeCurrency } from '@/lib/utils';
+import { estoqueService } from '@/services/estoque.service';
 import { pedidosService } from '@/services/pedidos.service';
-import type { DashboardPedidos, FiltrosPedidos } from '@/types/pedido';
+import type { FiltrosPedidos } from '@/types/pedido';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
@@ -67,6 +68,21 @@ export function OrderStats({
     return rest;
   }, [filtrosListagem]);
 
+  const periodoFaturamento = useMemo(
+    () => ({
+      data_inicial: filtrosParaCards.data_inicial?.trim() || undefined,
+      data_final: filtrosParaCards.data_final?.trim() || undefined,
+    }),
+    [filtrosParaCards.data_inicial, filtrosParaCards.data_final],
+  );
+
+  /** Faturamento oficial = saídas de estoque motivo Venda (bate com o relatório). */
+  const { data: faturamentoSaidas, isLoading: isLoadingFaturamento } = useQuery({
+    queryKey: ['estoque', 'faturamento-saidas-venda', periodoFaturamento],
+    queryFn: () => estoqueService.getFaturamentoSaidasVenda(periodoFaturamento),
+    staleTime: 30000,
+  });
+
   const { data: pedidosFiltrados, isLoading: isLoadingFiltrados } = useQuery({
     queryKey: ['pedidos', 'cards', filtrosParaCards],
     queryFn: () => listarPedidosParaCards(filtrosParaCards),
@@ -82,14 +98,33 @@ export function OrderStats({
         )
       : null;
 
-  const resumo = resumoFiltrado ?? dashboard;
+  const resumoBase = resumoFiltrado ?? dashboard;
+
+  const resumo = useMemo(() => {
+    if (!resumoBase) return resumoBase;
+    if (!faturamentoSaidas) return resumoBase;
+    return {
+      ...resumoBase,
+      faturamento_confirmado_venda: {
+        valor: Number(Number(faturamentoSaidas.faturamento || 0).toFixed(2)),
+        quantidade:
+          Number(faturamentoSaidas.registros || 0) ||
+          resumoBase.faturamento_confirmado_venda?.quantidade ||
+          0,
+      },
+    };
+  }, [resumoBase, faturamentoSaidas]);
+
   const isLoading =
-    temFiltrosListagemAtivos ? isLoadingFiltrados : isLoadingDashboard;
+    (temFiltrosListagemAtivos ? isLoadingFiltrados : isLoadingDashboard) ||
+    isLoadingFaturamento;
 
   const formatCurrencyValue = (value: number | undefined) =>
     formatCurrency(normalizeCurrency(value, false));
 
   const qtd = (n: number) => `${n} pedido${n === 1 ? '' : 's'}`;
+  const qtdMov = (n: number) =>
+    `${n} movimentaç${n === 1 ? 'ão' : 'ões'}`;
 
   if (variant === 'hero') {
     const tab = tipoFiltro === 'COMPRA' || tipoFiltro === 'VENDA' ? tipoFiltro : 'all';
@@ -103,7 +138,7 @@ export function OrderStats({
 
     const cardFaturamentoVenda: ModuleStatCardItem = {
       key: 'faturamento_venda',
-      label: `Faturamento (Vendas) · ${qtd(qtdFatVenda)}`,
+      label: `Faturamento (Vendas) · ${qtdMov(qtdFatVenda)}`,
       value: isLoading
         ? '—'
         : formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
@@ -217,8 +252,9 @@ export function OrderStats({
     {
       label: 'Faturamento Confirmado (Vendas)',
       value: formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
-      subtitle: `${resumo?.faturamento_confirmado_venda?.quantidade || 0} pedidos`,
-      description: 'Pedidos de venda pagos e faturados',
+      subtitle: `${resumo?.faturamento_confirmado_venda?.quantidade || 0} movimentações`,
+      description:
+        'Saídas de estoque com motivo Venda (mesmo total do Relatório de Movimentações)',
       icon: DollarSign,
       color: 'text-green-600 dark:text-green-400',
       bgColor: 'bg-green-100 dark:bg-green-900/20',

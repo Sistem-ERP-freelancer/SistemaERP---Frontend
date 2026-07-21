@@ -23,6 +23,7 @@ import {
   type ApiCentroCustoDespesa,
 } from "@/services/centro-custo.service";
 import { controleRocaService } from "@/services/controle-roca.service";
+import { estoqueService } from "@/services/estoque.service";
 import { financeiroService } from "@/services/financeiro.service";
 import { pedidosService } from "@/services/pedidos.service";
 import { useQuery } from "@tanstack/react-query";
@@ -497,7 +498,7 @@ const Dashboard = () => {
             ...(rocaIdFiltro ? { roca_id: rocaIdFiltro } : {}),
           };
 
-      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao, agregadoFunil] =
+      const [resumoFinanceiroMes, agregadoCentroCusto, margemContribuicao, agregadoFunil, faturamentoSaidas] =
         await Promise.all([
           financeiroService.getDashboardUnificado(paramsDashboard),
           agregarCentroCustoParaDre(filtrosCentroCusto),
@@ -511,6 +512,12 @@ const Dashboard = () => {
           parametrosDre.semRecorteData
             ? agregarCentroCustoParaDre(filtrosCentroCustoFunil)
             : Promise.resolve(null),
+          estoqueService
+            .getFaturamentoSaidasVenda({
+              data_inicial: periodoFunil.data_inicial,
+              data_final: periodoFunil.data_final,
+            })
+            .catch(() => null),
         ]);
 
       const resumoRaw = resumoFinanceiroMes as Record<string, unknown>;
@@ -523,10 +530,13 @@ const Dashboard = () => {
         (painelRaw.linhaRegistrado as Record<string, unknown>) ??
         {};
       /**
-       * Faturamento = pedidos ATENDIDO (data_pedido no período)
-       *              + receitas Visão Geral (contas RECEBER sem pedido).
+       * Faturamento = saídas de estoque motivo Venda no período
+       * (mesmo número do Relatório de Movimentações: Saída + Venda).
        */
-      const totalVendasEfetivas = numPainel(linhaReg.vendas);
+      const totalVendasEfetivas =
+        faturamentoSaidas != null
+          ? Number(Number(faturamentoSaidas.faturamento || 0).toFixed(2))
+          : numPainel(linhaReg.vendas);
       const totalFornecedores = numPainel(linhaReg.compras);
 
       const fornecedoresPorTipo = agregadoCentroCusto.items;
@@ -555,11 +565,13 @@ const Dashboard = () => {
       const receitaItens = Number(margemContribuicao?.totais?.receita ?? 0);
       const custoItens = Number(margemContribuicao?.totais?.custo_variavel ?? 0);
       const custoProduto =
-        receitaItens > 0.009 && totalVendasEfetivas > 0.009
-          ? Number(
-              (totalVendasEfetivas * (custoItens / receitaItens)).toFixed(2),
-            )
-          : Number(custoItens.toFixed(2));
+        faturamentoSaidas != null
+          ? Number(Number(faturamentoSaidas.custo || 0).toFixed(2))
+          : receitaItens > 0.009 && totalVendasEfetivas > 0.009
+            ? Number(
+                (totalVendasEfetivas * (custoItens / receitaItens)).toFixed(2),
+              )
+            : Number(custoItens.toFixed(2));
       const despesasGeraisFunil = Number(
         (
           (agregadoFunil?.total ?? somaCentroDespesaNoPeriodo) || 0
