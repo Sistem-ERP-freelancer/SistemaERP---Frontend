@@ -12,6 +12,7 @@ import {
   type RelatorioPedidoCampos,
 } from '@/components/orders/RelatorioModalParts';
 import { RelatorioPeriodoFinanceiro } from '@/components/reports/RelatorioPeriodoFinanceiro';
+import { RelatorioMargemContribuicaoDialog } from '@/components/reports/RelatorioMargemContribuicaoDialog';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -109,11 +110,7 @@ export default function Pedidos() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filtrosDialogOpen, setFiltrosDialogOpen] = useState(false);
-  const [dataInicialMargem, setDataInicialMargem] = useState('');
-  const [dataFinalMargem, setDataFinalMargem] = useState('');
-  const [loadingMargemPdf, setLoadingMargemPdf] = useState(false);
   const [margemDialogOpen, setMargemDialogOpen] = useState(false);
-  const [margemLoadingAction, setMargemLoadingAction] = useState<'download' | 'print' | null>(null);
   const [reportingOrderId, setReportingOrderId] = useState<number | null>(null);
   const [relatorioPedidosDialogOpen, setRelatorioPedidosDialogOpen] = useState(false);
   const [dataInicialRelPed, setDataInicialRelPed] = useState('');
@@ -226,24 +223,6 @@ export default function Pedidos() {
       toast.error(message);
     } finally {
       setReportingOrderId(null);
-    }
-  };
-
-  const handleDownloadMargemPdf = async () => {
-    setLoadingMargemPdf(true);
-    try {
-      // Período do relatório vem apenas do bloco (datas + botões); não usa filtros da lista de pedidos.
-      const dataInicial = dataInicialMargem?.trim() || undefined;
-      const dataFinal = dataFinalMargem?.trim() || undefined;
-      await pedidosService.downloadRelatorioMargemContribuicaoPdf(
-        dataInicial,
-        dataFinal
-      );
-      toast.success('Relatório de Margem de Contribuição baixado.');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao gerar relatório.');
-    } finally {
-      setLoadingMargemPdf(false);
     }
   };
 
@@ -900,78 +879,12 @@ export default function Pedidos() {
           </RelatorioModalShell>
         </Dialog>
 
-        <Dialog open={margemDialogOpen} onOpenChange={setMargemDialogOpen}>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Margem de contribuição</DialogTitle>
-              <DialogDescription>
-                Defina o período e gere o PDF com receita, custo e margem por produto.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
-                <RelatorioPeriodoFinanceiro
-                  dataInicial={dataInicialMargem}
-                  dataFinal={dataFinalMargem}
-                  onDataInicial={setDataInicialMargem}
-                  onDataFinal={setDataFinalMargem}
-                />
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                <Button
-                  type="button"
-                  variant="relatorioPrimary"
-                  className="flex-1 gap-2"
-                  disabled={margemLoadingAction !== null}
-                  onClick={async () => {
-                    try {
-                      setMargemLoadingAction('download');
-                      await handleDownloadMargemPdf();
-                    } finally {
-                      setMargemLoadingAction(null);
-                    }
-                  }}
-                >
-                  {margemLoadingAction === 'download' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Baixar PDF
-                </Button>
-                <Button
-                  type="button"
-                  variant="relatorioSecondary"
-                  className="flex-1 gap-2"
-                  disabled={margemLoadingAction !== null}
-                  onClick={async () => {
-                    try {
-                      setMargemLoadingAction('print');
-                      await pedidosService.printRelatorioMargemContribuicaoPdf(
-                        dataInicialMargem?.trim() || undefined,
-                        dataFinalMargem?.trim() || undefined,
-                      );
-                    } catch (e) {
-                      toast.error(
-                        e instanceof Error ? e.message : 'Erro ao abrir relatório.',
-                      );
-                    } finally {
-                      setMargemLoadingAction(null);
-                    }
-                  }}
-                >
-                  {margemLoadingAction === 'print' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Printer className="h-4 w-4" />
-                  )}
-                  Abrir para imprimir
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <RelatorioMargemContribuicaoDialog
+          open={margemDialogOpen}
+          onOpenChange={setMargemDialogOpen}
+          defaultDataInicial={filters.data_inicial}
+          defaultDataFinal={filters.data_final}
+        />
 
         <Dialog open={relatorioPedidosDialogOpen} onOpenChange={setRelatorioPedidosDialogOpen}>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
