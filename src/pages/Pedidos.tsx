@@ -468,6 +468,12 @@ export default function Pedidos() {
       case 'aberto_venda':
         updateFilters({ ...base, tipo: 'VENDA', status: 'ABERTO' });
         break;
+      case 'compras_confirmadas':
+        updateFilters({ ...base, tipo: 'COMPRA', status: undefined });
+        break;
+      case 'compras_em_aberto':
+        updateFilters({ ...base, tipo: 'COMPRA', status: 'ABERTO' });
+        break;
       case 'em_andamento':
         updateFilters({ ...base, status: 'ABERTO' });
         break;
@@ -583,6 +589,7 @@ export default function Pedidos() {
         <div className="shrink-0">
           <OrderStats
             variant="hero"
+            tipoFiltro={filters.tipo ?? 'all'}
             activeCardFilter={activePedidoCard}
             onCardClick={handlePedidoCardClick}
             filtrosListagem={(() => {

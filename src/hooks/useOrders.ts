@@ -41,8 +41,10 @@ export function useOrders() {
     queryFn: async () => {
       try {
         const cardFiltro = filters.card_filtro;
-        // Faturamento: múltiplos status — buscar lote maior e filtrar no cliente
-        const cardFiltroCliente = cardFiltro === 'faturamento_venda';
+        // Confirmados (venda/compra): múltiplos status — buscar lote maior e filtrar no cliente
+        const cardFiltroCliente =
+          cardFiltro === 'faturamento_venda' ||
+          cardFiltro === 'compras_confirmadas';
         const hasBusca = !!(filters.numero_pedido || filters.busca);
         const needsWideFetch = hasBusca || cardFiltroCliente;
         const limit = needsWideFetch ? 2000 : itemsPerPage;
@@ -52,10 +54,14 @@ export function useOrders() {
 
         if (cardFiltro === 'faturamento_venda') {
           apiFilters = { ...apiFilters, tipo: 'VENDA', status: undefined };
+        } else if (cardFiltro === 'compras_confirmadas') {
+          apiFilters = { ...apiFilters, tipo: 'COMPRA', status: undefined };
         } else if (cardFiltro === 'cancelados') {
           apiFilters = { ...apiFilters, status: 'CANCELADO', tipo: undefined };
         } else if (cardFiltro === 'aberto_venda') {
           apiFilters = { ...apiFilters, tipo: 'VENDA', status: 'ABERTO' };
+        } else if (cardFiltro === 'compras_em_aberto') {
+          apiFilters = { ...apiFilters, tipo: 'COMPRA', status: 'ABERTO' };
         } else if (cardFiltro === 'em_andamento') {
           apiFilters = { ...apiFilters, status: 'ABERTO' };
         }
@@ -145,6 +151,14 @@ export function useOrders() {
             o.status === 'QUITADO' ||
             o.status === 'PARCIAL'),
       );
+    } else if (filters.card_filtro === 'compras_confirmadas') {
+      ordersList = ordersList.filter(
+        (o) =>
+          o.tipo === 'COMPRA' &&
+          (o.status === 'ATENDIDO' ||
+            o.status === 'QUITADO' ||
+            o.status === 'PARCIAL'),
+      );
     }
 
     if (filters.numero_pedido && !filters.busca) {
@@ -176,7 +190,9 @@ export function useOrders() {
     filters.tipo,
   ]);
 
-  const needsClientPagination = filters.card_filtro === 'faturamento_venda';
+  const needsClientPagination =
+    filters.card_filtro === 'faturamento_venda' ||
+    filters.card_filtro === 'compras_confirmadas';
 
   const orders = useMemo(() => {
     if (!needsClientPagination) return filteredOrders;

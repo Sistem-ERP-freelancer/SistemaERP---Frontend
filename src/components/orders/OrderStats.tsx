@@ -5,7 +5,6 @@ import {
 import { statTheme } from '@/components/layout/module-stat-themes';
 import {
   calcularResumoCardsPedidos,
-  labelFaturamentoCard,
   listarPedidosTodasPaginas,
   type ResumoHeroPedidos,
 } from '@/lib/pedidos-stats';
@@ -27,12 +26,14 @@ import {
 export type PedidoCardFilterKey =
   | 'faturamento_venda'
   | 'aberto_venda'
+  | 'compras_confirmadas'
+  | 'compras_em_aberto'
   | 'em_andamento'
   | 'cancelados';
 
 interface OrderStatsProps {
   tipoFiltro?: import('@/types/pedido').TipoPedido | 'all' | undefined;
-  /** hero = 4 cards no topo (layout mockup); full = seções detalhadas */
+  /** hero = cards no topo; full = seções detalhadas */
   variant?: 'hero' | 'full';
   activeCardFilter?: PedidoCardFilterKey | null;
   onCardClick?: (key: PedidoCardFilterKey) => void;
@@ -74,63 +75,125 @@ export function OrderStats({
       : null;
 
   const resumo = resumoFiltrado ?? dashboard;
-  const modoCard =
-    resumoFiltrado?.modoCard ??
-    (tipoFiltro === 'COMPRA'
-      ? 'COMPRA'
-      : tipoFiltro === 'VENDA'
-        ? 'VENDA'
-        : 'VENDA');
   const isLoading =
     temFiltrosListagemAtivos ? isLoadingFiltrados : isLoadingDashboard;
 
   const formatCurrencyValue = (value: number | undefined) =>
     formatCurrency(normalizeCurrency(value, false));
 
+  const qtd = (n: number) => `${n} pedido${n === 1 ? '' : 's'}`;
+
   if (variant === 'hero') {
-    const qtdFaturamento = resumo?.faturamento_confirmado_venda?.quantidade || 0;
-    const qtdAberto = resumo?.valor_em_aberto_venda?.quantidade || 0;
+    const tab = tipoFiltro === 'COMPRA' || tipoFiltro === 'VENDA' ? tipoFiltro : 'all';
+
+    const qtdFatVenda = resumo?.faturamento_confirmado_venda?.quantidade || 0;
+    const qtdAbertoVenda = resumo?.valor_em_aberto_venda?.quantidade || 0;
+    const qtdFatCompra = resumo?.compras_confirmadas?.quantidade || 0;
+    const qtdAbertoCompra = resumo?.compras_em_aberto?.quantidade || 0;
     const qtdAndamento = resumo?.pedidos_em_andamento?.quantidade || 0;
     const qtdCancelados = resumo?.pedidos_cancelados?.quantidade || 0;
 
-    const heroItems: ModuleStatCardItem[] = [
-      {
-        key: 'faturamento_venda',
-        label: labelFaturamentoCard(modoCard, qtdFaturamento),
-        value: isLoading ? '—' : formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
-        Icon: ShoppingCart,
-        ...statTheme.emerald,
-        active: activeCardFilter === 'faturamento_venda',
-        onClick: onCardClick ? () => onCardClick('faturamento_venda') : undefined,
-      },
-      {
-        key: 'aberto_venda',
-        label: `Saldo em Aberto · ${qtdAberto} pedido${qtdAberto === 1 ? '' : 's'}`,
-        value: isLoading ? '—' : formatCurrencyValue(resumo?.valor_em_aberto_venda?.valor),
-        Icon: FileText,
-        ...statTheme.sky,
-        active: activeCardFilter === 'aberto_venda',
-        onClick: onCardClick ? () => onCardClick('aberto_venda') : undefined,
-      },
-      {
-        key: 'em_andamento',
-        label: `Pedidos Abertos · ${qtdAndamento} pedido${qtdAndamento === 1 ? '' : 's'}`,
-        value: isLoading ? '—' : String(qtdAndamento),
-        Icon: Package,
-        ...statTheme.violet,
-        active: activeCardFilter === 'em_andamento',
-        onClick: onCardClick ? () => onCardClick('em_andamento') : undefined,
-      },
-      {
-        key: 'cancelados',
-        label: `Pedidos Cancelados · ${qtdCancelados} pedido${qtdCancelados === 1 ? '' : 's'}`,
-        value: isLoading ? '—' : String(qtdCancelados),
-        Icon: XCircle,
-        ...statTheme.red,
-        active: activeCardFilter === 'cancelados',
-        onClick: onCardClick ? () => onCardClick('cancelados') : undefined,
-      },
-    ];
+    const cardFaturamentoVenda: ModuleStatCardItem = {
+      key: 'faturamento_venda',
+      label: `Faturamento (Vendas) · ${qtd(qtdFatVenda)}`,
+      value: isLoading
+        ? '—'
+        : formatCurrencyValue(resumo?.faturamento_confirmado_venda?.valor),
+      Icon: ShoppingCart,
+      ...statTheme.emerald,
+      active: activeCardFilter === 'faturamento_venda',
+      onClick: onCardClick ? () => onCardClick('faturamento_venda') : undefined,
+    };
+
+    const cardSaldoVenda: ModuleStatCardItem = {
+      key: 'aberto_venda',
+      label: `Saldo em Aberto (Vendas) · ${qtd(qtdAbertoVenda)}`,
+      value: isLoading
+        ? '—'
+        : formatCurrencyValue(resumo?.valor_em_aberto_venda?.valor),
+      Icon: FileText,
+      ...statTheme.sky,
+      active: activeCardFilter === 'aberto_venda',
+      onClick: onCardClick ? () => onCardClick('aberto_venda') : undefined,
+    };
+
+    const cardComprasConfirmadas: ModuleStatCardItem = {
+      key: 'compras_confirmadas',
+      label: `Compras Confirmadas · ${qtd(qtdFatCompra)}`,
+      value: isLoading
+        ? '—'
+        : formatCurrencyValue(resumo?.compras_confirmadas?.valor),
+      Icon: ShoppingCart,
+      ...statTheme.orange,
+      active: activeCardFilter === 'compras_confirmadas',
+      onClick: onCardClick ? () => onCardClick('compras_confirmadas') : undefined,
+    };
+
+    const cardComprasAberto: ModuleStatCardItem = {
+      key: 'compras_em_aberto',
+      label: `Compras em Aberto · ${qtd(qtdAbertoCompra)}`,
+      value: isLoading
+        ? '—'
+        : formatCurrencyValue(resumo?.compras_em_aberto?.valor),
+      Icon: FileText,
+      ...statTheme.amber,
+      active: activeCardFilter === 'compras_em_aberto',
+      onClick: onCardClick ? () => onCardClick('compras_em_aberto') : undefined,
+    };
+
+    const cardAbertos: ModuleStatCardItem = {
+      key: 'em_andamento',
+      label: `Pedidos Abertos · ${qtd(qtdAndamento)}`,
+      value: isLoading ? '—' : String(qtdAndamento),
+      Icon: Package,
+      ...statTheme.violet,
+      active: activeCardFilter === 'em_andamento',
+      onClick: onCardClick ? () => onCardClick('em_andamento') : undefined,
+    };
+
+    const cardCancelados: ModuleStatCardItem = {
+      key: 'cancelados',
+      label: `Pedidos Cancelados · ${qtd(qtdCancelados)}`,
+      value: isLoading ? '—' : String(qtdCancelados),
+      Icon: XCircle,
+      ...statTheme.red,
+      active: activeCardFilter === 'cancelados',
+      onClick: onCardClick ? () => onCardClick('cancelados') : undefined,
+    };
+
+    if (tab === 'all') {
+      return (
+        <div className="mb-0 space-y-4">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Vendas
+            </h3>
+            <ModuleStatCards
+              isLoading={isLoading}
+              columns={2}
+              className="mb-0"
+              items={[cardFaturamentoVenda, cardSaldoVenda]}
+            />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Compras
+            </h3>
+            <ModuleStatCards
+              isLoading={isLoading}
+              columns={2}
+              className="mb-0"
+              items={[cardComprasConfirmadas, cardComprasAberto]}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const heroItems: ModuleStatCardItem[] =
+      tab === 'COMPRA'
+        ? [cardComprasConfirmadas, cardComprasAberto, cardAbertos, cardCancelados]
+        : [cardFaturamentoVenda, cardSaldoVenda, cardAbertos, cardCancelados];
 
     return (
       <ModuleStatCards

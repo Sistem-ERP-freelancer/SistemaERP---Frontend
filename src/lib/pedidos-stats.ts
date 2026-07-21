@@ -14,6 +14,8 @@ export type ResumoHeroPedidos = Pick<
   DashboardPedidos,
   | 'faturamento_confirmado_venda'
   | 'valor_em_aberto_venda'
+  | 'compras_confirmadas'
+  | 'compras_em_aberto'
   | 'pedidos_em_andamento'
   | 'pedidos_cancelados'
 > & {
@@ -102,37 +104,70 @@ export function pedidoComSaldoEmAberto(p: PedidoComSaldo): boolean {
 
 /**
  * Resumo dos cards de Pedidos a partir da listagem filtrada.
- * - Faturamento: pedidos Atendidos (valor total)
- * - Saldo em Aberto: só status Aberto (não inclui Atendido com saldo — isso é Contas a Receber)
- * - Pedidos Abertos: status Aberto
- * - Cancelados: status Cancelado
+ * Separa métricas de VENDA e COMPRA.
+ * - Confirmados: pedidos Atendidos (valor total)
+ * - Em aberto: só status Aberto
+ * - Pedidos Abertos / Cancelados: conforme escopo do tipo
  */
 export function calcularResumoCardsPedidos(
   pedidos: Pedido[],
   tipoFiltro?: TipoPedido,
 ): ResumoHeroPedidos {
-  const escopo = tipoFiltro
-    ? pedidos.filter((p) => p.tipo === tipoFiltro)
-    : pedidos;
+  const vendas = pedidos.filter(
+    (p) =>
+      p.tipo === 'VENDA' && (!tipoFiltro || tipoFiltro === 'VENDA'),
+  );
+  const compras = pedidos.filter(
+    (p) =>
+      p.tipo === 'COMPRA' && (!tipoFiltro || tipoFiltro === 'COMPRA'),
+  );
+  const escopo =
+    tipoFiltro === 'VENDA'
+      ? vendas
+      : tipoFiltro === 'COMPRA'
+        ? compras
+        : pedidos;
 
-  const atendidos = escopo.filter((p) => pedidoAtendido(p));
+  const atendidosVenda = vendas.filter((p) => pedidoAtendido(p));
+  const abertosVenda = vendas.filter((p) => p.status === 'ABERTO');
+  const saldoVenda = abertosVenda.filter((p) => pedidoComSaldoEmAberto(p));
+
+  const atendidosCompra = compras.filter((p) => pedidoAtendido(p));
+  const abertosCompra = compras.filter((p) => p.status === 'ABERTO');
+  const saldoCompra = abertosCompra.filter((p) => pedidoComSaldoEmAberto(p));
+
   const abertos = escopo.filter((p) => p.status === 'ABERTO');
-  const comSaldoAberto = abertos.filter((p) => pedidoComSaldoEmAberto(p));
   const cancelados = escopo.filter((p) => p.status === 'CANCELADO');
 
   return {
     modoCard: inferirModoCard(pedidos, tipoFiltro),
     faturamento_confirmado_venda: {
       valor: Number(
-        atendidos.reduce((s, p) => s + Number(p.valor_total ?? 0), 0).toFixed(2),
+        atendidosVenda
+          .reduce((s, p) => s + Number(p.valor_total ?? 0), 0)
+          .toFixed(2),
       ),
-      quantidade: atendidos.length,
+      quantidade: atendidosVenda.length,
     },
     valor_em_aberto_venda: {
       valor: Number(
-        comSaldoAberto.reduce((s, p) => s + saldoAbertoPedido(p), 0).toFixed(2),
+        saldoVenda.reduce((s, p) => s + saldoAbertoPedido(p), 0).toFixed(2),
       ),
-      quantidade: comSaldoAberto.length,
+      quantidade: saldoVenda.length,
+    },
+    compras_confirmadas: {
+      valor: Number(
+        atendidosCompra
+          .reduce((s, p) => s + Number(p.valor_total ?? 0), 0)
+          .toFixed(2),
+      ),
+      quantidade: atendidosCompra.length,
+    },
+    compras_em_aberto: {
+      valor: Number(
+        saldoCompra.reduce((s, p) => s + saldoAbertoPedido(p), 0).toFixed(2),
+      ),
+      quantidade: saldoCompra.length,
     },
     pedidos_em_andamento: {
       quantidade: abertos.length,
