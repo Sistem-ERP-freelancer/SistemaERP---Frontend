@@ -6,6 +6,7 @@ import {
 } from "@/components/layout/ModuleStatCards";
 import { statTheme } from "@/components/layout/module-stat-themes";
 import { RelatorioMovimentacoesDialog } from "@/components/reports/RelatorioMovimentacoesDialog";
+import { RelatorioPosicaoEstoqueDialog } from "@/components/reports/RelatorioPosicaoEstoqueDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -68,6 +77,7 @@ import {
     Calendar,
     Circle,
     CircleDollarSign,
+    ChevronDown,
     FileText,
     Filter,
     Info,
@@ -102,6 +112,8 @@ const Estoque = () => {
   const [dataInicialRelatorio, setDataInicialRelatorio] = useState<string>("");
   const [dataFinalRelatorio, setDataFinalRelatorio] = useState<string>("");
   const [relatorioDialogOpen, setRelatorioDialogOpen] = useState(false);
+  const [relatorioPosicaoDialogOpen, setRelatorioPosicaoDialogOpen] =
+    useState(false);
 
   // Buscar produtos ativos (limit >= 100 + ATIVO retorna todos no backend)
   const { data: produtosData } = useQuery({
@@ -767,14 +779,27 @@ const Estoque = () => {
                   </span>
                 )}
               </Button>
-              <Button
-                variant="outline"
-                className="gap-2 shrink-0"
-                onClick={() => setRelatorioDialogOpen(true)}
-              >
-                <FileText className="w-4 h-4" />
-                Relatório
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2 shrink-0">
+                    <FileText className="w-4 h-4" />
+                    Relatório
+                    <ChevronDown className="w-4 h-4 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Relatórios</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setRelatorioDialogOpen(true)}>
+                    Movimentações
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setRelatorioPosicaoDialogOpen(true)}
+                  >
+                    Posição de estoque
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -1161,6 +1186,12 @@ const Estoque = () => {
               defaultDataInicial={dataInicialRelatorio}
               defaultDataFinal={dataFinalRelatorio}
               defaultTipo={filtroTipo}
+            />
+            <RelatorioPosicaoEstoqueDialog
+              open={relatorioPosicaoDialogOpen}
+              onOpenChange={setRelatorioPosicaoDialogOpen}
+              defaultDataInicial={dataInicialRelatorio}
+              defaultDataFinal={dataFinalRelatorio}
             />
           <div className="mt-4">
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">

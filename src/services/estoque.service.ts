@@ -305,6 +305,49 @@ class EstoqueService {
       throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
     }
   }
+
+  private buildRelatorioPosicaoQuery(params?: {
+    data_inicial?: string;
+    data_final?: string;
+  }): string {
+    const q = new URLSearchParams();
+    if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
+    if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    return q.toString();
+  }
+
+  async downloadRelatorioPosicaoEstoquePdf(params?: {
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<void> {
+    const query = this.buildRelatorioPosicaoQuery(params);
+    const blob = await apiClient.getBlob(
+      `/estoque/relatorio/posicao/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-posicao-estoque-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async printRelatorioPosicaoEstoquePdf(params?: {
+    data_inicial?: string;
+    data_final?: string;
+  }): Promise<void> {
+    const query = this.buildRelatorioPosicaoQuery(params);
+    const blob = await apiClient.getBlob(
+      `/estoque/relatorio/posicao/pdf${query ? `?${query}` : ''}`
+    );
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      throw new Error('Não foi possível abrir o PDF para impressão. Verifique o bloqueador de pop-ups.');
+    }
+  }
 }
 
 export interface RelatorioAcompanhamentoLinha {
