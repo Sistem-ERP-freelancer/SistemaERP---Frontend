@@ -10,6 +10,14 @@ import { RelatorioPosicaoEstoqueDialog } from "@/components/reports/RelatorioPos
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -26,6 +34,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
     Pagination,
     PaginationContent,
@@ -60,6 +73,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { cn, formatCurrency } from "@/lib/utils";
 import {
     estoqueService,
     MovimentacaoEstoque,
@@ -69,12 +83,13 @@ import {
 import { Produto, produtosService } from "@/services/produtos.service";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { formatCurrency } from "@/lib/utils";
 import {
     AlertTriangle,
     ArrowDownCircle,
     ArrowUpCircle,
     Calendar,
+    Check,
+    ChevronsUpDown,
     Circle,
     CircleDollarSign,
     ChevronDown,
@@ -96,6 +111,8 @@ const Estoque = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<string>("Todos");
+  const [filtroProdutoId, setFiltroProdutoId] = useState<number | null>(null);
+  const [produtoFiltroOpen, setProdutoFiltroOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15);
   const [ordenacaoMov, setOrdenacaoMov] = useState<"desc" | "asc">("desc");
@@ -144,6 +161,14 @@ const Estoque = () => {
   });
 
   const produtos: Produto[] = produtosData || [];
+
+  const produtoFiltroSelecionado = useMemo(
+    () =>
+      filtroProdutoId == null
+        ? null
+        : produtos.find((p) => Number(p.id) === Number(filtroProdutoId)) ?? null,
+    [produtos, filtroProdutoId],
+  );
 
   // Validar parâmetros de paginação conforme GUIA_PAGINACAO_FRONTEND.md
   const validarParametrosPaginação = (page: number, limit: number): boolean => {
@@ -329,6 +354,9 @@ const Estoque = () => {
       : null;
 
     return produtos.reduce((acc, p) => {
+      if (filtroProdutoId != null && Number(p.id) !== Number(filtroProdutoId)) {
+        return acc;
+      }
       const custo = Number(p.preco_custo) || 0;
       if (custo <= 0) return acc;
 
@@ -348,14 +376,22 @@ const Estoque = () => {
     produtos,
     movimentacoesOriginais,
     dataFinalRelatorio,
+    filtroProdutoId,
   ]);
 
-  // Filtrar movimentações por tipo, busca, período e ordenação (lista + cards)
+  // Filtrar movimentações por tipo, produto, busca, período e ordenação (lista + cards)
   const movimentacoesFiltradas = useMemo(() => {
     let lista = movimentacoesOriginais;
 
     if (filtroTipo !== "Todos") {
       lista = lista.filter((mov) => mov.tipo === filtroTipo);
+    }
+
+    if (filtroProdutoId != null) {
+      lista = lista.filter((mov) => {
+        const id = mov.produto_id ?? mov.produto?.id;
+        return id != null && Number(id) === Number(filtroProdutoId);
+      });
     }
 
     if (searchTerm.trim()) {
@@ -398,6 +434,7 @@ const Estoque = () => {
   }, [
     movimentacoesOriginais,
     filtroTipo,
+    filtroProdutoId,
     searchTerm,
     ordenacaoMov,
     dataInicialRelatorio,
@@ -415,7 +452,7 @@ const Estoque = () => {
   // Resetar página quando filtro, busca ou período mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [filtroTipo, searchTerm, dataInicialRelatorio, dataFinalRelatorio]);
+  }, [filtroTipo, filtroProdutoId, searchTerm, dataInicialRelatorio, dataFinalRelatorio]);
 
   // Calcular totais gerais e por tipo
   const { totalEntradas, totalSaidas, balanco, totaisPorTipo } = useMemo(() => {
@@ -704,12 +741,14 @@ const Estoque = () => {
 
   const temFiltrosAtivos =
     filtroTipo !== "Todos" ||
+    filtroProdutoId != null ||
     ordenacaoMov !== "desc" ||
     Boolean(dataInicialRelatorio) ||
     Boolean(dataFinalRelatorio);
 
   const contagemFiltrosAtivos =
     (filtroTipo !== "Todos" ? 1 : 0) +
+    (filtroProdutoId != null ? 1 : 0) +
     (ordenacaoMov !== "desc" ? 1 : 0) +
     (dataInicialRelatorio ? 1 : 0) +
     (dataFinalRelatorio ? 1 : 0);
@@ -721,6 +760,7 @@ const Estoque = () => {
 
   const handleLimparFiltros = () => {
     setFiltroTipo("Todos");
+    setFiltroProdutoId(null);
     setOrdenacaoMov("desc");
     setDataInicialRelatorio("");
     setDataFinalRelatorio("");
@@ -819,6 +859,90 @@ const Estoque = () => {
               </SheetHeader>
 
               <div className="space-y-6">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold">Produto</Label>
+                  <Popover
+                    open={produtoFiltroOpen}
+                    onOpenChange={setProdutoFiltroOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={produtoFiltroOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        <span className="truncate">
+                          {produtoFiltroSelecionado
+                            ? `${produtoFiltroSelecionado.nome} — ${produtoFiltroSelecionado.sku}`
+                            : "Todos os produtos"}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="p-0 w-[var(--radix-popover-trigger-width)]"
+                      align="start"
+                    >
+                      <Command>
+                        <CommandInput placeholder="Buscar produto ou SKU..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="todos-os-produtos"
+                              onSelect={() => {
+                                setFiltroProdutoId(null);
+                                setProdutoFiltroOpen(false);
+                                setCurrentPage(1);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  filtroProdutoId == null
+                                    ? "opacity-100"
+                                    : "opacity-0",
+                                )}
+                              />
+                              Todos os produtos
+                            </CommandItem>
+                            {produtos.map((produto) => (
+                              <CommandItem
+                                key={produto.id}
+                                value={`${produto.nome} ${produto.sku}`}
+                                onSelect={() => {
+                                  setFiltroProdutoId(Number(produto.id));
+                                  setProdutoFiltroOpen(false);
+                                  setCurrentPage(1);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    Number(filtroProdutoId) === Number(produto.id)
+                                      ? "opacity-100"
+                                      : "opacity-0",
+                                  )}
+                                />
+                                <span className="truncate">
+                                  {produto.nome} — {produto.sku}
+                                </span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Filtra a lista, os cards e o valor em estoque
+                  </p>
+                </div>
+
+                <Separator />
+
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold">
                     Tipo de Movimentação
@@ -1192,6 +1316,7 @@ const Estoque = () => {
               onOpenChange={setRelatorioPosicaoDialogOpen}
               defaultDataInicial={dataInicialRelatorio}
               defaultDataFinal={dataFinalRelatorio}
+              defaultProdutoId={filtroProdutoId}
             />
           <div className="mt-4">
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">

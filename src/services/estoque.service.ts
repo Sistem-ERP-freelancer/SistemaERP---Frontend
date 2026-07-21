@@ -309,16 +309,21 @@ class EstoqueService {
   private buildRelatorioPosicaoQuery(params?: {
     data_inicial?: string;
     data_final?: string;
+    produto_id?: number;
   }): string {
     const q = new URLSearchParams();
     if (params?.data_inicial?.trim()) q.append('data_inicial', params.data_inicial.trim());
     if (params?.data_final?.trim()) q.append('data_final', params.data_final.trim());
+    if (params?.produto_id != null && Number.isFinite(params.produto_id)) {
+      q.append('produto_id', String(params.produto_id));
+    }
     return q.toString();
   }
 
   async downloadRelatorioPosicaoEstoquePdf(params?: {
     data_inicial?: string;
     data_final?: string;
+    produto_id?: number;
   }): Promise<void> {
     const query = this.buildRelatorioPosicaoQuery(params);
     const blob = await apiClient.getBlob(
@@ -337,6 +342,7 @@ class EstoqueService {
   async printRelatorioPosicaoEstoquePdf(params?: {
     data_inicial?: string;
     data_final?: string;
+    produto_id?: number;
   }): Promise<void> {
     const query = this.buildRelatorioPosicaoQuery(params);
     const blob = await apiClient.getBlob(
