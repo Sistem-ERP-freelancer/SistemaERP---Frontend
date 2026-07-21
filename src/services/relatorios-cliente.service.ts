@@ -56,6 +56,8 @@ export interface RelatorioGeralContasPagarQuery {
   status?: string;
   fornecedorId?: number;
   rocaId?: number;
+  /** Campo do período: vencimento (padrão) ou emissão */
+  campoData?: 'vencimento' | 'emissao';
 }
 
 /** Filtros do relatório geral de contas a receber. */
@@ -65,6 +67,8 @@ export interface RelatorioGeralContasReceberQuery {
   status?: string;
   clienteId?: number;
   rocaId?: number;
+  /** Campo do período: vencimento (padrão) ou emissão */
+  campoData?: 'vencimento' | 'emissao';
 }
 
 /** Filtros do relatório por centro de custo. */
@@ -251,6 +255,9 @@ class RelatoriosClienteService {
     if (filtros?.rocaId != null && filtros.rocaId > 0) {
       params.append('roca_id', String(filtros.rocaId));
     }
+    if (filtros?.campoData === 'emissao' || filtros?.campoData === 'vencimento') {
+      params.append('campo_data', filtros.campoData);
+    }
     const q = params.toString();
     return q ? `?${q}` : '';
   }
@@ -317,6 +324,9 @@ class RelatoriosClienteService {
     }
     if (filtros?.rocaId != null && filtros.rocaId > 0) {
       params.append('roca_id', String(filtros.rocaId));
+    }
+    if (filtros?.campoData === 'emissao' || filtros?.campoData === 'vencimento') {
+      params.append('campo_data', filtros.campoData);
     }
     const q = params.toString();
     return q ? `?${q}` : '';

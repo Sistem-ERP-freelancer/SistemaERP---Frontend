@@ -248,6 +248,9 @@ function ContasAPagar() {
     useState<string>("Todos");
   const [relatorioGeralStatusFiltro, setRelatorioGeralStatusFiltro] =
     useState<string>("Todos");
+  const [relatorioGeralCampoData, setRelatorioGeralCampoData] = useState<
+    "vencimento" | "emissao"
+  >("vencimento");
   const [relatorioCentroCustoStatusFiltro, setRelatorioCentroCustoStatusFiltro] =
     useState<string>("Todos");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -420,6 +423,7 @@ function ContasAPagar() {
       tipo: "PAGAR" as const,
       data_inicial: relatorioGeralDataInicial || undefined,
       data_final: relatorioGeralDataFinal || undefined,
+      campo_data: relatorioGeralCampoData,
       status:
         relatorioGeralStatusFiltro !== "Todos"
           ? relatorioGeralStatusFiltro
@@ -429,6 +433,7 @@ function ContasAPagar() {
       relatorioGeralDataInicial,
       relatorioGeralDataFinal,
       relatorioGeralStatusFiltro,
+      relatorioGeralCampoData,
     ],
   );
 
@@ -479,11 +484,13 @@ function ContasAPagar() {
         relatorioGeralStatusFiltro !== "Todos"
           ? relatorioGeralStatusFiltro
           : undefined,
+      campoData: relatorioGeralCampoData,
     }),
     [
       relatorioGeralDataInicial,
       relatorioGeralDataFinal,
       relatorioGeralStatusFiltro,
+      relatorioGeralCampoData,
     ],
   );
 
@@ -2893,6 +2900,7 @@ function ContasAPagar() {
               setRelatorioGeralStatusFiltro(
                 statusFilter && statusFilter !== "" ? statusFilter : "Todos",
               );
+              setRelatorioGeralCampoData("vencimento");
             }
           }}
         >
@@ -2901,11 +2909,37 @@ function ContasAPagar() {
               <DialogTitle>Relatório geral</DialogTitle>
               <DialogDescription>
                 Inclui dados da empresa e todos os lançamentos de contas a pagar conforme os
-                filtros selecionados (período por data de vencimento e status).
+                filtros selecionados (período por data de vencimento ou emissão e status).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Filtrar período por</Label>
+                  <RadioGroup
+                    value={relatorioGeralCampoData}
+                    onValueChange={(v) =>
+                      setRelatorioGeralCampoData(v === "emissao" ? "emissao" : "vencimento")
+                    }
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="vencimento" id="relatorio-geral-pagar-campo-vencimento" />
+                      <Label htmlFor="relatorio-geral-pagar-campo-vencimento" className="cursor-pointer">
+                        Data de vencimento
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="emissao" id="relatorio-geral-pagar-campo-emissao" />
+                      <Label htmlFor="relatorio-geral-pagar-campo-emissao" className="cursor-pointer">
+                        Data de emissão
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <Separator />
+
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
                   <div className="grid grid-cols-2 gap-3">

@@ -341,6 +341,7 @@ class FinanceiroService {
     dias_maximos?: number;
     data_inicial?: string;
     data_final?: string;
+    campo_data?: 'vencimento' | 'emissao';
   }): Promise<ContasFinanceirasResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -360,6 +361,9 @@ class FinanceiroService {
     if (params?.dias_maximos !== undefined) queryParams.append('dias_maximos', params.dias_maximos.toString());
     if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
     if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.campo_data === 'emissao' || params?.campo_data === 'vencimento') {
+      queryParams.append('campo_data', params.campo_data);
+    }
 
     const query = queryParams.toString();
     return apiClient.get<ContasFinanceirasResponse>(`/contas-financeiras${query ? `?${query}` : ''}`);

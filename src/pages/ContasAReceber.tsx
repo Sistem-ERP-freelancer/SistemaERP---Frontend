@@ -138,6 +138,9 @@ const ContasAReceber = () => {
   const [relatorioDataInicial, setRelatorioDataInicial] = useState<string>("");
   const [relatorioDataFinal, setRelatorioDataFinal] = useState<string>("");
   const [relatorioStatusFiltro, setRelatorioStatusFiltro] = useState<string>("Todos");
+  const [relatorioCampoData, setRelatorioCampoData] = useState<"vencimento" | "emissao">(
+    "vencimento",
+  );
   const [relatorioPdfLoading, setRelatorioPdfLoading] = useState(false);
   const [relatorioProdutosClienteOpen, setRelatorioProdutosClienteOpen] =
     useState(false);
@@ -224,10 +227,11 @@ const ContasAReceber = () => {
       tipo: "RECEBER" as const,
       data_inicial: relatorioDataInicial || undefined,
       data_final: relatorioDataFinal || undefined,
+      campo_data: relatorioCampoData,
       status:
         relatorioStatusFiltro !== "Todos" ? relatorioStatusFiltro : undefined,
     }),
-    [relatorioDataInicial, relatorioDataFinal, relatorioStatusFiltro],
+    [relatorioDataInicial, relatorioDataFinal, relatorioStatusFiltro, relatorioCampoData],
   );
 
   const {
@@ -275,8 +279,9 @@ const ContasAReceber = () => {
       dataFinal: relatorioDataFinal || undefined,
       status:
         relatorioStatusFiltro !== "Todos" ? relatorioStatusFiltro : undefined,
+      campoData: relatorioCampoData,
     }),
-    [relatorioDataInicial, relatorioDataFinal, relatorioStatusFiltro],
+    [relatorioDataInicial, relatorioDataFinal, relatorioStatusFiltro, relatorioCampoData],
   );
 
   const relatorioClientePreviewParams = useMemo(
@@ -2253,6 +2258,7 @@ const ContasAReceber = () => {
                     setRelatorioDataInicial(dataInicialFilter || "");
                     setRelatorioDataFinal(dataFinalFilter || "");
                     setRelatorioStatusFiltro("Todos");
+                    setRelatorioCampoData("vencimento");
                     setRelatorioDialogOpen(true);
                   }}
                 >
@@ -2276,11 +2282,37 @@ const ContasAReceber = () => {
               <DialogTitle>Relatório geral</DialogTitle>
               <DialogDescription>
                 Inclui dados da empresa e todos os lançamentos de contas a receber conforme os
-                filtros selecionados (período por data de vencimento e status).
+                filtros selecionados (período por data de vencimento ou emissão e status).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1A3B70]">Filtrar período por</Label>
+                  <RadioGroup
+                    value={relatorioCampoData}
+                    onValueChange={(v) =>
+                      setRelatorioCampoData(v === "emissao" ? "emissao" : "vencimento")
+                    }
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="vencimento" id="relatorio-geral-receber-campo-vencimento" />
+                      <Label htmlFor="relatorio-geral-receber-campo-vencimento" className="cursor-pointer">
+                        Data de vencimento
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="emissao" id="relatorio-geral-receber-campo-emissao" />
+                      <Label htmlFor="relatorio-geral-receber-campo-emissao" className="cursor-pointer">
+                        Data de emissão
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <Separator />
+
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold text-[#1A3B70]">Período</Label>
                   <div className="grid grid-cols-2 gap-3">
