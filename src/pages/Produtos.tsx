@@ -283,18 +283,11 @@ const Produtos = () => {
       try {
         let response;
         
-        if (temFiltrosAtivos) {
-          // Usa busca avançada quando há filtros
+        if (temFiltrosAtivos || searchTerm.trim()) {
+          // Busca no backend (evita filtrar só a página atual no cliente)
           response = await produtosService.buscarAvancado({
             termo: searchTerm.trim() || undefined,
             ...filtrosAvancados,
-            page: currentPage,
-            limit: pageSize,
-          });
-        } else if (searchTerm.trim()) {
-          // Busca local por termo (já que não há endpoint de busca simples)
-          // Busca todos e filtra localmente, mas com paginação
-          response = await produtosService.listar({
             page: currentPage,
             limit: pageSize,
           });
@@ -320,17 +313,6 @@ const Produtos = () => {
         } else if (response?.produtos && Array.isArray(response.produtos)) {
           produtos = response.produtos;
           total = response.total || response.produtos.length;
-        }
-
-        // Se houver termo de busca e não houver filtros, filtrar localmente
-        // Nota: Isso pode não funcionar bem com paginação, idealmente o backend deveria fazer a busca
-        if (searchTerm.trim() && !temFiltrosAtivos) {
-          const produtosFiltrados = produtos.filter((p) =>
-            p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.sku.toLowerCase().includes(searchTerm.toLowerCase())
-          );
-          // Se filtrou localmente, o total pode estar incorreto
-          return { produtos: produtosFiltrados, total: produtosFiltrados.length };
         }
 
         if (import.meta.env.DEV) {
