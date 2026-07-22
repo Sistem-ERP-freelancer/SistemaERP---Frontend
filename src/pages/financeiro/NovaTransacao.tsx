@@ -14,7 +14,15 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -54,6 +62,7 @@ import {
   FileText,
   Info,
   Loader2,
+  Plus,
   ShoppingCart,
   TrendingDown,
   TrendingUp,
@@ -217,6 +226,9 @@ const NovaTransacao = () => {
   const [modo, setModo] = useState<ModoLancamento>("RECEBER");
   const [previsao, setPrevisao] = useState(false);
   const [centroCustoPopOpen, setCentroCustoPopOpen] = useState(false);
+  const [quickTipoOpen, setQuickTipoOpen] = useState(false);
+  const [quickTipoNome, setQuickTipoNome] = useState("");
+  const [salvandoQuickTipo, setSalvandoQuickTipo] = useState(false);
   const [form, setForm] = useState<NovaTransacaoForm>(initialForm);
   const [valorOriginalInput, setValorOriginalInput] = useState("");
   const [salvandoDespesaCc, setSalvandoDespesaCc] = useState(false);
@@ -415,6 +427,30 @@ const NovaTransacao = () => {
       centro_custo_tipo_id: tipoId,
     }));
     setCentroCustoPopOpen(false);
+  };
+
+  const salvarQuickTipo = async () => {
+    const n = quickTipoNome.trim();
+    if (!n) {
+      toast.error("Informe o nome do tipo.");
+      return;
+    }
+    setSalvandoQuickTipo(true);
+    try {
+      const tipo = await centroCustoService.criarTipo({ nome: n });
+      await queryClient.invalidateQueries({ queryKey: ["centro-custo"] });
+      selecionarCentroCustoTipo(tipo.id);
+      setQuickTipoNome("");
+      setQuickTipoOpen(false);
+      toast.success("Tipo cadastrado.");
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Não foi possível cadastrar o tipo.";
+      toast.error(msg);
+    } finally {
+      setSalvandoQuickTipo(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -747,13 +783,27 @@ const NovaTransacao = () => {
                                     </CommandItem>
                                   ))}
                                 </CommandGroup>
+                                <CommandSeparator />
+                                <CommandGroup>
+                                  <CommandItem
+                                    value="cadastrar-novo-tipo"
+                                    onSelect={() => {
+                                      setCentroCustoPopOpen(false);
+                                      setQuickTipoOpen(true);
+                                    }}
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Cadastrar novo tipo…
+                                  </CommandItem>
+                                </CommandGroup>
                               </CommandList>
                             </Command>
                           </PopoverContent>
                         </Popover>
                         {tiposDespesaLista.length === 0 ? (
                           <p className="text-xs text-amber-600 dark:text-amber-400">
-                            Nenhum tipo cadastrado. Cadastre em Centro de Custos → Tipos.
+                            Nenhum tipo cadastrado. Use &quot;Cadastrar novo tipo&quot; ou cadastre
+                            em Centro de Custos → Tipos.
                           </p>
                         ) : (
                           <p className="text-xs text-muted-foreground">
@@ -1161,6 +1211,45 @@ const NovaTransacao = () => {
             </div>
         </div>
       </div>
+
+      <Dialog open={quickTipoOpen} onOpenChange={setQuickTipoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cadastro rápido de tipo</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={quickTipoNome}
+            onChange={(e) => setQuickTipoNome(e.target.value)}
+            placeholder="Nome do tipo"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void salvarQuickTipo();
+              }
+            }}
+            disabled={salvandoQuickTipo}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setQuickTipoOpen(false)}
+              disabled={salvandoQuickTipo}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={() => void salvarQuickTipo()} disabled={salvandoQuickTipo}>
+              {salvandoQuickTipo ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Cadastrando...
+                </>
+              ) : (
+                "Cadastrar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };
