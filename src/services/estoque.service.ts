@@ -254,6 +254,11 @@ class EstoqueService {
     atual: { quantidade: number; valor: number };
     inicioPeriodo: { data: string; quantidade: number; valor: number };
     fimPeriodo: { data: string; quantidade: number; valor: number };
+    periodo?: {
+      qtdEntrada: number;
+      qtdSaida: number;
+      variacao: number;
+    };
     fimMesAnterior?: { data: string; quantidade: number; valor: number };
   }> {
     const q = new URLSearchParams();
@@ -265,6 +270,11 @@ class EstoqueService {
       atual: { quantidade: number; valor: number };
       inicioPeriodo: { data: string; quantidade: number; valor: number };
       fimPeriodo: { data: string; quantidade: number; valor: number };
+      periodo?: {
+        qtdEntrada: number;
+        qtdSaida: number;
+        variacao: number;
+      };
       fimMesAnterior?: { data: string; quantidade: number; valor: number };
     }>(`/estoque/metricas-dre${query ? `?${query}` : ''}`);
   }
