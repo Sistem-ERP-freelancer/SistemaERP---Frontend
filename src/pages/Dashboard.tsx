@@ -230,12 +230,8 @@ const Dashboard = () => {
   const [dreMesAnoFiltro, setDreMesAnoFiltro] = useState<string>(() =>
     mesAnoAtualLocal(),
   );
-  /** Período do bloco Posição de Estoque (De / Até). */
-  const [estoqueDataInicial, setEstoqueDataInicial] = useState(() => {
-    const [ano, mes] = mesAnoAtualLocal().split("-").map(Number);
-    return formatISODateLocal(new Date(ano, mes - 1, 1));
-  });
-  const [estoqueDataFinal, setEstoqueDataFinal] = useState(() =>
+  /** Dia da posição de estoque no dashboard. */
+  const [estoqueData, setEstoqueData] = useState(() =>
     formatISODateLocal(new Date()),
   );
   const [drePdfLoading, setDrePdfLoading] = useState<"download" | "print" | null>(
@@ -694,23 +690,15 @@ const Dashboard = () => {
 
   const { data: metricasEstoqueDre, isLoading: loadingMetricasEstoque } =
     useQuery({
-      queryKey: [
-        "dashboard",
-        "posicao-estoque",
-        estoqueDataInicial,
-        estoqueDataFinal,
-      ],
+      queryKey: ["dashboard", "posicao-estoque", estoqueData],
       queryFn: () =>
         estoqueService.getMetricasDre({
-          data_inicial: estoqueDataInicial,
-          data_final: estoqueDataFinal,
+          data_inicial: estoqueData,
+          data_final: estoqueData,
         }),
       staleTime: 0,
       retry: false,
-      enabled:
-        acessoFinanceiro &&
-        !!estoqueDataInicial?.trim() &&
-        !!estoqueDataFinal?.trim(),
+      enabled: acessoFinanceiro && !!estoqueData?.trim(),
     });
 
   const rocaDreNome = useMemo(() => {
@@ -1003,10 +991,8 @@ const Dashboard = () => {
             valor={metricasEstoqueDre?.fimPeriodo?.valor ?? 0}
             dataPosicao={metricasEstoqueDre?.fimPeriodo?.data}
             loading={loadingMetricasEstoque}
-            dataInicial={estoqueDataInicial}
-            dataFinal={estoqueDataFinal}
-            onDataInicial={setEstoqueDataInicial}
-            onDataFinal={setEstoqueDataFinal}
+            data={estoqueData}
+            onData={setEstoqueData}
           />
         </motion.div>
         </DashboardSectionErrorBoundary>

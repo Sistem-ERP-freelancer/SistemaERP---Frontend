@@ -4,16 +4,15 @@ import { Label } from '@/components/ui/label';
 import { Calendar, Loader2, Package, Wallet } from 'lucide-react';
 
 export type PosicaoEstoqueMetricasProps = {
-  /** Posição na data final do período filtrado */
+  /** Posição na data selecionada */
   quantidade: number;
   valor: number;
   dataPosicao?: string;
   loading?: boolean;
   className?: string;
-  dataInicial: string;
-  dataFinal: string;
-  onDataInicial: (value: string) => void;
-  onDataFinal: (value: string) => void;
+  /** Dia da posição (YYYY-MM-DD) */
+  data: string;
+  onData: (value: string) => void;
 };
 
 function fmtQtd(n: number): string {
@@ -38,16 +37,14 @@ export function PosicaoEstoqueMetricas({
   dataPosicao,
   loading = false,
   className,
-  dataInicial,
-  dataFinal,
-  onDataInicial,
-  onDataFinal,
+  data,
+  onData,
 }: PosicaoEstoqueMetricasProps) {
   const dataHint = dataPosicao
     ? `Posição em ${fmtDataBr(dataPosicao)}`
-    : dataFinal
-      ? `Posição em ${fmtDataBr(dataFinal)}`
-      : 'Posição no fim do período';
+    : data
+      ? `Posição em ${fmtDataBr(data)}`
+      : 'Selecione um dia';
 
   const cards = [
     {
@@ -98,49 +95,26 @@ export function PosicaoEstoqueMetricas({
             Posição de Estoque
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
-            Quantidade e valor na data final do período filtrado. Valor =
-            quantidade × preço de custo.
+            Quantidade e valor no dia selecionado. Valor = quantidade × preço de
+            custo.
           </p>
         </div>
-        <div className="w-full shrink-0 space-y-2 sm:w-auto sm:min-w-[18rem]">
-          <Label className="text-xs font-medium text-slate-500">Período</Label>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label
-                htmlFor="posicao-estoque-de"
-                className="text-[11px] text-muted-foreground"
-              >
-                De
-              </Label>
-              <div className="relative">
-                <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="posicao-estoque-de"
-                  type="date"
-                  className="h-10 rounded-lg border-slate-200 bg-white pl-8 text-sm dark:border-border dark:bg-background"
-                  value={dataInicial}
-                  onChange={(e) => onDataInicial(e.target.value || '')}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label
-                htmlFor="posicao-estoque-ate"
-                className="text-[11px] text-muted-foreground"
-              >
-                Até
-              </Label>
-              <div className="relative">
-                <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <Input
-                  id="posicao-estoque-ate"
-                  type="date"
-                  className="h-10 rounded-lg border-slate-200 bg-white pl-8 text-sm dark:border-border dark:bg-background"
-                  value={dataFinal}
-                  onChange={(e) => onDataFinal(e.target.value || '')}
-                />
-              </div>
-            </div>
+        <div className="w-full shrink-0 space-y-2 sm:w-auto sm:min-w-[14rem]">
+          <Label
+            htmlFor="posicao-estoque-dia"
+            className="text-xs font-medium text-slate-500"
+          >
+            Dia
+          </Label>
+          <div className="relative">
+            <Calendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Input
+              id="posicao-estoque-dia"
+              type="date"
+              className="h-10 rounded-lg border-slate-200 bg-white pl-8 text-sm dark:border-border dark:bg-background"
+              value={data}
+              onChange={(e) => onData(e.target.value || '')}
+            />
           </div>
         </div>
       </div>
