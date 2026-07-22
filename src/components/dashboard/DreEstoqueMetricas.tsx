@@ -1,25 +1,13 @@
 import { cn, formatCurrency } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Calendar,
-  GitCompareArrows,
-  Loader2,
-  Package,
-  Wallet,
-} from 'lucide-react';
+import { Calendar, Loader2, Package, Wallet } from 'lucide-react';
 
 export type PosicaoEstoqueMetricasProps = {
   /** Posição na data final do período filtrado */
   quantidade: number;
   valor: number;
   dataPosicao?: string;
-  /** Movimentações no período (fluxo) */
-  qtdEntrada?: number;
-  qtdSaida?: number;
-  variacao?: number;
   loading?: boolean;
   className?: string;
   dataInicial: string;
@@ -32,14 +20,6 @@ function fmtQtd(n: number): string {
   return new Intl.NumberFormat('pt-BR', {
     maximumFractionDigits: 3,
   }).format(Number(n) || 0);
-}
-
-function fmtQtdSinal(n: number): string {
-  const v = Number(n) || 0;
-  const abs = fmtQtd(Math.abs(v));
-  if (v > 0) return `+${abs}`;
-  if (v < 0) return `-${abs}`;
-  return abs;
 }
 
 function fmtDataBr(iso?: string): string {
@@ -56,9 +36,6 @@ export function PosicaoEstoqueMetricas({
   quantidade,
   valor,
   dataPosicao,
-  qtdEntrada = 0,
-  qtdSaida = 0,
-  variacao = 0,
   loading = false,
   className,
   dataInicial,
@@ -71,11 +48,6 @@ export function PosicaoEstoqueMetricas({
     : dataFinal
       ? `Posição em ${fmtDataBr(dataFinal)}`
       : 'Posição no fim do período';
-
-  const periodoHint =
-    dataInicial && dataFinal
-      ? `${fmtDataBr(dataInicial)} a ${fmtDataBr(dataFinal)}`
-      : 'No período filtrado';
 
   const cards = [
     {
@@ -94,30 +66,6 @@ export function PosicaoEstoqueMetricas({
       Icon: Wallet,
       tone: 'emerald' as const,
     },
-    {
-      key: 'entrada',
-      label: 'Qtd. entrada',
-      value: loading ? '…' : `+${fmtQtd(qtdEntrada)}`,
-      hint: periodoHint,
-      Icon: ArrowUpCircle,
-      tone: 'emerald' as const,
-    },
-    {
-      key: 'saida',
-      label: 'Qtd. saída',
-      value: loading ? '…' : `-${fmtQtd(qtdSaida)}`,
-      hint: periodoHint,
-      Icon: ArrowDownCircle,
-      tone: 'rose' as const,
-    },
-    {
-      key: 'variacao',
-      label: 'Variação do período',
-      value: loading ? '…' : fmtQtdSinal(variacao),
-      hint: 'Entradas − saídas no período',
-      Icon: GitCompareArrows,
-      tone: (variacao >= 0 ? 'violet' : 'rose') as 'violet' | 'rose',
-    },
   ];
 
   const toneClass = {
@@ -130,16 +78,6 @@ export function PosicaoEstoqueMetricas({
       wrap: 'border-emerald-100 bg-emerald-50/90 dark:border-emerald-900/40 dark:bg-emerald-950/25',
       icon: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400',
       value: 'text-emerald-800 dark:text-emerald-300',
-    },
-    rose: {
-      wrap: 'border-rose-100 bg-rose-50/90 dark:border-rose-900/40 dark:bg-rose-950/25',
-      icon: 'bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400',
-      value: 'text-rose-800 dark:text-rose-300',
-    },
-    violet: {
-      wrap: 'border-violet-100 bg-violet-50/90 dark:border-violet-900/40 dark:bg-violet-950/25',
-      icon: 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-violet-400',
-      value: 'text-violet-800 dark:text-violet-300',
     },
   };
 
@@ -160,8 +98,8 @@ export function PosicaoEstoqueMetricas({
             Posição de Estoque
           </h3>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-muted-foreground">
-            Posição na data final do período, mais entradas, saídas e variação
-            (entradas − saídas) no intervalo filtrado.
+            Quantidade e valor na data final do período filtrado. Valor =
+            quantidade × preço de custo.
           </p>
         </div>
         <div className="w-full shrink-0 space-y-2 sm:w-auto sm:min-w-[18rem]">
@@ -213,7 +151,7 @@ export function PosicaoEstoqueMetricas({
           Carregando estoque…
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {cards.map((card) => {
             const t = toneClass[card.tone];
             return (

@@ -1002,9 +1002,6 @@ const Dashboard = () => {
             quantidade={metricasEstoqueDre?.fimPeriodo?.quantidade ?? 0}
             valor={metricasEstoqueDre?.fimPeriodo?.valor ?? 0}
             dataPosicao={metricasEstoqueDre?.fimPeriodo?.data}
-            qtdEntrada={metricasEstoqueDre?.periodo?.qtdEntrada ?? 0}
-            qtdSaida={metricasEstoqueDre?.periodo?.qtdSaida ?? 0}
-            variacao={metricasEstoqueDre?.periodo?.variacao ?? 0}
             loading={loadingMetricasEstoque}
             dataInicial={estoqueDataInicial}
             dataFinal={estoqueDataFinal}
