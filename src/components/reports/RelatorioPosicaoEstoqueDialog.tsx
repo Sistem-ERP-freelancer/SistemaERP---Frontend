@@ -145,7 +145,7 @@ export function RelatorioPosicaoEstoqueDialog({
           <DialogTitle>Relatório de Posição de Estoque</DialogTitle>
           <DialogDescription>
             Produto, quantidade no início do período, quantidade no fim do mês,
-            preço unitário e valor total (qtd. fim × custo).
+            preço de compra e valor total (qtd. fim × custo).
           </DialogDescription>
         </DialogHeader>
 

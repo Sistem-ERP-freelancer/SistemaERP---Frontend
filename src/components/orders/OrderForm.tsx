@@ -1303,7 +1303,7 @@ export function OrderForm({
           <FormSection
             icon={Package}
             title="Itens do pedido"
-            description="Produtos, quantidades e valores unitários."
+            description="Produtos, quantidades e preços de compra."
             action={
               <Button type="button" onClick={handleAddItem} variant="outline" size="sm" className="rounded-xl">
                 <Plus className="w-4 h-4 mr-2" />
@@ -1443,7 +1443,7 @@ export function OrderForm({
                     </div>
 
                     <div className="space-y-2 xl:col-span-2">
-                      <Label>Preço Unitário</Label>
+                      <Label>Preço de Compra</Label>
                       <Input
                         type="number"
                         step="0.01"

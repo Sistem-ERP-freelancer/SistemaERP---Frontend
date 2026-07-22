@@ -319,7 +319,7 @@ const RelatorioComprasCliente = () => {
                           <TableHead>Pedido</TableHead>
                           <TableHead>Produto</TableHead>
                           <TableHead className="text-right">Qtd</TableHead>
-                          <TableHead className="text-right">Preço unit.</TableHead>
+                          <TableHead className="text-right">Preço de compra</TableHead>
                           <TableHead className="text-right">Subtotal</TableHead>
                         </TableRow>
                       </TableHeader>

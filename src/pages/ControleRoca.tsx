@@ -3936,7 +3936,7 @@ export default function ControleRoca() {
                         <TableHead>Nome</TableHead>
                         <TableHead>Código / SKU</TableHead>
                         <TableHead>Unidade</TableHead>
-                        <TableHead>Valor unit. prod</TableHead>
+                        <TableHead>Pr. compra prod</TableHead>
                         <TableHead>Estoque</TableHead>
                         <TableHead className="text-right w-[140px]">Ações</TableHead>
                       </TableRow>
@@ -4563,7 +4563,7 @@ className={
                       <TableHead className="min-w-[7rem] w-[11%] whitespace-nowrap px-2">Roça</TableHead>
                       <TableHead className="min-w-[6rem] w-[12%] whitespace-nowrap px-2">Produtos</TableHead>
                       <TableHead className="min-w-[3rem] w-[5%] whitespace-nowrap px-1 text-center">Qtde</TableHead>
-                      <TableHead className="min-w-[5rem] w-[8%] whitespace-nowrap text-right px-2">Valor Unit.</TableHead>
+                      <TableHead className="min-w-[5rem] w-[8%] whitespace-nowrap text-right px-2">Preço compra</TableHead>
                       <TableHead className="min-w-[6.5rem] w-[12%] whitespace-nowrap px-2 text-center">Meeiro</TableHead>
                       <TableHead className="min-w-[4.75rem] w-[6%] text-center whitespace-nowrap py-2 px-2">
                         % meeiro
@@ -4894,7 +4894,7 @@ className={
                                     <TableHead className="text-right whitespace-nowrap">
                                       Pés (1/lanç.)
                                     </TableHead>
-                                    <TableHead className="text-right">Preço un.</TableHead>
+                                    <TableHead className="text-right">Preço compra</TableHead>
                                     <TableHead className="text-right">Total</TableHead>
                                   </TableRow>
                                 </TableHeader>
@@ -5217,7 +5217,7 @@ className={
                                           />
                                         </div>
                                         <div className="flex items-center gap-2">
-                                          <Label className="text-muted-foreground text-xs">Preço un.</Label>
+                                          <Label className="text-muted-foreground text-xs">Preço de compra</Label>
                                           <Input
                                             type="number"
                                             min={0}
@@ -7303,7 +7303,7 @@ className={
                 <div>
                   <h3 className="text-base font-semibold leading-tight">Notas de lançamento</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Produto, quantidades, preço unitário e total (PDF). Os filtros abaixo são os mesmos do relatório
+                    Produto, quantidades, preço de compra e total (PDF). Os filtros abaixo são os mesmos do relatório
                     geral seguinte e da sidebar de lançamentos.
                   </p>
                 </div>
@@ -8292,7 +8292,7 @@ className={
                       <TableHead>Meeiro</TableHead>
                       <TableHead>Produto</TableHead>
                       <TableHead>Quantidade</TableHead>
-                      <TableHead>Preço unit.</TableHead>
+                      <TableHead>Preço de compra</TableHead>
                       <TableHead>Valor total</TableHead>
                       <TableHead className="text-right">Porcentagem</TableHead>
                       <TableHead className="text-right">Valor a receber</TableHead>
@@ -9795,15 +9795,15 @@ className={
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Pencil className="h-5 w-5 text-primary" />
-                Reajustar valor unitário
+                Reajustar preço de compra
               </DialogTitle>
               <DialogDescription>
-                Defina o novo preço unitário que será aplicado a todos os itens dos {lancamentosSelecionados.size} lançamento(s) selecionado(s).
+                Defina o novo preço de compra que será aplicado a todos os itens dos {lancamentosSelecionados.size} lançamento(s) selecionado(s).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="novoValorReajuste">Novo valor unitário (R$)</Label>
+                <Label htmlFor="novoValorReajuste">Novo preço de compra (R$)</Label>
                 <Input
                   id="novoValorReajuste"
                   type="number"
@@ -9814,7 +9814,7 @@ className={
                   onChange={(e) => setNovoValorReajuste(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Este valor será aplicado como preço unitário de todos os produtos em todos os lançamentos selecionados. Os totais serão recalculados automaticamente.
+                  Este valor será aplicado como preço de compra de todos os produtos em todos os lançamentos selecionados. Os totais serão recalculados automaticamente.
                 </p>
               </div>
             </div>
@@ -12096,7 +12096,7 @@ className={
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-foreground">Notas de lançamento</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Nome do produto, quantidade, preço unitário (média ponderada) e valor total. Os filtros
+                      Nome do produto, quantidade, preço de compra (média ponderada) e valor total. Os filtros
                       abaixo são compartilhados com os demais relatórios deste painel.
                     </p>
                   </div>
@@ -12977,12 +12977,12 @@ function AddProdutoLanc({
           />
         </div>
         <div className="space-y-2 min-w-0 flex-1 sm:min-w-[140px]">
-          <Label>Preço un.</Label>
+          <Label>Preço de compra</Label>
           <Input
             type="number"
             min={0}
             step="0.01"
-            placeholder="Preço unitário"
+            placeholder="Preço de compra"
             value={preco}
             onChange={(e) => setPreco(e.target.value)}
             className="w-full min-h-11"
@@ -12999,7 +12999,7 @@ function AddProdutoLanc({
               return;
             }
             if (!qtd?.trim() || !preco?.trim()) {
-              toast.error('Informe quantidade e preço unitário');
+              toast.error('Informe quantidade e preço de compra');
               return;
             }
             const q = parseFloat(qtd.replace(',', '.'));

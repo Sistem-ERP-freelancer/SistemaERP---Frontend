@@ -535,7 +535,7 @@ export function OrderViewDialog({
                   <TableRow>
                     <TableHead>Produto</TableHead>
                     <TableHead className="text-right">Quantidade</TableHead>
-                    <TableHead className="text-right">Preço Unit.</TableHead>
+                    <TableHead className="text-right">Preço de Compra</TableHead>
                     <TableHead className="text-right">Desconto</TableHead>
                     <TableHead className="text-right">Subtotal</TableHead>
                   </TableRow>
