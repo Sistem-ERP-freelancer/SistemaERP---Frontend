@@ -1,7 +1,6 @@
 import { cn, formatCurrency } from '@/lib/utils';
-import { Label } from '@/components/ui/label';
+import { MonthYearSelect } from '@/components/ui/MonthYearSelect';
 import {
-  Calendar,
   DollarSign,
   Equal,
   Loader2,
@@ -199,33 +198,14 @@ export function DreFaturamentoLucro({
           {showFilters ? (
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
               {onMesAnoChange ? (
-                <div className="flex min-w-[12rem] flex-col gap-1">
-                  <Label
-                    htmlFor="dre-funil-mes-ano"
-                    className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
-                  >
-                    <Calendar className="h-3.5 w-3.5 opacity-70" />
-                    Mês
-                  </Label>
-                  <div className="relative">
-                    <input
-                      id="dre-funil-mes-ano"
-                      type="month"
-                      value={mesAno}
-                      onChange={(e) => onMesAnoChange(e.target.value)}
-                      className={cn(
-                        'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-border dark:bg-background',
-                        mesAno
-                          ? 'text-foreground'
-                          : 'text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent',
-                      )}
-                    />
-                    {!mesAno ? (
-                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-slate-400">
-                        Todo o período
-                      </span>
-                    ) : null}
-                  </div>
+                <div className="min-w-0 w-full sm:max-w-[14rem]">
+                  <MonthYearSelect
+                    id="dre-funil-mes-ano"
+                    label="Mês"
+                    value={mesAno}
+                    onChange={onMesAnoChange}
+                    emptyLabel="Todo o período"
+                  />
                 </div>
               ) : null}
               {filtersExtra}

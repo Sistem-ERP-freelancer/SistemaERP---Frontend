@@ -32,7 +32,6 @@ import { motion } from "framer-motion";
 import {
     BarChart3,
     Building2,
-    Calendar,
     Coins,
     Download,
     ListFilter,
@@ -45,6 +44,7 @@ import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import { MonthYearSelect } from "@/components/ui/MonthYearSelect";
 import {
     Select,
     SelectContent,
@@ -793,7 +793,7 @@ const Dashboard = () => {
           initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="mb-6 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]"
+          className="mb-6 rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]"
         >
           <div className="relative border-b border-border/80 bg-gradient-to-br from-slate-50/90 via-card to-sky-50/40 px-4 py-5 sm:px-6 dark:from-muted/30 dark:via-card dark:to-sky-950/20">
             <div className="flex flex-col gap-4">
@@ -836,8 +836,8 @@ const Dashboard = () => {
                     transition={{ delay: 0.08 + blocoIdx * 0.06 }}
                     className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60"
                   >
-                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <div className="mb-4 space-y-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#003366] text-xs font-bold text-white">
                           {bloco.etapa}
                         </span>
@@ -849,43 +849,25 @@ const Dashboard = () => {
                         </h3>
                       </div>
                       {bloco.etapa === 1 ? (
-                        <motion.div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end" layout={false}>
-                        <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:min-w-[16rem] dark:bg-background/50">
-                          <Label
-                            htmlFor="dashboard-mes-ano"
-                            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                          >
-                            <Calendar className="h-3.5 w-3.5 opacity-70" />
-                            Mês de referência
-                          </Label>
-                          <div className="relative">
-                            <input
+                        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:max-w-2xl">
+                          <div className="rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
+                            <MonthYearSelect
                               id="dashboard-mes-ano"
-                              type="month"
+                              label="Mês de referência"
                               value={mesAnoFiltro}
-                              onChange={(e) => setMesAnoFiltro(e.target.value)}
-                              className={`h-10 w-full min-w-[12rem] rounded-lg border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                                mesAnoFiltro
-                                  ? "text-foreground"
-                                  : "text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent"
-                              }`}
+                              onChange={setMesAnoFiltro}
+                              emptyLabel="Todos os meses"
                             />
-                            {!mesAnoFiltro ? (
-                              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-muted-foreground">
-                                Todos os meses
-                              </span>
-                            ) : null}
                           </div>
-                        </div>
-                          <motion.div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:min-w-[16rem] dark:bg-background/50">
-                            <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <div className="rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
+                            <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                               <ListFilter className="h-3.5 w-3.5 opacity-70" />
                               {rotulo.singular}
                             </Label>
                             <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
                               <SelectTrigger
                                 id="dashboard-painel-roca"
-                                className="h-10"
+                                className="h-10 w-full"
                                 aria-label={`Filtrar painel por ${rotulo.singularLower}`}
                               >
                                 <SelectValue placeholder={rotulo.todas} />
@@ -899,12 +881,12 @@ const Dashboard = () => {
                                 ))}
                               </SelectContent>
                             </Select>
-                          </motion.div>
-                        </motion.div>
+                          </div>
+                        </div>
                       ) : null}
                       {String(bloco.etapa) === "3" ? (
-                        <div className="flex w-full flex-col gap-1.5 rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm sm:w-auto sm:min-w-[18rem] dark:bg-background/50">
-                          <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        <div className="w-full max-w-md rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
+                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <ListFilter className="h-3.5 w-3.5 opacity-70" />
                             Visão dos totais gerais
                           </Label>
@@ -916,7 +898,7 @@ const Dashboard = () => {
                           >
                             <SelectTrigger
                               id="dashboard-totais-gerais-modo"
-                              className="h-10"
+                              className="h-10 w-full"
                               aria-label="Filtro da seção totais gerais"
                             >
                               <SelectValue placeholder="Escolher visão" />
@@ -1077,34 +1059,16 @@ const Dashboard = () => {
                   </Button>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-                  <div className="flex min-w-[12rem] flex-col gap-1">
-                    <Label
-                      htmlFor="dashboard-dre-mes-ano"
-                      className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
-                    >
-                      <Calendar className="h-3.5 w-3.5 opacity-70" />
-                      Mês
-                    </Label>
-                    <div className="relative">
-                      <input
-                        id="dashboard-dre-mes-ano"
-                        type="month"
-                        value={dreMesAnoFiltro}
-                        onChange={(e) => setDreMesAnoFiltro(e.target.value)}
-                        className={`h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-border dark:bg-background ${
-                          dreMesAnoFiltro
-                            ? "text-foreground"
-                            : "text-transparent [&::-webkit-datetime-edit]:text-transparent [&::-webkit-datetime-edit-fields-wrapper]:text-transparent [&::-webkit-datetime-edit-text]:text-transparent [&::-webkit-datetime-edit-month-field]:text-transparent [&::-webkit-datetime-edit-year-field]:text-transparent"
-                        }`}
-                      />
-                      {!dreMesAnoFiltro ? (
-                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-medium text-slate-400">
-                          Todo o período
-                        </span>
-                      ) : null}
-                    </div>
+                  <div className="min-w-0 flex-1 sm:max-w-[14rem]">
+                    <MonthYearSelect
+                      id="dashboard-dre-mes-ano"
+                      label="Mês"
+                      value={dreMesAnoFiltro}
+                      onChange={setDreMesAnoFiltro}
+                      emptyLabel="Todo o período"
+                    />
                   </div>
-                  <div className="flex min-w-[12rem] flex-col gap-1">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-[14rem]">
                     <Label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                       <ListFilter className="h-3.5 w-3.5 opacity-70" />
                       {rotulo.singular}
