@@ -141,6 +141,8 @@ const Produtos = () => {
     estoqueMax: undefined,
     validadeInicial: "",
     validadeFinal: "",
+    cadastroInicial: "",
+    cadastroFinal: "",
   });
   const [categoriasDialogOpen, setCategoriasDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -886,6 +888,8 @@ const Produtos = () => {
       estoqueMax: undefined,
       validadeInicial: "",
       validadeFinal: "",
+      cadastroInicial: "",
+      cadastroFinal: "",
     });
     setFiltrosDialogOpen(false);
   };
@@ -1357,6 +1361,43 @@ const Produtos = () => {
                             setFiltrosAvancados({
                               ...filtrosAvancados,
                               estoqueMax: e.target.value ? parseInt(e.target.value) : undefined,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Cadastro */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                      CADASTRO
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Data Inicial</Label>
+                        <Input
+                          type="date"
+                          value={filtrosAvancados.cadastroInicial || ""}
+                          onChange={(e) =>
+                            setFiltrosAvancados({
+                              ...filtrosAvancados,
+                              cadastroInicial: e.target.value || "",
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Data Final</Label>
+                        <Input
+                          type="date"
+                          value={filtrosAvancados.cadastroFinal || ""}
+                          onChange={(e) =>
+                            setFiltrosAvancados({
+                              ...filtrosAvancados,
+                              cadastroFinal: e.target.value || "",
                             })
                           }
                         />

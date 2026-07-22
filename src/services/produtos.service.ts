@@ -82,6 +82,9 @@ export interface FiltrosProdutos {
   estoqueMax?: number;
   validadeInicial?: string;
   validadeFinal?: string;
+  /** Data de cadastro (criadoEm) — YYYY-MM-DD */
+  cadastroInicial?: string;
+  cadastroFinal?: string;
   page?: number;
   limit?: number;
 }
@@ -149,6 +152,8 @@ class ProdutosService {
     if (params?.estoqueMax) queryParams.append('estoqueMax', params.estoqueMax.toString());
     if (params?.validadeInicial) queryParams.append('validadeInicial', params.validadeInicial);
     if (params?.validadeFinal) queryParams.append('validadeFinal', params.validadeFinal);
+    if (params?.cadastroInicial) queryParams.append('cadastroInicial', params.cadastroInicial);
+    if (params?.cadastroFinal) queryParams.append('cadastroFinal', params.cadastroFinal);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
 
