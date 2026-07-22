@@ -837,86 +837,94 @@ const Dashboard = () => {
                     className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-[2px] sm:p-5 dark:bg-card/60"
                   >
                     <div className="mb-4 space-y-3">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#003366] text-xs font-bold text-white">
-                          {bloco.etapa}
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-muted dark:text-muted-foreground">
-                          {bloco.pill}
-                        </span>
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-foreground sm:text-lg">
-                          {bloco.titulo}
-                        </h3>
-                      </div>
-                      {bloco.etapa === 1 ? (
-                        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:max-w-2xl">
-                          <div className="rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
-                            <MonthYearSelect
-                              id="dashboard-mes-ano"
-                              label="Mês de referência"
-                              value={mesAnoFiltro}
-                              onChange={setMesAnoFiltro}
-                              emptyLabel="Todos os meses"
-                            />
+                      <div
+                        className={
+                          bloco.etapa === 1 || String(bloco.etapa) === "3"
+                            ? "flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
+                            : undefined
+                        }
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#003366] text-xs font-bold text-white">
+                            {bloco.etapa}
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-muted dark:text-muted-foreground">
+                            {bloco.pill}
+                          </span>
+                          <h3 className="text-base font-semibold text-slate-900 dark:text-foreground sm:text-lg">
+                            {bloco.titulo}
+                          </h3>
+                        </div>
+                        {bloco.etapa === 1 ? (
+                          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:ml-auto lg:w-auto lg:min-w-[28rem] lg:max-w-xl lg:shrink-0">
+                            <div className="rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
+                              <MonthYearSelect
+                                id="dashboard-mes-ano"
+                                label="Mês de referência"
+                                value={mesAnoFiltro}
+                                onChange={setMesAnoFiltro}
+                                emptyLabel="Todos os meses"
+                              />
+                            </div>
+                            <div className="rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
+                              <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                <ListFilter className="h-3.5 w-3.5 opacity-70" />
+                                {rotulo.singular}
+                              </Label>
+                              <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
+                                <SelectTrigger
+                                  id="dashboard-painel-roca"
+                                  className="h-10 w-full"
+                                  aria-label={`Filtrar painel por ${rotulo.singularLower}`}
+                                >
+                                  <SelectValue placeholder={rotulo.todas} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">{rotulo.todas}</SelectItem>
+                                  {rocasOpcoes.map((roca) => (
+                                    <SelectItem key={roca.id} value={String(roca.id)}>
+                                      {roca.nome}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
-                          <div className="rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
+                        ) : null}
+                        {String(bloco.etapa) === "3" ? (
+                          <div className="w-full max-w-md rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm lg:ml-auto lg:w-[22rem] lg:max-w-none lg:shrink-0 dark:bg-background/50">
                             <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                               <ListFilter className="h-3.5 w-3.5 opacity-70" />
-                              {rotulo.singular}
+                              Visão dos totais gerais
                             </Label>
-                            <Select value={rocaFiltro} onValueChange={setRocaFiltro}>
+                            <Select
+                              value={totaisGeraisModo}
+                              onValueChange={(v) =>
+                                setTotaisGeraisModo(v as PainelTotaisGeraisModo)
+                              }
+                            >
                               <SelectTrigger
-                                id="dashboard-painel-roca"
+                                id="dashboard-totais-gerais-modo"
                                 className="h-10 w-full"
-                                aria-label={`Filtrar painel por ${rotulo.singularLower}`}
+                                aria-label="Filtro da seção totais gerais"
                               >
-                                <SelectValue placeholder={rotulo.todas} />
+                                <SelectValue placeholder="Escolher visão" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="all">{rotulo.todas}</SelectItem>
-                                {rocasOpcoes.map((roca) => (
-                                  <SelectItem key={roca.id} value={String(roca.id)}>
-                                    {roca.nome}
-                                  </SelectItem>
-                                ))}
+                                <SelectItem value="pagos">
+                                  Valores pagos e recebidos (caixa)
+                                </SelectItem>
+                                <SelectItem value="emissao">
+                                  Faturamento (competência acumulada)
+                                </SelectItem>
+                                <SelectItem value="a_receber">
+                                  Valores a receber e a pagar (em aberto)
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
-                        </div>
-                      ) : null}
-                      {String(bloco.etapa) === "3" ? (
-                        <div className="w-full max-w-md rounded-xl border border-border/60 bg-background/80 px-3 py-2.5 shadow-sm dark:bg-background/50">
-                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                            <ListFilter className="h-3.5 w-3.5 opacity-70" />
-                            Visão dos totais gerais
-                          </Label>
-                          <Select
-                            value={totaisGeraisModo}
-                            onValueChange={(v) =>
-                              setTotaisGeraisModo(v as PainelTotaisGeraisModo)
-                            }
-                          >
-                            <SelectTrigger
-                              id="dashboard-totais-gerais-modo"
-                              className="h-10 w-full"
-                              aria-label="Filtro da seção totais gerais"
-                            >
-                              <SelectValue placeholder="Escolher visão" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pagos">
-                                Valores pagos e recebidos (caixa)
-                              </SelectItem>
-                              <SelectItem value="emissao">
-                                Faturamento (competência acumulada)
-                              </SelectItem>
-                              <SelectItem value="a_receber">
-                                Valores a receber e a pagar (em aberto)
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : null}
+                        ) : null}
+                      </div>
                     </div>
                     <p className="mb-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                       {bloco.subtitulo}
