@@ -656,14 +656,16 @@ const Estoque = () => {
     }
 
     // Validar quantidade
-    if (!dados.quantidade || typeof dados.quantidade !== 'number') {
-      erros.push('A quantidade é obrigatória e deve ser um número');
-    } else {
-      if (!Number.isInteger(dados.quantidade)) {
-        erros.push('A quantidade deve ser um número inteiro');
-      } else if (dados.quantidade < 1) {
-        erros.push('A quantidade deve ser maior ou igual a 1');
+    if (dados.quantidade === undefined || typeof dados.quantidade !== "number") {
+      erros.push("A quantidade é obrigatória e deve ser um número");
+    } else if (!Number.isInteger(dados.quantidade)) {
+      erros.push("A quantidade deve ser um número inteiro");
+    } else if (dados.tipo === "AJUSTE") {
+      if (dados.quantidade < 0) {
+        erros.push("No ajuste, o estoque final deve ser maior ou igual a 0");
       }
+    } else if (dados.quantidade < 1) {
+      erros.push("A quantidade deve ser maior ou igual a 1");
     }
 
     // Validar campos opcionais (devem ser strings se enviados)
@@ -690,12 +692,18 @@ const Estoque = () => {
     }
 
     if (!movimentacao.tipo) {
-      toast.error("Selecione o tipo de saída");
+      toast.error("Selecione o tipo de movimentação");
       return;
     }
 
     if (!movimentacao.motivo?.trim()) {
-      toast.error("Informe a causa da saída");
+      toast.error(
+        movimentacao.tipo === "ENTRADA"
+          ? "Informe o motivo da entrada"
+          : movimentacao.tipo === "AJUSTE"
+            ? "Informe o motivo do ajuste"
+            : "Informe a causa da saída",
+      );
       return;
     }
 
@@ -787,7 +795,7 @@ const Estoque = () => {
               onClick={() => setDialogMovimentacaoOpen(true)}
             >
               <Plus className="w-4 h-4" />
-              Criar saída
+              Nova movimentação
             </Button>
 
             <div className="relative flex-1 w-full min-w-0">
@@ -1102,16 +1110,34 @@ const Estoque = () => {
           >
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Registrar saída</DialogTitle>
+                <DialogTitle>Nova movimentação</DialogTitle>
                 <DialogDescription>
-                  Escolha o tipo de saída, o produto, a quantidade e a causa.
+                  Escolha o tipo, o produto, a quantidade e o motivo.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-5 pt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {(
                     [
+                      {
+                        tipo: "ENTRADA" as const,
+                        label: "Entrada",
+                        desc: "Adicionar ao estoque",
+                        Icon: ArrowDownCircle,
+                        border: "#059669",
+                        bg: "#ECFDF5",
+                        color: "#047857",
+                      },
+                      {
+                        tipo: "AJUSTE" as const,
+                        label: "Ajuste",
+                        desc: "Definir estoque final",
+                        Icon: Settings,
+                        border: "#2563EB",
+                        bg: "#EFF6FF",
+                        color: "#1D4ED8",
+                      },
                       {
                         tipo: "SAIDA" as const,
                         label: "Saída",
@@ -1218,26 +1244,58 @@ const Estoque = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Quantidade *</Label>
+                    <Label>
+                      {movimentacao.tipo === "AJUSTE"
+                        ? "Estoque final *"
+                        : "Quantidade *"}
+                    </Label>
                     <Input
                       type="number"
-                      min="1"
+                      min={movimentacao.tipo === "AJUSTE" ? "0" : "1"}
                       step="1"
-                      placeholder="Ex: 5"
-                      value={movimentacao.quantidade || ""}
+                      placeholder={
+                        movimentacao.tipo === "AJUSTE" ? "Ex: 0 ou 50" : "Ex: 5"
+                      }
+                      value={
+                        movimentacao.quantidade === 0 &&
+                        movimentacao.tipo !== "AJUSTE"
+                          ? ""
+                          : movimentacao.quantidade
+                      }
                       onChange={(e) =>
                         setMovimentacao({
                           ...movimentacao,
-                          quantidade: Number(e.target.value) || 0,
+                          quantidade:
+                            e.target.value === ""
+                              ? 0
+                              : Number(e.target.value) || 0,
                         })
                       }
                     />
+                    {movimentacao.tipo === "AJUSTE" ? (
+                      <p className="text-xs text-muted-foreground">
+                        Informe o saldo que deve ficar no estoque (não a
+                        diferença).
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="space-y-2 sm:col-span-2">
-                    <Label>Causa da saída *</Label>
+                    <Label>
+                      {movimentacao.tipo === "ENTRADA"
+                        ? "Motivo da entrada *"
+                        : movimentacao.tipo === "AJUSTE"
+                          ? "Motivo do ajuste *"
+                          : "Causa da saída *"}
+                    </Label>
                     <Input
-                      placeholder="Ex: Venda avulsa, produto vencido, envio para filial..."
+                      placeholder={
+                        movimentacao.tipo === "ENTRADA"
+                          ? "Ex: Compra avulsa, devolução de cliente, inventário..."
+                          : movimentacao.tipo === "AJUSTE"
+                            ? "Ex: Inventário, correção de cadastro..."
+                            : "Ex: Venda avulsa, produto vencido, envio para filial..."
+                      }
                       value={movimentacao.motivo || ""}
                       onChange={(e) =>
                         setMovimentacao({
@@ -1278,11 +1336,15 @@ const Estoque = () => {
                     className="flex-1 text-white hover:opacity-90 transition-opacity"
                     style={{
                       backgroundColor:
-                        movimentacao.tipo === "PERDA"
-                          ? "#F39C12"
-                          : movimentacao.tipo === "TRANSFERENCIA"
-                            ? "#9B59B6"
-                            : "#E74C3C",
+                        movimentacao.tipo === "ENTRADA"
+                          ? "#059669"
+                          : movimentacao.tipo === "AJUSTE"
+                            ? "#2563EB"
+                            : movimentacao.tipo === "PERDA"
+                              ? "#F39C12"
+                              : movimentacao.tipo === "TRANSFERENCIA"
+                                ? "#9B59B6"
+                                : "#E74C3C",
                     }}
                     disabled={movimentarEstoqueMutation.isPending}
                   >
@@ -1291,6 +1353,10 @@ const Estoque = () => {
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         Registrando...
                       </>
+                    ) : movimentacao.tipo === "ENTRADA" ? (
+                      "Registrar entrada"
+                    ) : movimentacao.tipo === "AJUSTE" ? (
+                      "Registrar ajuste"
                     ) : movimentacao.tipo === "PERDA" ? (
                       "Registrar perda"
                     ) : movimentacao.tipo === "TRANSFERENCIA" ? (
@@ -1322,7 +1388,9 @@ const Estoque = () => {
             <Alert variant="default" className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
               <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <AlertDescription className="text-sm text-blue-800 dark:text-blue-300">
-                As movimentações são geradas automaticamente ao criar pedidos de compra ou venda e ao cadastrar produto com estoque inicial.
+                As movimentações são geradas automaticamente ao criar pedidos de
+                compra ou venda. Você também pode registrar manualmente entrada,
+                ajuste, saída, perda ou transferência.
               </AlertDescription>
             </Alert>
           </div>
