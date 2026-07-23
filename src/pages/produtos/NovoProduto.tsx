@@ -48,9 +48,7 @@ export default function NovoProduto() {
         msg.toLowerCase().includes('usuário autenticado') &&
         msg.toLowerCase().includes('obrigatório')
       ) {
-        toast.error(
-          'É necessário estar logado para cadastrar produto com estoque inicial. Faça login e tente novamente.',
-        );
+        toast.error('É necessário estar logado para cadastrar o produto. Faça login e tente novamente.');
       } else {
         toast.error(msg);
       }

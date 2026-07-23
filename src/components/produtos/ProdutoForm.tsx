@@ -359,70 +359,28 @@ export default function ProdutoForm({
           <FormSection
             icon={Package}
             title="Estoque"
-            description="Quantidades, unidade de medida e localização."
+            description="Unidade de medida do produto. Quantidades entram por movimentação ou pedido."
           >
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div className="space-y-2">
-                  <Label>Estoque Atual *</Label>
-                  <Input
-                    type="number"
-                    className={inputClass}
-                    value={form.estoque_atual ?? ''}
-                    onChange={(e) => patch({ estoque_atual: e.target.value ? Number(e.target.value) : 0 })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Estoque Mínimo *</Label>
-                  <Input
-                    type="number"
-                    className={inputClass}
-                    value={form.estoque_minimo ?? ''}
-                    onChange={(e) => patch({ estoque_minimo: e.target.value ? Number(e.target.value) : 0 })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Estoque Máximo</Label>
-                  <Input
-                    type="number"
-                    className={inputClass}
-                    value={form.estoque_maximo ?? ''}
-                    onChange={(e) =>
-                      patch({ estoque_maximo: e.target.value ? Number(e.target.value) : undefined })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Unidade *</Label>
-                  <Select
-                    value={form.unidade_medida || 'UN'}
-                    onValueChange={(value) =>
-                      patch({ unidade_medida: value as ProdutoFormData['unidade_medida'] })
-                    }
-                  >
-                    <SelectTrigger className={inputClass}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="UN">Unidade (UN)</SelectItem>
-                      <SelectItem value="KG">Quilograma (KG)</SelectItem>
-                      <SelectItem value="LT">Litro (LT)</SelectItem>
-                      <SelectItem value="CX">Caixa (CX)</SelectItem>
-                      <SelectItem value="SC">Saco (SC)</SelectItem>
-                      <SelectItem value="ARROBA">Arroba (ARROBA)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Localização</Label>
-                <Input
-                  className={inputClass}
-                  placeholder="Ex: Prateleira A-01"
-                  value={form.localizacao || ''}
-                  onChange={(e) => patch({ localizacao: e.target.value || undefined })}
-                />
-              </div>
+            <div className="space-y-2 max-w-xs">
+              <Label>Unidade *</Label>
+              <Select
+                value={form.unidade_medida || 'UN'}
+                onValueChange={(value) =>
+                  patch({ unidade_medida: value as ProdutoFormData['unidade_medida'] })
+                }
+              >
+                <SelectTrigger className={inputClass}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UN">Unidade (UN)</SelectItem>
+                  <SelectItem value="KG">Quilograma (KG)</SelectItem>
+                  <SelectItem value="LT">Litro (LT)</SelectItem>
+                  <SelectItem value="CX">Caixa (CX)</SelectItem>
+                  <SelectItem value="SC">Saco (SC)</SelectItem>
+                  <SelectItem value="ARROBA">Arroba (ARROBA)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </FormSection>
 
@@ -550,10 +508,8 @@ export default function ProdutoForm({
                     </span>
                   </div>
                   <div className="flex justify-between gap-2 border-b border-border/40 pb-2">
-                    <span className="text-muted-foreground">Estoque</span>
-                    <span className="font-medium">
-                      {form.estoque_atual ?? 0} {form.unidade_medida || 'UN'}
-                    </span>
+                    <span className="text-muted-foreground">Unidade</span>
+                    <span className="font-medium">{form.unidade_medida || 'UN'}</span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">SKU</span>

@@ -107,7 +107,6 @@ import {
     Info,
     LayoutGrid,
     Loader2,
-    MapPin,
     Package,
     Plus,
     RotateCcw,
@@ -531,8 +530,7 @@ const Produtos = () => {
       toast.error("Selecione um produto");
       return;
     }
-    // Conforme GUIA_FRONTEND_ESTOQUE_SECAO_PRODUTO: o backend cria a movimentação
-    // automaticamente ao processar o PATCH com estoque_atual diferente do atual
+    // Estoque não é editado aqui — só via Movimentações / pedidos
     const produtoData: Partial<CreateProdutoDto> = {
       nome: editingProduto.nome || undefined,
       sku: editingProduto.sku || undefined,
@@ -543,14 +541,6 @@ const Produtos = () => {
       preco_venda:
         editingProduto.preco_venda !== undefined && editingProduto.preco_venda !== null
           ? Number(editingProduto.preco_venda)
-          : undefined,
-      estoque_atual:
-        editingProduto.estoque_atual !== undefined && editingProduto.estoque_atual !== null
-          ? Number(editingProduto.estoque_atual)
-          : undefined,
-      estoque_minimo:
-        editingProduto.estoque_minimo !== undefined && editingProduto.estoque_minimo !== null
-          ? Number(editingProduto.estoque_minimo)
           : undefined,
       unidade_medida: (editingProduto.unidade_medida as any) || "UN",
       statusProduto: (editingProduto.statusProduto as any) || "ATIVO",
@@ -664,8 +654,8 @@ const Produtos = () => {
       return;
     }
 
-    // Campos numéricos opcionais
-    const numericFields: Array<keyof Produto> = ['preco_promocional', 'peso', 'altura', 'largura', 'estoque_maximo'];
+    // Campos numéricos opcionais (sem estoque — alterado só em Movimentações)
+    const numericFields: Array<keyof Produto> = ['preco_promocional', 'peso', 'altura', 'largura'];
     numericFields.forEach(field => {
       const originalValue = selectedProduto[field];
       const currentValue = editingProduto[field as keyof typeof editingProduto];
@@ -677,12 +667,7 @@ const Produtos = () => {
         // Campo foi modificado - verificar se tem novo valor válido
         const normalizedCurrent = normalizeNumericValue(currentValue);
         if (normalizedCurrent !== null) {
-          // Validações específicas para estoque_maximo
-          if (field === 'estoque_maximo' && normalizedCurrent >= 0) {
-            produtoData[field as keyof CreateProdutoDto] = normalizedCurrent as any;
-          } else if (field !== 'estoque_maximo') {
-            produtoData[field as keyof CreateProdutoDto] = normalizedCurrent as any;
-          }
+          produtoData[field as keyof CreateProdutoDto] = normalizedCurrent as any;
         }
       }
       // Se não foi modificado, não incluir no payload
@@ -2288,92 +2273,33 @@ const Produtos = () => {
                       Estoque
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Controle de estoque e localização
+                      Unidade de medida. Quantidades só por movimentação ou pedido.
                     </p>
                   </div>
                 </div>
-                <div className="space-y-6">
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <Label>Estoque Atual *</Label>
-                    <Input 
-                      type="number"
-                      placeholder="0"
-                      value={editingProduto.estoque_atual || ""}
-                      onChange={(e) =>
-                        setEditingProduto({
-                          ...editingProduto,
-                          estoque_atual: e.target.value ? Number(e.target.value) : 0,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Estoque Mínimo *</Label>
-                    <Input 
-                      type="number"
-                      placeholder="0"
-                      value={editingProduto.estoque_minimo || ""}
-                      onChange={(e) =>
-                        setEditingProduto({
-                          ...editingProduto,
-                          estoque_minimo: e.target.value ? Number(e.target.value) : 0,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Estoque Máximo</Label>
-                    <Input 
-                      type="number"
-                      placeholder="0"
-                      value={editingProduto.estoque_maximo || ""}
-                      onChange={(e) =>
-                        setEditingProduto({
-                          ...editingProduto,
-                          estoque_maximo: e.target.value ? Number(e.target.value) : undefined,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Unidade de Medida *</Label>
-                    <Select
-                      value={editingProduto.unidade_medida || "UN"}
-                      onValueChange={(value: "UN" | "KG" | "LT" | "CX") =>
-                        setEditingProduto({
-                          ...editingProduto,
-                          unidade_medida: value,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="UN">Unidade (UN)</SelectItem>
-                        <SelectItem value="KG">Quilograma (KG)</SelectItem>
-                        <SelectItem value="LT">Litro (LT)</SelectItem>
-                        <SelectItem value="CX">Caixa (CX)</SelectItem>
-                        <SelectItem value="SC">Saco (SC)</SelectItem>
-                        <SelectItem value="ARROBA">Arroba (ARROBA)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      Localização
-                    </Label>
-                    <Input
-                      placeholder="Ex: Prateleira A-01"
-                      value={editingProduto.localizacao || ""}
-                      onChange={(e) =>
-                        setEditingProduto({ ...editingProduto, localizacao: e.target.value })
-                      }
-                    />
-                  </div>
+                <div className="space-y-2 max-w-xs">
+                  <Label>Unidade de Medida *</Label>
+                  <Select
+                    value={editingProduto.unidade_medida || "UN"}
+                    onValueChange={(value: "UN" | "KG" | "LT" | "CX") =>
+                      setEditingProduto({
+                        ...editingProduto,
+                        unidade_medida: value,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UN">Unidade (UN)</SelectItem>
+                      <SelectItem value="KG">Quilograma (KG)</SelectItem>
+                      <SelectItem value="LT">Litro (LT)</SelectItem>
+                      <SelectItem value="CX">Caixa (CX)</SelectItem>
+                      <SelectItem value="SC">Saco (SC)</SelectItem>
+                      <SelectItem value="ARROBA">Arroba (ARROBA)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
