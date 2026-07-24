@@ -30,6 +30,7 @@ import Dashboard from "./pages/Dashboard";
 import Estoque from "./pages/Estoque";
 import EmDesenvolvimentoPage from "./pages/EmDesenvolvimentoPage";
 import Financeiro from "./pages/Financeiro";
+import BancosContas from "./pages/financeiro/BancosContas";
 import NovaTransacao from "./pages/financeiro/NovaTransacao";
 import FluxoDeCaixa from "./pages/FluxoDeCaixa";
 import RelatorioComprasCliente from "./pages/RelatorioComprasCliente";
@@ -45,7 +46,7 @@ import Produtos from "./pages/Produtos";
 import NovoProduto from "./pages/produtos/NovoProduto";
 import Settings from "./pages/Settings";
 import Transportadoras from "./pages/Transportadoras";
-import { ArrowLeftRight, Building2, Scale } from "lucide-react";
+import { ArrowLeftRight, Scale } from "lucide-react";
 
 function ProtectedFinanceRoute({ children }: { children: React.ReactNode }) {
   return (
@@ -195,11 +196,7 @@ const App = () => (
               path="/financeiro/bancos-contas"
               element={
                 <ProtectedFinanceRoute>
-                  <EmDesenvolvimentoPage
-                    icon={Building2}
-                    title="Bancos e Contas"
-                    subtitle="Cadastro de bancos e contas bancárias vinculadas às empresas."
-                  />
+                  <BancosContas />
                 </ProtectedFinanceRoute>
               }
             />
