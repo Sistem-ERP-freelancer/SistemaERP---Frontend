@@ -188,6 +188,7 @@ const Settings = () => {
     onSuccess: (tenant: any) => {
       queryClient.invalidateQueries({ queryKey: ["tenant-me"] });
       queryClient.invalidateQueries({ queryKey: ["spedy-tenant-status"] });
+      queryClient.invalidateQueries({ queryKey: ["spedy-numeracao-nfe"] });
       const syncMsg = tenant?.spedy_sync?.message as string | undefined;
       toast.success(
         syncMsg || "Informações da empresa atualizadas com sucesso!",

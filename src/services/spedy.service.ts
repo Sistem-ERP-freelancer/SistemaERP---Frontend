@@ -24,6 +24,14 @@ export interface SpedyAtivarResult {
   message: string;
 }
 
+export interface SpedyNumeracaoNfe {
+  serie: string;
+  proximoNumero: number;
+  maiorUsado: number;
+  fonte?: 'spedy' | 'tenant' | 'padrao';
+  message?: string;
+}
+
 function formParaAtivarSpedy(
   form: UpdateTenantEmpresaDto,
   senhaCertificado?: string,
@@ -88,5 +96,16 @@ export const spedyService = {
     anexarCertificadoSeguro(fd, certificado);
     fd.append('senhaCertificado', senhaCertificado.trim());
     return apiClient.postForm<SpedyCertificadoResult>('/tenant/me/spedy/certificado', fd);
+  },
+
+  obterNumeracaoNfe(): Promise<SpedyNumeracaoNfe> {
+    return apiClient.get<SpedyNumeracaoNfe>('/tenant/me/spedy/numeracao-nfe');
+  },
+
+  atualizarNumeracaoNfe(data: {
+    serie?: string;
+    proximoNumero?: number;
+  }): Promise<SpedyNumeracaoNfe> {
+    return apiClient.put<SpedyNumeracaoNfe>('/tenant/me/spedy/numeracao-nfe', data);
   },
 };

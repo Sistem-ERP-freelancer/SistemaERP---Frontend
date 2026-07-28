@@ -65,6 +65,7 @@ export function EmpresaConfigSection({
   const [senhaCertificado, setSenhaCertificado] = useState('');
   const [ativandoSpedy, setAtivandoSpedy] = useState(false);
   const [atualizandoCertificado, setAtualizandoCertificado] = useState(false);
+  const numeracaoAplicadaRef = useRef(false);
 
   const { data: spedyStatus, isLoading: loadingSpedyStatus } = useQuery({
     queryKey: ['spedy-tenant-status'],
@@ -81,11 +82,33 @@ export function EmpresaConfigSection({
     retry: false,
   });
 
+  const integracaoAtivaQuery =
+    spedyStatus?.integracao_ativa ||
+    Boolean(tenantInfo?.configuracoes?.spedy?.apiKey);
+
+  const { data: numeracaoNfe } = useQuery({
+    queryKey: ['spedy-numeracao-nfe'],
+    queryFn: () => spedyService.obterNumeracaoNfe(),
+    enabled: canEdit && !loading && !!integracaoAtivaQuery,
+    retry: false,
+  });
+
   useEffect(() => {
     if (tenantInfo) {
+      numeracaoAplicadaRef.current = false;
       setForm(tenantParaFormEmpresa(tenantInfo));
     }
   }, [tenantInfo]);
+
+  useEffect(() => {
+    if (!numeracaoNfe || numeracaoAplicadaRef.current) return;
+    numeracaoAplicadaRef.current = true;
+    setForm((prev) => ({
+      ...prev,
+      serieNfe: numeracaoNfe.serie || prev.serieNfe || '1',
+      proximoNumeroNfe: numeracaoNfe.proximoNumero || prev.proximoNumeroNfe || 1,
+    }));
+  }, [numeracaoNfe]);
 
   const setField = <K extends keyof UpdateTenantEmpresaDto>(
     key: K,
@@ -609,6 +632,47 @@ export function EmpresaConfigSection({
               onCheckedChange={(v) => setField('isFinalCustomer', v)}
               disabled={disabled}
             />
+          </div>
+          <div className="sm:col-span-2 rounded-lg border p-3 space-y-3">
+            <div>
+              <Label className="text-sm font-medium">Numeração da NF-e</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Informe o número da próxima nota. Ex.: se colocar 200, a próxima emissão
+                será 200, depois 201, 202… Não use um número já utilizado na SEFAZ.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Série</Label>
+                <Input
+                  value={form.serieNfe ?? '1'}
+                  onChange={(e) =>
+                    setField('serieNfe', e.target.value.replace(/\D/g, '').slice(0, 3) || '1')
+                  }
+                  disabled={disabled}
+                  inputMode="numeric"
+                  maxLength={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Próximo número</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={form.proximoNumeroNfe ?? 1}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setField('proximoNumeroNfe', Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+            {numeracaoNfe && numeracaoNfe.maiorUsado > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Maior número já usado nesta série: {numeracaoNfe.maiorUsado}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -25,6 +25,8 @@ export interface TenantEmpresaFiscal {
   cfopInterno?: string | null;
   cfopInterestadual?: string | null;
   isFinalCustomer?: boolean | null;
+  serieNfe?: string | null;
+  proximoNumeroNfe?: number | null;
 }
 
 export interface TenantSpedyConfig {
@@ -67,6 +69,8 @@ export interface UpdateTenantEmpresaDto {
   cfopInterno?: string;
   cfopInterestadual?: string;
   isFinalCustomer?: boolean;
+  serieNfe?: string;
+  proximoNumeroNfe?: number;
   spedyApiKey?: string;
   spedyAmbiente?: SpedyAmbiente;
   sendEmailToCustomer?: boolean;
@@ -94,6 +98,8 @@ export const EMPRESA_FORM_PADRAO: UpdateTenantEmpresaDto = {
   cfopInterno: '5102',
   cfopInterestadual: '6102',
   isFinalCustomer: true,
+  serieNfe: '1',
+  proximoNumeroNfe: 1,
   spedyApiKey: '',
   spedyAmbiente: 'homologacao',
   sendEmailToCustomer: true,
@@ -134,6 +140,11 @@ export function tenantParaFormEmpresa(tenant: {
     cfopInterno: fiscal.cfopInterno || '5102',
     cfopInterestadual: fiscal.cfopInterestadual || '6102',
     isFinalCustomer: fiscal.isFinalCustomer ?? true,
+    serieNfe: fiscal.serieNfe || '1',
+    proximoNumeroNfe:
+      fiscal.proximoNumeroNfe != null && Number(fiscal.proximoNumeroNfe) >= 1
+        ? Number(fiscal.proximoNumeroNfe)
+        : 1,
     spedyApiKey: spedy.apiKey || '',
     spedyAmbiente: spedy.ambiente || 'homologacao',
     sendEmailToCustomer: spedy.sendEmailToCustomer ?? true,
