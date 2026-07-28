@@ -11650,7 +11650,11 @@ className={
           }
         }}
       >
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            className="max-w-3xl max-h-[90vh] overflow-y-auto"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>Novo Lançamento de Produção</DialogTitle>
               <DialogDescription>
