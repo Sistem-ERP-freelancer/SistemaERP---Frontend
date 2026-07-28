@@ -1339,10 +1339,7 @@ export default function ControleRoca() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['controle-roca'] });
       toast.success('Lançamento registrado com sucesso');
-      setOpenLancamento(false);
-      setLancData(new Date().toISOString().slice(0, 10));
-      setLancRocaId('');
-      setLancMeeiros([]);
+      // Mantém o modal aberto para continuar lançando; limpa só os produtos
       setLancProdutos([]);
     },
     onError: (err: any) => {
@@ -12041,6 +12038,7 @@ className={
                 Cancelar
               </Button>
               <Button
+                type="button"
                 variant="gradient"
                 onClick={handleSubmitLancamento}
                 disabled={
