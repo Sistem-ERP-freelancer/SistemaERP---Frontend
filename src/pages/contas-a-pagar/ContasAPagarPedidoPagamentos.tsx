@@ -114,6 +114,13 @@ const ContasAPagarPedidoPagamentos = () => {
     () => contasDoPedido.filter((c) => abertoConta(c) > 0.009),
     [contasDoPedido],
   );
+  const contaSelecionada = useMemo(
+    () => contasAbertas.find((c) => String(c.id) === contaFinanceiraId) ?? null,
+    [contasAbertas, contaFinanceiraId],
+  );
+  const valorEmAbertoParcela = contaSelecionada
+    ? abertoConta(contaSelecionada)
+    : valorEmAberto;
 
   const formasDoPedido = useMemo(() => {
     const doPlano = (pedido?.formas_pagamento ?? [])
@@ -195,7 +202,12 @@ const ContasAPagarPedidoPagamentos = () => {
       const valor = Number(valorPago);
       if (!valor || valor <= 0) throw new Error('Informe o valor pago');
       if (!formaPagamento) throw new Error('Selecione a forma de pagamento');
-      if (valor > valorEmAberto) throw new Error('Valor não pode ser maior que o valor em aberto');
+      if (contasAbertas.length > 1 && !contaFinanceiraId) {
+        throw new Error('Selecione a parcela que receberá o pagamento');
+      }
+      if (valor > valorEmAbertoParcela) {
+        throw new Error('Valor não pode ser maior que o valor em aberto da parcela selecionada');
+      }
       return pedidosService.registrarPagamentoPedido(id, {
         valor,
         forma_pagamento: formaPagamento,
@@ -371,7 +383,7 @@ const ContasAPagarPedidoPagamentos = () => {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Formas cadastradas no pedido. Ao escolher, o valor e a forma são preenchidos.
+                  Selecione a parcela que receberá o pagamento. O abatimento será feito somente nela.
                 </p>
               </div>
             )}
@@ -382,13 +394,13 @@ const ContasAPagarPedidoPagamentos = () => {
                 type="number"
                 step="0.01"
                 min="0"
-                max={valorEmAberto}
+                max={valorEmAbertoParcela}
                 value={valorPago === '' ? '' : valorPago}
                 onChange={(e) => setValorPago(e.target.value ? Number(e.target.value) : '')}
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Valor em aberto: {formatCurrency(valorEmAberto)}. Permite pagamento parcial.
+                Valor em aberto da parcela: {formatCurrency(valorEmAbertoParcela)}. Permite pagamento parcial.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
