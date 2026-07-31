@@ -1458,6 +1458,7 @@ function ContasAPagar() {
     if (itensAgrupadosApi && itensAgrupadosApi.length > 0) {
       return itensAgrupadosApi.map((item) => {
         const valorTotal = Number(item.valor_total ?? 0);
+        const valorParcela = Number(item.valor_parcela ?? valorTotal);
         const valorPago = Number(item.valor_pago ?? 0);
         const abertoFallback = Math.max(0, valorTotal - valorPago);
         const stO = String(item.status ?? "").toUpperCase();
@@ -1480,7 +1481,7 @@ function ContasAPagar() {
           valor: new Intl.NumberFormat("pt-BR", {
             style: "currency",
             currency: "BRL",
-          }).format(valorTotal),
+          }).format(valorParcela),
           valorPago: new Intl.NumberFormat("pt-BR", {
             style: "currency",
             currency: "BRL",

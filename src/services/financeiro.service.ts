@@ -111,6 +111,8 @@ export interface ContaFinanceiraAgrupada {
   tipo: 'RECEBER' | 'PAGAR';
   categoria: string;
   valor_total: number;
+  /** Valor da parcela associada ao próximo vencimento exibido. */
+  valor_parcela?: number;
   valor_pago?: number;
   status: string;
   roca_nome?: string | null;
