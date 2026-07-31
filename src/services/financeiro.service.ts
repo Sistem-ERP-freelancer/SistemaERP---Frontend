@@ -309,6 +309,7 @@ class FinanceiroService {
     roca_id?: number;
     data_inicial?: string;
     data_final?: string;
+    busca?: string;
   }): Promise<ContasAgrupadasResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -322,6 +323,7 @@ class FinanceiroService {
     }
     if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
     if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.busca?.trim()) queryParams.append('busca', params.busca.trim());
 
     const query = queryParams.toString();
     return apiClient.get<ContasAgrupadasResponse>(`/contas-financeiras/agrupado${query ? `?${query}` : ''}`);
@@ -342,6 +344,7 @@ class FinanceiroService {
     data_inicial?: string;
     data_final?: string;
     campo_data?: 'vencimento' | 'emissao';
+    busca?: string;
   }): Promise<ContasFinanceirasResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -361,6 +364,7 @@ class FinanceiroService {
     if (params?.dias_maximos !== undefined) queryParams.append('dias_maximos', params.dias_maximos.toString());
     if (params?.data_inicial) queryParams.append('data_inicial', params.data_inicial);
     if (params?.data_final) queryParams.append('data_final', params.data_final);
+    if (params?.busca?.trim()) queryParams.append('busca', params.busca.trim());
     if (params?.campo_data === 'emissao' || params?.campo_data === 'vencimento') {
       queryParams.append('campo_data', params.campo_data);
     }

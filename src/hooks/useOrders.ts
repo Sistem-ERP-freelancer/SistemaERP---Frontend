@@ -198,19 +198,6 @@ export function useOrders() {
       ordersList = ordersList.filter((order) =>
         order.numero_pedido?.toLowerCase().includes(searchTerm),
       );
-    } else if (filters.busca && filters.busca.trim()) {
-      const termo = filters.busca.trim().toLowerCase();
-      ordersList = ordersList.filter((order) => {
-        const matchNumero = order.numero_pedido?.toLowerCase().includes(termo);
-        const matchCliente = order.cliente?.nome?.toLowerCase().includes(termo);
-        const matchFornecedor =
-          order.fornecedor?.nome_fantasia?.toLowerCase().includes(termo) ||
-          order.fornecedor?.nome_razao?.toLowerCase().includes(termo);
-        const matchRoca =
-          order.roca_nome?.toLowerCase().includes(termo) ||
-          order.roca?.nome?.toLowerCase().includes(termo);
-        return !!(matchNumero || matchCliente || matchFornecedor || matchRoca);
-      });
     }
 
     return ordersList;

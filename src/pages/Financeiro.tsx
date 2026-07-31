@@ -430,6 +430,7 @@ const Financeiro = () => {
       rocaFilterId,
       dataInicialFilter,
       dataFinalFilter,
+      searchTerm,
     ],
     queryFn: () =>
       listarContasTodasAsPaginas({
@@ -627,6 +628,7 @@ const Financeiro = () => {
           roca_id: rocaFilterId,
           data_inicial: dataInicialFilter || undefined,
           data_final: dataFinalFilter || undefined,
+          busca: searchTerm.trim() || undefined,
         });
         
         return {
@@ -655,6 +657,10 @@ const Financeiro = () => {
   const itensAgrupados = contasAgrupadasResponse?.itens || [];
   const totalAgrupado = contasAgrupadasResponse?.total || 0;
   const totalPages = Math.ceil(totalAgrupado / limit) || 1;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   // Calcular estatísticas do topo com a mesma base de competência:
   // - Receita do Mês = receita_mes
@@ -929,17 +935,10 @@ const Financeiro = () => {
     }));
   }, [itensAgrupados]);
 
-  // Filtrar por busca local (por nome, descrição)
+  // A busca é aplicada no backend antes da paginação.
   const filteredTransacoes = useMemo(() => {
-    if (!searchTerm.trim()) return transacoesDisplay;
-    const term = searchTerm.toLowerCase();
-    return transacoesDisplay.filter(t => 
-      (t.cliente_nome?.toLowerCase() || "").includes(term) ||
-      (t.descricao?.toLowerCase() || "").includes(term) ||
-      (t.roca_nome?.toLowerCase() || "").includes(term) ||
-      String(t.contaId).includes(term)
-    );
-  }, [transacoesDisplay, searchTerm]);
+    return transacoesDisplay;
+  }, [transacoesDisplay]);
 
   const filteredTransacoesComSecao = useMemo(() => {
     if (secaoTipoFilter === "todos") return filteredTransacoes;

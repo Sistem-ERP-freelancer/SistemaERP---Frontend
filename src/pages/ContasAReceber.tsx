@@ -1435,6 +1435,10 @@ const ContasAReceber = () => {
         parcelas_restantes: restantes,
         valor_aberto: valorAberto,
         cliente_nome:
+          (primeira as ContaFinanceira & {
+            cliente?: { nome?: string };
+            cliente_nome?: string;
+          })?.cliente?.nome ||
           (primeira as ContaFinanceira & { cliente_nome?: string })?.cliente_nome ||
           cliente?.nome ||
           "—",
@@ -1456,6 +1460,20 @@ const ContasAReceber = () => {
       return (
         g.descricaoBase.toLowerCase().includes(term) ||
         g.cliente_nome.toLowerCase().includes(term) ||
+        String(g.pedido_id ?? "").includes(term) ||
+        g.parcelas.some((p) => String(p.id ?? "").includes(term)) ||
+        g.parcelas.some((p) =>
+          String(
+            (p as ContaFinanceira & {
+              pedido?: { numero_pedido?: string };
+              numero_pedido?: string;
+            }).pedido?.numero_pedido ??
+              (p as ContaFinanceira & { numero_pedido?: string }).numero_pedido ??
+              "",
+          )
+            .toLowerCase()
+            .includes(term),
+        ) ||
         g.parcelas.some((p) => (p.numero_conta ?? "").toLowerCase().includes(term)) ||
         rocaTxt.includes(term)
       );

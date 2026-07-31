@@ -626,6 +626,7 @@ function ContasAPagar() {
       dataInicialFilter,
       dataFinalFilter,
       activeCardFilter,
+      searchTerm,
     ],
     queryFn: async () => {
       if (!validarParametrosPaginação(currentPage, pageSize)) {
@@ -674,7 +675,7 @@ function ContasAPagar() {
          * Sem filtro explícito na folha, buscamos no servidor conforme o card — não só
          * nas 15 linhas da página atual.
          */
-        if (!filtro) {
+        if (!filtro && !searchTerm.trim()) {
           if (activeCardFilter === "valor_pago") {
             const [pagasTotal, pagasParcial] = await Promise.all([
               listarContasPagarTodasAsPaginas({
@@ -833,6 +834,7 @@ function ContasAPagar() {
           tipo_despesa_id: tipoDespesaArg,
           data_inicial: dataInicialArg,
           data_final: dataFinalArg,
+          busca: searchTerm.trim() || undefined,
         });
 
         let contasData: ContaFinanceira[] = [];
@@ -978,6 +980,7 @@ function ContasAPagar() {
       tipo_despesa_id: tipoDespesaArg,
       data_inicial: dataInicialArg,
       data_final: dataFinalArg,
+          busca: searchTerm.trim() || undefined,
       status,
       proximidade_vencimento,
     };
@@ -1729,30 +1732,8 @@ function ContasAPagar() {
       }
     }
 
-    // Filtrar por termo de busca
-    if (searchTerm.trim()) {
-      const termo = searchTerm.toLowerCase();
-      filtered = filtered.filter(t => {
-      const o = (t as { origemConta?: string }).origemConta;
-      const origemTxt =
-        o === "DESPESA"
-          ? "despesa centro custo"
-          : o === "COMPRA"
-            ? "compra pedido"
-            : "";
-      const rocaNome = (t as { roca_nome?: string | null }).roca_nome ?? "";
-      const matchesSearch =
-        (t.descricao ?? "").toLowerCase().includes(termo) ||
-        String(t.id ?? "").toLowerCase().includes(termo) ||
-        (t.fornecedor ?? "").toLowerCase().includes(termo) ||
-        rocaNome.toLowerCase().includes(termo) ||
-        origemTxt.includes(termo);
-      return matchesSearch;
-    });
-    }
-
     return filtered;
-  }, [transacoesDisplay, searchTerm, isNumericSearch, contaPorId, contasExibir, fornecedores, activeTab]);
+  }, [transacoesDisplay, isNumericSearch, contaPorId, contasExibir, fornecedores, activeTab]);
 
   const handleCreate = () => {
     if (!newTransacao.descricao || !newTransacao.valor_original || !newTransacao.data_vencimento) {
