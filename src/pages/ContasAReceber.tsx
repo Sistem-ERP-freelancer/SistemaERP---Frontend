@@ -1655,6 +1655,8 @@ const ContasAReceber = () => {
         grupoKey: g.key,
         ehPrevisao: g.ehPrevisao,
         contaId: primeiraParcela?.id,
+        parcelasPagas: g.parcelas_pagas,
+        totalParcelas: g.total_parcelas,
       };
     });
   }, [filteredGruposContas]);
@@ -2654,6 +2656,16 @@ const ContasAReceber = () => {
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{transacao.id}</span>
+                          {(transacao as {
+                            parcelasPagas?: number;
+                            totalParcelas?: number;
+                          }).totalParcelas &&
+                            (transacao as { totalParcelas?: number }).totalParcelas! > 1 && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {(transacao as { parcelasPagas?: number }).parcelasPagas ?? 0}/
+                              {(transacao as { totalParcelas?: number }).totalParcelas} parcelas pagas
+                            </span>
+                          )}
                           {(transacao as { ehPrevisao?: boolean }).ehPrevisao ? (
                             <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-600">
                               Previsão
