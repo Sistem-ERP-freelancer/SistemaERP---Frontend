@@ -220,9 +220,10 @@ const ContasAReceberPedidoDetalhes = () => {
   const valorPago =
     totaisContas?.pago ?? contaDetalhe?.valor_pago ?? resumoFinal!.valor_pago;
   const valorEmAberto =
-    totaisContas?.aberto ??
     contaDetalhe?.valor_em_aberto ??
-    resumoFinal!.valor_em_aberto;
+    resumoFinal!.valor_em_aberto
+    ?? totaisContas?.aberto;
+
   const statusExibicao =
     valorEmAberto <= 0.009
       ? 'Quitado'
