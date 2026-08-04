@@ -214,9 +214,10 @@ const ContasAReceberPedidoDetalhes = () => {
       : null;
 
   const valorTotal =
-    totaisContas?.total ??
     contaDetalhe?.valor_total_pedido ??
-    resumoFinal!.valor_total;
+    resumoFinal!.valor_total ??
+    totaisContas?.total ;
+
   const valorPago =
     totaisContas?.pago ?? contaDetalhe?.valor_pago ?? resumoFinal!.valor_pago;
   const valorEmAberto =
