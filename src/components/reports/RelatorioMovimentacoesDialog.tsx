@@ -82,19 +82,28 @@ export function RelatorioMovimentacoesDialog({
     if (!open) return;
     setDataInicial(defaultDataInicial?.trim() || defInicio);
     setDataFinal(defaultDataFinal?.trim() || defFim);
-    setStatusFiltro(
+    const tipo =
       defaultTipo && defaultTipo !== "Todos"
         ? (defaultTipo as TipoMovimentacao)
-        : "Todos",
-    );
-    setNatureza("todos");
+        : "Todos";
+    setStatusFiltro(tipo);
+    if (tipo === "ENTRADA") {
+      setNatureza("compra");
+    } else if (tipo === "SAIDA") {
+      setNatureza("venda");
+    } else {
+      setNatureza("todos");
+    }
   }, [open, defaultDataInicial, defaultDataFinal, defaultTipo, defInicio, defFim]);
 
   const paramsPdf = () => ({
     data_inicial: dataInicial.trim() || undefined,
     data_final: dataFinal.trim() || undefined,
     tipos: statusFiltro === "Todos" ? undefined : [statusFiltro],
-    natureza,
+    natureza:
+      statusFiltro === "ENTRADA" && natureza === "todos"
+        ? "compra"
+        : natureza,
   });
 
   const handleDownloadPdf = async () => {
@@ -138,7 +147,12 @@ export function RelatorioMovimentacoesDialog({
             <Label htmlFor="relatorio-mov-natureza">Compras / Vendas</Label>
             <Select
               value={natureza}
-              onValueChange={(v) => setNatureza(v as "todos" | "compra" | "venda")}
+              onValueChange={(v) => {
+                const nat = v as "todos" | "compra" | "venda";
+                setNatureza(nat);
+                if (nat === "compra") setStatusFiltro("ENTRADA");
+                else if (nat === "venda") setStatusFiltro("SAIDA");
+              }}
             >
               <SelectTrigger id="relatorio-mov-natureza">
                 <SelectValue placeholder="Todas as operações" />
@@ -190,9 +204,12 @@ export function RelatorioMovimentacoesDialog({
               </Label>
               <RadioGroup
                 value={statusFiltro}
-                onValueChange={(v) =>
-                  setStatusFiltro(v as "Todos" | TipoMovimentacao)
-                }
+                onValueChange={(v) => {
+                  const val = v as "Todos" | TipoMovimentacao;
+                  setStatusFiltro(val);
+                  if (val === "ENTRADA") setNatureza("compra");
+                  else if (val === "SAIDA") setNatureza("venda");
+                }}
                 className="space-y-2"
               >
                 {STATUS_OPTIONS.map(({ value, label, color }) => (

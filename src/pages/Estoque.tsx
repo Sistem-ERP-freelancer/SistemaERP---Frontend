@@ -383,7 +383,27 @@ const Estoque = () => {
   const movimentacoesFiltradas = useMemo(() => {
     let lista = movimentacoesOriginais;
 
-    if (filtroTipo !== "Todos") {
+    if (filtroTipo === "ENTRADA") {
+      lista = lista.filter((mov) => {
+        if (mov.tipo !== "ENTRADA") return false;
+        const motivoStr = (mov.motivo || "").toLowerCase();
+        const obsStr = (mov.observacao || "").toLowerCase();
+
+        // Excluir explicitamente Estoque Inicial, Inventário, Cancelamento e Reversão
+        const eExcluido =
+          motivoStr.includes("estoque inicial") ||
+          motivoStr.includes("inventario") ||
+          motivoStr.includes("inventário") ||
+          motivoStr.includes("cancelamento") ||
+          obsStr.includes("cancelamento") ||
+          motivoStr.includes("reversão") ||
+          motivoStr.includes("reversao");
+
+        const eCompra = motivoStr.includes("compra");
+
+        return eCompra && !eExcluido;
+      });
+    } else if (filtroTipo !== "Todos") {
       lista = lista.filter((mov) => mov.tipo === filtroTipo);
     }
 
